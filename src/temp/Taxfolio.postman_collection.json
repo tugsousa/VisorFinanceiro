@@ -1,0 +1,47 @@
+{
+	"info": {
+		"_postman_id": "d4b216a3-c698-4dc2-bdfe-4534622024fc",
+		"name": "Taxfolio",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"_exporter_id": "40778550"
+	},
+	"item": [
+		{
+			"name": "testDegiro",
+			"item": [
+				{
+					"name": "http://localhost:8080/upload",
+					"request": {
+						"auth": {
+							"type": "noauth"
+						},
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "formdata",
+							"formdata": [
+								{
+									"key": "file",
+									"type": "file",
+									"src": "/C:/_DEV/Taxfolio/temp/Account.csv"
+								}
+							]
+						},
+						"url": {
+							"raw": "http://localhost:8080/upload",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8080",
+							"path": [
+								"upload"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		}
+	]
+}
