@@ -19,6 +19,7 @@ type ProcessedTransaction struct {
 	ProductName  string
 	ISIN         string
 	Quantity     int
+	Price        float64
 	OrderType    string  // e.g., "compra", "venda", "dividendo"
 	Amount       float64 // Transaction amount in original currency
 	Currency     string  // Original currency (e.g., "USD", "EUR")
