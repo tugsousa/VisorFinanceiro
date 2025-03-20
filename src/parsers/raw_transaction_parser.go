@@ -87,6 +87,12 @@ func ParseProcessedTransactions(rawTransactions []models.RawTransaction) ([]mode
 			isin = raw.ISIN
 		}
 
+		// Calculate Comission
+		commission, err := processors.CalculateCommission(raw.OrderID, rawTransactions)
+		if err != nil {
+			log.Printf("Error calculating commission for transaction %s: %v", raw.OrderID, err)
+		}
+
 		// Create a ProcessedTransaction
 		processed := models.ProcessedTransaction{
 			Date:         raw.OrderDate,
@@ -97,7 +103,7 @@ func ParseProcessedTransactions(rawTransactions []models.RawTransaction) ([]mode
 			OrderType:    orderType,
 			Amount:       amount,
 			Currency:     raw.Currency,
-			Commission:   0.0, // Default commission (you can parse this from the Description if needed)
+			Commission:   commission, // Default commission (you can parse this from the Description if needed)
 			OrderID:      raw.OrderID,
 			ExchangeRate: exchangeRate,
 			AmountEUR:    amountEUR,
