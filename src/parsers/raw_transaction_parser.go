@@ -2,11 +2,13 @@ package parsers
 
 import (
 	"TAXFOLIO/models"
+	"TAXFOLIO/processors"
 	"fmt"
 	"log"
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // ParseProcessedTransactions converts a slice of RawTransaction into a slice of ProcessedTransaction.
@@ -63,14 +65,18 @@ func ParseProcessedTransactions(rawTransactions []models.RawTransaction) ([]mode
 			return nil, fmt.Errorf("invalid amount for transaction %s: %w", raw.OrderID, err)
 		}
 
-		// Convert ExchangeRate to float64 (default to 1 if empty or invalid)
-		exchangeRate := 1.0 // Default value
-		if raw.ExchangeRate != "" {
-			exchangeRate, err = strconv.ParseFloat(raw.ExchangeRate, 64)
-			if err != nil {
-				// If ExchangeRate is invalid, log a warning but continue with the default value
-				fmt.Printf("Warning: Invalid exchange rate for transaction %s. Using default value of 1.\n", raw.OrderID)
-			}
+		// Parse the transaction date
+		transactionDate, err := time.Parse("02-01-2006", raw.OrderDate)
+		if err != nil {
+			return nil, fmt.Errorf("invalid date format for transaction %s: %w", raw.OrderID, err)
+		}
+
+		// Get the exchange rate for the transaction's currency and date
+		exchangeRate, err := processors.GetExchangeRate(raw.Currency, transactionDate)
+		if err != nil {
+			// If the exchange rate is not found, log a warning and use a default value of 1.0
+			log.Printf("Warning: Unable to retrieve exchange rate for currency %s and date %s. Using default value of 1.0. Error: %v", raw.Currency, raw.OrderDate, err)
+			exchangeRate = 1.0
 		}
 
 		// Calculate AmountEUR
@@ -119,7 +125,6 @@ func parseDescription(description string) (string, int, float64, string, string,
 		return "dividendo", 0, 0, "", "", nil
 	}
 
-	//re := regexp.MustCompile(`(?i)\s*(compra|venda)\s+([\d\s]+)\s+([a-zA-Z0-9\s\.\-\(\)]+)(?:@([\d,]+))?\s+([A-Za-z]+)?\s*(?:\(([\w\d]+)\))?$`)
 	re := regexp.MustCompile(`(?i)\s*(compra|venda)\s+(\d+\s*\d*)\s+([a-zA-Z0-9\s\.\-\(\)]+)@([\d,]+)\s+([A-Za-z]+)?\s*(?:\(([\w\d]+)\))?$`)
 	matches := re.FindStringSubmatch(description)
 	if matches == nil {
