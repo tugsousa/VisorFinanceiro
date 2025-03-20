@@ -106,6 +106,11 @@ func ParseProcessedTransactions(rawTransactions []models.RawTransaction) ([]mode
 // parseDescription extracts OrderType, Quantity, Price, ISIN, and Name from the Description field.
 func parseDescription(description string) (string, int, float64, string, string, error) {
 
+	// Replace non-breaking spaces with regular spaces
+	description = strings.ReplaceAll(description, "\u00A0", " ")
+	// Trim leading/trailing whitespace
+	description = strings.TrimSpace(description)
+
 	// Check if the description is "Dividendo" or "Imposto sobre dividendo"
 	if strings.Contains(strings.ToLower(description), "dividendo") {
 		if strings.Contains(strings.ToLower(description), "imposto sobre dividendo") {
@@ -114,10 +119,8 @@ func parseDescription(description string) (string, int, float64, string, string,
 		return "dividendo", 0, 0, "", "", nil
 	}
 
-	// Example Description: "Compra 48 Vanguard FTSE All-World High Div Yield UCITS USD@64,68 EUR (IE00B8GKDB10)"
-
-	re := regexp.MustCompile(`(?i)\s*(compra|venda)\s+([\d\s]+)\s+([a-zA-Z0-9\s\.\-\(\)]+)(?:@([\d,]+))?\s+([A-Za-z]+)?\s*(?:\(([\w\d]+)\))?$`)
-
+	//re := regexp.MustCompile(`(?i)\s*(compra|venda)\s+([\d\s]+)\s+([a-zA-Z0-9\s\.\-\(\)]+)(?:@([\d,]+))?\s+([A-Za-z]+)?\s*(?:\(([\w\d]+)\))?$`)
+	re := regexp.MustCompile(`(?i)\s*(compra|venda)\s+(\d+\s*\d*)\s+([a-zA-Z0-9\s\.\-\(\)]+)@([\d,]+)\s+([A-Za-z]+)?\s*(?:\(([\w\d]+)\))?$`)
 	matches := re.FindStringSubmatch(description)
 	if matches == nil {
 		return "", 0, 0, "", "", fmt.Errorf("unknown transaction format in description: %s", description)
