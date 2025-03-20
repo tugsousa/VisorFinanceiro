@@ -3,6 +3,7 @@ package handlers
 import (
 	"TAXFOLIO/src/models"
 	"TAXFOLIO/src/parsers"
+	"TAXFOLIO/src/processors"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -30,17 +31,16 @@ func (h *UploadHandler) HandleUpload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Calculate dividends
+	dividendResult := processors.CalculateDividends(processedTransactions)
+
 	// Return the processed transactions as JSON
 	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(processedTransactions); err != nil {
+	//if err := json.NewEncoder(w).Encode(rawTransactions); err != nil {
+	//if err := json.NewEncoder(w).Encode(processedTransactions); err != nil {
+	if err := json.NewEncoder(w).Encode(dividendResult); err != nil {
 		http.Error(w, "Error generating JSON response", http.StatusInternalServerError)
 	}
-
-	/*// Return the parsed transactions as JSON
-	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(rawTransactions); err != nil {
-		http.Error(w, "Error generating JSON response", http.StatusInternalServerError)
-	}*/
 }
 
 func (h *UploadHandler) parseUploadedFile(r *http.Request) ([]models.RawTransaction, error) {
