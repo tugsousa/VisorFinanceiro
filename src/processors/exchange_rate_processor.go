@@ -1,7 +1,7 @@
 package processors
 
 import (
-	"TAXFOLIO/models"
+	"TAXFOLIO/src/models"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -13,18 +13,25 @@ var historicalRates models.ExchangeRate
 
 // init loads the historical exchange rates from the JSON file.
 func init() {
+	// Define the file path
+	filePath := "data/historicalExchangeRate.json"
+	//fmt.Printf("Debug: Loading exchange rates from file: %s\n", filePath)
+
 	// Load historical exchange rates from JSON file
-	file, err := os.ReadFile("historicalExchangeRate.json")
+	file, err := os.ReadFile(filePath)
 	if err != nil {
 		fmt.Println("Error reading historical exchange rate file:", err)
 		return
 	}
+	//fmt.Printf("Debug: File content: %s\n", string(file))
 
+	// Parse the JSON data
 	err = json.Unmarshal(file, &historicalRates)
 	if err != nil {
 		fmt.Println("Error unmarshalling historical exchange rates:", err)
 		return
 	}
+	//fmt.Printf("Debug: Parsed historical rates: %+v\n", historicalRates)
 }
 
 // GetExchangeRate retrieves the exchange rate for a given currency and date.

@@ -1,7 +1,7 @@
 package main
 
 import (
-	"TAXFOLIO/handlers"
+	"TAXFOLIO/src/handlers"
 	"log"
 	"net/http"
 )

@@ -1,8 +1,8 @@
 package parsers
 
 import (
-	"TAXFOLIO/models"
-	"TAXFOLIO/processors"
+	"TAXFOLIO/src/models"
+	"TAXFOLIO/src/processors"
 	"fmt"
 	"log"
 	"regexp"

@@ -1,8 +1,8 @@
 package handlers
 
 import (
-	"TAXFOLIO/models"
-	"TAXFOLIO/parsers"
+	"TAXFOLIO/src/models"
+	"TAXFOLIO/src/parsers"
 	"encoding/json"
 	"fmt"
 	"net/http"

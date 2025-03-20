@@ -1,7 +1,7 @@
 package parsers
 
 import (
-	"TAXFOLIO/models"
+	"TAXFOLIO/src/models"
 	"encoding/csv"
 	"fmt"
 	"io"
