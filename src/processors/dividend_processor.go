@@ -2,6 +2,7 @@ package processors
 
 import (
 	"TAXFOLIO/src/models"
+	"math"
 	"strings"
 )
 
@@ -36,6 +37,9 @@ func CalculateDividends(transactions []models.ProcessedTransaction) DividendResu
 		// Use AmountEUR directly (already converted to EUR)
 		amount := t.AmountEUR
 
+		// Round the amount to 2 decimal places
+		amount = roundToTwoDecimalPlaces(amount)
+
 		// Initialize the map for the year and country if they don't exist
 		if _, ok := result[year]; !ok {
 			result[year] = make(map[string]map[string]float64)
@@ -55,4 +59,9 @@ func CalculateDividends(transactions []models.ProcessedTransaction) DividendResu
 	}
 
 	return result
+}
+
+// roundToTwoDecimalPlaces rounds a float64 to 2 decimal places.
+func roundToTwoDecimalPlaces(value float64) float64 {
+	return math.Round(value*100) / 100
 }

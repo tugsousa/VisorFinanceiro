@@ -41,7 +41,8 @@ func ParseProcessedTransactions(rawTransactions []models.RawTransaction) ([]mode
 	for _, raw := range rawTransactions {
 
 		// Parse the Description field to extract OrderType, Quantity, Price, ISIN, and Name
-		orderType, quantity, price, isin, name, err := parseDescription(raw.Description)
+		//orderType, quantity, price, isin, name, err := parseDescription(raw.Description)
+		orderType, quantity, price, _, name, err := parseDescription(raw.Description)
 		if err != nil {
 			// Check if the description is in the skipLoggingDescriptions list
 			shouldSkipLogging := false
@@ -82,10 +83,10 @@ func ParseProcessedTransactions(rawTransactions []models.RawTransaction) ([]mode
 		// Calculate AmountEUR
 		amountEUR := amount / exchangeRate
 
-		// If ISIN is empty, use the ISIN from the raw transaction
+		/*// If ISIN is empty, use the ISIN from the raw transaction
 		if isin == "" {
 			isin = raw.ISIN
-		}
+		}*/
 
 		// Calculate Comission
 		commission, err := processors.CalculateCommission(raw.OrderID, rawTransactions)
@@ -97,7 +98,7 @@ func ParseProcessedTransactions(rawTransactions []models.RawTransaction) ([]mode
 		processed := models.ProcessedTransaction{
 			Date:         raw.OrderDate,
 			ProductName:  name,
-			ISIN:         isin,
+			ISIN:         raw.ISIN,
 			Quantity:     quantity,
 			Price:        price,
 			OrderType:    orderType,
