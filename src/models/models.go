@@ -35,13 +35,27 @@ type SaleDetail struct {
 	ProductName   string
 	ISIN          string
 	Quantity      int
+	SalePrice     float64
 	SaleAmount    float64 // Sale amount in original currency
 	SaleCurrency  string
 	SaleAmountEUR float64 // Sale amount in EUR
+	BuyPrice      float64
 	BuyAmount     float64 // Purchase amount in original currency
 	BuyCurrency   string
 	BuyAmountEUR  float64 // Purchase amount in EUR
 	Delta         float64 // Profit/Loss (SaleAmountEUR - BuyAmountEUR)
+}
+
+// PurchaseLot represents remaining unsold purchase lots
+type PurchaseLot struct {
+	BuyDate      string  `json:"buy_date"`
+	ProductName  string  `json:"product_name"`
+	ISIN         string  `json:"isin"`
+	Quantity     int     `json:"quantity"`
+	BuyPrice     float64 `json:"buyPrice"`
+	BuyAmount    float64 `json:"buy_amount"`     // Purchase amount in original currency
+	BuyCurrency  string  `json:"buy_currency"`   // Original purchase currency
+	BuyAmountEUR float64 `json:"buy_amount_eur"` // Purchase amount in EUR
 }
 
 // ExchangeRate represents the structure of the exchange rate JSON file.

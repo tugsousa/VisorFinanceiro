@@ -34,11 +34,23 @@ func (h *UploadHandler) HandleUpload(w http.ResponseWriter, r *http.Request) {
 	// Calculate dividends
 	dividendResult := processors.CalculateDividends(processedTransactions)
 
+	// Process stock transactions
+	stockProcessor := processors.NewStockProcessor()
+	saleDetails, remainingPurchases := stockProcessor.ProcessTransactions(processedTransactions)
+
+	// Prepare response
+	response := map[string]interface{}{
+		"dividendResult":     dividendResult,
+		"saleDetails":        saleDetails,
+		"remainingPurchases": remainingPurchases,
+		// ... other data you want to return
+	}
 	// Return the processed transactions as JSON
 	w.Header().Set("Content-Type", "application/json")
 	//if err := json.NewEncoder(w).Encode(rawTransactions); err != nil {
 	//if err := json.NewEncoder(w).Encode(processedTransactions); err != nil {
-	if err := json.NewEncoder(w).Encode(dividendResult); err != nil {
+	//if err := json.NewEncoder(w).Encode(dividendResult); err != nil {
+	if err := json.NewEncoder(w).Encode(response); err != nil {
 		http.Error(w, "Error generating JSON response", http.StatusInternalServerError)
 	}
 }

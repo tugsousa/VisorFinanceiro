@@ -9,6 +9,11 @@ import (
 
 // CalculateCommission calculates the total commission for a specific orderId.
 func CalculateCommission(orderId string, transactions []models.RawTransaction) (float64, error) {
+
+	// Return 0 immediately if orderId is empty
+	if orderId == "" {
+		return 0, nil
+	}
 	var totalCommission float64
 
 	for _, transaction := range transactions {
