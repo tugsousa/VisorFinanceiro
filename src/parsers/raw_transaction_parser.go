@@ -39,9 +39,7 @@ func ParseProcessedTransactions(rawTransactions []models.RawTransaction) ([]mode
 	}
 
 	for _, raw := range rawTransactions {
-
 		// Parse the Description field to extract OrderType, Quantity, Price, ISIN, and Name
-		//orderType, quantity, price, isin, name, err := parseDescription(raw.Description)
 		orderType, quantity, price, _, name, err := parseDescription(raw.Description)
 		if err != nil {
 			// Check if the description is in the skipLoggingDescriptions list
@@ -53,7 +51,6 @@ func ParseProcessedTransactions(rawTransactions []models.RawTransaction) ([]mode
 				}
 			}
 
-			// Log the error only if it's not in the skipLoggingDescriptions list
 			if !shouldSkipLogging {
 				log.Printf("Skipping transaction due to parse error: %v", err)
 			}
@@ -66,6 +63,14 @@ func ParseProcessedTransactions(rawTransactions []models.RawTransaction) ([]mode
 			return nil, fmt.Errorf("invalid amount for transaction %s: %w", raw.OrderID, err)
 		}
 
+		// If amount is 0 but we have quantity and price, calculate it
+		if amount == 0 && quantity != 0 && price != 0 {
+			amount = float64(quantity) * price
+			if orderType == "venda" {
+				amount = -amount // Sales should be negative amounts
+			}
+		}
+
 		// Parse the transaction date
 		transactionDate, err := time.Parse("02-01-2006", raw.OrderDate)
 		if err != nil {
@@ -75,20 +80,23 @@ func ParseProcessedTransactions(rawTransactions []models.RawTransaction) ([]mode
 		// Get the exchange rate for the transaction's currency and date
 		exchangeRate, err := processors.GetExchangeRate(raw.Currency, transactionDate)
 		if err != nil {
-			// If the exchange rate is not found, log a warning and use a default value of 1.0
-			log.Printf("Warning: Unable to retrieve exchange rate for currency %s and date %s. Using default value of 1.0. Error: %v", raw.Currency, raw.OrderDate, err)
+			log.Printf("Warning: Unable to retrieve exchange rate for currency %s and date %s. Using default value of 1.0. Error: %v",
+				raw.Currency, raw.OrderDate, err)
 			exchangeRate = 1.0
 		}
 
 		// Calculate AmountEUR
 		amountEUR := amount / exchangeRate
 
-		/*// If ISIN is empty, use the ISIN from the raw transaction
-		if isin == "" {
-			isin = raw.ISIN
-		}*/
+		// If amountEUR is 0 but we have quantity and price, calculate it
+		if amountEUR == 0 && quantity != 0 && price != 0 {
+			amountEUR = float64(quantity) * price
+			if orderType == "venda" {
+				amountEUR = -amountEUR // Sales should be negative amounts
+			}
+		}
 
-		// Calculate Comission
+		// Calculate Commission
 		commission, err := processors.CalculateCommission(raw.OrderID, rawTransactions)
 		if err != nil {
 			log.Printf("Error calculating commission for transaction %s: %v", raw.OrderID, err)
@@ -104,13 +112,12 @@ func ParseProcessedTransactions(rawTransactions []models.RawTransaction) ([]mode
 			OrderType:    orderType,
 			Amount:       amount,
 			Currency:     raw.Currency,
-			Commission:   commission, // Default commission (you can parse this from the Description if needed)
+			Commission:   commission,
 			OrderID:      raw.OrderID,
 			ExchangeRate: exchangeRate,
 			AmountEUR:    amountEUR,
 		}
 
-		// Add to the result slice
 		processedTransactions = append(processedTransactions, processed)
 	}
 	return processedTransactions, nil
@@ -118,13 +125,12 @@ func ParseProcessedTransactions(rawTransactions []models.RawTransaction) ([]mode
 
 // parseDescription extracts OrderType, Quantity, Price, ISIN, and Name from the Description field.
 func parseDescription(description string) (string, int, float64, string, string, error) {
-
 	// Replace non-breaking spaces with regular spaces
 	description = strings.ReplaceAll(description, "\u00A0", " ")
 	// Trim leading/trailing whitespace
 	description = strings.TrimSpace(description)
 
-	// Check if the description is "Dividendo" or "Imposto sobre dividendo"
+	// Check for dividend or tax transactions
 	if strings.Contains(strings.ToLower(description), "dividendo") {
 		if strings.Contains(strings.ToLower(description), "imposto sobre dividendo") {
 			return "imposto sobre dividendo", 0, 0, "", "", nil
@@ -139,11 +145,11 @@ func parseDescription(description string) (string, int, float64, string, string,
 	}
 
 	// Extract fields from the regex matches
-	orderType := strings.ToLower(matches[1])               // "compra" or "venda"
-	quantityStr := strings.ReplaceAll(matches[2], " ", "") // Remove spaces
-	priceStr := strings.ReplaceAll(matches[4], ",", ".")   // Replace comma with dot
-	name := strings.TrimSpace(matches[3])                  // Product name
-	isin := matches[5]                                     // ISIN (optional)
+	orderType := strings.ToLower(matches[1])
+	quantityStr := strings.ReplaceAll(matches[2], " ", "")
+	priceStr := strings.ReplaceAll(matches[4], ",", ".")
+	name := strings.TrimSpace(matches[3])
+	isin := matches[5]
 
 	// Parse quantity
 	quantity, err := strconv.Atoi(quantityStr)
@@ -151,7 +157,7 @@ func parseDescription(description string) (string, int, float64, string, string,
 		return "", 0, 0, "", "", fmt.Errorf("invalid quantity: %w", err)
 	}
 
-	// Parse price (if available)
+	// Parse price
 	if priceStr == "" {
 		return "", 0, 0, "", "", fmt.Errorf("price not found in description: %s", description)
 	}
