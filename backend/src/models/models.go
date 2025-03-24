@@ -41,6 +41,7 @@ type SaleDetail struct {
 	SaleAmountEUR float64 // Sale amount in EUR
 	BuyPrice      float64
 	BuyAmount     float64 // Purchase amount in original currency
+	Commission    float64 // Commission/fees
 	BuyCurrency   string
 	BuyAmountEUR  float64 // Purchase amount in EUR
 	Delta         float64 // Profit/Loss (SaleAmountEUR - BuyAmountEUR)

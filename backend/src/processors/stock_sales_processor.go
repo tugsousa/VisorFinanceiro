@@ -32,6 +32,7 @@ func (p *StockProcessor) ProcessTransactions(transactions []models.ProcessedTran
 
 		for _, sale := range sales {
 			remainingQty := sale.Quantity
+			totalCommission := sale.Commission
 
 			for remainingQty > 0 && len(purchasePtrs) > 0 {
 				currentPurchase := purchasePtrs[0]
@@ -41,9 +42,12 @@ func (p *StockProcessor) ProcessTransactions(transactions []models.ProcessedTran
 				saleRatio := float64(matchedQty) / float64(sale.Quantity)
 				purchaseRatio := float64(matchedQty) / float64(currentPurchase.Quantity)
 
-				// Calculate unit prices
-				salePrice := sale.Amount / float64(sale.Quantity)
-				buyPrice := currentPurchase.Amount / float64(currentPurchase.Quantity)
+				// Calculate unit prices (use original prices, not prorated amounts)
+				salePrice := sale.Price
+				buyPrice := currentPurchase.Price
+
+				// Calculate prorated commission
+				commission := totalCommission * saleRatio
 
 				saleDetail := models.SaleDetail{
 					SaleDate:      sale.Date,
@@ -58,9 +62,9 @@ func (p *StockProcessor) ProcessTransactions(transactions []models.ProcessedTran
 					BuyAmount:     currentPurchase.Amount * purchaseRatio,
 					BuyCurrency:   currentPurchase.Currency,
 					BuyAmountEUR:  currentPurchase.AmountEUR * purchaseRatio,
-					BuyPrice:      buyPrice,
-					Delta:         (sale.AmountEUR * saleRatio) + (currentPurchase.AmountEUR * purchaseRatio),
-					//Delta: (salePrice - buyPrice) * float64(matchedQty),
+					BuyPrice:      buyPrice, // Use the original unit price
+					Commission:    commission,
+					Delta:         (buyPrice - salePrice) * float64(matchedQty),
 				}
 				saleDetails = append(saleDetails, saleDetail)
 
@@ -86,7 +90,7 @@ func (p *StockProcessor) ProcessTransactions(transactions []models.ProcessedTran
 					BuyAmount:    p.Amount,
 					BuyCurrency:  p.Currency,
 					BuyAmountEUR: p.AmountEUR,
-					BuyPrice:     p.Amount / float64(p.Quantity),
+					BuyPrice:     p.Price, // Use the original price
 				})
 			}
 		}
@@ -95,8 +99,7 @@ func (p *StockProcessor) ProcessTransactions(transactions []models.ProcessedTran
 	return saleDetails, remainingPurchases
 }
 
-// Helper functions
-
+// Helper functions remain the same as before
 func groupTransactionsByISIN(transactions []models.ProcessedTransaction) map[string][]models.ProcessedTransaction {
 	grouped := make(map[string][]models.ProcessedTransaction)
 	for _, tx := range transactions {

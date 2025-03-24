@@ -46,21 +46,22 @@ export default function SalesSummary({ data }) {
               ISIN: sale.ISIN,
               ProductName: sale.ProductName,
               totalQuantity: 0,
-              totalSales: 0,
               totalProfit: 0,
+              totalCommission: 0,
               transactions: []
             };
           }
 
           const profit = sale.Delta || 0;
-          const saleValue = sale.SaleAmountEUR || 0;
+          const commission = sale.Commission || 0;
 
           groupedSales[key].totalQuantity += sale.Quantity || 0;
-          groupedSales[key].totalSales += saleValue;
           groupedSales[key].totalProfit += profit;
+          groupedSales[key].totalCommission += commission;
           groupedSales[key].transactions.push({
             ...sale,
             profit,
+            commission,
             saleDate: saleDate.toISOString().split('T')[0] // Format as YYYY-MM-DD
           });
         } catch (error) {
@@ -74,16 +75,16 @@ export default function SalesSummary({ data }) {
 
         if (!yearlySummaries[group.year]) {
           yearlySummaries[group.year] = {
-            totalSales: 0,
-            totalQuantity: 0,
             totalProfit: 0,
+            totalCommission: 0,
+            totalQuantity: 0,
             products: new Set()
           };
         }
 
-        yearlySummaries[group.year].totalSales += group.totalSales;
-        yearlySummaries[group.year].totalQuantity += group.totalQuantity;
         yearlySummaries[group.year].totalProfit += group.totalProfit;
+        yearlySummaries[group.year].totalCommission += group.totalCommission;
+        yearlySummaries[group.year].totalQuantity += group.totalQuantity;
         yearlySummaries[group.year].products.add(group.ProductName);
       });
     }
@@ -114,23 +115,23 @@ export default function SalesSummary({ data }) {
   // Calculate totals based on filtered data
   const totals = selectedYear === 'all'
     ? Object.values(yearlySummaries).reduce((acc, curr) => ({
-        totalSales: acc.totalSales + curr.totalSales,
-        totalQuantity: acc.totalQuantity + curr.totalQuantity,
         totalProfit: acc.totalProfit + curr.totalProfit,
+        totalCommission: acc.totalCommission + curr.totalCommission,
+        totalQuantity: acc.totalQuantity + curr.totalQuantity,
         uniqueProducts: new Set([...acc.uniqueProducts, ...curr.products])
       }), { 
-        totalSales: 0, 
-        totalQuantity: 0, 
         totalProfit: 0,
+        totalCommission: 0,
+        totalQuantity: 0,
         uniqueProducts: new Set()
       })
     : {
         ...yearlySummaries[selectedYear],
         uniqueProducts: yearlySummaries[selectedYear]?.products || new Set()
       } || { 
-        totalSales: 0, 
-        totalQuantity: 0, 
         totalProfit: 0,
+        totalCommission: 0,
+        totalQuantity: 0,
         uniqueProducts: new Set()
       };
 
@@ -142,15 +143,21 @@ export default function SalesSummary({ data }) {
         labels: years.filter(year => year !== 'all'),
         datasets: [
           {
-            label: 'Total Sales (€)',
-            data: years.filter(year => year !== 'all').map(year => yearlySummaries[year]?.totalSales || 0),
-            backgroundColor: 'rgba(75, 192, 192, 0.6)',
-            borderColor: 'rgba(75, 192, 192, 1)',
+            label: 'Total Profit/Loss (€)',
+            data: years.filter(year => year !== 'all').map(year => yearlySummaries[year]?.totalProfit || 0),
+            backgroundColor: (ctx) => {
+              const value = ctx.raw;
+              return value >= 0 ? 'rgba(75, 192, 192, 0.6)' : 'rgba(255, 99, 132, 0.6)';
+            },
+            borderColor: (ctx) => {
+              const value = ctx.raw;
+              return value >= 0 ? 'rgba(75, 192, 192, 1)' : 'rgba(255, 99, 132, 1)';
+            },
             borderWidth: 1
           },
           {
-            label: 'Total Profit (€)',
-            data: years.filter(year => year !== 'all').map(year => yearlySummaries[year]?.totalProfit || 0),
+            label: 'Total Commission (€)',
+            data: years.filter(year => year !== 'all').map(year => yearlySummaries[year]?.totalCommission || 0),
             backgroundColor: 'rgba(153, 102, 255, 0.6)',
             borderColor: 'rgba(153, 102, 255, 1)',
             borderWidth: 1
@@ -159,29 +166,35 @@ export default function SalesSummary({ data }) {
       };
     } else {
       // Show product breakdown when a specific year is selected
-      const productSales = {};
+      const productData = {};
       filteredSales.forEach(group => {
-        productSales[group.ProductName] = {
-          total: group.totalSales,
-          profit: group.totalProfit
+        productData[group.ProductName] = {
+          profit: group.totalProfit,
+          commission: group.totalCommission
         };
       });
 
-      const productNames = Object.keys(productSales);
+      const productNames = Object.keys(productData);
       
       return {
         labels: productNames,
         datasets: [
           {
-            label: 'Sales Amount (€)',
-            data: productNames.map(name => productSales[name].total),
-            backgroundColor: 'rgba(75, 192, 192, 0.6)',
-            borderColor: 'rgba(75, 192, 192, 1)',
+            label: 'Profit/Loss (€)',
+            data: productNames.map(name => productData[name].profit),
+            backgroundColor: (ctx) => {
+              const value = ctx.raw;
+              return value >= 0 ? 'rgba(75, 192, 192, 0.6)' : 'rgba(255, 99, 132, 0.6)';
+            },
+            borderColor: (ctx) => {
+              const value = ctx.raw;
+              return value >= 0 ? 'rgba(75, 192, 192, 1)' : 'rgba(255, 99, 132, 1)';
+            },
             borderWidth: 1
           },
           {
-            label: 'Profit (€)',
-            data: productNames.map(name => productSales[name].profit),
+            label: 'Commission (€)',
+            data: productNames.map(name => productData[name].commission),
             backgroundColor: 'rgba(153, 102, 255, 0.6)',
             borderColor: 'rgba(153, 102, 255, 1)',
             borderWidth: 1
@@ -223,13 +236,7 @@ export default function SalesSummary({ data }) {
       <Grid container spacing={3} sx={{ mb: 3 }}>
         <Grid item xs={12} md={4}>
           <Paper elevation={2} sx={{ p: 2 }}>
-            <Typography variant="subtitle2">Total Sales</Typography>
-            <Typography variant="h5">€{totals.totalSales.toFixed(2)}</Typography>
-          </Paper>
-        </Grid>
-        <Grid item xs={12} md={4}>
-          <Paper elevation={2} sx={{ p: 2 }}>
-            <Typography variant="subtitle2">Total Profit</Typography>
+            <Typography variant="subtitle2">Total Profit/Loss</Typography>
             <Typography variant="h5" color={totals.totalProfit >= 0 ? 'success.main' : 'error.main'}>
               €{totals.totalProfit.toFixed(2)}
             </Typography>
@@ -237,8 +244,16 @@ export default function SalesSummary({ data }) {
         </Grid>
         <Grid item xs={12} md={4}>
           <Paper elevation={2} sx={{ p: 2 }}>
-            <Typography variant="subtitle2">Unique Products</Typography>
-            <Typography variant="h5">{totals.uniqueProducts.size}</Typography>
+            <Typography variant="subtitle2">Total Commission</Typography>
+            <Typography variant="h5">
+              €{totals.totalCommission.toFixed(2)}
+            </Typography>
+          </Paper>
+        </Grid>
+        <Grid item xs={12} md={4}>
+          <Paper elevation={2} sx={{ p: 2 }}>
+            <Typography variant="subtitle2">Total Quantity</Typography>
+            <Typography variant="h5">{totals.totalQuantity}</Typography>
           </Paper>
         </Grid>
       </Grid>
@@ -254,8 +269,8 @@ export default function SalesSummary({ data }) {
               title: {
                 display: true,
                 text: selectedYear === 'all' 
-                  ? 'Yearly Sales Overview' 
-                  : `Product Sales for ${selectedYear}`
+                  ? 'Yearly Profit/Loss and Commission' 
+                  : `Profit/Loss and Commission for ${selectedYear}`
               },
               tooltip: {
                 callbacks: {
@@ -299,8 +314,8 @@ export default function SalesSummary({ data }) {
               <TableCell>Product</TableCell>
               <TableCell>ISIN</TableCell>
               <TableCell align="right">Quantity</TableCell>
-              <TableCell align="right">Total Sales (€)</TableCell>
-              <TableCell align="right">Total Profit (€)</TableCell>
+              <TableCell align="right">Profit/Loss (€)</TableCell>
+              <TableCell align="right">Commission (€)</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
@@ -331,13 +346,13 @@ export default function SalesSummary({ data }) {
                         <TableCell>{group.ProductName}</TableCell>
                         <TableCell>{group.ISIN}</TableCell>
                         <TableCell align="right">{group.totalQuantity}</TableCell>
-                        <TableCell align="right">{group.totalSales.toFixed(2)}</TableCell>
                         <TableCell 
-                          align="right" 
+                          align="right"
                           sx={{ color: group.totalProfit >= 0 ? 'success.main' : 'error.main' }}
                         >
                           {group.totalProfit.toFixed(2)}
                         </TableCell>
+                        <TableCell align="right">{group.totalCommission.toFixed(2)}</TableCell>
                       </TableRow>
                       <TableRow>
                         <TableCell style={{ paddingBottom: 0, paddingTop: 0 }} colSpan={7}>
@@ -351,9 +366,8 @@ export default function SalesSummary({ data }) {
                                   <TableRow>
                                     <TableCell>Date</TableCell>
                                     <TableCell align="right">Quantity</TableCell>
-                                    <TableCell align="right">Price (€)</TableCell>
-                                    <TableCell align="right">Amount (€)</TableCell>
-                                    <TableCell align="right">Profit (€)</TableCell>
+                                    <TableCell align="right">Profit/Loss (€)</TableCell>
+                                    <TableCell align="right">Commission (€)</TableCell>
                                   </TableRow>
                                 </TableHead>
                                 <TableBody>
@@ -361,14 +375,13 @@ export default function SalesSummary({ data }) {
                                     <TableRow key={txnIndex}>
                                       <TableCell>{txn.saleDate}</TableCell>
                                       <TableCell align="right">{txn.Quantity}</TableCell>
-                                      <TableCell align="right">{txn.SalePrice?.toFixed(2)}</TableCell>
-                                      <TableCell align="right">{txn.SaleAmountEUR?.toFixed(2)}</TableCell>
                                       <TableCell 
                                         align="right"
                                         sx={{ color: txn.profit >= 0 ? 'success.main' : 'error.main' }}
                                       >
                                         {txn.profit.toFixed(2)}
                                       </TableCell>
+                                      <TableCell align="right">{txn.commission.toFixed(2)}</TableCell>
                                     </TableRow>
                                   ))}
                                 </TableBody>
@@ -383,12 +396,14 @@ export default function SalesSummary({ data }) {
                 <TableRow sx={{ '& td': { fontWeight: 'bold' } }}>
                   <TableCell colSpan={4}>Total</TableCell>
                   <TableCell align="right">{filteredSales.reduce((sum, group) => sum + group.totalQuantity, 0)}</TableCell>
-                  <TableCell align="right">{filteredSales.reduce((sum, group) => sum + group.totalSales, 0).toFixed(2)}</TableCell>
                   <TableCell 
-                    align="right" 
+                    align="right"
                     sx={{ color: totals.totalProfit >= 0 ? 'success.main' : 'error.main' }}
                   >
                     {filteredSales.reduce((sum, group) => sum + group.totalProfit, 0).toFixed(2)}
+                  </TableCell>
+                  <TableCell align="right">
+                    {filteredSales.reduce((sum, group) => sum + group.totalCommission, 0).toFixed(2)}
                   </TableCell>
                 </TableRow>
               </>
