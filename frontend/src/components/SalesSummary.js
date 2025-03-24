@@ -2,13 +2,11 @@ import React, { useState } from 'react';
 import { 
   Typography, Paper, Table, TableBody, TableCell, TableContainer, 
   TableHead, TableRow, Box, Select, MenuItem, FormControl, InputLabel,
-  Grid, Collapse, IconButton
+  Grid, Tabs, Tab
 } from '@mui/material';
 import { Bar } from 'react-chartjs-2';
 import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, 
   Title, Tooltip, Legend } from 'chart.js';
-import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
-import KeyboardArrowUpIcon from '@mui/icons-material/KeyboardArrowUp';
 
 ChartJS.register(
   CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend
@@ -16,195 +14,244 @@ ChartJS.register(
 
 export default function SalesSummary({ data }) {
   const [selectedYear, setSelectedYear] = useState('all');
-  const [expandedGroups, setExpandedGroups] = useState({});
+  const [viewMode, setViewMode] = useState('yearly'); // 'yearly' or 'all'
 
-  // Process sales data and group by year and ISIN
-  const { processedSales, years, yearlySummaries } = React.useMemo(() => {
+  // Process and group sales data by ISIN and year
+  const { processedSales, years, isinGroups, yearlyIsinGroups } = React.useMemo(() => {
     const processedSales = [];
     const years = new Set();
-    const yearlySummaries = {};
-    const groupedSales = {};
+    const isinGroups = {};
+    const yearlyIsinGroups = {};
+
+    const parseDate = (dateStr) => {
+      if (!dateStr || dateStr.trim() === '') {
+        console.warn('Empty date string encountered');
+        return new Date(NaN);
+      }
+      
+      // Handle both DD-MM-YYYY and YYYY-MM-DD formats
+      const parts = dateStr.includes('-') 
+        ? dateStr.split('-')
+        : dateStr.split('/');
+      
+      if (parts.length === 3) {
+        // If format is DD-MM-YYYY
+        if (parts[0].length === 2 && parts[2].length === 4) {
+          return new Date(`${parts[2]}-${parts[1]}-${parts[0]}`);
+        }
+        // If format is YYYY-MM-DD
+        return new Date(dateStr);
+      }
+      
+      console.warn('Unrecognized date format:', dateStr);
+      return new Date(NaN);
+    };
 
     if (data) {
-      // First pass to group by year and ISIN
-      data.forEach(sale => {
+      console.log('Processing sales data. Total records:', data.length);
+      let validCount = 0;
+      let invalidCount = 0;
+
+      data.forEach((sale, index) => {
         try {
-          // Fix for NaN year - ensure SaleDate is valid
-          const saleDate = new Date(sale.SaleDate);
+          console.groupCollapsed(`Processing sale #${index + 1}: ${sale.ProductName}`);
+          console.log('Raw sale data:', sale);
+
+          if (!sale.SaleDate) {
+            console.warn('Missing SaleDate', sale);
+            invalidCount++;
+            console.groupEnd();
+            return;
+          }
+
+          const saleDate = parseDate(sale.SaleDate);
+          console.log(`Parsed "${sale.SaleDate}" as:`, saleDate);
+
           if (isNaN(saleDate.getTime())) {
-            console.warn('Invalid sale date:', sale.SaleDate);
+            console.warn('Invalid sale date:', sale.SaleDate, 'Parsed as:', saleDate);
+            invalidCount++;
+            console.groupEnd();
             return;
           }
 
           const year = saleDate.getFullYear().toString();
           years.add(year);
-          const key = `${year}_${sale.ISIN}`;
 
-          if (!groupedSales[key]) {
-            groupedSales[key] = {
-              year,
+          const revenue = sale.Delta || 0;
+          const commission = sale.Commission ? -Math.abs(sale.Commission) : 0;
+          const netProfit = revenue + commission;
+
+          console.log('Calculated values:', {
+            revenue,
+            commission,
+            netProfit
+          });
+
+          const saleRecord = {
+            year,
+            ISIN: sale.ISIN,
+            ProductName: sale.ProductName,
+            revenue,
+            commission,
+            netProfit,
+            saleDate: saleDate.toISOString().split('T')[0],
+            originalData: sale
+          };
+
+          processedSales.push(saleRecord);
+
+          // Group by ISIN (all years)
+          if (!isinGroups[sale.ISIN]) {
+            isinGroups[sale.ISIN] = {
               ISIN: sale.ISIN,
               ProductName: sale.ProductName,
-              totalQuantity: 0,
-              totalProfit: 0,
+              totalRevenue: 0,
               totalCommission: 0,
+              totalNetProfit: 0,
               transactions: []
             };
           }
 
-          const profit = sale.Delta || 0;
-          const commission = sale.Commission || 0;
+          isinGroups[sale.ISIN].totalRevenue += revenue;
+          isinGroups[sale.ISIN].totalCommission += commission;
+          isinGroups[sale.ISIN].totalNetProfit += netProfit;
+          isinGroups[sale.ISIN].transactions.push(saleRecord);
 
-          groupedSales[key].totalQuantity += sale.Quantity || 0;
-          groupedSales[key].totalProfit += profit;
-          groupedSales[key].totalCommission += commission;
-          groupedSales[key].transactions.push({
-            ...sale,
-            profit,
-            commission,
-            saleDate: saleDate.toISOString().split('T')[0] // Format as YYYY-MM-DD
-          });
+          // Group by year and ISIN
+          if (!yearlyIsinGroups[year]) {
+            yearlyIsinGroups[year] = {};
+          }
+          
+          if (!yearlyIsinGroups[year][sale.ISIN]) {
+            yearlyIsinGroups[year][sale.ISIN] = {
+              ISIN: sale.ISIN,
+              ProductName: sale.ProductName,
+              totalRevenue: 0,
+              totalCommission: 0,
+              totalNetProfit: 0,
+              transactions: []
+            };
+          }
+
+          yearlyIsinGroups[year][sale.ISIN].totalRevenue += revenue;
+          yearlyIsinGroups[year][sale.ISIN].totalCommission += commission;
+          yearlyIsinGroups[year][sale.ISIN].totalNetProfit += netProfit;
+          yearlyIsinGroups[year][sale.ISIN].transactions.push(saleRecord);
+
+          validCount++;
+          console.groupEnd();
         } catch (error) {
-          console.error('Error processing sale:', sale, error);
+          console.error(`Error processing sale #${index + 1}:`, error, sale);
+          invalidCount++;
+          console.groupEnd();
         }
       });
 
-      // Convert grouped sales to array and calculate yearly summaries
-      Object.values(groupedSales).forEach(group => {
-        processedSales.push(group);
-
-        if (!yearlySummaries[group.year]) {
-          yearlySummaries[group.year] = {
-            totalProfit: 0,
-            totalCommission: 0,
-            totalQuantity: 0,
-            products: new Set()
-          };
-        }
-
-        yearlySummaries[group.year].totalProfit += group.totalProfit;
-        yearlySummaries[group.year].totalCommission += group.totalCommission;
-        yearlySummaries[group.year].totalQuantity += group.totalQuantity;
-        yearlySummaries[group.year].products.add(group.ProductName);
-      });
+      console.log(`Data processing complete. Valid: ${validCount}, Invalid: ${invalidCount}`);
     }
 
-    // Sort years in ascending order
-    const sortedYears = Array.from(years).sort((a, b) => a - b);
+    console.log('Processed sales:', processedSales);
+    console.log('ISIN groups:', isinGroups);
+    console.log('Yearly ISIN groups:', yearlyIsinGroups);
 
     return {
-      processedSales: processedSales.sort((a, b) => b.year - a.year || a.ISIN.localeCompare(b.ISIN)),
-      years: ['all', ...sortedYears],
-      yearlySummaries
+      processedSales,
+      years: ['all', ...Array.from(years).sort((a, b) => a - b)],
+      isinGroups,
+      yearlyIsinGroups
     };
   }, [data]);
-
-  // Toggle group expansion
-  const toggleGroup = (key) => {
-    setExpandedGroups(prev => ({
-      ...prev,
-      [key]: !prev[key]
-    }));
-  };
 
   // Filter sales by selected year
   const filteredSales = selectedYear === 'all' 
     ? processedSales 
     : processedSales.filter(sale => sale.year === selectedYear);
 
-  // Calculate totals based on filtered data
-  const totals = selectedYear === 'all'
-    ? Object.values(yearlySummaries).reduce((acc, curr) => ({
-        totalProfit: acc.totalProfit + curr.totalProfit,
-        totalCommission: acc.totalCommission + curr.totalCommission,
-        totalQuantity: acc.totalQuantity + curr.totalQuantity,
-        uniqueProducts: new Set([...acc.uniqueProducts, ...curr.products])
-      }), { 
-        totalProfit: 0,
-        totalCommission: 0,
-        totalQuantity: 0,
-        uniqueProducts: new Set()
-      })
-    : {
-        ...yearlySummaries[selectedYear],
-        uniqueProducts: yearlySummaries[selectedYear]?.products || new Set()
-      } || { 
-        totalProfit: 0,
-        totalCommission: 0,
-        totalQuantity: 0,
-        uniqueProducts: new Set()
-      };
+  // Calculate totals
+  const totals = filteredSales.reduce((acc, sale) => ({
+    revenue: acc.revenue + sale.revenue,
+    commission: acc.commission + sale.commission,
+    netProfit: acc.netProfit + sale.netProfit,
+  }), { revenue: 0, commission: 0, netProfit: 0 });
 
-  // Prepare chart data
+  // Prepare chart data based on view mode
   const getChartData = () => {
-    if (selectedYear === 'all') {
-      // Show yearly overview when no filter is applied
+    if (viewMode === 'yearly' && selectedYear !== 'all') {
+      // Show ISINs for selected year only
+      const yearData = yearlyIsinGroups[selectedYear] || {};
       return {
-        labels: years.filter(year => year !== 'all'),
-        datasets: [
-          {
-            label: 'Total Profit/Loss (€)',
-            data: years.filter(year => year !== 'all').map(year => yearlySummaries[year]?.totalProfit || 0),
-            backgroundColor: (ctx) => {
-              const value = ctx.raw;
-              return value >= 0 ? 'rgba(75, 192, 192, 0.6)' : 'rgba(255, 99, 132, 0.6)';
-            },
-            borderColor: (ctx) => {
-              const value = ctx.raw;
-              return value >= 0 ? 'rgba(75, 192, 192, 1)' : 'rgba(255, 99, 132, 1)';
-            },
-            borderWidth: 1
+        labels: Object.keys(yearData).map(isin => {
+          const group = yearData[isin];
+          return `${isin} (${group.ProductName})`;
+        }),
+        datasets: [{
+          label: `Net Profit/Loss by ISIN for ${selectedYear} (€)`,
+          data: Object.values(yearData).map(group => group.totalNetProfit),
+          backgroundColor: (ctx) => {
+            const value = ctx.raw;
+            return value >= 0 ? 'rgba(75, 192, 192, 0.6)' : 'rgba(255, 99, 132, 0.6)';
           },
-          {
-            label: 'Total Commission (€)',
-            data: years.filter(year => year !== 'all').map(year => yearlySummaries[year]?.totalCommission || 0),
-            backgroundColor: 'rgba(153, 102, 255, 0.6)',
-            borderColor: 'rgba(153, 102, 255, 1)',
-            borderWidth: 1
-          }
-        ]
+          borderColor: (ctx) => {
+            const value = ctx.raw;
+            return value >= 0 ? 'rgba(75, 192, 192, 1)' : 'rgba(255, 99, 132, 1)';
+          },
+          borderWidth: 1
+        }]
       };
     } else {
-      // Show product breakdown when a specific year is selected
-      const productData = {};
-      filteredSales.forEach(group => {
-        productData[group.ProductName] = {
-          profit: group.totalProfit,
-          commission: group.totalCommission
-        };
-      });
-
-      const productNames = Object.keys(productData);
-      
+      // Show all ISINs with their totals
       return {
-        labels: productNames,
-        datasets: [
-          {
-            label: 'Profit/Loss (€)',
-            data: productNames.map(name => productData[name].profit),
-            backgroundColor: (ctx) => {
-              const value = ctx.raw;
-              return value >= 0 ? 'rgba(75, 192, 192, 0.6)' : 'rgba(255, 99, 132, 0.6)';
-            },
-            borderColor: (ctx) => {
-              const value = ctx.raw;
-              return value >= 0 ? 'rgba(75, 192, 192, 1)' : 'rgba(255, 99, 132, 1)';
-            },
-            borderWidth: 1
+        labels: Object.keys(isinGroups).map(isin => {
+          const group = isinGroups[isin];
+          return `${isin} (${group.ProductName})`;
+        }),
+        datasets: [{
+          label: 'Net Profit/Loss by ISIN (All Years) (€)',
+          data: Object.values(isinGroups).map(group => group.totalNetProfit),
+          backgroundColor: (ctx) => {
+            const value = ctx.raw;
+            return value >= 0 ? 'rgba(75, 192, 192, 0.6)' : 'rgba(255, 99, 132, 0.6)';
           },
-          {
-            label: 'Commission (€)',
-            data: productNames.map(name => productData[name].commission),
-            backgroundColor: 'rgba(153, 102, 255, 0.6)',
-            borderColor: 'rgba(153, 102, 255, 1)',
-            borderWidth: 1
-          }
-        ]
+          borderColor: (ctx) => {
+            const value = ctx.raw;
+            return value >= 0 ? 'rgba(75, 192, 192, 1)' : 'rgba(255, 99, 132, 1)';
+          },
+          borderWidth: 1
+        }]
       };
     }
   };
 
   const chartData = getChartData();
+
+  // Get grouped data for table display
+  const getGroupedTableData = () => {
+    if (selectedYear === 'all') {
+      // Group by year and ISIN for all years
+      return Object.entries(yearlyIsinGroups).flatMap(([year, isins]) => 
+        Object.values(isins).map(group => ({
+          year,
+          ISIN: group.ISIN,
+          ProductName: group.ProductName,
+          revenue: group.totalRevenue,
+          commission: group.totalCommission,
+          netProfit: group.totalNetProfit
+        }))
+      ).sort((a, b) => a.year.localeCompare(b.year) || a.ISIN.localeCompare(b.ISIN));
+    } else {
+      // Group by ISIN for selected year
+      return Object.values(yearlyIsinGroups[selectedYear] || {}).map(group => ({
+        year: selectedYear,
+        ISIN: group.ISIN,
+        ProductName: group.ProductName,
+        revenue: group.totalRevenue,
+        commission: group.totalCommission,
+        netProfit: group.totalNetProfit
+      }));
+    }
+  };
+
+  const groupedTableData = getGroupedTableData();
 
   return (
     <Paper elevation={3} sx={{ p: 3, mb: 3 }}>
@@ -236,29 +283,43 @@ export default function SalesSummary({ data }) {
       <Grid container spacing={3} sx={{ mb: 3 }}>
         <Grid item xs={12} md={4}>
           <Paper elevation={2} sx={{ p: 2 }}>
-            <Typography variant="subtitle2">Total Profit/Loss</Typography>
-            <Typography variant="h5" color={totals.totalProfit >= 0 ? 'success.main' : 'error.main'}>
-              €{totals.totalProfit.toFixed(2)}
+            <Typography variant="subtitle2">Total Revenue</Typography>
+            <Typography variant="h5" color={totals.revenue >= 0 ? 'success.main' : 'error.main'}>
+              €{totals.revenue.toFixed(2)}
             </Typography>
           </Paper>
         </Grid>
         <Grid item xs={12} md={4}>
           <Paper elevation={2} sx={{ p: 2 }}>
             <Typography variant="subtitle2">Total Commission</Typography>
-            <Typography variant="h5">
-              €{totals.totalCommission.toFixed(2)}
+            <Typography variant="h5" color="error.main">
+              €{totals.commission.toFixed(2)}
             </Typography>
           </Paper>
         </Grid>
         <Grid item xs={12} md={4}>
           <Paper elevation={2} sx={{ p: 2 }}>
-            <Typography variant="subtitle2">Total Quantity</Typography>
-            <Typography variant="h5">{totals.totalQuantity}</Typography>
+            <Typography variant="subtitle2">Net Profit/Loss</Typography>
+            <Typography variant="h5" color={totals.netProfit >= 0 ? 'success.main' : 'error.main'}>
+              €{totals.netProfit.toFixed(2)}
+            </Typography>
           </Paper>
         </Grid>
       </Grid>
 
-      {/* Dynamic Bar Chart */}
+      {/* Chart View Toggle */}
+      <Box sx={{ mb: 3 }}>
+        <Tabs 
+          value={viewMode} 
+          onChange={(e, newValue) => setViewMode(newValue)}
+          centered
+        >
+          <Tab label="Yearly View" value="yearly" disabled={selectedYear === 'all'} />
+          <Tab label="All Years View" value="all" />
+        </Tabs>
+      </Box>
+
+      {/* ISIN Grouped Chart */}
       <Box sx={{ height: 400, mb: 4 }}>
         <Bar 
           data={chartData}
@@ -268,16 +329,26 @@ export default function SalesSummary({ data }) {
             plugins: {
               title: {
                 display: true,
-                text: selectedYear === 'all' 
-                  ? 'Yearly Profit/Loss and Commission' 
-                  : `Profit/Loss and Commission for ${selectedYear}`
+                text: chartData.datasets[0].label
               },
               tooltip: {
                 callbacks: {
                   label: (context) => {
-                    const label = context.dataset.label || '';
-                    const value = context.raw;
-                    return `${label}: €${value.toFixed(2)}`;
+                    const isin = context.label.split(' ')[0];
+                    let group;
+                    
+                    if (viewMode === 'yearly' && selectedYear !== 'all') {
+                      group = yearlyIsinGroups[selectedYear]?.[isin];
+                    } else {
+                      group = isinGroups[isin];
+                    }
+                    
+                    return [
+                      `Product: ${group?.ProductName || 'N/A'}`,
+                      `Net: €${context.raw.toFixed(2)}`,
+                      `Revenue: €${group?.totalRevenue.toFixed(2) || '0.00'}`,
+                      `Commission: €${group?.totalCommission.toFixed(2) || '0.00'}`
+                    ];
                   }
                 }
               }
@@ -289,121 +360,75 @@ export default function SalesSummary({ data }) {
                   display: true,
                   text: 'Amount (€)'
                 }
-              },
-              x: {
-                title: {
-                  display: true,
-                  text: selectedYear === 'all' ? 'Year' : 'Product'
-                }
               }
             }
           }}
         />
       </Box>
 
-      {/* Grouped Sales Table */}
+      {/* Grouped Sales Records Table */}
       <Typography variant="h6" gutterBottom sx={{ mt: 4 }}>
-        {selectedYear === 'all' ? 'All Sales Records' : `Sales Records for ${selectedYear}`}
+        {selectedYear === 'all' ? 'Sales Summary by Year and ISIN' : `Sales Summary for ${selectedYear} by ISIN`}
       </Typography>
       <TableContainer>
         <Table size="small" stickyHeader>
           <TableHead>
             <TableRow>
-              <TableCell></TableCell>
               <TableCell>Year</TableCell>
               <TableCell>Product</TableCell>
               <TableCell>ISIN</TableCell>
-              <TableCell align="right">Quantity</TableCell>
-              <TableCell align="right">Profit/Loss (€)</TableCell>
+              <TableCell align="right">Revenue (€)</TableCell>
               <TableCell align="right">Commission (€)</TableCell>
+              <TableCell align="right">Net Profit/Loss (€)</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
-            {filteredSales.length === 0 ? (
+            {groupedTableData.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={7} align="center">
+                <TableCell colSpan={6} align="center">
                   No sales data available for selected filter
                 </TableCell>
               </TableRow>
             ) : (
               <>
-                {filteredSales.map((group, index) => {
-                  const groupKey = `${group.year}_${group.ISIN}`;
-                  const isExpanded = expandedGroups[groupKey];
-                  
-                  return (
-                    <React.Fragment key={groupKey}>
-                      <TableRow hover>
-                        <TableCell>
-                          <IconButton
-                            size="small"
-                            onClick={() => toggleGroup(groupKey)}
-                          >
-                            {isExpanded ? <KeyboardArrowUpIcon /> : <KeyboardArrowDownIcon />}
-                          </IconButton>
-                        </TableCell>
-                        <TableCell>{group.year}</TableCell>
-                        <TableCell>{group.ProductName}</TableCell>
-                        <TableCell>{group.ISIN}</TableCell>
-                        <TableCell align="right">{group.totalQuantity}</TableCell>
-                        <TableCell 
-                          align="right"
-                          sx={{ color: group.totalProfit >= 0 ? 'success.main' : 'error.main' }}
-                        >
-                          {group.totalProfit.toFixed(2)}
-                        </TableCell>
-                        <TableCell align="right">{group.totalCommission.toFixed(2)}</TableCell>
-                      </TableRow>
-                      <TableRow>
-                        <TableCell style={{ paddingBottom: 0, paddingTop: 0 }} colSpan={7}>
-                          <Collapse in={isExpanded} timeout="auto" unmountOnExit>
-                            <Box sx={{ margin: 1 }}>
-                              <Typography variant="subtitle2" gutterBottom>
-                                Transaction Details
-                              </Typography>
-                              <Table size="small">
-                                <TableHead>
-                                  <TableRow>
-                                    <TableCell>Date</TableCell>
-                                    <TableCell align="right">Quantity</TableCell>
-                                    <TableCell align="right">Profit/Loss (€)</TableCell>
-                                    <TableCell align="right">Commission (€)</TableCell>
-                                  </TableRow>
-                                </TableHead>
-                                <TableBody>
-                                  {group.transactions.map((txn, txnIndex) => (
-                                    <TableRow key={txnIndex}>
-                                      <TableCell>{txn.saleDate}</TableCell>
-                                      <TableCell align="right">{txn.Quantity}</TableCell>
-                                      <TableCell 
-                                        align="right"
-                                        sx={{ color: txn.profit >= 0 ? 'success.main' : 'error.main' }}
-                                      >
-                                        {txn.profit.toFixed(2)}
-                                      </TableCell>
-                                      <TableCell align="right">{txn.commission.toFixed(2)}</TableCell>
-                                    </TableRow>
-                                  ))}
-                                </TableBody>
-                              </Table>
-                            </Box>
-                          </Collapse>
-                        </TableCell>
-                      </TableRow>
-                    </React.Fragment>
-                  );
-                })}
+                {groupedTableData.map((group, index) => (
+                  <TableRow key={index} hover>
+                    <TableCell>{group.year}</TableCell>
+                    <TableCell>{group.ProductName}</TableCell>
+                    <TableCell>{group.ISIN}</TableCell>
+                    <TableCell 
+                      align="right"
+                      sx={{ color: group.revenue >= 0 ? 'success.main' : 'error.main' }}
+                    >
+                      {group.revenue.toFixed(2)}
+                    </TableCell>
+                    <TableCell align="right" sx={{ color: 'error.main' }}>
+                      {group.commission.toFixed(2)}
+                    </TableCell>
+                    <TableCell 
+                      align="right"
+                      sx={{ color: group.netProfit >= 0 ? 'success.main' : 'error.main' }}
+                    >
+                      {group.netProfit.toFixed(2)}
+                    </TableCell>
+                  </TableRow>
+                ))}
                 <TableRow sx={{ '& td': { fontWeight: 'bold' } }}>
-                  <TableCell colSpan={4}>Total</TableCell>
-                  <TableCell align="right">{filteredSales.reduce((sum, group) => sum + group.totalQuantity, 0)}</TableCell>
+                  <TableCell colSpan={3}>Total</TableCell>
                   <TableCell 
                     align="right"
-                    sx={{ color: totals.totalProfit >= 0 ? 'success.main' : 'error.main' }}
+                    sx={{ color: totals.revenue >= 0 ? 'success.main' : 'error.main' }}
                   >
-                    {filteredSales.reduce((sum, group) => sum + group.totalProfit, 0).toFixed(2)}
+                    {totals.revenue.toFixed(2)}
                   </TableCell>
-                  <TableCell align="right">
-                    {filteredSales.reduce((sum, group) => sum + group.totalCommission, 0).toFixed(2)}
+                  <TableCell align="right" sx={{ color: 'error.main' }}>
+                    {totals.commission.toFixed(2)}
+                  </TableCell>
+                  <TableCell 
+                    align="right"
+                    sx={{ color: totals.netProfit >= 0 ? 'success.main' : 'error.main' }}
+                  >
+                    {totals.netProfit.toFixed(2)}
                   </TableCell>
                 </TableRow>
               </>

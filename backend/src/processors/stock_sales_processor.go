@@ -64,7 +64,7 @@ func (p *StockProcessor) ProcessTransactions(transactions []models.ProcessedTran
 					BuyAmountEUR:  currentPurchase.AmountEUR * purchaseRatio,
 					BuyPrice:      buyPrice, // Use the original unit price
 					Commission:    commission,
-					Delta:         (buyPrice - salePrice) * float64(matchedQty),
+					Delta:         (salePrice - buyPrice) * float64(matchedQty),
 				}
 				saleDetails = append(saleDetails, saleDetail)
 
