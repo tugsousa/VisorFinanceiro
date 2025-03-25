@@ -4,7 +4,10 @@ import UploadPage from './pages/UploadPage';
 import Dashboard from './pages/Dashboard';
 import YearlyView from './pages/YearlyView';
 import DetailedView from './pages/DetailedView';
-import Layout from './components/Layout';
+import Layout from './layouts/Layout';
+import Holdings from './pages/HoldingsPage';
+import Dividends from './pages/DividendsPage';
+import Cash from './pages/CashPage';
 
 function App() {
   return (
@@ -15,6 +18,9 @@ function App() {
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/yearly" element={<YearlyView />} />
           <Route path="/detailed" element={<DetailedView />} />
+          <Route path="/holdings" element={<Holdings />} />
+          <Route path="/dividends" element={<Dividends />} />
+          <Route path="/cash" element={<Cash />} />
         </Routes>
       </Layout>
     </Router>
