@@ -64,27 +64,7 @@ export default function Dashboard() {
           </Card>
         </Grid>
       </Grid>
-      
-      <Box sx={{ mt: 4, display: 'flex', justifyContent: 'center', gap: 2 }}>
-        <Button
-          component={Link}
-          to="/yearly"
-          state={{ data }}
-          variant="contained"
-          size="large"
-        >
-          View Yearly Breakdown
-        </Button>
-        <Button
-          component={Link}
-          to="/detailed"
-          state={{ data }}
-          variant="outlined"
-          size="large"
-        >
-          View Detailed Data
-        </Button>
-      </Box>
+  
     </Box>
   );
 }
