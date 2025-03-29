@@ -8,10 +8,11 @@
         "ExchangeRate": 1,
         "ISIN": "IE00B8GKDB10",
         "OrderID": "ca6c8080-5637-449f-b772-9f035d6e5aaf",
-        "OrderType": "compra",
+        "OrderType": "stockbuy",
         "Price": 64.68,
         "ProductName": "Vanguard FTSE All-World High Div Yield UCITS USD",
-        "Quantity": 48
+        "Quantity": 48,
+        "TransactionType": ""
     },
     {
         "Amount": 3051,
@@ -22,24 +23,26 @@
         "ExchangeRate": 1,
         "ISIN": "BMG3602E1084",
         "OrderID": "ffde74b7-9e6c-4c28-ae3c-7efc5269db7a",
-        "OrderType": "venda",
+        "OrderType": "stocksale",
         "Price": 22.6,
         "ProductName": "Flow Traders Ltd",
-        "Quantity": 135
+        "Quantity": 135,
+        "TransactionType": ""
     },
     {
         "Amount": 83.77,
         "AmountEUR": 80.2087322864803,
-        "Commission": 30,
+        "Commission": 0,
         "Currency": "USD",
         "Date": "30-12-2024",
         "ExchangeRate": 1.0444,
         "ISIN": "IE00B8GKDB10",
         "OrderID": "",
-        "OrderType": "dividendo",
+        "OrderType": "dividend",
         "Price": 0,
         "ProductName": "",
-        "Quantity": 0
+        "Quantity": 0,
+        "TransactionType": ""
     },
     {
         "Amount": -444.92,
@@ -50,52 +53,56 @@
         "ExchangeRate": 1,
         "ISIN": "IE00B8GKDB10",
         "OrderID": "012ff299-675e-4f22-9950-21a0ad692414",
-        "OrderType": "compra",
+        "OrderType": "stockbuy",
         "Price": 63.56,
         "ProductName": "Vanguard FTSE All-World High Div Yield UCITS USD",
-        "Quantity": 7
+        "Quantity": 7,
+        "TransactionType": ""
     },
     {
         "Amount": 483,
         "AmountEUR": 483,
-        "Commission": 30,
+        "Commission": 0,
         "Currency": "EUR",
         "Date": "02-10-2024",
         "ExchangeRate": 1,
         "ISIN": "BE0974256852",
         "OrderID": "",
-        "OrderType": "dividendo",
+        "OrderType": "dividend",
         "Price": 0,
         "ProductName": "",
-        "Quantity": 0
+        "Quantity": 0,
+        "TransactionType": ""
     },
     {
         "Amount": -144.9,
         "AmountEUR": -144.9,
-        "Commission": 30,
+        "Commission": 0,
         "Currency": "EUR",
         "Date": "02-10-2024",
         "ExchangeRate": 1,
         "ISIN": "BE0974256852",
         "OrderID": "",
-        "OrderType": "imposto sobre dividendo",
+        "OrderType": "dividendtax",
         "Price": 0,
         "ProductName": "",
-        "Quantity": 0
+        "Quantity": 0,
+        "TransactionType": ""
     },
     {
         "Amount": 53.43,
         "AmountEUR": 47.8978036754818,
-        "Commission": 30,
+        "Commission": 0,
         "Currency": "USD",
         "Date": "26-09-2024",
         "ExchangeRate": 1.1155,
         "ISIN": "IE00B8GKDB10",
         "OrderID": "",
-        "OrderType": "dividendo",
+        "OrderType": "dividend",
         "Price": 0,
         "ProductName": "",
-        "Quantity": 0
+        "Quantity": 0,
+        "TransactionType": ""
     },
     {
         "Amount": -4953.6,
@@ -106,10 +113,11 @@
         "ExchangeRate": 1,
         "ISIN": "IE00B8GKDB10",
         "OrderID": "3d35ba86-9205-4476-b34c-8758ceba4b92",
-        "OrderType": "compra",
+        "OrderType": "stockbuy",
         "Price": 61.92,
         "ProductName": "Vanguard FTSE All-World High Div Yield UCITS USD",
-        "Quantity": 80
+        "Quantity": 80,
+        "TransactionType": ""
     },
     {
         "Amount": -5015,
@@ -120,10 +128,11 @@
         "ExchangeRate": 1,
         "ISIN": "IE00B8GKDB10",
         "OrderID": "545b355e-841c-4da3-b5c7-9ecbd34386ee",
-        "OrderType": "compra",
+        "OrderType": "stockbuy",
         "Price": 59,
         "ProductName": "Vanguard FTSE All-World High Div Yield UCITS USD",
-        "Quantity": 85
+        "Quantity": 85,
+        "TransactionType": ""
     },
     {
         "Amount": -1352.35,
@@ -134,66 +143,71 @@
         "ExchangeRate": 1,
         "ISIN": "IE00B8GKDB10",
         "OrderID": "d8019436-f51e-4ffd-88be-4329ed258f61",
-        "OrderType": "compra",
+        "OrderType": "stockbuy",
         "Price": 58.798,
         "ProductName": "Vanguard FTSE All-World High Div Yield UCITS USD",
-        "Quantity": 23
+        "Quantity": 23,
+        "TransactionType": ""
     },
     {
         "Amount": 182.6,
         "AmountEUR": 167.41542128908,
-        "Commission": 30,
+        "Commission": 0,
         "Currency": "USD",
         "Date": "15-07-2024",
         "ExchangeRate": 1.0907,
         "ISIN": "US01609W1027",
         "OrderID": "",
-        "OrderType": "dividendo",
+        "OrderType": "dividend",
         "Price": 0,
         "ProductName": "",
-        "Quantity": 0
+        "Quantity": 0,
+        "TransactionType": ""
     },
     {
         "Amount": -3.04,
         "AmountEUR": -3.04,
-        "Commission": 30,
+        "Commission": 0,
         "Currency": "EUR",
         "Date": "23-06-2024",
         "ExchangeRate": 1,
         "ISIN": "BMG3602E1084",
         "OrderID": "",
-        "OrderType": "imposto sobre dividendo",
+        "OrderType": "dividendtax",
         "Price": 0,
         "ProductName": "",
-        "Quantity": 0
+        "Quantity": 0,
+        "TransactionType": ""
     },
     {
         "Amount": 20.25,
         "AmountEUR": 20.25,
-        "Commission": 30,
+        "Commission": 0,
         "Currency": "EUR",
         "Date": "23-06-2024",
         "ExchangeRate": 1,
         "ISIN": "BMG3602E1084",
         "OrderID": "",
-        "OrderType": "dividendo",
+        "OrderType": "dividend",
         "Price": 0,
         "ProductName": "",
-        "Quantity": 0
+        "Quantity": 0,
+        "TransactionType": ""
     },
     {
         "Amount": 272,
         "AmountEUR": 272,
-        "Commission": 30,
+        "Commission": 0,
         "Currency": "HKD",
         "Date": "02-06-2024",
-        "ExchangeRate": 1,
+        "ExchangeRate": 0,
         "ISIN": "KYG875721634",
         "OrderID": "",
-        "OrderType": "dividendo",
+        "OrderType": "dividend",
         "Price": 0,
         "ProductName": "",
-        "Quantity": 0
+        "Quantity": 0,
+        "TransactionType": ""
     },
     {
         "Amount": -2997,
@@ -204,10 +218,11 @@
         "ExchangeRate": 1,
         "ISIN": "US01609W1027",
         "OrderID": "3dfbca73-82e3-483d-aa00-e0ef61cc7a6b",
-        "OrderType": "compra",
+        "OrderType": "stockbuy",
         "Price": 81,
         "ProductName": "ADR on Alibaba Group Holding",
-        "Quantity": 37
+        "Quantity": 37,
+        "TransactionType": ""
     },
     {
         "Amount": 1560.24,
@@ -218,10 +233,11 @@
         "ExchangeRate": 1,
         "ISIN": "BE0974256852",
         "OrderID": "993f2410-1e95-49b3-b97d-786b4680d939",
-        "OrderType": "venda",
+        "OrderType": "stocksale",
         "Price": 43.34,
         "ProductName": "Colruyt",
-        "Quantity": 36
+        "Quantity": 36,
+        "TransactionType": ""
     },
     {
         "Amount": 1560.24,
@@ -232,24 +248,26 @@
         "ExchangeRate": 1,
         "ISIN": "BE0974256852",
         "OrderID": "993f2410-1e95-49b3-b97d-786b4680d939",
-        "OrderType": "venda",
+        "OrderType": "stocksale",
         "Price": 43.34,
         "ProductName": "Colruyt",
-        "Quantity": 36
+        "Quantity": 36,
+        "TransactionType": ""
     },
     {
         "Amount": 73,
         "AmountEUR": 67.0339761248852,
-        "Commission": 30,
+        "Commission": 0,
         "Currency": "USD",
         "Date": "22-01-2024",
         "ExchangeRate": 1.089,
         "ISIN": "US01609W1027",
         "OrderID": "",
-        "OrderType": "dividendo",
+        "OrderType": "dividend",
         "Price": 0,
         "ProductName": "",
-        "Quantity": 0
+        "Quantity": 0,
+        "TransactionType": ""
     },
     {
         "Amount": 7322.92,
@@ -260,38 +278,41 @@
         "ExchangeRate": 1,
         "ISIN": "BE0974256852",
         "OrderID": "85ad98a5-d55f-4aab-8b11-742ce11539ec",
-        "OrderType": "venda",
+        "OrderType": "stocksale",
         "Price": 41.14,
         "ProductName": "Colruyt",
-        "Quantity": 178
+        "Quantity": 178,
+        "TransactionType": ""
     },
     {
         "Amount": 600,
         "AmountEUR": 600,
-        "Commission": 30,
+        "Commission": 0,
         "Currency": "EUR",
         "Date": "26-12-2023",
         "ExchangeRate": 1,
         "ISIN": "BE0974256852",
         "OrderID": "",
-        "OrderType": "dividendo",
+        "OrderType": "dividend",
         "Price": 0,
         "ProductName": "",
-        "Quantity": 0
+        "Quantity": 0,
+        "TransactionType": ""
     },
     {
         "Amount": -180,
         "AmountEUR": -180,
-        "Commission": 30,
+        "Commission": 0,
         "Currency": "EUR",
         "Date": "26-12-2023",
         "ExchangeRate": 1,
         "ISIN": "BE0974256852",
         "OrderID": "",
-        "OrderType": "imposto sobre dividendo",
+        "OrderType": "dividendtax",
         "Price": 0,
         "ProductName": "",
-        "Quantity": 0
+        "Quantity": 0,
+        "TransactionType": ""
     },
     {
         "Amount": -2238.75,
@@ -302,10 +323,11 @@
         "ExchangeRate": 1,
         "ISIN": "BMG3602E1084",
         "OrderID": "3b1686a1-059d-4373-8866-07a34197eff5",
-        "OrderType": "compra",
+        "OrderType": "stockbuy",
         "Price": 17.91,
         "ProductName": "Flow Traders Ltd",
-        "Quantity": 125
+        "Quantity": 125,
+        "TransactionType": ""
     },
     {
         "Amount": -179.1,
@@ -316,10 +338,11 @@
         "ExchangeRate": 1,
         "ISIN": "BMG3602E1084",
         "OrderID": "3b1686a1-059d-4373-8866-07a34197eff5",
-        "OrderType": "compra",
+        "OrderType": "stockbuy",
         "Price": 17.91,
         "ProductName": "Flow Traders Ltd",
-        "Quantity": 10
+        "Quantity": 10,
+        "TransactionType": ""
     },
     {
         "Amount": 343.52,
@@ -330,10 +353,11 @@
         "ExchangeRate": 1,
         "ISIN": "BMG3602E1084",
         "OrderID": "fd7c7cb3-3c7a-49b9-ba77-e5a4be9128c9",
-        "OrderType": "venda",
+        "OrderType": "stocksale",
         "Price": 18.08,
         "ProductName": "Flow Traders Ltd",
-        "Quantity": 19
+        "Quantity": 19,
+        "TransactionType": ""
     },
     {
         "Amount": 1699.52,
@@ -344,10 +368,11 @@
         "ExchangeRate": 1,
         "ISIN": "BMG3602E1084",
         "OrderID": "fd7c7cb3-3c7a-49b9-ba77-e5a4be9128c9",
-        "OrderType": "venda",
+        "OrderType": "stocksale",
         "Price": 18.08,
         "ProductName": "Flow Traders Ltd",
-        "Quantity": 94
+        "Quantity": 94,
+        "TransactionType": ""
     },
     {
         "Amount": 54.12,
@@ -358,10 +383,11 @@
         "ExchangeRate": 1,
         "ISIN": "BMG3602E1084",
         "OrderID": "fd7c7cb3-3c7a-49b9-ba77-e5a4be9128c9",
-        "OrderType": "venda",
+        "OrderType": "stocksale",
         "Price": 18.04,
         "ProductName": "Flow Traders Ltd",
-        "Quantity": 3
+        "Quantity": 3,
+        "TransactionType": ""
     },
     {
         "Amount": 342.76,
@@ -372,10 +398,11 @@
         "ExchangeRate": 1,
         "ISIN": "BMG3602E1084",
         "OrderID": "fd7c7cb3-3c7a-49b9-ba77-e5a4be9128c9",
-        "OrderType": "venda",
+        "OrderType": "stocksale",
         "Price": 18.04,
         "ProductName": "Flow Traders Ltd",
-        "Quantity": 19
+        "Quantity": 19,
+        "TransactionType": ""
     },
     {
         "Amount": -2951.2,
@@ -386,10 +413,11 @@
         "ExchangeRate": 1,
         "ISIN": "KYG875721634",
         "OrderID": "f7a5f69e-b105-40eb-b43a-2cac90028039",
-        "OrderType": "compra",
+        "OrderType": "stockbuy",
         "Price": 36.89,
         "ProductName": "Tencent Holdings Ltd",
-        "Quantity": 80
+        "Quantity": 80,
+        "TransactionType": ""
     },
     {
         "Amount": 2932.8,
@@ -400,10 +428,11 @@
         "ExchangeRate": 1,
         "ISIN": "KYG875721634",
         "OrderID": "dd66765d-8342-46b9-b96c-a1eaf1164c4f",
-        "OrderType": "venda",
+        "OrderType": "stocksale",
         "Price": 36.66,
         "ProductName": "Tencent Holdings Ltd",
-        "Quantity": 80
+        "Quantity": 80,
+        "TransactionType": ""
     },
     {
         "Amount": -1093.5,
@@ -414,38 +443,41 @@
         "ExchangeRate": 1,
         "ISIN": "US01609W1027",
         "OrderID": "e8b2d772-f258-486d-a75b-fb4aaf335e91",
-        "OrderType": "compra",
+        "OrderType": "stockbuy",
         "Price": 72.9,
         "ProductName": "ADR on Alibaba Group Holding",
-        "Quantity": 15
+        "Quantity": 15,
+        "TransactionType": ""
     },
     {
         "Amount": 480,
         "AmountEUR": 480,
-        "Commission": 30,
+        "Commission": 0,
         "Currency": "EUR",
         "Date": "04-10-2023",
         "ExchangeRate": 1,
         "ISIN": "BE0974256852",
         "OrderID": "",
-        "OrderType": "dividendo",
+        "OrderType": "dividend",
         "Price": 0,
         "ProductName": "",
-        "Quantity": 0
+        "Quantity": 0,
+        "TransactionType": ""
     },
     {
         "Amount": -144,
         "AmountEUR": -144,
-        "Commission": 30,
+        "Commission": 0,
         "Currency": "EUR",
         "Date": "04-10-2023",
         "ExchangeRate": 1,
         "ISIN": "BE0974256852",
         "OrderID": "",
-        "OrderType": "imposto sobre dividendo",
+        "OrderType": "dividendtax",
         "Price": 0,
         "ProductName": "",
-        "Quantity": 0
+        "Quantity": 0,
+        "TransactionType": ""
     },
     {
         "Amount": 8383.5,
@@ -456,10 +488,11 @@
         "ExchangeRate": 1,
         "ISIN": "IE00BK5BQT80",
         "OrderID": "30f23a9e-1dfe-4f44-96d1-5f3ac41b83b2",
-        "OrderType": "venda",
+        "OrderType": "stocksale",
         "Price": 103.5,
         "ProductName": "Vanguard FTSE All-World UCITS ETF USD Acc",
-        "Quantity": 81
+        "Quantity": 81,
+        "TransactionType": ""
     },
     {
         "Amount": 4761.92,
@@ -470,80 +503,86 @@
         "ExchangeRate": 1,
         "ISIN": "IE00BK5BQT80",
         "OrderID": "30f23a9e-1dfe-4f44-96d1-5f3ac41b83b2",
-        "OrderType": "venda",
+        "OrderType": "stocksale",
         "Price": 103.52,
         "ProductName": "Vanguard FTSE All-World UCITS ETF USD Acc",
-        "Quantity": 46
+        "Quantity": 46,
+        "TransactionType": ""
     },
     {
         "Amount": 40.5,
         "AmountEUR": 40.5,
-        "Commission": 30,
+        "Commission": 0,
         "Currency": "EUR",
         "Date": "21-08-2023",
         "ExchangeRate": 1,
         "ISIN": "BMG3602E1084",
         "OrderID": "",
-        "OrderType": "dividendo",
+        "OrderType": "dividend",
         "Price": 0,
         "ProductName": "",
-        "Quantity": 0
+        "Quantity": 0,
+        "TransactionType": ""
     },
     {
         "Amount": -6.08,
         "AmountEUR": -6.08,
-        "Commission": 30,
+        "Commission": 0,
         "Currency": "EUR",
         "Date": "21-08-2023",
         "ExchangeRate": 1,
         "ISIN": "BMG3602E1084",
         "OrderID": "",
-        "OrderType": "imposto sobre dividendo",
+        "OrderType": "dividendtax",
         "Price": 0,
         "ProductName": "",
-        "Quantity": 0
+        "Quantity": 0,
+        "TransactionType": ""
     },
     {
         "Amount": 192,
         "AmountEUR": 22.9179846497249,
-        "Commission": 30,
+        "Commission": 0,
         "Currency": "HKD",
         "Date": "06-06-2023",
         "ExchangeRate": 8.3777,
         "ISIN": "KYG875721634",
         "OrderID": "",
-        "OrderType": "dividendo",
+        "OrderType": "dividend",
         "Price": 0,
         "ProductName": "",
-        "Quantity": 0
+        "Quantity": 0,
+        "TransactionType": ""
     },
     {
         "Amount": 108,
         "AmountEUR": 108,
-        "Commission": 30,
+        "Commission": 0,
         "Currency": "EUR",
         "Date": "05-05-2023",
         "ExchangeRate": 1,
         "ISIN": "BMG3602E1084",
         "OrderID": "",
-        "OrderType": "dividendo",
+        "OrderType": "dividend",
         "Price": 0,
         "ProductName": "",
-        "Quantity": 0
+        "Quantity": 0,
+        "TransactionType": ""
     },
     {
         "Amount": -16.2,
         "AmountEUR": -16.2,
-        "Commission": 30,
+        "Commission": 0,
         "Currency": "EUR",
         "Date": "05-05-2023",
         "ExchangeRate": 1,
         "ISIN": "BMG3602E1084",
         "OrderID": "",
-        "OrderType": "imposto sobre dividendo",
+        "OrderType": "dividendtax",
         "Price": 0,
         "ProductName": "",
-        "Quantity": 0
+        "Quantity": 0,
+        "TransactionType": ""
     },
     {
         "Amount": 127.84,
@@ -554,136 +593,146 @@
         "ExchangeRate": 1,
         "ISIN": "KYG596691041",
         "OrderID": "70f62b26-3cd7-4368-9edb-f6033061724f",
-        "OrderType": "venda",
+        "OrderType": "stocksale",
         "Price": 15.98,
         "ProductName": "Meituan",
-        "Quantity": 8
+        "Quantity": 8,
+        "TransactionType": ""
     },
     {
         "Amount": 134.8,
         "AmountEUR": 134.8,
-        "Commission": 30,
+        "Commission": 0,
         "Currency": "EUR",
         "Date": "27-03-2023",
         "ExchangeRate": 1,
         "ISIN": "KYG596691041",
         "OrderID": "",
-        "OrderType": "venda",
+        "OrderType": "stocksale",
         "Price": 16.85,
         "ProductName": "Meituan - Non tradeable",
-        "Quantity": 8
+        "Quantity": 8,
+        "TransactionType": ""
     },
     {
         "Amount": -134.8,
         "AmountEUR": -134.8,
-        "Commission": 30,
+        "Commission": 0,
         "Currency": "EUR",
         "Date": "27-03-2023",
         "ExchangeRate": 1,
         "ISIN": "KYG596691041",
         "OrderID": "",
-        "OrderType": "compra",
+        "OrderType": "stockbuy",
         "Price": 16.85,
         "ProductName": "Meituan",
-        "Quantity": 8
+        "Quantity": 8,
+        "TransactionType": ""
     },
     {
         "Amount": 0,
         "AmountEUR": 0,
-        "Commission": 30,
+        "Commission": 0,
         "Currency": "EUR",
         "Date": "23-02-2023",
         "ExchangeRate": 1,
         "ISIN": "US01609W1027",
         "OrderID": "",
-        "OrderType": "compra",
+        "OrderType": "stockbuy",
         "Price": 108.8069,
         "ProductName": "ADR on Alibaba Group Holding",
-        "Quantity": 58
+        "Quantity": 58,
+        "TransactionType": ""
     },
     {
         "Amount": 0,
         "AmountEUR": 0,
-        "Commission": 30,
+        "Commission": 0,
         "Currency": "EUR",
         "Date": "23-02-2023",
         "ExchangeRate": 1,
         "ISIN": "KYG875721634",
         "OrderID": "",
-        "OrderType": "compra",
+        "OrderType": "stockbuy",
         "Price": 49.8046,
         "ProductName": "Tencent Holdings Ltd",
-        "Quantity": 80
+        "Quantity": 80,
+        "TransactionType": ""
     },
     {
         "Amount": 0,
         "AmountEUR": 0,
-        "Commission": 30,
+        "Commission": 0,
         "Currency": "EUR",
         "Date": "23-02-2023",
         "ExchangeRate": 1,
         "ISIN": "US01609W1027",
         "OrderID": "",
-        "OrderType": "venda",
+        "OrderType": "stocksale",
         "Price": 108.8069,
         "ProductName": "Alibaba Group Holding Ltd",
-        "Quantity": 58
+        "Quantity": 58,
+        "TransactionType": ""
     },
     {
         "Amount": 0,
         "AmountEUR": 0,
-        "Commission": 30,
+        "Commission": 0,
         "Currency": "EUR",
         "Date": "23-02-2023",
         "ExchangeRate": 1,
         "ISIN": "KYG875721634",
         "OrderID": "",
-        "OrderType": "venda",
+        "OrderType": "stocksale",
         "Price": 49.8046,
         "ProductName": "Tencent Holdings Ltd",
-        "Quantity": 80
+        "Quantity": 80,
+        "TransactionType": ""
     },
     {
         "Amount": -3140.1,
         "AmountEUR": -3140.1,
-        "Commission": 30,
+        "Commission": 0,
         "Currency": "EUR",
         "Date": "16-01-2023",
         "ExchangeRate": 1,
         "ISIN": "BMG3602E1084",
         "OrderID": "",
-        "OrderType": "compra",
+        "OrderType": "stockbuy",
         "Price": 23.26,
         "ProductName": "Flow Traders Ltd",
-        "Quantity": 135
+        "Quantity": 135,
+        "TransactionType": ""
     },
     {
         "Amount": 3140.1,
         "AmountEUR": 3140.1,
-        "Commission": 30,
+        "Commission": 0,
         "Currency": "EUR",
         "Date": "16-01-2023",
         "ExchangeRate": 1,
         "ISIN": "NL0011279492",
         "OrderID": "",
-        "OrderType": "venda",
+        "OrderType": "stocksale",
         "Price": 23.26,
         "ProductName": "Flow Traders NV",
-        "Quantity": 135
+        "Quantity": 135,
+        "TransactionType": ""
     },
     {
         "Amount": 0,
         "AmountEUR": 0,
-        "Commission": 30,
+        "Commission": 0,
         "Currency": "EUR",
         "Date": "05-01-2023",
         "ExchangeRate": 1,
         "ISIN": "KYG596691041",
         "OrderID": "",
-        "OrderType": "compra",
+        "OrderType": "stockbuy",
         "Price": 0,
         "ProductName": "Meituan - Non tradeable",
-        "Quantity": 8
+        "Quantity": 8,
+        "TransactionType": ""
     },
     {
         "Amount": 110,
@@ -694,122 +743,131 @@
         "ExchangeRate": 1,
         "ISIN": "BEEN07268574",
         "OrderID": "5b0de6dd-1831-476c-a928-f922caa193f9",
-        "OrderType": "venda",
+        "OrderType": "option",
         "Price": 1.1,
         "ProductName": "COL P20.00 17MAR23",
-        "Quantity": 1
+        "Quantity": 1,
+        "TransactionType": ""
     },
     {
         "Amount": -3500,
         "AmountEUR": -3500,
-        "Commission": 30,
+        "Commission": 0,
         "Currency": "EUR",
         "Date": "08-12-2022",
         "ExchangeRate": 1,
         "ISIN": "BE0974256852",
         "OrderID": "",
-        "OrderType": "compra",
+        "OrderType": "stockbuy",
         "Price": 35,
         "ProductName": "Colruyt",
-        "Quantity": 100
+        "Quantity": 100,
+        "TransactionType": ""
     },
     {
         "Amount": 0,
         "AmountEUR": 0,
-        "Commission": 30,
+        "Commission": 0,
         "Currency": "EUR",
         "Date": "08-12-2022",
         "ExchangeRate": 1,
         "ISIN": "BEEN02796090",
         "OrderID": "",
-        "OrderType": "compra",
+        "OrderType": "option",
         "Price": 0,
         "ProductName": "COL P35.00 16DEC22",
-        "Quantity": 1
+        "Quantity": 1,
+        "TransactionType": ""
     },
     {
         "Amount": -12000,
         "AmountEUR": -12000,
-        "Commission": 30,
+        "Commission": 0,
         "Currency": "EUR",
         "Date": "27-10-2022",
         "ExchangeRate": 1,
         "ISIN": "BE0974256852",
         "OrderID": "",
-        "OrderType": "compra",
+        "OrderType": "stockbuy",
         "Price": 40,
         "ProductName": "Colruyt",
-        "Quantity": 300
+        "Quantity": 300,
+        "TransactionType": ""
     },
     {
         "Amount": 0,
         "AmountEUR": 0,
-        "Commission": 30,
+        "Commission": 0,
         "Currency": "EUR",
         "Date": "27-10-2022",
         "ExchangeRate": 1,
         "ISIN": "BEEN05499056",
         "OrderID": "",
-        "OrderType": "compra",
+        "OrderType": "option",
         "Price": 0,
         "ProductName": "COL P40.00 17MAR23",
-        "Quantity": 3
+        "Quantity": 3,
+        "TransactionType": ""
     },
     {
         "Amount": -3500,
         "AmountEUR": -3500,
-        "Commission": 30,
+        "Commission": 0,
         "Currency": "EUR",
         "Date": "27-10-2022",
         "ExchangeRate": 1,
         "ISIN": "BE0974256852",
         "OrderID": "",
-        "OrderType": "compra",
+        "OrderType": "stockbuy",
         "Price": 35,
         "ProductName": "Colruyt",
-        "Quantity": 100
+        "Quantity": 100,
+        "TransactionType": ""
     },
     {
         "Amount": 0,
         "AmountEUR": 0,
-        "Commission": 30,
+        "Commission": 0,
         "Currency": "EUR",
         "Date": "27-10-2022",
         "ExchangeRate": 1,
         "ISIN": "BEEN02796090",
         "OrderID": "",
-        "OrderType": "compra",
+        "OrderType": "option",
         "Price": 0,
         "ProductName": "COL P35.00 16DEC22",
-        "Quantity": 1
+        "Quantity": 1,
+        "TransactionType": ""
     },
     {
         "Amount": 110,
         "AmountEUR": 110,
-        "Commission": 30,
+        "Commission": 0,
         "Currency": "EUR",
         "Date": "05-10-2022",
         "ExchangeRate": 1,
         "ISIN": "BE0974256852",
         "OrderID": "",
-        "OrderType": "dividendo",
+        "OrderType": "dividend",
         "Price": 0,
         "ProductName": "",
-        "Quantity": 0
+        "Quantity": 0,
+        "TransactionType": ""
     },
     {
         "Amount": -33,
         "AmountEUR": -33,
-        "Commission": 30,
+        "Commission": 0,
         "Currency": "EUR",
         "Date": "05-10-2022",
         "ExchangeRate": 1,
         "ISIN": "BE0974256852",
         "OrderID": "",
-        "OrderType": "imposto sobre dividendo",
+        "OrderType": "dividendtax",
         "Price": 0,
         "ProductName": "",
-        "Quantity": 0
+        "Quantity": 0,
+        "TransactionType": ""
     },
     {
         "Amount": -320,
@@ -820,10 +878,11 @@
         "ExchangeRate": 1,
         "ISIN": "BEEN05993769",
         "OrderID": "cb8baf97-999f-40fa-8eed-c8c5acb1bb49",
-        "OrderType": "compra",
+        "OrderType": "option",
         "Price": 3.2,
         "ProductName": "COL P24.00 16DEC22",
-        "Quantity": 1
+        "Quantity": 1,
+        "TransactionType": ""
     },
     {
         "Amount": -50,
@@ -834,10 +893,11 @@
         "ExchangeRate": 1,
         "ISIN": "BEEN07268574",
         "OrderID": "a65bd5c5-a626-4dd2-93af-6532bdec84ff",
-        "OrderType": "compra",
+        "OrderType": "option",
         "Price": 0.5,
         "ProductName": "COL P20.00 17MAR23",
-        "Quantity": 1
+        "Quantity": 1,
+        "TransactionType": ""
     },
     {
         "Amount": 4080,
@@ -848,10 +908,11 @@
         "ExchangeRate": 1,
         "ISIN": "BEEN05499056",
         "OrderID": "f33400a2-8cb6-46ff-9570-2ce22caf2979",
-        "OrderType": "venda",
+        "OrderType": "option",
         "Price": 13.6,
         "ProductName": "COL P40.00 17MAR23",
-        "Quantity": 3
+        "Quantity": 3,
+        "TransactionType": ""
     },
     {
         "Amount": -4600,
@@ -862,38 +923,41 @@
         "ExchangeRate": 1,
         "ISIN": "BEEN02643227",
         "OrderID": "b2c511c4-f104-4ebd-861d-dcc8e09fbe42",
-        "OrderType": "compra",
+        "OrderType": "option",
         "Price": 23,
         "ProductName": "COL P50.00 16SEP22",
-        "Quantity": 2
+        "Quantity": 2,
+        "TransactionType": ""
     },
     {
         "Amount": -5000,
         "AmountEUR": -5000,
-        "Commission": 30,
+        "Commission": 0,
         "Currency": "EUR",
         "Date": "01-09-2022",
         "ExchangeRate": 1,
         "ISIN": "BE0974256852",
         "OrderID": "",
-        "OrderType": "compra",
+        "OrderType": "stockbuy",
         "Price": 50,
         "ProductName": "Colruyt",
-        "Quantity": 100
+        "Quantity": 100,
+        "TransactionType": ""
     },
     {
         "Amount": 0,
         "AmountEUR": 0,
-        "Commission": 30,
+        "Commission": 0,
         "Currency": "EUR",
         "Date": "01-09-2022",
         "ExchangeRate": 1,
         "ISIN": "BEEN02643227",
         "OrderID": "",
-        "OrderType": "compra",
+        "OrderType": "option",
         "Price": 0,
         "ProductName": "COL P50.00 16SEP22",
-        "Quantity": 1
+        "Quantity": 1,
+        "TransactionType": ""
     },
     {
         "Amount": 61,
@@ -904,38 +968,41 @@
         "ExchangeRate": 1,
         "ISIN": "BEEN05993769",
         "OrderID": "bce7f8fa-51d2-4e0e-9aac-ff5807e58f13",
-        "OrderType": "venda",
+        "OrderType": "option",
         "Price": 0.61,
         "ProductName": "COL P24.00 16DEC22",
-        "Quantity": 1
+        "Quantity": 1,
+        "TransactionType": ""
     },
     {
         "Amount": 70,
         "AmountEUR": 70,
-        "Commission": 30,
+        "Commission": 0,
         "Currency": "EUR",
         "Date": "21-08-2022",
         "ExchangeRate": 1,
         "ISIN": "NL0011279492",
         "OrderID": "",
-        "OrderType": "dividendo",
+        "OrderType": "dividend",
         "Price": 0,
         "ProductName": "",
-        "Quantity": 0
+        "Quantity": 0,
+        "TransactionType": ""
     },
     {
         "Amount": -10.5,
         "AmountEUR": -10.5,
-        "Commission": 30,
+        "Commission": 0,
         "Currency": "EUR",
         "Date": "21-08-2022",
         "ExchangeRate": 1,
         "ISIN": "NL0011279492",
         "OrderID": "",
-        "OrderType": "imposto sobre dividendo",
+        "OrderType": "dividendtax",
         "Price": 0,
         "ProductName": "",
-        "Quantity": 0
+        "Quantity": 0,
+        "TransactionType": ""
     },
     {
         "Amount": -757.9,
@@ -946,10 +1013,11 @@
         "ExchangeRate": 1,
         "ISIN": "KYG875721634",
         "OrderID": "ca3c219b-8e3d-4df9-853c-f073efa05835",
-        "OrderType": "compra",
+        "OrderType": "stockbuy",
         "Price": 37.895,
         "ProductName": "Tencent Holdings Ltd",
-        "Quantity": 20
+        "Quantity": 20,
+        "TransactionType": ""
     },
     {
         "Amount": -730.8,
@@ -960,10 +1028,11 @@
         "ExchangeRate": 1,
         "ISIN": "US01609W1027",
         "OrderID": "f6804b16-c9c0-4113-8dc7-6f80a2a83037",
-        "OrderType": "compra",
+        "OrderType": "stockbuy",
         "Price": 91.35,
         "ProductName": "Alibaba Group Holding Ltd",
-        "Quantity": 8
+        "Quantity": 8,
+        "TransactionType": ""
     },
     {
         "Amount": -746.9,
@@ -974,10 +1043,11 @@
         "ExchangeRate": 1,
         "ISIN": "NL0011279492",
         "OrderID": "2dc42fd5-c1c4-456c-811c-b0754699c69c",
-        "OrderType": "compra",
+        "OrderType": "stockbuy",
         "Price": 21.34,
         "ProductName": "Flow Traders NV",
-        "Quantity": 35
+        "Quantity": 35,
+        "TransactionType": ""
     },
     {
         "Amount": -692.23,
@@ -988,10 +1058,11 @@
         "ExchangeRate": 1,
         "ISIN": "IE00BK5BQT80",
         "OrderID": "7c99ea40-7fae-4142-9df9-7a129e939e62",
-        "OrderType": "compra",
+        "OrderType": "stockbuy",
         "Price": 98.89,
         "ProductName": "Vanguard FTSE All-World UCITS ETF USD Acc",
-        "Quantity": 7
+        "Quantity": 7,
+        "TransactionType": ""
     },
     {
         "Amount": -578.7,
@@ -1002,10 +1073,11 @@
         "ExchangeRate": 1,
         "ISIN": "IE00BK5BQT80",
         "OrderID": "2b69a6e4-dde4-4fb4-9ca4-300cb4b66a6a",
-        "OrderType": "compra",
+        "OrderType": "stockbuy",
         "Price": 96.45,
         "ProductName": "Vanguard FTSE All-World UCITS ETF USD Acc",
-        "Quantity": 6
+        "Quantity": 6,
+        "TransactionType": ""
     },
     {
         "Amount": -337.5,
@@ -1016,24 +1088,26 @@
         "ExchangeRate": 1,
         "ISIN": "NL0011279492",
         "OrderID": "39ae162f-7eb1-408b-aad1-f95ca82e4300",
-        "OrderType": "compra",
+        "OrderType": "stockbuy",
         "Price": 22.5,
         "ProductName": "Flow Traders NV",
-        "Quantity": 15
+        "Quantity": 15,
+        "TransactionType": ""
     },
     {
         "Amount": 0,
         "AmountEUR": 0,
-        "Commission": 30,
+        "Commission": 0,
         "Currency": "EUR",
         "Date": "16-07-2022",
         "ExchangeRate": 1,
         "ISIN": "BEEN07090374",
         "OrderID": "",
-        "OrderType": "venda",
+        "OrderType": "option",
         "Price": 0,
         "ProductName": "COL P25.00 15JUL22",
-        "Quantity": 3
+        "Quantity": 3,
+        "TransactionType": ""
     },
     {
         "Amount": -620.69,
@@ -1044,10 +1118,11 @@
         "ExchangeRate": 1,
         "ISIN": "IE00BK5BQT80",
         "OrderID": "3c0a65be-8020-4d17-b221-8ffeb9aad7ee",
-        "OrderType": "compra",
+        "OrderType": "stockbuy",
         "Price": 88.67,
         "ProductName": "Vanguard FTSE All-World UCITS ETF USD Acc",
-        "Quantity": 7
+        "Quantity": 7,
+        "TransactionType": ""
     },
     {
         "Amount": 51,
@@ -1058,10 +1133,11 @@
         "ExchangeRate": 1,
         "ISIN": "BEEN07094111",
         "OrderID": "c94565bc-14d9-46f2-9420-4918d61eea5c",
-        "OrderType": "venda",
+        "OrderType": "option",
         "Price": 0.17,
         "ProductName": "COL P25.00 17JUN22",
-        "Quantity": 3
+        "Quantity": 3,
+        "TransactionType": ""
     },
     {
         "Amount": 1960,
@@ -1072,10 +1148,11 @@
         "ExchangeRate": 1,
         "ISIN": "BEEN02796090",
         "OrderID": "ddda615f-e5be-4af8-ac4a-dd140e5e60c7",
-        "OrderType": "venda",
+        "OrderType": "option",
         "Price": 9.8,
         "ProductName": "COL P35.00 16DEC22",
-        "Quantity": 2
+        "Quantity": 2,
+        "TransactionType": ""
     },
     {
         "Amount": -1780,
@@ -1086,10 +1163,11 @@
         "ExchangeRate": 1,
         "ISIN": "BEEN02019725",
         "OrderID": "dc459ccf-1ba3-4000-ac15-2219dc1e7f7f",
-        "OrderType": "compra",
+        "OrderType": "option",
         "Price": 8.9,
         "ProductName": "COL P35.00 17JUN22",
-        "Quantity": 2
+        "Quantity": 2,
+        "TransactionType": ""
     },
     {
         "Amount": -159,
@@ -1100,10 +1178,11 @@
         "ExchangeRate": 1,
         "ISIN": "BEEN07090374",
         "OrderID": "c2fc5cf3-78da-4ef9-b5bd-7a75bb2ac553",
-        "OrderType": "compra",
+        "OrderType": "option",
         "Price": 0.53,
         "ProductName": "COL P25.00 15JUL22",
-        "Quantity": 3
+        "Quantity": 3,
+        "TransactionType": ""
     },
     {
         "Amount": -732.32,
@@ -1114,24 +1193,26 @@
         "ExchangeRate": 1,
         "ISIN": "IE00BK5BQT80",
         "OrderID": "366cdfe0-5695-40f0-a053-39b405a25b13",
-        "OrderType": "compra",
+        "OrderType": "stockbuy",
         "Price": 91.54,
         "ProductName": "Vanguard FTSE All-World UCITS ETF USD Acc",
-        "Quantity": 8
+        "Quantity": 8,
+        "TransactionType": ""
     },
     {
         "Amount": 96,
         "AmountEUR": 11.4755666061012,
-        "Commission": 30,
+        "Commission": 0,
         "Currency": "HKD",
         "Date": "07-06-2022",
         "ExchangeRate": 8.3656,
         "ISIN": "KYG875721634",
         "OrderID": "",
-        "OrderType": "dividendo",
+        "OrderType": "dividend",
         "Price": 0,
         "ProductName": "",
-        "Quantity": 0
+        "Quantity": 0,
+        "TransactionType": ""
     },
     {
         "Amount": -105,
@@ -1142,10 +1223,11 @@
         "ExchangeRate": 1,
         "ISIN": "BEEN07094111",
         "OrderID": "ff8bd837-0ce9-4c14-b8dc-8ced3b34d1e4",
-        "OrderType": "compra",
+        "OrderType": "option",
         "Price": 0.35,
         "ProductName": "COL P25.00 17JUN22",
-        "Quantity": 3
+        "Quantity": 3,
+        "TransactionType": ""
     },
     {
         "Amount": -667.03,
@@ -1156,10 +1238,11 @@
         "ExchangeRate": 1,
         "ISIN": "IE00BK5BQT80",
         "OrderID": "17301523-f51b-4644-9137-99f62c3ca133",
-        "OrderType": "compra",
+        "OrderType": "stockbuy",
         "Price": 95.29,
         "ProductName": "Vanguard FTSE All-World UCITS ETF USD Acc",
-        "Quantity": 7
+        "Quantity": 7,
+        "TransactionType": ""
     },
     {
         "Amount": 375,
@@ -1170,10 +1253,11 @@
         "ExchangeRate": 1,
         "ISIN": "BEEN02019725",
         "OrderID": "5c0c4d7c-4b47-4877-9c87-79a8bc2f0d1f",
-        "OrderType": "venda",
+        "OrderType": "option",
         "Price": 3.75,
         "ProductName": "COL P35.00 17JUN22",
-        "Quantity": 1
+        "Quantity": 1,
+        "TransactionType": ""
     },
     {
         "Amount": 179,
@@ -1184,10 +1268,11 @@
         "ExchangeRate": 1,
         "ISIN": "BEEN02019725",
         "OrderID": "44e5de17-7762-4416-87f5-0eb244327930",
-        "OrderType": "venda",
+        "OrderType": "option",
         "Price": 1.79,
         "ProductName": "COL P35.00 17JUN22",
-        "Quantity": 1
+        "Quantity": 1,
+        "TransactionType": ""
     },
     {
         "Amount": -73,
@@ -1198,10 +1283,11 @@
         "ExchangeRate": 1,
         "ISIN": "BEEN05102064",
         "OrderID": "09cfe70a-74e2-48c3-b039-fd6cbf277275",
-        "OrderType": "compra",
+        "OrderType": "option",
         "Price": 0.73,
         "ProductName": "EUN C11.00 16SEP22",
-        "Quantity": 1
+        "Quantity": 1,
+        "TransactionType": ""
     },
     {
         "Amount": -105,
@@ -1212,38 +1298,41 @@
         "ExchangeRate": 1,
         "ISIN": "BEEN05102049",
         "OrderID": "ba484fac-0d13-43eb-b3cf-660fa7de8d7f",
-        "OrderType": "compra",
+        "OrderType": "option",
         "Price": 0.35,
         "ProductName": "EUN C11.00 17JUN22",
-        "Quantity": 3
+        "Quantity": 3,
+        "TransactionType": ""
     },
     {
         "Amount": 29.75,
         "AmountEUR": 29.75,
-        "Commission": 30,
+        "Commission": 0,
         "Currency": "EUR",
         "Date": "06-05-2022",
         "ExchangeRate": 1,
         "ISIN": "NL0011279492",
         "OrderID": "",
-        "OrderType": "dividendo",
+        "OrderType": "dividend",
         "Price": 0,
         "ProductName": "",
-        "Quantity": 0
+        "Quantity": 0,
+        "TransactionType": ""
     },
     {
         "Amount": -4.46,
         "AmountEUR": -4.46,
-        "Commission": 30,
+        "Commission": 0,
         "Currency": "EUR",
         "Date": "06-05-2022",
         "ExchangeRate": 1,
         "ISIN": "NL0011279492",
         "OrderID": "",
-        "OrderType": "imposto sobre dividendo",
+        "OrderType": "dividendtax",
         "Price": 0,
         "ProductName": "",
-        "Quantity": 0
+        "Quantity": 0,
+        "TransactionType": ""
     },
     {
         "Amount": 98,
@@ -1254,10 +1343,11 @@
         "ExchangeRate": 1,
         "ISIN": "BEEN05102064",
         "OrderID": "2d8e82b7-d672-459f-953d-b01372314076",
-        "OrderType": "venda",
+        "OrderType": "option",
         "Price": 0.98,
         "ProductName": "EUN C11.00 16SEP22",
-        "Quantity": 1
+        "Quantity": 1,
+        "TransactionType": ""
     },
     {
         "Amount": 128,
@@ -1268,10 +1358,11 @@
         "ExchangeRate": 1,
         "ISIN": "BEEN05102049",
         "OrderID": "65a26f60-0efd-4624-b032-68d30b6b7f1b",
-        "OrderType": "venda",
+        "OrderType": "option",
         "Price": 0.64,
         "ProductName": "EUN C11.00 17JUN22",
-        "Quantity": 2
+        "Quantity": 2,
+        "TransactionType": ""
     },
     {
         "Amount": -511.1,
@@ -1282,10 +1373,11 @@
         "ExchangeRate": 1,
         "ISIN": "IE00BK5BQT80",
         "OrderID": "c87a55a9-d92d-42d5-a168-2cbde56757e6",
-        "OrderType": "compra",
+        "OrderType": "stockbuy",
         "Price": 102.22,
         "ProductName": "Vanguard FTSE All-World UCITS ETF USD Acc",
-        "Quantity": 5
+        "Quantity": 5,
+        "TransactionType": ""
     },
     {
         "Amount": 63,
@@ -1296,10 +1388,11 @@
         "ExchangeRate": 1,
         "ISIN": "BEEN05102049",
         "OrderID": "204f4d32-8f0f-4a8c-9c65-13aed51e4867",
-        "OrderType": "venda",
+        "OrderType": "option",
         "Price": 0.63,
         "ProductName": "EUN C11.00 17JUN22",
-        "Quantity": 1
+        "Quantity": 1,
+        "TransactionType": ""
     },
     {
         "Amount": 51.6,
@@ -1310,38 +1403,41 @@
         "ExchangeRate": 1,
         "ISIN": "KYG8208B1014",
         "OrderID": "e47ecea8-1f23-4153-907d-fbd8e6666fd8",
-        "OrderType": "venda",
+        "OrderType": "stocksale",
         "Price": 25.8,
         "ProductName": "JD.Com Inc",
-        "Quantity": 2
+        "Quantity": 2,
+        "TransactionType": ""
     },
     {
         "Amount": 0,
         "AmountEUR": 0,
-        "Commission": 30,
+        "Commission": 0,
         "Currency": "EUR",
         "Date": "28-03-2022",
         "ExchangeRate": 1,
         "ISIN": "KYG8208B1014",
         "OrderID": "",
-        "OrderType": "venda",
+        "OrderType": "stocksale",
         "Price": 0,
         "ProductName": "JD.Com Inc",
-        "Quantity": 2
+        "Quantity": 2,
+        "TransactionType": ""
     },
     {
         "Amount": 0,
         "AmountEUR": 0,
-        "Commission": 30,
+        "Commission": 0,
         "Currency": "EUR",
         "Date": "28-03-2022",
         "ExchangeRate": 1,
         "ISIN": "KYG8208B1014",
         "OrderID": "",
-        "OrderType": "compra",
+        "OrderType": "stockbuy",
         "Price": 0,
         "ProductName": "JD.Com Inc",
-        "Quantity": 2
+        "Quantity": 2,
+        "TransactionType": ""
     },
     {
         "Amount": -623,
@@ -1352,10 +1448,11 @@
         "ExchangeRate": 1,
         "ISIN": "KYG875721634",
         "OrderID": "3ff865f5-6899-4248-9206-6a8f9bcee365",
-        "OrderType": "compra",
+        "OrderType": "stockbuy",
         "Price": 44.5,
         "ProductName": "Tencent Holdings Ltd",
-        "Quantity": 14
+        "Quantity": 14,
+        "TransactionType": ""
     },
     {
         "Amount": -695.66,
@@ -1366,10 +1463,11 @@
         "ExchangeRate": 1,
         "ISIN": "IE00BK5BQT80",
         "OrderID": "fd35c0fe-c016-45c1-a91b-b2f31415e0d1",
-        "OrderType": "compra",
+        "OrderType": "stockbuy",
         "Price": 99.38,
         "ProductName": "Vanguard FTSE All-World UCITS ETF USD Acc",
-        "Quantity": 7
+        "Quantity": 7,
+        "TransactionType": ""
     },
     {
         "Amount": 4500,
@@ -1380,10 +1478,11 @@
         "ExchangeRate": 1,
         "ISIN": "BEEN02643227",
         "OrderID": "47256df1-c85a-4cee-8eda-9fc686f7615f",
-        "OrderType": "venda",
+        "OrderType": "option",
         "Price": 15,
         "ProductName": "COL P50.00 16SEP22",
-        "Quantity": 3
+        "Quantity": 3,
+        "TransactionType": ""
     },
     {
         "Amount": -4005,
@@ -1394,10 +1493,11 @@
         "ExchangeRate": 1,
         "ISIN": "BEEN01397148",
         "OrderID": "d65b3558-6574-4510-a385-aa4a7a2b22c7",
-        "OrderType": "compra",
+        "OrderType": "option",
         "Price": 13.35,
         "ProductName": "COL P48.00 18MAR22",
-        "Quantity": 3
+        "Quantity": 3,
+        "TransactionType": ""
     },
     {
         "Amount": -55,
@@ -1408,10 +1508,11 @@
         "ExchangeRate": 1,
         "ISIN": "NLEN03404782",
         "OrderID": "f1597393-d847-47d4-a05c-9e6c680ee30d",
-        "OrderType": "compra",
+        "OrderType": "option",
         "Price": 0.55,
         "ProductName": "FLW P31.00 18MAR22",
-        "Quantity": 1
+        "Quantity": 1,
+        "TransactionType": ""
     },
     {
         "Amount": -150,
@@ -1422,10 +1523,11 @@
         "ExchangeRate": 1,
         "ISIN": "NLEN03404782",
         "OrderID": "690b5508-d63b-47cd-a5d9-0fc7f5769fbe",
-        "OrderType": "compra",
+        "OrderType": "option",
         "Price": 0.75,
         "ProductName": "FLW P31.00 18MAR22",
-        "Quantity": 2
+        "Quantity": 2,
+        "TransactionType": ""
     },
     {
         "Amount": -493,
@@ -1436,10 +1538,26 @@
         "ExchangeRate": 1,
         "ISIN": "IE00BK5BQT80",
         "OrderID": "19ee6bb5-f01f-4287-83d8-bb1ab9200bbd",
-        "OrderType": "compra",
+        "OrderType": "stockbuy",
         "Price": 98.6,
         "ProductName": "Vanguard FTSE All-World UCITS ETF USD Acc",
-        "Quantity": 5
+        "Quantity": 5,
+        "TransactionType": ""
+    },
+    {
+        "Amount": 0.01,
+        "AmountEUR": 0.01,
+        "Commission": 0,
+        "Currency": "EUR",
+        "Date": "28-02-2022",
+        "ExchangeRate": 1,
+        "ISIN": "",
+        "OrderID": "",
+        "OrderType": "cashdeposit",
+        "Price": 0,
+        "ProductName": "Cash Deposit",
+        "Quantity": 0,
+        "TransactionType": ""
     },
     {
         "Amount": -562.74,
@@ -1450,10 +1568,11 @@
         "ExchangeRate": 1,
         "ISIN": "IE00BK5BQT80",
         "OrderID": "c303feee-ed29-462e-8d0e-ce2355c68356",
-        "OrderType": "compra",
+        "OrderType": "stockbuy",
         "Price": 93.79,
         "ProductName": "Vanguard FTSE All-World UCITS ETF USD Acc",
-        "Quantity": 6
+        "Quantity": 6,
+        "TransactionType": ""
     },
     {
         "Amount": 510,
@@ -1464,10 +1583,11 @@
         "ExchangeRate": 1,
         "ISIN": "NLEN03404782",
         "OrderID": "192f4519-b528-4de3-865e-df5b0d570a8d",
-        "OrderType": "venda",
+        "OrderType": "option",
         "Price": 1.7,
         "ProductName": "FLW P31.00 18MAR22",
-        "Quantity": 3
+        "Quantity": 3,
+        "TransactionType": ""
     },
     {
         "Amount": 39,
@@ -1478,10 +1598,11 @@
         "ExchangeRate": 1,
         "ISIN": "BEEN04700199",
         "OrderID": "2d58bc3a-2e69-4506-9dd3-879a96274574",
-        "OrderType": "venda",
+        "OrderType": "option",
         "Price": 0.13,
         "ProductName": "COL P29.00 18MAR22",
-        "Quantity": 3
+        "Quantity": 3,
+        "TransactionType": ""
     },
     {
         "Amount": -22,
@@ -1492,10 +1613,11 @@
         "ExchangeRate": 1,
         "ISIN": "NLEN03123481",
         "OrderID": "4c5cfa1a-898d-4274-be38-7b7b7882e43f",
-        "OrderType": "compra",
+        "OrderType": "option",
         "Price": 0.22,
         "ProductName": "FLW P32.00 18FEB22",
-        "Quantity": 1
+        "Quantity": 1,
+        "TransactionType": ""
     },
     {
         "Amount": -1072,
@@ -1506,10 +1628,11 @@
         "ExchangeRate": 1,
         "ISIN": "US01609W1027",
         "OrderID": "edb9093c-e25f-45de-bb93-ae881369249c",
-        "OrderType": "compra",
+        "OrderType": "stockbuy",
         "Price": 107.2,
         "ProductName": "Alibaba Group Holding Ltd",
-        "Quantity": 10
+        "Quantity": 10,
+        "TransactionType": ""
     },
     {
         "Amount": -503,
@@ -1520,10 +1643,11 @@
         "ExchangeRate": 1,
         "ISIN": "IE00BK5BQT80",
         "OrderID": "62190590-b8ef-4467-962d-fa0a385729f4",
-        "OrderType": "compra",
+        "OrderType": "stockbuy",
         "Price": 100.6,
         "ProductName": "Vanguard FTSE All-World UCITS ETF USD Acc",
-        "Quantity": 5
+        "Quantity": 5,
+        "TransactionType": ""
     },
     {
         "Amount": -55,
@@ -1534,10 +1658,11 @@
         "ExchangeRate": 1,
         "ISIN": "NLEN03127482",
         "OrderID": "c8200331-fc99-4614-b625-ec8c7b5dc888",
-        "OrderType": "compra",
+        "OrderType": "option",
         "Price": 0.55,
         "ProductName": "PRX P64.00 18FEB22",
-        "Quantity": 1
+        "Quantity": 1,
+        "TransactionType": ""
     },
     {
         "Amount": 40,
@@ -1548,10 +1673,11 @@
         "ExchangeRate": 1,
         "ISIN": "NLEN03225849",
         "OrderID": "787fed9d-140d-4dbe-b52e-15dd3a53c33e",
-        "OrderType": "venda",
+        "OrderType": "option",
         "Price": 0.4,
         "ProductName": "PRX P58.00 18FEB22",
-        "Quantity": 1
+        "Quantity": 1,
+        "TransactionType": ""
     },
     {
         "Amount": -60,
@@ -1562,10 +1688,11 @@
         "ExchangeRate": 1,
         "ISIN": "BEEN04700199",
         "OrderID": "36cd3787-1fee-4758-badb-fd42a6691841",
-        "OrderType": "compra",
+        "OrderType": "option",
         "Price": 0.2,
         "ProductName": "COL P29.00 18MAR22",
-        "Quantity": 3
+        "Quantity": 3,
+        "TransactionType": ""
     },
     {
         "Amount": -54,
@@ -1576,10 +1703,11 @@
         "ExchangeRate": 1,
         "ISIN": "NLEN03225849",
         "OrderID": "57390798-897f-4368-8e5c-43e69bcdcc5e",
-        "OrderType": "compra",
+        "OrderType": "option",
         "Price": 0.54,
         "ProductName": "PRX P58.00 18FEB22",
-        "Quantity": 1
+        "Quantity": 1,
+        "TransactionType": ""
     },
     {
         "Amount": 124,
@@ -1590,38 +1718,41 @@
         "ExchangeRate": 1,
         "ISIN": "NLEN03127482",
         "OrderID": "c959f66d-0afa-4d08-b8c6-e7e3559ab9bb",
-        "OrderType": "venda",
+        "OrderType": "option",
         "Price": 1.24,
         "ProductName": "PRX P64.00 18FEB22",
-        "Quantity": 1
+        "Quantity": 1,
+        "TransactionType": ""
     },
     {
         "Amount": 0,
         "AmountEUR": 0,
-        "Commission": 30,
+        "Commission": 0,
         "Currency": "EUR",
         "Date": "23-01-2022",
         "ExchangeRate": 1,
         "ISIN": "NLEN03374258",
         "OrderID": "",
-        "OrderType": "compra",
+        "OrderType": "option",
         "Price": 0,
         "ProductName": "PRX P67.00 21JAN22",
-        "Quantity": 1
+        "Quantity": 1,
+        "TransactionType": ""
     },
     {
         "Amount": 0,
         "AmountEUR": 0,
-        "Commission": 30,
+        "Commission": 0,
         "Currency": "EUR",
         "Date": "20-01-2022",
         "ExchangeRate": 1,
         "ISIN": "KYG8208B1014",
         "OrderID": "",
-        "OrderType": "compra",
+        "OrderType": "stockbuy",
         "Price": 0,
         "ProductName": "JD.Com Inc",
-        "Quantity": 2
+        "Quantity": 2,
+        "TransactionType": ""
     },
     {
         "Amount": 10,
@@ -1632,10 +1763,11 @@
         "ExchangeRate": 1,
         "ISIN": "NLEN03374258",
         "OrderID": "e6d2bc77-4d0a-4794-a5bf-6648e9ebaee4",
-        "OrderType": "venda",
+        "OrderType": "option",
         "Price": 0.1,
         "ProductName": "PRX P67.00 21JAN22",
-        "Quantity": 1
+        "Quantity": 1,
+        "TransactionType": ""
     },
     {
         "Amount": 80,
@@ -1646,10 +1778,11 @@
         "ExchangeRate": 1,
         "ISIN": "NLEN03123481",
         "OrderID": "82873327-f9da-4b3f-b7fe-3744363e67f0",
-        "OrderType": "venda",
+        "OrderType": "option",
         "Price": 0.8,
         "ProductName": "FLW P32.00 18FEB22",
-        "Quantity": 1
+        "Quantity": 1,
+        "TransactionType": ""
     },
     {
         "Amount": -24,
@@ -1660,10 +1793,11 @@
         "ExchangeRate": 1,
         "ISIN": "NLEN03361156",
         "OrderID": "71e72e2a-2b4a-45e5-b9b0-cb7b07675e7f",
-        "OrderType": "compra",
+        "OrderType": "option",
         "Price": 0.24,
         "ProductName": "PRX P66.00 21JAN22",
-        "Quantity": 1
+        "Quantity": 1,
+        "TransactionType": ""
     },
     {
         "Amount": 90,
@@ -1674,10 +1808,11 @@
         "ExchangeRate": 1,
         "ISIN": "NLEN03361156",
         "OrderID": "971a1938-60bf-48e8-9bf0-46aefb1fffae",
-        "OrderType": "venda",
+        "OrderType": "option",
         "Price": 0.9,
         "ProductName": "PRX P66.00 21JAN22",
-        "Quantity": 1
+        "Quantity": 1,
+        "TransactionType": ""
     },
     {
         "Amount": -419.76,
@@ -1688,10 +1823,11 @@
         "ExchangeRate": 1,
         "ISIN": "IE00BK5BQT80",
         "OrderID": "86bb2e4e-89cc-4ba4-8030-13638a0ceea6",
-        "OrderType": "compra",
+        "OrderType": "stockbuy",
         "Price": 104.94,
         "ProductName": "Vanguard FTSE All-World UCITS ETF USD Acc",
-        "Quantity": 4
+        "Quantity": 4,
+        "TransactionType": ""
     },
     {
         "Amount": -6124.8,
@@ -1702,10 +1838,11 @@
         "ExchangeRate": 1,
         "ISIN": "IE00BK5BQT80",
         "OrderID": "7d360153-aedc-4bff-b609-a7d7ee626021",
-        "OrderType": "compra",
+        "OrderType": "stockbuy",
         "Price": 102.08,
         "ProductName": "Vanguard FTSE All-World UCITS ETF USD Acc",
-        "Quantity": 60
+        "Quantity": 60,
+        "TransactionType": ""
     },
     {
         "Amount": 3157.41,
@@ -1716,10 +1853,11 @@
         "ExchangeRate": 1,
         "ISIN": "IE00B4L5Y983",
         "OrderID": "ee641375-5566-4d80-964b-700eedfa50d6",
-        "OrderType": "venda",
+        "OrderType": "stocksale",
         "Price": 77.01,
         "ProductName": "iShares Core MSCI World UCITS ETF USD (Acc)",
-        "Quantity": 41
+        "Quantity": 41,
+        "TransactionType": ""
     },
     {
         "Amount": 2464.32,
@@ -1730,10 +1868,11 @@
         "ExchangeRate": 1,
         "ISIN": "IE00B4L5Y983",
         "OrderID": "ee641375-5566-4d80-964b-700eedfa50d6",
-        "OrderType": "venda",
+        "OrderType": "stocksale",
         "Price": 77.01,
         "ProductName": "iShares Core MSCI World UCITS ETF USD (Acc)",
-        "Quantity": 32
+        "Quantity": 32,
+        "TransactionType": ""
     },
     {
         "Amount": -384.5,
@@ -1744,24 +1883,26 @@
         "ExchangeRate": 1,
         "ISIN": "IE00B4L5Y983",
         "OrderID": "ce9d28b8-98b8-472f-9621-33f280952d92",
-        "OrderType": "compra",
+        "OrderType": "stockbuy",
         "Price": 76.9,
         "ProductName": "iShares Core MSCI World UCITS ETF USD (Acc)",
-        "Quantity": 5
+        "Quantity": 5,
+        "TransactionType": ""
     },
     {
         "Amount": 0.01,
         "AmountEUR": 0.00882145377558222,
-        "Commission": 30,
+        "Commission": 0,
         "Currency": "USD",
         "Date": "16-12-2021",
         "ExchangeRate": 1.1336,
         "ISIN": "US8288061091",
         "OrderID": "",
-        "OrderType": "imposto sobre dividendo",
+        "OrderType": "dividendtax",
         "Price": 0,
         "ProductName": "",
-        "Quantity": 0
+        "Quantity": 0,
+        "TransactionType": ""
     },
     {
         "Amount": 2265,
@@ -1772,10 +1913,11 @@
         "ExchangeRate": 1,
         "ISIN": "BEEN01397148",
         "OrderID": "2f43ab6d-7baf-498e-af3a-2812715c188b",
-        "OrderType": "venda",
+        "OrderType": "option",
         "Price": 7.55,
         "ProductName": "COL P48.00 18MAR22",
-        "Quantity": 3
+        "Quantity": 3,
+        "TransactionType": ""
     },
     {
         "Amount": -2265,
@@ -1786,10 +1928,11 @@
         "ExchangeRate": 1,
         "ISIN": "BEEN00724821",
         "OrderID": "1e945c1a-1d48-4679-b11d-a9633b5d72a0",
-        "OrderType": "compra",
+        "OrderType": "option",
         "Price": 7.55,
         "ProductName": "COL P48.00 17DEC21",
-        "Quantity": 3
+        "Quantity": 3,
+        "TransactionType": ""
     },
     {
         "Amount": -1064,
@@ -1800,10 +1943,11 @@
         "ExchangeRate": 1,
         "ISIN": "KYG875721634",
         "OrderID": "61efffaf-d932-4b94-b46e-fea998888650",
-        "OrderType": "compra",
+        "OrderType": "stockbuy",
         "Price": 53.2,
         "ProductName": "Tencent Holdings Ltd",
-        "Quantity": 20
+        "Quantity": 20,
+        "TransactionType": ""
     },
     {
         "Amount": 592.3,
@@ -1814,10 +1958,11 @@
         "ExchangeRate": 1.1314,
         "ISIN": "US00287Y1091",
         "OrderID": "32eda07e-163c-4679-8203-2cc3be7c8d76",
-        "OrderType": "venda",
+        "OrderType": "stocksale",
         "Price": 118.46,
         "ProductName": "Abbvie Inc",
-        "Quantity": 5
+        "Quantity": 5,
+        "TransactionType": ""
     },
     {
         "Amount": -4508,
@@ -1828,10 +1973,11 @@
         "ExchangeRate": 1,
         "ISIN": "US01609W1027",
         "OrderID": "2ace4c71-16de-4ffe-ba20-66139bb2940d",
-        "OrderType": "compra",
+        "OrderType": "stockbuy",
         "Price": 112.7,
         "ProductName": "Alibaba Group Holding Ltd",
-        "Quantity": 40
+        "Quantity": 40,
+        "TransactionType": ""
     },
     {
         "Amount": 5106.4,
@@ -1842,10 +1988,11 @@
         "ExchangeRate": 1.1314,
         "ISIN": "US01609W1027",
         "OrderID": "52794c97-27b9-41eb-bda0-979b1474b4f4",
-        "OrderType": "venda",
+        "OrderType": "stocksale",
         "Price": 127.66,
         "ProductName": "ADR on Alibaba Group Holding",
-        "Quantity": 40
+        "Quantity": 40,
+        "TransactionType": ""
     },
     {
         "Amount": -693,
@@ -1856,38 +2003,41 @@
         "ExchangeRate": 1,
         "ISIN": "IE00B4L5Y983",
         "OrderID": "e5bcf6e0-cf35-4581-8623-9c3f4b4be2c0",
-        "OrderType": "compra",
+        "OrderType": "stockbuy",
         "Price": 77,
         "ProductName": "iShares Core MSCI World UCITS ETF USD (Acc)",
-        "Quantity": 9
+        "Quantity": 9,
+        "TransactionType": ""
     },
     {
         "Amount": 6.5,
         "AmountEUR": 5.71780436312456,
-        "Commission": 30,
+        "Commission": 0,
         "Currency": "USD",
         "Date": "16-11-2021",
         "ExchangeRate": 1.1368,
         "ISIN": "US00287Y1091",
         "OrderID": "",
-        "OrderType": "dividendo",
+        "OrderType": "dividend",
         "Price": 0,
         "ProductName": "",
-        "Quantity": 0
+        "Quantity": 0,
+        "TransactionType": ""
     },
     {
         "Amount": -0.98,
         "AmountEUR": -0.862068965517241,
-        "Commission": 30,
+        "Commission": 0,
         "Currency": "USD",
         "Date": "16-11-2021",
         "ExchangeRate": 1.1368,
         "ISIN": "US00287Y1091",
         "OrderID": "",
-        "OrderType": "imposto sobre dividendo",
+        "OrderType": "dividendtax",
         "Price": 0,
         "ProductName": "",
-        "Quantity": 0
+        "Quantity": 0,
+        "TransactionType": ""
     },
     {
         "Amount": -250,
@@ -1898,10 +2048,11 @@
         "ExchangeRate": 1,
         "ISIN": "BEEN00751907",
         "OrderID": "7437fdf6-c103-4e1e-988a-91ae2335c977",
-        "OrderType": "compra",
+        "OrderType": "option",
         "Price": 2.5,
         "ProductName": "COL P46.00 17DEC21",
-        "Quantity": 1
+        "Quantity": 1,
+        "TransactionType": ""
     },
     {
         "Amount": -307.8,
@@ -1912,10 +2063,11 @@
         "ExchangeRate": 1,
         "ISIN": "IE00B4L5Y983",
         "OrderID": "51b15fef-65ca-4285-958d-35d8daa4f2bf",
-        "OrderType": "compra",
+        "OrderType": "stockbuy",
         "Price": 76.95,
         "ProductName": "iShares Core MSCI World UCITS ETF USD (Acc)",
-        "Quantity": 4
+        "Quantity": 4,
+        "TransactionType": ""
     },
     {
         "Amount": -1092.7,
@@ -1926,10 +2078,11 @@
         "ExchangeRate": 1,
         "ISIN": "NL0011279492",
         "OrderID": "e464df8e-72d2-47a1-815e-56f7d90214b3",
-        "OrderType": "compra",
+        "OrderType": "stockbuy",
         "Price": 31.22,
         "ProductName": "Flow Traders NV",
-        "Quantity": 35
+        "Quantity": 35,
+        "TransactionType": ""
     },
     {
         "Amount": -426.36,
@@ -1940,10 +2093,11 @@
         "ExchangeRate": 1,
         "ISIN": "IE00B4L5Y983",
         "OrderID": "5ae511cc-a7ba-4364-bf47-441f5bd19a3c",
-        "OrderType": "compra",
+        "OrderType": "stockbuy",
         "Price": 71.06,
         "ProductName": "iShares Core MSCI World UCITS ETF USD (Acc)",
-        "Quantity": 6
+        "Quantity": 6,
+        "TransactionType": ""
     },
     {
         "Amount": 335,
@@ -1954,10 +2108,11 @@
         "ExchangeRate": 1,
         "ISIN": "BEEN00751907",
         "OrderID": "c7c30c49-704e-45db-9750-d4a32d17e506",
-        "OrderType": "venda",
+        "OrderType": "option",
         "Price": 3.35,
         "ProductName": "COL P46.00 17DEC21",
-        "Quantity": 1
+        "Quantity": 1,
+        "TransactionType": ""
     },
     {
         "Amount": -1466,
@@ -1968,10 +2123,11 @@
         "ExchangeRate": 1.1719,
         "ISIN": "US01609W1027",
         "OrderID": "aff6912b-2688-447e-9fb1-9311989c1737",
-        "OrderType": "compra",
+        "OrderType": "stockbuy",
         "Price": 146.6,
         "ProductName": "ADR on Alibaba Group Holding",
-        "Quantity": 10
+        "Quantity": 10,
+        "TransactionType": ""
     },
     {
         "Amount": 550.2,
@@ -1982,10 +2138,11 @@
         "ExchangeRate": 1.1719,
         "ISIN": "BE0003816338",
         "OrderID": "9bdcf4e1-fbd1-4b19-b406-b9c9e29a500f",
-        "OrderType": "venda",
+        "OrderType": "stocksale",
         "Price": 9.17,
         "ProductName": "CMB Tech NV",
-        "Quantity": 60
+        "Quantity": 60,
+        "TransactionType": ""
     },
     {
         "Amount": 1834,
@@ -1996,10 +2153,11 @@
         "ExchangeRate": 1.1719,
         "ISIN": "BE0003816338",
         "OrderID": "9bdcf4e1-fbd1-4b19-b406-b9c9e29a500f",
-        "OrderType": "venda",
+        "OrderType": "stocksale",
         "Price": 9.17,
         "ProductName": "CMB Tech NV",
-        "Quantity": 200
+        "Quantity": 200,
+        "TransactionType": ""
     },
     {
         "Amount": 1834,
@@ -2010,10 +2168,11 @@
         "ExchangeRate": 1.1719,
         "ISIN": "BE0003816338",
         "OrderID": "9bdcf4e1-fbd1-4b19-b406-b9c9e29a500f",
-        "OrderType": "venda",
+        "OrderType": "stocksale",
         "Price": 9.17,
         "ProductName": "CMB Tech NV",
-        "Quantity": 200
+        "Quantity": 200,
+        "TransactionType": ""
     },
     {
         "Amount": 917,
@@ -2024,10 +2183,11 @@
         "ExchangeRate": 1.1719,
         "ISIN": "BE0003816338",
         "OrderID": "9bdcf4e1-fbd1-4b19-b406-b9c9e29a500f",
-        "OrderType": "venda",
+        "OrderType": "stocksale",
         "Price": 9.17,
         "ProductName": "CMB Tech NV",
-        "Quantity": 100
+        "Quantity": 100,
+        "TransactionType": ""
     },
     {
         "Amount": 1687.28,
@@ -2038,10 +2198,11 @@
         "ExchangeRate": 1.1719,
         "ISIN": "BE0003816338",
         "OrderID": "9bdcf4e1-fbd1-4b19-b406-b9c9e29a500f",
-        "OrderType": "venda",
+        "OrderType": "stocksale",
         "Price": 9.17,
         "ProductName": "CMB Tech NV",
-        "Quantity": 184
+        "Quantity": 184,
+        "TransactionType": ""
     },
     {
         "Amount": 146.72,
@@ -2052,10 +2213,11 @@
         "ExchangeRate": 1.1719,
         "ISIN": "BE0003816338",
         "OrderID": "9bdcf4e1-fbd1-4b19-b406-b9c9e29a500f",
-        "OrderType": "venda",
+        "OrderType": "stocksale",
         "Price": 9.17,
         "ProductName": "CMB Tech NV",
-        "Quantity": 16
+        "Quantity": 16,
+        "TransactionType": ""
     },
     {
         "Amount": -72,
@@ -2066,10 +2228,11 @@
         "ExchangeRate": 1,
         "ISIN": "BEEN01556081",
         "OrderID": "deda8a82-e733-4813-a8bf-9a6fff0b8c38",
-        "OrderType": "compra",
+        "OrderType": "option",
         "Price": 0.12,
         "ProductName": "EUN P6.50 17DEC21",
-        "Quantity": 6
+        "Quantity": 6,
+        "TransactionType": ""
     },
     {
         "Amount": -90,
@@ -2080,10 +2243,11 @@
         "ExchangeRate": 1,
         "ISIN": "BEEN01399722",
         "OrderID": "605924c5-535d-4aad-944f-1cc6dba44773",
-        "OrderType": "compra",
+        "OrderType": "option",
         "Price": 0.3,
         "ProductName": "EUN P7.00 17DEC21",
-        "Quantity": 3
+        "Quantity": 3,
+        "TransactionType": ""
     },
     {
         "Amount": -60,
@@ -2094,10 +2258,11 @@
         "ExchangeRate": 1,
         "ISIN": "BEEN02259339",
         "OrderID": "c9f0777b-4614-453a-a2e1-aef6b7000cbd",
-        "OrderType": "compra",
+        "OrderType": "option",
         "Price": 0.1,
         "ProductName": "EUN P7.00 15OKT21",
-        "Quantity": 6
+        "Quantity": 6,
+        "TransactionType": ""
     },
     {
         "Amount": -24,
@@ -2108,10 +2273,11 @@
         "ExchangeRate": 1,
         "ISIN": "BEEN02212031",
         "OrderID": "5d80de6c-e685-45d7-94a4-d716ac27a2d3",
-        "OrderType": "compra",
+        "OrderType": "option",
         "Price": 0.08,
         "ProductName": "EUN P6.80 15OKT21",
-        "Quantity": 3
+        "Quantity": 3,
+        "TransactionType": ""
     },
     {
         "Amount": -292.52,
@@ -2122,38 +2288,41 @@
         "ExchangeRate": 1,
         "ISIN": "IE00B4L5Y983",
         "OrderID": "3fbb5cb2-a5f6-4a29-b605-af90df059566",
-        "OrderType": "compra",
+        "OrderType": "stockbuy",
         "Price": 73.13,
         "ProductName": "iShares Core MSCI World UCITS ETF USD (Acc)",
-        "Quantity": 4
+        "Quantity": 4,
+        "TransactionType": ""
     },
     {
         "Amount": 22.8,
         "AmountEUR": 19.2600101368474,
-        "Commission": 30,
+        "Commission": 0,
         "Currency": "USD",
         "Date": "09-09-2021",
         "ExchangeRate": 1.1838,
         "ISIN": "BE0003816338",
         "OrderID": "",
-        "OrderType": "dividendo",
+        "OrderType": "dividend",
         "Price": 0,
         "ProductName": "",
-        "Quantity": 0
+        "Quantity": 0,
+        "TransactionType": ""
     },
     {
         "Amount": -6.84,
         "AmountEUR": -5.77800304105423,
-        "Commission": 30,
+        "Commission": 0,
         "Currency": "USD",
         "Date": "09-09-2021",
         "ExchangeRate": 1.1838,
         "ISIN": "BE0003816338",
         "OrderID": "",
-        "OrderType": "imposto sobre dividendo",
+        "OrderType": "dividendtax",
         "Price": 0,
         "ProductName": "",
-        "Quantity": 0
+        "Quantity": 0,
+        "TransactionType": ""
     },
     {
         "Amount": 99,
@@ -2164,10 +2333,11 @@
         "ExchangeRate": 1,
         "ISIN": "BEEN02360152",
         "OrderID": "7dbb47d9-3577-4bfa-8bb1-9645b2997cfc",
-        "OrderType": "venda",
+        "OrderType": "option",
         "Price": 0.11,
         "ProductName": "EUN P6.60 15OKT21",
-        "Quantity": 9
+        "Quantity": 9,
+        "TransactionType": ""
     },
     {
         "Amount": -542.35,
@@ -2178,10 +2348,11 @@
         "ExchangeRate": 1.1817,
         "ISIN": "US00287Y1091",
         "OrderID": "851b0dab-794e-499d-ba92-21432e5d5e56",
-        "OrderType": "compra",
+        "OrderType": "stockbuy",
         "Price": 108.47,
         "ProductName": "Abbvie Inc",
-        "Quantity": 5
+        "Quantity": 5,
+        "TransactionType": ""
     },
     {
         "Amount": -126,
@@ -2192,10 +2363,11 @@
         "ExchangeRate": 1,
         "ISIN": "BEEN02360152",
         "OrderID": "3b36f726-8075-4855-b4ed-52c68b3e9937",
-        "OrderType": "compra",
+        "OrderType": "option",
         "Price": 0.14,
         "ProductName": "EUN P6.60 15OKT21",
-        "Quantity": 9
+        "Quantity": 9,
+        "TransactionType": ""
     },
     {
         "Amount": -1602.5,
@@ -2206,10 +2378,11 @@
         "ExchangeRate": 1.1761,
         "ISIN": "US01609W1027",
         "OrderID": "69438f05-8182-42b8-aaea-19cb7fbd9ae7",
-        "OrderType": "compra",
+        "OrderType": "stockbuy",
         "Price": 160.25,
         "ProductName": "ADR on Alibaba Group Holding",
-        "Quantity": 10
+        "Quantity": 10,
+        "TransactionType": ""
     },
     {
         "Amount": -867.5,
@@ -2220,10 +2393,11 @@
         "ExchangeRate": 1,
         "ISIN": "NL0011279492",
         "OrderID": "95901690-b015-49c0-9da9-6fd11ff5f9e6",
-        "OrderType": "compra",
+        "OrderType": "stockbuy",
         "Price": 34.7,
         "ProductName": "Flow Traders NV",
-        "Quantity": 25
+        "Quantity": 25,
+        "TransactionType": ""
     },
     {
         "Amount": 872.96,
@@ -2234,10 +2408,11 @@
         "ExchangeRate": 1.1761,
         "ISIN": "US92343V1044",
         "OrderID": "f5e8ffdf-4f46-4533-b7aa-b50e8c1832de",
-        "OrderType": "venda",
+        "OrderType": "stocksale",
         "Price": 54.56,
         "ProductName": "Verizon Communications",
-        "Quantity": 16
+        "Quantity": 16,
+        "TransactionType": ""
     },
     {
         "Amount": 720.12,
@@ -2248,38 +2423,41 @@
         "ExchangeRate": 1.1761,
         "ISIN": "US00287Y1091",
         "OrderID": "edc087bf-974c-4857-9b36-d4a8c62ec0b0",
-        "OrderType": "venda",
+        "OrderType": "stocksale",
         "Price": 120.02,
         "ProductName": "Abbvie Inc",
-        "Quantity": 6
+        "Quantity": 6,
+        "TransactionType": ""
     },
     {
         "Amount": 25,
         "AmountEUR": 25,
-        "Commission": 30,
+        "Commission": 0,
         "Currency": "EUR",
         "Date": "23-08-2021",
         "ExchangeRate": 1,
         "ISIN": "NL0011279492",
         "OrderID": "",
-        "OrderType": "dividendo",
+        "OrderType": "dividend",
         "Price": 0,
         "ProductName": "",
-        "Quantity": 0
+        "Quantity": 0,
+        "TransactionType": ""
     },
     {
         "Amount": -3.75,
         "AmountEUR": -3.75,
-        "Commission": 30,
+        "Commission": 0,
         "Currency": "EUR",
         "Date": "23-08-2021",
         "ExchangeRate": 1,
         "ISIN": "NL0011279492",
         "OrderID": "",
-        "OrderType": "imposto sobre dividendo",
+        "OrderType": "dividendtax",
         "Price": 0,
         "ProductName": "",
-        "Quantity": 0
+        "Quantity": 0,
+        "TransactionType": ""
     },
     {
         "Amount": -358.15,
@@ -2290,10 +2468,11 @@
         "ExchangeRate": 1,
         "ISIN": "IE00B4L5Y983",
         "OrderID": "c036c8b3-9831-4a81-876b-99327d7fd347",
-        "OrderType": "compra",
+        "OrderType": "stockbuy",
         "Price": 71.63,
         "ProductName": "iShares Core MSCI World UCITS ETF USD (Acc)",
-        "Quantity": 5
+        "Quantity": 5,
+        "TransactionType": ""
     },
     {
         "Amount": -11,
@@ -2304,38 +2483,41 @@
         "ExchangeRate": 1,
         "ISIN": "NLEN02301567",
         "OrderID": "fe39d215-cc7e-4158-8798-a1a98b787e02",
-        "OrderType": "compra",
+        "OrderType": "option",
         "Price": 0.11,
         "ProductName": "FLW P33.00 20AUG21",
-        "Quantity": 1
+        "Quantity": 1,
+        "TransactionType": ""
     },
     {
         "Amount": 7.8,
         "AmountEUR": 6.6287074020566,
-        "Commission": 30,
+        "Commission": 0,
         "Currency": "USD",
         "Date": "17-08-2021",
         "ExchangeRate": 1.1767,
         "ISIN": "US00287Y1091",
         "OrderID": "",
-        "OrderType": "dividendo",
+        "OrderType": "dividend",
         "Price": 0,
         "ProductName": "",
-        "Quantity": 0
+        "Quantity": 0,
+        "TransactionType": ""
     },
     {
         "Amount": -1.17,
         "AmountEUR": -0.99430611030849,
-        "Commission": 30,
+        "Commission": 0,
         "Currency": "USD",
         "Date": "17-08-2021",
         "ExchangeRate": 1.1767,
         "ISIN": "US00287Y1091",
         "OrderID": "",
-        "OrderType": "imposto sobre dividendo",
+        "OrderType": "dividendtax",
         "Price": 0,
         "ProductName": "",
-        "Quantity": 0
+        "Quantity": 0,
+        "TransactionType": ""
     },
     {
         "Amount": 156,
@@ -2346,10 +2528,11 @@
         "ExchangeRate": 1,
         "ISIN": "BEEN01556081",
         "OrderID": "de37f1c7-a22c-4131-a7cf-fb980a4b3927",
-        "OrderType": "venda",
+        "OrderType": "option",
         "Price": 0.52,
         "ProductName": "EUN P6.50 17DEC21",
-        "Quantity": 3
+        "Quantity": 3,
+        "TransactionType": ""
     },
     {
         "Amount": 228,
@@ -2360,10 +2543,11 @@
         "ExchangeRate": 1,
         "ISIN": "BEEN01399722",
         "OrderID": "2e8e4c85-45b6-4c95-a439-52cdeaf53381",
-        "OrderType": "venda",
+        "OrderType": "option",
         "Price": 0.76,
         "ProductName": "EUN P7.00 17DEC21",
-        "Quantity": 3
+        "Quantity": 3,
+        "TransactionType": ""
     },
     {
         "Amount": 114,
@@ -2374,10 +2558,11 @@
         "ExchangeRate": 1,
         "ISIN": "BEEN02212031",
         "OrderID": "2a5f59a1-960e-4731-b617-c212e3cdf067",
-        "OrderType": "venda",
+        "OrderType": "option",
         "Price": 0.38,
         "ProductName": "EUN P6.80 15OKT21",
-        "Quantity": 3
+        "Quantity": 3,
+        "TransactionType": ""
     },
     {
         "Amount": 114,
@@ -2388,10 +2573,11 @@
         "ExchangeRate": 1,
         "ISIN": "BEEN02259339",
         "OrderID": "28439a47-32d0-444b-be27-d7b3bf44fa5a",
-        "OrderType": "venda",
+        "OrderType": "option",
         "Price": 0.57,
         "ProductName": "EUN P7.00 15OKT21",
-        "Quantity": 2
+        "Quantity": 2,
+        "TransactionType": ""
     },
     {
         "Amount": 129,
@@ -2402,10 +2588,11 @@
         "ExchangeRate": 1,
         "ISIN": "BEEN01556081",
         "OrderID": "276cccca-b888-4b6e-82a6-3ab3662a180a",
-        "OrderType": "venda",
+        "OrderType": "option",
         "Price": 0.43,
         "ProductName": "EUN P6.50 17DEC21",
-        "Quantity": 3
+        "Quantity": 3,
+        "TransactionType": ""
     },
     {
         "Amount": 168,
@@ -2416,38 +2603,41 @@
         "ExchangeRate": 1,
         "ISIN": "BEEN02259339",
         "OrderID": "6b9678df-53a2-4379-8cde-2eae759b862c",
-        "OrderType": "venda",
+        "OrderType": "option",
         "Price": 0.42,
         "ProductName": "EUN P7.00 15OKT21",
-        "Quantity": 4
+        "Quantity": 4,
+        "TransactionType": ""
     },
     {
         "Amount": 10.04,
         "AmountEUR": 8.44762305427009,
-        "Commission": 30,
+        "Commission": 0,
         "Currency": "USD",
         "Date": "03-08-2021",
         "ExchangeRate": 1.1885,
         "ISIN": "US92343V1044",
         "OrderID": "",
-        "OrderType": "dividendo",
+        "OrderType": "dividend",
         "Price": 0,
         "ProductName": "",
-        "Quantity": 0
+        "Quantity": 0,
+        "TransactionType": ""
     },
     {
         "Amount": -1.51,
         "AmountEUR": -1.27050904501472,
-        "Commission": 30,
+        "Commission": 0,
         "Currency": "USD",
         "Date": "03-08-2021",
         "ExchangeRate": 1.1885,
         "ISIN": "US92343V1044",
         "OrderID": "",
-        "OrderType": "imposto sobre dividendo",
+        "OrderType": "dividendtax",
         "Price": 0,
         "ProductName": "",
-        "Quantity": 0
+        "Quantity": 0,
+        "TransactionType": ""
     },
     {
         "Amount": -487.95,
@@ -2458,10 +2648,11 @@
         "ExchangeRate": 1,
         "ISIN": "KYG875721634",
         "OrderID": "35056d5a-fc22-43e5-8dc1-26f3da32f253",
-        "OrderType": "compra",
+        "OrderType": "stockbuy",
         "Price": 48.795,
         "ProductName": "Tencent Holdings Ltd",
-        "Quantity": 10
+        "Quantity": 10,
+        "TransactionType": ""
     },
     {
         "Amount": -552,
@@ -2472,10 +2663,11 @@
         "ExchangeRate": 1.181,
         "ISIN": "US01609W1027",
         "OrderID": "93646077-26c5-438d-ac08-3fb27d9c84e6",
-        "OrderType": "compra",
+        "OrderType": "stockbuy",
         "Price": 184,
         "ProductName": "ADR on Alibaba Group Holding",
-        "Quantity": 3
+        "Quantity": 3,
+        "TransactionType": ""
     },
     {
         "Amount": -34,
@@ -2486,10 +2678,11 @@
         "ExchangeRate": 1,
         "ISIN": "BEEN01828241",
         "OrderID": "0cf78d4a-494c-4360-a567-930d2673d0b3",
-        "OrderType": "compra",
+        "OrderType": "option",
         "Price": 0.17,
         "ProductName": "TGH P29.00 20AUG21",
-        "Quantity": 2
+        "Quantity": 2,
+        "TransactionType": ""
     },
     {
         "Amount": -852,
@@ -2500,10 +2693,11 @@
         "ExchangeRate": 1,
         "ISIN": "NL0011279492",
         "OrderID": "02b636bf-bdb6-4615-a448-4762ed4d59b1",
-        "OrderType": "compra",
+        "OrderType": "stockbuy",
         "Price": 34.08,
         "ProductName": "Flow Traders NV",
-        "Quantity": 25
+        "Quantity": 25,
+        "TransactionType": ""
     },
     {
         "Amount": -25,
@@ -2514,10 +2708,11 @@
         "ExchangeRate": 1,
         "ISIN": "BEEN01828266",
         "OrderID": "b8e3b543-58bd-44fe-878a-e8a9a56ab621",
-        "OrderType": "compra",
+        "OrderType": "option",
         "Price": 0.25,
         "ProductName": "TGH P30.00 20AUG21",
-        "Quantity": 1
+        "Quantity": 1,
+        "TransactionType": ""
     },
     {
         "Amount": -150,
@@ -2528,10 +2723,11 @@
         "ExchangeRate": 1,
         "ISIN": "BEEN01399722",
         "OrderID": "e8c7cde2-14b4-4edf-ae81-764c2ed24226",
-        "OrderType": "compra",
+        "OrderType": "option",
         "Price": 0.5,
         "ProductName": "EUN P7.00 17DEC21",
-        "Quantity": 3
+        "Quantity": 3,
+        "TransactionType": ""
     },
     {
         "Amount": 70,
@@ -2542,10 +2738,11 @@
         "ExchangeRate": 1,
         "ISIN": "NLEN02301567",
         "OrderID": "4aa6a3ca-5685-4510-b908-cd1df8171cb4",
-        "OrderType": "venda",
+        "OrderType": "option",
         "Price": 0.7,
         "ProductName": "FLW P33.00 20AUG21",
-        "Quantity": 1
+        "Quantity": 1,
+        "TransactionType": ""
     },
     {
         "Amount": 180,
@@ -2556,66 +2753,71 @@
         "ExchangeRate": 1,
         "ISIN": "BEEN01399722",
         "OrderID": "17b7cc18-b984-45c5-9c7b-6aa5e1cd6bf4",
-        "OrderType": "venda",
+        "OrderType": "option",
         "Price": 0.6,
         "ProductName": "EUN P7.00 17DEC21",
-        "Quantity": 3
+        "Quantity": 3,
+        "TransactionType": ""
     },
     {
         "Amount": 6.28,
         "AmountEUR": 5.31797781353205,
-        "Commission": 30,
+        "Commission": 0,
         "Currency": "USD",
         "Date": "15-07-2021",
         "ExchangeRate": 1.1809,
         "ISIN": "US92343V1044",
         "OrderID": "",
-        "OrderType": "dividendo",
+        "OrderType": "dividend",
         "Price": 0,
         "ProductName": "",
-        "Quantity": 0
+        "Quantity": 0,
+        "TransactionType": ""
     },
     {
         "Amount": -0.94,
         "AmountEUR": -0.796003048522313,
-        "Commission": 30,
+        "Commission": 0,
         "Currency": "USD",
         "Date": "15-07-2021",
         "ExchangeRate": 1.1809,
         "ISIN": "US92343V1044",
         "OrderID": "",
-        "OrderType": "imposto sobre dividendo",
+        "OrderType": "dividendtax",
         "Price": 0,
         "ProductName": "",
-        "Quantity": 0
+        "Quantity": 0,
+        "TransactionType": ""
     },
     {
         "Amount": -6.28,
         "AmountEUR": -5.31797781353205,
-        "Commission": 30,
+        "Commission": 0,
         "Currency": "USD",
         "Date": "15-07-2021",
         "ExchangeRate": 1.1809,
         "ISIN": "US92343V1044",
         "OrderID": "",
-        "OrderType": "dividendo",
+        "OrderType": "dividend",
         "Price": 0,
         "ProductName": "",
-        "Quantity": 0
+        "Quantity": 0,
+        "TransactionType": ""
     },
     {
         "Amount": 0.94,
         "AmountEUR": 0.796003048522313,
-        "Commission": 30,
+        "Commission": 0,
         "Currency": "USD",
         "Date": "15-07-2021",
         "ExchangeRate": 1.1809,
         "ISIN": "US92343V1044",
         "OrderID": "",
-        "OrderType": "imposto sobre dividendo",
+        "OrderType": "dividendtax",
         "Price": 0,
         "ProductName": "",
-        "Quantity": 0
+        "Quantity": 0,
+        "TransactionType": ""
     },
     {
         "Amount": -707.5,
@@ -2626,10 +2828,11 @@
         "ExchangeRate": 1,
         "ISIN": "IE00B4L5Y983",
         "OrderID": "6a12c680-5c2b-40b4-8dac-f3f79e423b26",
-        "OrderType": "compra",
+        "OrderType": "stockbuy",
         "Price": 70.75,
         "ProductName": "iShares Core MSCI World UCITS ETF USD (Acc)",
-        "Quantity": 10
+        "Quantity": 10,
+        "TransactionType": ""
     },
     {
         "Amount": 60,
@@ -2640,10 +2843,11 @@
         "ExchangeRate": 1,
         "ISIN": "BEEN01828241",
         "OrderID": "172f4547-bff7-45bd-9c6a-92df110e1be3",
-        "OrderType": "venda",
+        "OrderType": "option",
         "Price": 0.3,
         "ProductName": "TGH P29.00 20AUG21",
-        "Quantity": 2
+        "Quantity": 2,
+        "TransactionType": ""
     },
     {
         "Amount": -55,
@@ -2654,24 +2858,26 @@
         "ExchangeRate": 1,
         "ISIN": "BEEN01828266",
         "OrderID": "8925b106-df9a-478b-903c-ddf2b82703e7",
-        "OrderType": "compra",
+        "OrderType": "option",
         "Price": 0.55,
         "ProductName": "TGH P30.00 20AUG21",
-        "Quantity": 1
+        "Quantity": 1,
+        "TransactionType": ""
     },
     {
         "Amount": 0,
         "AmountEUR": 0,
-        "Commission": 30,
+        "Commission": 0,
         "Currency": "EUR",
         "Date": "19-06-2021",
         "ExchangeRate": 1,
         "ISIN": "BEEN01396421",
         "OrderID": "",
-        "OrderType": "compra",
+        "OrderType": "option",
         "Price": 0,
         "ProductName": "UCB P68.00 18JUN21",
-        "Quantity": 1
+        "Quantity": 1,
+        "TransactionType": ""
     },
     {
         "Amount": -240,
@@ -2682,10 +2888,11 @@
         "ExchangeRate": 1,
         "ISIN": "BEEN01397049",
         "OrderID": "f04e2317-8ed8-47ad-9aad-86bca66c88be",
-        "OrderType": "compra",
+        "OrderType": "option",
         "Price": 2.4,
         "ProductName": "COL P49.00 18JUN21",
-        "Quantity": 1
+        "Quantity": 1,
+        "TransactionType": ""
     },
     {
         "Amount": 1230,
@@ -2696,10 +2903,11 @@
         "ExchangeRate": 1,
         "ISIN": "BEEN00724821",
         "OrderID": "bb1ae7c9-b1ea-4d4c-824b-26238062e19f",
-        "OrderType": "venda",
+        "OrderType": "option",
         "Price": 4.1,
         "ProductName": "COL P48.00 17DEC21",
-        "Quantity": 3
+        "Quantity": 3,
+        "TransactionType": ""
     },
     {
         "Amount": -495,
@@ -2710,10 +2918,11 @@
         "ExchangeRate": 1,
         "ISIN": "BEENX9291016",
         "OrderID": "a6965ec4-d7e1-40d5-a796-e4acfa92754c",
-        "OrderType": "compra",
+        "OrderType": "option",
         "Price": 1.65,
         "ProductName": "COL P48.00 18JUN21",
-        "Quantity": 3
+        "Quantity": 3,
+        "TransactionType": ""
     },
     {
         "Amount": 23,
@@ -2724,10 +2933,11 @@
         "ExchangeRate": 1,
         "ISIN": "BEENX9291016",
         "OrderID": "d2269374-1159-4ead-956e-6b3037715a76",
-        "OrderType": "venda",
+        "OrderType": "option",
         "Price": 0.23,
         "ProductName": "COL P48.00 18JUN21",
-        "Quantity": 1
+        "Quantity": 1,
+        "TransactionType": ""
     },
     {
         "Amount": -1065.45,
@@ -2738,10 +2948,11 @@
         "ExchangeRate": 1.2112,
         "ISIN": "US01609W1027",
         "OrderID": "470e8c3b-f16d-4bd8-9bfe-bf4ab8efc88f",
-        "OrderType": "compra",
+        "OrderType": "stockbuy",
         "Price": 213.09,
         "ProductName": "ADR on Alibaba Group Holding",
-        "Quantity": 5
+        "Quantity": 5,
+        "TransactionType": ""
     },
     {
         "Amount": 42,
@@ -2752,10 +2963,11 @@
         "ExchangeRate": 1,
         "ISIN": "BEEN01397049",
         "OrderID": "5c6bdeb8-87f7-4b92-b919-2edf8b0ca457",
-        "OrderType": "venda",
+        "OrderType": "option",
         "Price": 0.42,
         "ProductName": "COL P49.00 18JUN21",
-        "Quantity": 1
+        "Quantity": 1,
+        "TransactionType": ""
     },
     {
         "Amount": 46,
@@ -2766,10 +2978,11 @@
         "ExchangeRate": 1,
         "ISIN": "BEENX9291016",
         "OrderID": "dbb9c168-291f-4262-af9a-23d7ea76b15a",
-        "OrderType": "venda",
+        "OrderType": "option",
         "Price": 0.23,
         "ProductName": "COL P48.00 18JUN21",
-        "Quantity": 2
+        "Quantity": 2,
+        "TransactionType": ""
     },
     {
         "Amount": -10,
@@ -2780,24 +2993,26 @@
         "ExchangeRate": 1,
         "ISIN": "BEEN01590718",
         "OrderID": "8dc058d3-98b4-443a-80a6-394ddb77170c",
-        "OrderType": "compra",
+        "OrderType": "option",
         "Price": 0.1,
         "ProductName": "UCB P68.00 16JUL21",
-        "Quantity": 1
+        "Quantity": 1,
+        "TransactionType": ""
     },
     {
         "Amount": 12.8,
         "AmountEUR": 1.35412479106278,
-        "Commission": 30,
+        "Commission": 0,
         "Currency": "HKD",
         "Date": "08-06-2021",
         "ExchangeRate": 9.4526,
         "ISIN": "KYG875721634",
         "OrderID": "",
-        "OrderType": "dividendo",
+        "OrderType": "dividend",
         "Price": 0,
         "ProductName": "",
-        "Quantity": 0
+        "Quantity": 0,
+        "TransactionType": ""
     },
     {
         "Amount": -512.56,
@@ -2808,10 +3023,11 @@
         "ExchangeRate": 1,
         "ISIN": "KYG875721634",
         "OrderID": "5e52cfc7-c8c2-4c52-98c9-15b80e1021dd",
-        "OrderType": "compra",
+        "OrderType": "stockbuy",
         "Price": 64.07,
         "ProductName": "Tencent Holdings Ltd",
-        "Quantity": 8
+        "Quantity": 8,
+        "TransactionType": ""
     },
     {
         "Amount": 40,
@@ -2822,10 +3038,11 @@
         "ExchangeRate": 1,
         "ISIN": "BEEN01590718",
         "OrderID": "c6c6f2da-1949-425c-82f0-399ad4d028c1",
-        "OrderType": "venda",
+        "OrderType": "option",
         "Price": 0.4,
         "ProductName": "UCB P68.00 16JUL21",
-        "Quantity": 1
+        "Quantity": 1,
+        "TransactionType": ""
     },
     {
         "Amount": 40,
@@ -2836,10 +3053,11 @@
         "ExchangeRate": 1,
         "ISIN": "BEEN01689072",
         "OrderID": "d0b3b5ca-5b7a-484d-ad9a-0af3a915bfd2",
-        "OrderType": "venda",
+        "OrderType": "option",
         "Price": 0.2,
         "ProductName": "UCB P64.00 16JUL21",
-        "Quantity": 2
+        "Quantity": 2,
+        "TransactionType": ""
     },
     {
         "Amount": -50,
@@ -2850,38 +3068,41 @@
         "ExchangeRate": 1,
         "ISIN": "BEEN01689072",
         "OrderID": "a62975b1-4a13-48fb-9d00-225bcf9eeca7",
-        "OrderType": "compra",
+        "OrderType": "option",
         "Price": 0.25,
         "ProductName": "UCB P64.00 16JUL21",
-        "Quantity": 2
+        "Quantity": 2,
+        "TransactionType": ""
     },
     {
         "Amount": 18.71,
         "AmountEUR": 18.71,
-        "Commission": 30,
+        "Commission": 0,
         "Currency": "EUR",
         "Date": "04-06-2021",
         "ExchangeRate": 1,
         "ISIN": "BE0003816338",
         "OrderID": "",
-        "OrderType": "dividendo",
+        "OrderType": "dividend",
         "Price": 0,
         "ProductName": "",
-        "Quantity": 0
+        "Quantity": 0,
+        "TransactionType": ""
     },
     {
         "Amount": -5.61,
         "AmountEUR": -5.61,
-        "Commission": 30,
+        "Commission": 0,
         "Currency": "EUR",
         "Date": "04-06-2021",
         "ExchangeRate": 1,
         "ISIN": "BE0003816338",
         "OrderID": "",
-        "OrderType": "imposto sobre dividendo",
+        "OrderType": "dividendtax",
         "Price": 0,
         "ProductName": "",
-        "Quantity": 0
+        "Quantity": 0,
+        "TransactionType": ""
     },
     {
         "Amount": 120,
@@ -2892,10 +3113,11 @@
         "ExchangeRate": 1,
         "ISIN": "BEEN01828266",
         "OrderID": "51c99554-8932-44eb-83bd-89d1790d7d76",
-        "OrderType": "venda",
+        "OrderType": "option",
         "Price": 0.6,
         "ProductName": "TGH P30.00 20AUG21",
-        "Quantity": 2
+        "Quantity": 2,
+        "TransactionType": ""
     },
     {
         "Amount": -85,
@@ -2906,10 +3128,11 @@
         "ExchangeRate": 1,
         "ISIN": "BEEN01590734",
         "OrderID": "8450b56c-faba-4756-8709-cd536f0ed47f",
-        "OrderType": "compra",
+        "OrderType": "option",
         "Price": 0.85,
         "ProductName": "UCB P72.00 16JUL21",
-        "Quantity": 1
+        "Quantity": 1,
+        "TransactionType": ""
     },
     {
         "Amount": 105,
@@ -2920,10 +3143,11 @@
         "ExchangeRate": 1,
         "ISIN": "BEEN01590734",
         "OrderID": "1aa08779-7100-461b-9081-929f3883afa9",
-        "OrderType": "venda",
+        "OrderType": "option",
         "Price": 1.05,
         "ProductName": "UCB P72.00 16JUL21",
-        "Quantity": 1
+        "Quantity": 1,
+        "TransactionType": ""
     },
     {
         "Amount": -113.32,
@@ -2934,10 +3158,11 @@
         "ExchangeRate": 1.2264,
         "ISIN": "US92343V1044",
         "OrderID": "7735b443-00d2-4bd7-8715-3684b69bf327",
-        "OrderType": "compra",
+        "OrderType": "stockbuy",
         "Price": 56.66,
         "ProductName": "Verizon Communications",
-        "Quantity": 2
+        "Quantity": 2,
+        "TransactionType": ""
     },
     {
         "Amount": -1260.84,
@@ -2948,66 +3173,71 @@
         "ExchangeRate": 1.2212,
         "ISIN": "US01609W1027",
         "OrderID": "cdc77130-4d88-440b-beac-8144647171ae",
-        "OrderType": "compra",
+        "OrderType": "stockbuy",
         "Price": 210.14,
         "ProductName": "ADR on Alibaba Group Holding",
-        "Quantity": 6
+        "Quantity": 6,
+        "TransactionType": ""
     },
     {
         "Amount": 0,
         "AmountEUR": 0,
-        "Commission": 30,
+        "Commission": 0,
         "Currency": "EUR",
         "Date": "22-05-2021",
         "ExchangeRate": 1,
         "ISIN": "BEEN00104545",
         "OrderID": "",
-        "OrderType": "compra",
+        "OrderType": "option",
         "Price": 0,
         "ProductName": "UCB P68.00 21MAY21",
-        "Quantity": 2
+        "Quantity": 2,
+        "TransactionType": ""
     },
     {
         "Amount": 0,
         "AmountEUR": 0,
-        "Commission": 30,
+        "Commission": 0,
         "Currency": "EUR",
         "Date": "21-05-2021",
         "ExchangeRate": 1,
         "ISIN": "DE000C5122X2",
         "OrderID": "",
-        "OrderType": "compra",
+        "OrderType": "option",
         "Price": 0,
         "ProductName": "OESX P3625.00 21MAY21",
-        "Quantity": 1
+        "Quantity": 1,
+        "TransactionType": ""
     },
     {
         "Amount": 7.8,
         "AmountEUR": 6.42345384171951,
-        "Commission": 30,
+        "Commission": 0,
         "Currency": "USD",
         "Date": "17-05-2021",
         "ExchangeRate": 1.2143,
         "ISIN": "US00287Y1091",
         "OrderID": "",
-        "OrderType": "dividendo",
+        "OrderType": "dividend",
         "Price": 0,
         "ProductName": "",
-        "Quantity": 0
+        "Quantity": 0,
+        "TransactionType": ""
     },
     {
         "Amount": -1.17,
         "AmountEUR": -0.963518076257926,
-        "Commission": 30,
+        "Commission": 0,
         "Currency": "USD",
         "Date": "17-05-2021",
         "ExchangeRate": 1.2143,
         "ISIN": "US00287Y1091",
         "OrderID": "",
-        "OrderType": "imposto sobre dividendo",
+        "OrderType": "dividendtax",
         "Price": 0,
         "ProductName": "",
-        "Quantity": 0
+        "Quantity": 0,
+        "TransactionType": ""
     },
     {
         "Amount": -418.4,
@@ -3018,10 +3248,11 @@
         "ExchangeRate": 1.2081,
         "ISIN": "US01609W1027",
         "OrderID": "9af5e96c-f5dc-4712-8f13-dccc433336c8",
-        "OrderType": "compra",
+        "OrderType": "stockbuy",
         "Price": 209.2,
         "ProductName": "ADR on Alibaba Group Holding",
-        "Quantity": 2
+        "Quantity": 2,
+        "TransactionType": ""
     },
     {
         "Amount": 40,
@@ -3032,10 +3263,11 @@
         "ExchangeRate": 1,
         "ISIN": "BEEN01396421",
         "OrderID": "21e8c107-89f3-43ec-8370-2b70b9a13e87",
-        "OrderType": "venda",
+        "OrderType": "option",
         "Price": 0.4,
         "ProductName": "UCB P68.00 18JUN21",
-        "Quantity": 1
+        "Quantity": 1,
+        "TransactionType": ""
     },
     {
         "Amount": 52,
@@ -3046,10 +3278,11 @@
         "ExchangeRate": 1,
         "ISIN": "DE000C5122X2",
         "OrderID": "a2942106-80af-4fd4-bbfe-f0c6b5e7ff28",
-        "OrderType": "venda",
+        "OrderType": "option",
         "Price": 5.2,
         "ProductName": "OESX P3625.00 21MAY21",
-        "Quantity": 1
+        "Quantity": 1,
+        "TransactionType": ""
     },
     {
         "Amount": -118,
@@ -3060,10 +3293,11 @@
         "ExchangeRate": 1,
         "ISIN": "DE000C512376",
         "OrderID": "f2f91071-deb9-4bd2-a05d-4e3c3844d453",
-        "OrderType": "compra",
+        "OrderType": "option",
         "Price": 11.8,
         "ProductName": "OESX P3750.00 21MAY21",
-        "Quantity": 1
+        "Quantity": 1,
+        "TransactionType": ""
     },
     {
         "Amount": 49,
@@ -3074,10 +3308,11 @@
         "ExchangeRate": 1,
         "ISIN": "DE000C512376",
         "OrderID": "6efb20a4-0222-40e1-84f7-a2711a6a2c8d",
-        "OrderType": "venda",
+        "OrderType": "option",
         "Price": 4.9,
         "ProductName": "OESX P3750.00 21MAY21",
-        "Quantity": 1
+        "Quantity": 1,
+        "TransactionType": ""
     },
     {
         "Amount": -10,
@@ -3088,10 +3323,11 @@
         "ExchangeRate": 1,
         "ISIN": "DE000C512277",
         "OrderID": "dd5db2e6-2be9-4769-a7bd-db48f67bec1f",
-        "OrderType": "compra",
+        "OrderType": "option",
         "Price": 1,
         "ProductName": "OESX P3325.00 21MAY21",
-        "Quantity": 1
+        "Quantity": 1,
+        "TransactionType": ""
     },
     {
         "Amount": -70,
@@ -3102,10 +3338,11 @@
         "ExchangeRate": 1,
         "ISIN": "BEEN00728020",
         "OrderID": "3beee7d4-40b4-4be7-bc97-65adffa447df",
-        "OrderType": "compra",
+        "OrderType": "option",
         "Price": 0.14,
         "ProductName": "EUN P6.00 17SEP21",
-        "Quantity": 5
+        "Quantity": 5,
+        "TransactionType": ""
     },
     {
         "Amount": -15,
@@ -3116,10 +3353,11 @@
         "ExchangeRate": 1,
         "ISIN": "BEENX9832363",
         "OrderID": "ebd563a9-bfb8-4b26-a0b2-0b33ff63ba5f",
-        "OrderType": "compra",
+        "OrderType": "option",
         "Price": 0.03,
         "ProductName": "EUN P6.00 18JUN21",
-        "Quantity": 5
+        "Quantity": 5,
+        "TransactionType": ""
     },
     {
         "Amount": -45,
@@ -3130,10 +3368,11 @@
         "ExchangeRate": 1,
         "ISIN": "BEEN01158813",
         "OrderID": "48edf1b5-1953-43be-bc20-9dc06923e8b4",
-        "OrderType": "compra",
+        "OrderType": "option",
         "Price": 0.45,
         "ProductName": "UCB P72.00 21MAY21",
-        "Quantity": 1
+        "Quantity": 1,
+        "TransactionType": ""
     },
     {
         "Amount": -227.62,
@@ -3144,10 +3383,11 @@
         "ExchangeRate": 1.2021,
         "ISIN": "US01609W1027",
         "OrderID": "3700fe9d-17dc-4f08-9f17-1b303ff92c29",
-        "OrderType": "compra",
+        "OrderType": "stockbuy",
         "Price": 227.62,
         "ProductName": "ADR on Alibaba Group Holding",
-        "Quantity": 1
+        "Quantity": 1,
+        "TransactionType": ""
     },
     {
         "Amount": 44,
@@ -3158,38 +3398,41 @@
         "ExchangeRate": 1,
         "ISIN": "BEEN00104545",
         "OrderID": "cf2d0325-30fa-46c9-b127-f6425cafd00c",
-        "OrderType": "venda",
+        "OrderType": "option",
         "Price": 0.22,
         "ProductName": "UCB P68.00 21MAY21",
-        "Quantity": 2
+        "Quantity": 2,
+        "TransactionType": ""
     },
     {
         "Amount": 6.28,
         "AmountEUR": 5.22419099908493,
-        "Commission": 30,
+        "Commission": 0,
         "Currency": "USD",
         "Date": "04-05-2021",
         "ExchangeRate": 1.2021,
         "ISIN": "US92343V1044",
         "OrderID": "",
-        "OrderType": "dividendo",
+        "OrderType": "dividend",
         "Price": 0,
         "ProductName": "",
-        "Quantity": 0
+        "Quantity": 0,
+        "TransactionType": ""
     },
     {
         "Amount": -0.94,
         "AmountEUR": -0.78196489476749,
-        "Commission": 30,
+        "Commission": 0,
         "Currency": "USD",
         "Date": "04-05-2021",
         "ExchangeRate": 1.2021,
         "ISIN": "US92343V1044",
         "OrderID": "",
-        "OrderType": "imposto sobre dividendo",
+        "OrderType": "dividendtax",
         "Price": 0,
         "ProductName": "",
-        "Quantity": 0
+        "Quantity": 0,
+        "TransactionType": ""
     },
     {
         "Amount": -30,
@@ -3200,10 +3443,11 @@
         "ExchangeRate": 1,
         "ISIN": "BEEN01161775",
         "OrderID": "f9fecb7c-45f8-44db-9d82-4ffc2f6b782f",
-        "OrderType": "compra",
+        "OrderType": "option",
         "Price": 0.1,
         "ProductName": "TGH P32.00 21MAY21",
-        "Quantity": 3
+        "Quantity": 3,
+        "TransactionType": ""
     },
     {
         "Amount": -225.6,
@@ -3214,10 +3458,11 @@
         "ExchangeRate": 1.2088,
         "ISIN": "US92343V1044",
         "OrderID": "a3af8571-23b3-486d-95b0-7ebe8bb4c828",
-        "OrderType": "compra",
+        "OrderType": "stockbuy",
         "Price": 56.4,
         "ProductName": "Verizon Communications",
-        "Quantity": 4
+        "Quantity": 4,
+        "TransactionType": ""
     },
     {
         "Amount": -1664.75,
@@ -3228,10 +3473,11 @@
         "ExchangeRate": 1,
         "ISIN": "IE00B4L5Y983",
         "OrderID": "e1e3192a-8e86-457d-b0e0-9b53c104211b",
-        "OrderType": "compra",
+        "OrderType": "stockbuy",
         "Price": 66.59,
         "ProductName": "iShares Core MSCI World UCITS ETF USD (Acc)",
-        "Quantity": 25
+        "Quantity": 25,
+        "TransactionType": ""
     },
     {
         "Amount": 43,
@@ -3242,10 +3488,11 @@
         "ExchangeRate": 1,
         "ISIN": "DE000C512277",
         "OrderID": "0691c335-1152-4af3-85a5-201cc3089c05",
-        "OrderType": "venda",
+        "OrderType": "option",
         "Price": 4.3,
         "ProductName": "OESX P3325.00 21MAY21",
-        "Quantity": 1
+        "Quantity": 1,
+        "TransactionType": ""
     },
     {
         "Amount": 3339,
@@ -3256,10 +3503,11 @@
         "ExchangeRate": 1.2046,
         "ISIN": "US0463531089",
         "OrderID": "52033afd-caf6-4441-927d-36e3c151c177",
-        "OrderType": "venda",
+        "OrderType": "stocksale",
         "Price": 53,
         "ProductName": "ASTRAZENECA PLC COMMON",
-        "Quantity": 63
+        "Quantity": 63,
+        "TransactionType": ""
     },
     {
         "Amount": 2652.5,
@@ -3270,10 +3518,11 @@
         "ExchangeRate": 1.2007,
         "ISIN": "US0463531089",
         "OrderID": "0972b1c6-ff76-4860-b909-36e6141fb090",
-        "OrderType": "venda",
+        "OrderType": "stocksale",
         "Price": 53.05,
         "ProductName": "ASTRAZENECA PLC COMMON",
-        "Quantity": 50
+        "Quantity": 50,
+        "TransactionType": ""
     },
     {
         "Amount": 50,
@@ -3284,10 +3533,11 @@
         "ExchangeRate": 1,
         "ISIN": "BEENX9832363",
         "OrderID": "05cee93f-e665-4061-b3e5-f270bc264a9c",
-        "OrderType": "venda",
+        "OrderType": "option",
         "Price": 0.1,
         "ProductName": "EUN P6.00 18JUN21",
-        "Quantity": 5
+        "Quantity": 5,
+        "TransactionType": ""
     },
     {
         "Amount": 150,
@@ -3298,10 +3548,11 @@
         "ExchangeRate": 1,
         "ISIN": "BEEN00728020",
         "OrderID": "503fbabb-c657-4a3e-91da-30f800f3d9e8",
-        "OrderType": "venda",
+        "OrderType": "option",
         "Price": 0.3,
         "ProductName": "EUN P6.00 17SEP21",
-        "Quantity": 5
+        "Quantity": 5,
+        "TransactionType": ""
     },
     {
         "Amount": -538.96,
@@ -3312,10 +3563,11 @@
         "ExchangeRate": 1,
         "ISIN": "KYG875721634",
         "OrderID": "fa95c10c-98f1-4266-ad41-865564404eb3",
-        "OrderType": "compra",
+        "OrderType": "stockbuy",
         "Price": 67.37,
         "ProductName": "Tencent Holdings Ltd",
-        "Quantity": 8
+        "Quantity": 8,
+        "TransactionType": ""
     },
     {
         "Amount": 60,
@@ -3326,10 +3578,11 @@
         "ExchangeRate": 1,
         "ISIN": "BEEN01161775",
         "OrderID": "70c664b5-4c71-404d-8ce1-a5f65dee083d",
-        "OrderType": "venda",
+        "OrderType": "option",
         "Price": 0.6,
         "ProductName": "TGH P32.00 21MAY21",
-        "Quantity": 1
+        "Quantity": 1,
+        "TransactionType": ""
     },
     {
         "Amount": 80,
@@ -3340,10 +3593,11 @@
         "ExchangeRate": 1,
         "ISIN": "BEEN01158813",
         "OrderID": "33b4520a-f7fb-4e0b-83c1-f657b668a710",
-        "OrderType": "venda",
+        "OrderType": "option",
         "Price": 0.8,
         "ProductName": "UCB P72.00 21MAY21",
-        "Quantity": 1
+        "Quantity": 1,
+        "TransactionType": ""
     },
     {
         "Amount": 80,
@@ -3354,136 +3608,146 @@
         "ExchangeRate": 1,
         "ISIN": "BEEN01161775",
         "OrderID": "2bf330f5-fc7b-4cec-ad6b-c5f40df58e4d",
-        "OrderType": "venda",
+        "OrderType": "option",
         "Price": 0.4,
         "ProductName": "TGH P32.00 21MAY21",
-        "Quantity": 2
+        "Quantity": 2,
+        "TransactionType": ""
     },
     {
         "Amount": 88.35,
         "AmountEUR": 75.2491269908866,
-        "Commission": 30,
+        "Commission": 0,
         "Currency": "USD",
         "Date": "30-03-2021",
         "ExchangeRate": 1.1741,
         "ISIN": "US0463531089",
         "OrderID": "",
-        "OrderType": "dividendo",
+        "OrderType": "dividend",
         "Price": 0,
         "ProductName": "",
-        "Quantity": 0
+        "Quantity": 0,
+        "TransactionType": ""
     },
     {
         "Amount": -22.8,
         "AmountEUR": -22.8,
-        "Commission": 30,
+        "Commission": 0,
         "Currency": "EUR",
         "Date": "24-03-2021",
         "ExchangeRate": 1,
         "ISIN": "BE0003816338",
         "OrderID": "",
-        "OrderType": "dividendo",
+        "OrderType": "dividend",
         "Price": 0,
         "ProductName": "",
-        "Quantity": 0
+        "Quantity": 0,
+        "TransactionType": ""
     },
     {
         "Amount": 6.84,
         "AmountEUR": 6.84,
-        "Commission": 30,
+        "Commission": 0,
         "Currency": "EUR",
         "Date": "24-03-2021",
         "ExchangeRate": 1,
         "ISIN": "BE0003816338",
         "OrderID": "",
-        "OrderType": "imposto sobre dividendo",
+        "OrderType": "dividendtax",
         "Price": 0,
         "ProductName": "",
-        "Quantity": 0
+        "Quantity": 0,
+        "TransactionType": ""
     },
     {
         "Amount": 22.8,
         "AmountEUR": 19.2811839323467,
-        "Commission": 30,
+        "Commission": 0,
         "Currency": "USD",
         "Date": "24-03-2021",
         "ExchangeRate": 1.1825,
         "ISIN": "BE0003816338",
         "OrderID": "",
-        "OrderType": "dividendo",
+        "OrderType": "dividend",
         "Price": 0,
         "ProductName": "",
-        "Quantity": 0
+        "Quantity": 0,
+        "TransactionType": ""
     },
     {
         "Amount": -6.84,
         "AmountEUR": -5.78435517970402,
-        "Commission": 30,
+        "Commission": 0,
         "Currency": "USD",
         "Date": "24-03-2021",
         "ExchangeRate": 1.1825,
         "ISIN": "BE0003816338",
         "OrderID": "",
-        "OrderType": "imposto sobre dividendo",
+        "OrderType": "dividendtax",
         "Price": 0,
         "ProductName": "",
-        "Quantity": 0
+        "Quantity": 0,
+        "TransactionType": ""
     },
     {
         "Amount": -22.8,
         "AmountEUR": -19.2811839323467,
-        "Commission": 30,
+        "Commission": 0,
         "Currency": "USD",
         "Date": "24-03-2021",
         "ExchangeRate": 1.1825,
         "ISIN": "BE0003816338",
         "OrderID": "",
-        "OrderType": "dividendo",
+        "OrderType": "dividend",
         "Price": 0,
         "ProductName": "",
-        "Quantity": 0
+        "Quantity": 0,
+        "TransactionType": ""
     },
     {
         "Amount": 6.84,
         "AmountEUR": 5.78435517970402,
-        "Commission": 30,
+        "Commission": 0,
         "Currency": "USD",
         "Date": "24-03-2021",
         "ExchangeRate": 1.1825,
         "ISIN": "BE0003816338",
         "OrderID": "",
-        "OrderType": "imposto sobre dividendo",
+        "OrderType": "dividendtax",
         "Price": 0,
         "ProductName": "",
-        "Quantity": 0
+        "Quantity": 0,
+        "TransactionType": ""
     },
     {
         "Amount": 22.8,
         "AmountEUR": 22.8,
-        "Commission": 30,
+        "Commission": 0,
         "Currency": "EUR",
         "Date": "24-03-2021",
         "ExchangeRate": 1,
         "ISIN": "BE0003816338",
         "OrderID": "",
-        "OrderType": "dividendo",
+        "OrderType": "dividend",
         "Price": 0,
         "ProductName": "",
-        "Quantity": 0
+        "Quantity": 0,
+        "TransactionType": ""
     },
     {
         "Amount": -6.84,
         "AmountEUR": -6.84,
-        "Commission": 30,
+        "Commission": 0,
         "Currency": "EUR",
         "Date": "24-03-2021",
         "ExchangeRate": 1,
         "ISIN": "BE0003816338",
         "OrderID": "",
-        "OrderType": "imposto sobre dividendo",
+        "OrderType": "dividendtax",
         "Price": 0,
         "ProductName": "",
-        "Quantity": 0
+        "Quantity": 0,
+        "TransactionType": ""
     },
     {
         "Amount": -627.54,
@@ -3494,24 +3758,26 @@
         "ExchangeRate": 1.1907,
         "ISIN": "US00287Y1091",
         "OrderID": "d6f5d352-3e12-43ca-8ace-603a6f2f9542",
-        "OrderType": "compra",
+        "OrderType": "stockbuy",
         "Price": 104.59,
         "ProductName": "Abbvie Inc",
-        "Quantity": 6
+        "Quantity": 6,
+        "TransactionType": ""
     },
     {
         "Amount": 15,
         "AmountEUR": 12.577561630052,
-        "Commission": 30,
+        "Commission": 0,
         "Currency": "USD",
         "Date": "16-03-2021",
         "ExchangeRate": 1.1926,
         "ISIN": "MHY7542C1306",
         "OrderID": "",
-        "OrderType": "dividendo",
+        "OrderType": "dividend",
         "Price": 0,
         "ProductName": "",
-        "Quantity": 0
+        "Quantity": 0,
+        "TransactionType": ""
     },
     {
         "Amount": -683.97,
@@ -3522,10 +3788,11 @@
         "ExchangeRate": 1.192,
         "ISIN": "US01609W1027",
         "OrderID": "b2f6d50d-b9d3-494d-88b4-ab17a8f5823c",
-        "OrderType": "compra",
+        "OrderType": "stockbuy",
         "Price": 227.99,
         "ProductName": "ADR on Alibaba Group Holding",
-        "Quantity": 3
+        "Quantity": 3,
+        "TransactionType": ""
     },
     {
         "Amount": -554.3,
@@ -3536,10 +3803,11 @@
         "ExchangeRate": 1.192,
         "ISIN": "US92343V1044",
         "OrderID": "bf2beaf8-8c57-47d6-ae49-ccf03e2d4dee",
-        "OrderType": "compra",
+        "OrderType": "stockbuy",
         "Price": 55.43,
         "ProductName": "Verizon Communications",
-        "Quantity": 10
+        "Quantity": 10,
+        "TransactionType": ""
     },
     {
         "Amount": -318.55,
@@ -3550,10 +3818,11 @@
         "ExchangeRate": 1,
         "ISIN": "IE00B4L5Y983",
         "OrderID": "1610547a-2ea5-49b3-8bf0-b1bc771254d1",
-        "OrderType": "compra",
+        "OrderType": "stockbuy",
         "Price": 63.71,
         "ProductName": "iShares Core MSCI World UCITS ETF USD (Acc)",
-        "Quantity": 5
+        "Quantity": 5,
+        "TransactionType": ""
     },
     {
         "Amount": 360,
@@ -3564,10 +3833,11 @@
         "ExchangeRate": 1.1892,
         "ISIN": "MHY7542C1306",
         "OrderID": "b647a797-4393-4a58-931b-39c4bb5b4f88",
-        "OrderType": "venda",
+        "OrderType": "stocksale",
         "Price": 18,
         "ProductName": "Scorpio Tankers Inc",
-        "Quantity": 20
+        "Quantity": 20,
+        "TransactionType": ""
     },
     {
         "Amount": 535.5,
@@ -3578,10 +3848,11 @@
         "ExchangeRate": 1.1892,
         "ISIN": "MHY7542C1306",
         "OrderID": "9ef4f7f5-fb4b-474b-871a-360b0e4e957d",
-        "OrderType": "venda",
+        "OrderType": "stocksale",
         "Price": 17.85,
         "ProductName": "Scorpio Tankers Inc",
-        "Quantity": 30
+        "Quantity": 30,
+        "TransactionType": ""
     },
     {
         "Amount": 1785,
@@ -3592,38 +3863,41 @@
         "ExchangeRate": 1.1892,
         "ISIN": "MHY7542C1306",
         "OrderID": "9ef4f7f5-fb4b-474b-871a-360b0e4e957d",
-        "OrderType": "venda",
+        "OrderType": "stocksale",
         "Price": 17.85,
         "ProductName": "Scorpio Tankers Inc",
-        "Quantity": 100
+        "Quantity": 100,
+        "TransactionType": ""
     },
     {
         "Amount": 22.8,
         "AmountEUR": 19.2145626158773,
-        "Commission": 30,
+        "Commission": 0,
         "Currency": "USD",
         "Date": "08-03-2021",
         "ExchangeRate": 1.1866,
         "ISIN": "BE0003816338",
         "OrderID": "",
-        "OrderType": "dividendo",
+        "OrderType": "dividend",
         "Price": 0,
         "ProductName": "",
-        "Quantity": 0
+        "Quantity": 0,
+        "TransactionType": ""
     },
     {
         "Amount": -6.84,
         "AmountEUR": -5.76436878476319,
-        "Commission": 30,
+        "Commission": 0,
         "Currency": "USD",
         "Date": "08-03-2021",
         "ExchangeRate": 1.1866,
         "ISIN": "BE0003816338",
         "OrderID": "",
-        "OrderType": "imposto sobre dividendo",
+        "OrderType": "dividendtax",
         "Price": 0,
         "ProductName": "",
-        "Quantity": 0
+        "Quantity": 0,
+        "TransactionType": ""
     },
     {
         "Amount": -958.4,
@@ -3634,10 +3908,11 @@
         "ExchangeRate": 1.2028,
         "ISIN": "US0463531089",
         "OrderID": "d3ca06b8-7f18-4116-b470-9d9c842140e3",
-        "OrderType": "compra",
+        "OrderType": "stockbuy",
         "Price": 47.92,
         "ProductName": "ASTRAZENECA PLC COMMON",
-        "Quantity": 20
+        "Quantity": 20,
+        "TransactionType": ""
     },
     {
         "Amount": 560.7,
@@ -3648,10 +3923,11 @@
         "ExchangeRate": 1.2133,
         "ISIN": "PA1436583006",
         "OrderID": "e10ff1b6-a5b0-4ef9-9b7e-92d4a2020b12",
-        "OrderType": "venda",
+        "OrderType": "stocksale",
         "Price": 26.7,
         "ProductName": "Carnival Corp",
-        "Quantity": 21
+        "Quantity": 21,
+        "TransactionType": ""
     },
     {
         "Amount": -21,
@@ -3662,10 +3938,11 @@
         "ExchangeRate": 1,
         "ISIN": "BEENX0474454",
         "OrderID": "859e2583-1412-4cd9-a084-30a566dc84a7",
-        "OrderType": "compra",
+        "OrderType": "option",
         "Price": 0.21,
         "ProductName": "EUN P7.00 19FEB21",
-        "Quantity": 1
+        "Quantity": 1,
+        "TransactionType": ""
     },
     {
         "Amount": -42,
@@ -3676,10 +3953,11 @@
         "ExchangeRate": 1,
         "ISIN": "BEENX0474454",
         "OrderID": "859e2583-1412-4cd9-a084-30a566dc84a7",
-        "OrderType": "compra",
+        "OrderType": "option",
         "Price": 0.21,
         "ProductName": "EUN P7.00 19FEB21",
-        "Quantity": 2
+        "Quantity": 2,
+        "TransactionType": ""
     },
     {
         "Amount": -66,
@@ -3690,10 +3968,11 @@
         "ExchangeRate": 1,
         "ISIN": "BEENX0474470",
         "OrderID": "c4e1f60e-1439-4c54-b2bc-be1127f98df5",
-        "OrderType": "compra",
+        "OrderType": "option",
         "Price": 0.33,
         "ProductName": "EUN P7.20 19FEB21",
-        "Quantity": 2
+        "Quantity": 2,
+        "TransactionType": ""
     },
     {
         "Amount": 108,
@@ -3704,10 +3983,11 @@
         "ExchangeRate": 1,
         "ISIN": "BEENX0474454",
         "OrderID": "57630dc3-f9c5-45c4-8c62-4d5e2a7f3ffb",
-        "OrderType": "venda",
+        "OrderType": "option",
         "Price": 0.36,
         "ProductName": "EUN P7.00 19FEB21",
-        "Quantity": 3
+        "Quantity": 3,
+        "TransactionType": ""
     },
     {
         "Amount": 124,
@@ -3718,10 +3998,11 @@
         "ExchangeRate": 1,
         "ISIN": "BEENX0474470",
         "OrderID": "0370e2b1-57cc-4e71-9d87-c384167fc2df",
-        "OrderType": "venda",
+        "OrderType": "option",
         "Price": 0.62,
         "ProductName": "EUN P7.20 19FEB21",
-        "Quantity": 2
+        "Quantity": 2,
+        "TransactionType": ""
     },
     {
         "Amount": -1267.25,
@@ -3732,10 +4013,11 @@
         "ExchangeRate": 1.2136,
         "ISIN": "US0463531089",
         "OrderID": "80e18c58-ada7-4a62-bf4e-2ae37df7be84",
-        "OrderType": "compra",
+        "OrderType": "stockbuy",
         "Price": 50.69,
         "ProductName": "ASTRAZENECA PLC COMMON",
-        "Quantity": 25
+        "Quantity": 25,
+        "TransactionType": ""
     },
     {
         "Amount": -506.7,
@@ -3746,10 +4028,11 @@
         "ExchangeRate": 1.2246,
         "ISIN": "US0463531089",
         "OrderID": "f71831e1-7017-45c1-98ef-6227391416ad",
-        "OrderType": "compra",
+        "OrderType": "stockbuy",
         "Price": 50.67,
         "ProductName": "ASTRAZENECA PLC COMMON",
-        "Quantity": 10
+        "Quantity": 10,
+        "TransactionType": ""
     },
     {
         "Amount": -495.6,
@@ -3760,24 +4043,26 @@
         "ExchangeRate": 1.2246,
         "ISIN": "BE0003816338",
         "OrderID": "2a01a794-83f0-411e-9dd6-bcd3d25ea155",
-        "OrderType": "compra",
+        "OrderType": "stockbuy",
         "Price": 8.26,
         "ProductName": "CMB Tech NV",
-        "Quantity": 60
+        "Quantity": 60,
+        "TransactionType": ""
     },
     {
         "Amount": 15,
         "AmountEUR": 12.3558484349259,
-        "Commission": 30,
+        "Commission": 0,
         "Currency": "USD",
         "Date": "15-12-2020",
         "ExchangeRate": 1.214,
         "ISIN": "MHY7542C1306",
         "OrderID": "",
-        "OrderType": "dividendo",
+        "OrderType": "dividend",
         "Price": 0,
         "ProductName": "",
-        "Quantity": 0
+        "Quantity": 0,
+        "TransactionType": ""
     },
     {
         "Amount": -1008.6,
@@ -3788,10 +4073,11 @@
         "ExchangeRate": 1.2162,
         "ISIN": "US0463531089",
         "OrderID": "67e435cf-0bdf-497c-b45e-3bdb6da0bdfd",
-        "OrderType": "compra",
+        "OrderType": "stockbuy",
         "Price": 50.43,
         "ProductName": "ASTRAZENECA PLC COMMON",
-        "Quantity": 20
+        "Quantity": 20,
+        "TransactionType": ""
     },
     {
         "Amount": 464.31,
@@ -3802,38 +4088,41 @@
         "ExchangeRate": 1.2127,
         "ISIN": "PA1436583006",
         "OrderID": "3909bebe-12ba-4b31-9944-a16914a32f57",
-        "OrderType": "venda",
+        "OrderType": "stocksale",
         "Price": 22.11,
         "ProductName": "Carnival Corp",
-        "Quantity": 21
+        "Quantity": 21,
+        "TransactionType": ""
     },
     {
         "Amount": 63,
         "AmountEUR": 52.6403743315508,
-        "Commission": 30,
+        "Commission": 0,
         "Currency": "USD",
         "Date": "01-12-2020",
         "ExchangeRate": 1.1968,
         "ISIN": "BE0003816338",
         "OrderID": "",
-        "OrderType": "dividendo",
+        "OrderType": "dividend",
         "Price": 0,
         "ProductName": "",
-        "Quantity": 0
+        "Quantity": 0,
+        "TransactionType": ""
     },
     {
         "Amount": -18.9,
         "AmountEUR": -15.7921122994652,
-        "Commission": 30,
+        "Commission": 0,
         "Currency": "USD",
         "Date": "01-12-2020",
         "ExchangeRate": 1.1968,
         "ISIN": "BE0003816338",
         "OrderID": "",
-        "OrderType": "imposto sobre dividendo",
+        "OrderType": "dividendtax",
         "Price": 0,
         "ProductName": "",
-        "Quantity": 0
+        "Quantity": 0,
+        "TransactionType": ""
     },
     {
         "Amount": -627.6,
@@ -3844,10 +4133,11 @@
         "ExchangeRate": 1.1922,
         "ISIN": "US0463531089",
         "OrderID": "cf57f735-8ce6-4979-8241-8b4175c9bfe1",
-        "OrderType": "compra",
+        "OrderType": "stockbuy",
         "Price": 52.3,
         "ProductName": "ASTRAZENECA PLC COMMON",
-        "Quantity": 12
+        "Quantity": 12,
+        "TransactionType": ""
     },
     {
         "Amount": -537.5,
@@ -3858,10 +4148,11 @@
         "ExchangeRate": 1.1865,
         "ISIN": "US0463531089",
         "OrderID": "c25fe4fa-0ace-4e5d-a9ad-82b3d282a516",
-        "OrderType": "compra",
+        "OrderType": "stockbuy",
         "Price": 53.75,
         "ProductName": "ASTRAZENECA PLC COMMON",
-        "Quantity": 10
+        "Quantity": 10,
+        "TransactionType": ""
     },
     {
         "Amount": -321.54,
@@ -3872,10 +4163,11 @@
         "ExchangeRate": 1.1901,
         "ISIN": "US0463531089",
         "OrderID": "949b05a0-4360-41e4-815f-fd6a073362aa",
-        "OrderType": "compra",
+        "OrderType": "stockbuy",
         "Price": 53.59,
         "ProductName": "ASTRAZENECA PLC COMMON",
-        "Quantity": 6
+        "Quantity": 6,
+        "TransactionType": ""
     },
     {
         "Amount": -567.5,
@@ -3886,10 +4178,11 @@
         "ExchangeRate": 1.183,
         "ISIN": "US0463531089",
         "OrderID": "a92e5408-f969-4d6a-b94a-d34c8e61ebd5",
-        "OrderType": "compra",
+        "OrderType": "stockbuy",
         "Price": 56.75,
         "ProductName": "ASTRAZENECA PLC COMMON",
-        "Quantity": 10
+        "Quantity": 10,
+        "TransactionType": ""
     },
     {
         "Amount": 702,
@@ -3900,10 +4193,11 @@
         "ExchangeRate": 1.1883,
         "ISIN": "US8288061091",
         "OrderID": "1f7986c6-a060-49e9-8c33-f03fbdd6b2c7",
-        "OrderType": "venda",
+        "OrderType": "stocksale",
         "Price": 78,
         "ProductName": "Simon Property Group",
-        "Quantity": 9
+        "Quantity": 9,
+        "TransactionType": ""
     },
     {
         "Amount": 775,
@@ -3914,10 +4208,11 @@
         "ExchangeRate": 1.1883,
         "ISIN": "US8288061091",
         "OrderID": "c6ef9b6a-30a8-4dc8-9b29-1804f38832be",
-        "OrderType": "venda",
+        "OrderType": "stocksale",
         "Price": 77.5,
         "ProductName": "Simon Property Group",
-        "Quantity": 10
+        "Quantity": 10,
+        "TransactionType": ""
     },
     {
         "Amount": -303,
@@ -3928,80 +4223,86 @@
         "ExchangeRate": 1.1819,
         "ISIN": "MHY7542C1306",
         "OrderID": "ae7ac02a-71ee-4bd0-bfd5-38abf6103917",
-        "OrderType": "compra",
+        "OrderType": "stockbuy",
         "Price": 10.1,
         "ProductName": "Scorpio Tankers Inc",
-        "Quantity": 30
+        "Quantity": 30,
+        "TransactionType": ""
     },
     {
         "Amount": 24.7,
         "AmountEUR": 20.8985531770877,
-        "Commission": 30,
+        "Commission": 0,
         "Currency": "USD",
         "Date": "26-10-2020",
         "ExchangeRate": 1.1819,
         "ISIN": "US8288061091",
         "OrderID": "",
-        "OrderType": "dividendo",
+        "OrderType": "dividend",
         "Price": 0,
         "ProductName": "",
-        "Quantity": 0
+        "Quantity": 0,
+        "TransactionType": ""
     },
     {
         "Amount": -3.71,
         "AmountEUR": -3.1390134529148,
-        "Commission": 30,
+        "Commission": 0,
         "Currency": "USD",
         "Date": "26-10-2020",
         "ExchangeRate": 1.1819,
         "ISIN": "US8288061091",
         "OrderID": "",
-        "OrderType": "imposto sobre dividendo",
+        "OrderType": "dividendtax",
         "Price": 0,
         "ProductName": "",
-        "Quantity": 0
+        "Quantity": 0,
+        "TransactionType": ""
     },
     {
         "Amount": 12,
         "AmountEUR": 10.2494021182098,
-        "Commission": 30,
+        "Commission": 0,
         "Currency": "USD",
         "Date": "30-09-2020",
         "ExchangeRate": 1.1708,
         "ISIN": "MHY7542C1306",
         "OrderID": "",
-        "OrderType": "dividendo",
+        "OrderType": "dividend",
         "Price": 0,
         "ProductName": "",
-        "Quantity": 0
+        "Quantity": 0,
+        "TransactionType": ""
     },
     {
         "Amount": 329,
         "AmountEUR": 275.544388609715,
-        "Commission": 30,
+        "Commission": 0,
         "Currency": "USD",
         "Date": "31-08-2020",
         "ExchangeRate": 1.194,
         "ISIN": "BE0003816338",
         "OrderID": "",
-        "OrderType": "dividendo",
+        "OrderType": "dividend",
         "Price": 0,
         "ProductName": "",
-        "Quantity": 0
+        "Quantity": 0,
+        "TransactionType": ""
     },
     {
         "Amount": -98.7,
         "AmountEUR": -82.6633165829146,
-        "Commission": 30,
+        "Commission": 0,
         "Currency": "USD",
         "Date": "31-08-2020",
         "ExchangeRate": 1.194,
         "ISIN": "BE0003816338",
         "OrderID": "",
-        "OrderType": "imposto sobre dividendo",
+        "OrderType": "dividendtax",
         "Price": 0,
         "ProductName": "",
-        "Quantity": 0
+        "Quantity": 0,
+        "TransactionType": ""
     },
     {
         "Amount": -541.8,
@@ -4012,38 +4313,41 @@
         "ExchangeRate": 1.176,
         "ISIN": "US8288061091",
         "OrderID": "c167d6c1-94b8-4fb6-ad97-33b459347dfe",
-        "OrderType": "compra",
+        "OrderType": "stockbuy",
         "Price": 60.2,
         "ProductName": "Simon Property Group",
-        "Quantity": 9
+        "Quantity": 9,
+        "TransactionType": ""
     },
     {
         "Amount": 13,
         "AmountEUR": 11.0544217687075,
-        "Commission": 30,
+        "Commission": 0,
         "Currency": "USD",
         "Date": "27-07-2020",
         "ExchangeRate": 1.176,
         "ISIN": "US8288061091",
         "OrderID": "",
-        "OrderType": "dividendo",
+        "OrderType": "dividend",
         "Price": 0,
         "ProductName": "",
-        "Quantity": 0
+        "Quantity": 0,
+        "TransactionType": ""
     },
     {
         "Amount": -1.95,
         "AmountEUR": -1.65816326530612,
-        "Commission": 30,
+        "Commission": 0,
         "Currency": "USD",
         "Date": "27-07-2020",
         "ExchangeRate": 1.176,
         "ISIN": "US8288061091",
         "OrderID": "",
-        "OrderType": "imposto sobre dividendo",
+        "OrderType": "dividendtax",
         "Price": 0,
         "ProductName": "",
-        "Quantity": 0
+        "Quantity": 0,
+        "TransactionType": ""
     },
     {
         "Amount": 444,
@@ -4054,10 +4358,11 @@
         "ExchangeRate": 1.1276,
         "ISIN": "US13123X1028",
         "OrderID": "e5d06efa-5604-432c-8eff-aa91a16c1949",
-        "OrderType": "venda",
+        "OrderType": "stocksale",
         "Price": 1.11,
         "ProductName": "Callon Petroleum",
-        "Quantity": 400
+        "Quantity": 400,
+        "TransactionType": ""
     },
     {
         "Amount": 111,
@@ -4068,10 +4373,11 @@
         "ExchangeRate": 1.1276,
         "ISIN": "US13123X1028",
         "OrderID": "e5d06efa-5604-432c-8eff-aa91a16c1949",
-        "OrderType": "venda",
+        "OrderType": "stocksale",
         "Price": 1.11,
         "ProductName": "Callon Petroleum",
-        "Quantity": 100
+        "Quantity": 100,
+        "TransactionType": ""
     },
     {
         "Amount": -103.68,
@@ -4082,10 +4388,11 @@
         "ExchangeRate": 1.1342,
         "ISIN": "US13123X1028",
         "OrderID": "ab30a4c1-d870-4d38-a015-97c95cb3e624",
-        "OrderType": "compra",
+        "OrderType": "stockbuy",
         "Price": 1.08,
         "ProductName": "Callon Petroleum",
-        "Quantity": 96
+        "Quantity": 96,
+        "TransactionType": ""
     },
     {
         "Amount": -436.32,
@@ -4096,10 +4403,11 @@
         "ExchangeRate": 1.1342,
         "ISIN": "US13123X1028",
         "OrderID": "ab30a4c1-d870-4d38-a015-97c95cb3e624",
-        "OrderType": "compra",
+        "OrderType": "stockbuy",
         "Price": 1.08,
         "ProductName": "Callon Petroleum",
-        "Quantity": 404
+        "Quantity": 404,
+        "TransactionType": ""
     },
     {
         "Amount": 6,
@@ -4110,10 +4418,11 @@
         "ExchangeRate": 1,
         "ISIN": "BEENX8800023",
         "OrderID": "d6d61aba-02d6-4845-93e6-a0284024bf10",
-        "OrderType": "venda",
+        "OrderType": "option",
         "Price": 0.01,
         "ProductName": "EUN C10.00 17JUL20",
-        "Quantity": 6
+        "Quantity": 6,
+        "TransactionType": ""
     },
     {
         "Amount": -796,
@@ -4124,10 +4433,11 @@
         "ExchangeRate": 1.1198,
         "ISIN": "BE0003816338",
         "OrderID": "594bdb68-5e78-4136-8364-2a872b452e5c",
-        "OrderType": "compra",
+        "OrderType": "stockbuy",
         "Price": 7.96,
         "ProductName": "CMB Tech NV",
-        "Quantity": 100
+        "Quantity": 100,
+        "TransactionType": ""
     },
     {
         "Amount": -520,
@@ -4138,10 +4448,11 @@
         "ExchangeRate": 1.1198,
         "ISIN": "MHY7542C1306",
         "OrderID": "d377f8bb-d45c-4dc6-a6c8-a1c2bb0f096a",
-        "OrderType": "compra",
+        "OrderType": "stockbuy",
         "Price": 13,
         "ProductName": "Scorpio Tankers Inc",
-        "Quantity": 40
+        "Quantity": 40,
+        "TransactionType": ""
     },
     {
         "Amount": -54,
@@ -4152,52 +4463,71 @@
         "ExchangeRate": 1,
         "ISIN": "BEENX8800023",
         "OrderID": "e7f6c82f-506a-4de6-be2b-45fb512c3c64",
-        "OrderType": "compra",
+        "OrderType": "option",
         "Price": 0.09,
         "ProductName": "EUN C10.00 17JUL20",
-        "Quantity": 6
+        "Quantity": 6,
+        "TransactionType": ""
+    },
+    {
+        "Amount": 2150,
+        "AmountEUR": 2150,
+        "Commission": 0,
+        "Currency": "EUR",
+        "Date": "29-06-2020",
+        "ExchangeRate": 1,
+        "ISIN": "",
+        "OrderID": "",
+        "OrderType": "cashdeposit",
+        "Price": 0,
+        "ProductName": "Cash Deposit",
+        "Quantity": 0,
+        "TransactionType": ""
     },
     {
         "Amount": 486,
         "AmountEUR": 433.425488272541,
-        "Commission": 30,
+        "Commission": 0,
         "Currency": "USD",
         "Date": "26-06-2020",
         "ExchangeRate": 1.1213,
         "ISIN": "BE0003816338",
         "OrderID": "",
-        "OrderType": "dividendo",
+        "OrderType": "dividend",
         "Price": 0,
         "ProductName": "",
-        "Quantity": 0
+        "Quantity": 0,
+        "TransactionType": ""
     },
     {
         "Amount": -145.8,
         "AmountEUR": -130.027646481762,
-        "Commission": 30,
+        "Commission": 0,
         "Currency": "USD",
         "Date": "26-06-2020",
         "ExchangeRate": 1.1213,
         "ISIN": "BE0003816338",
         "OrderID": "",
-        "OrderType": "imposto sobre dividendo",
+        "OrderType": "dividendtax",
         "Price": 0,
         "ProductName": "",
-        "Quantity": 0
+        "Quantity": 0,
+        "TransactionType": ""
     },
     {
         "Amount": 8,
         "AmountEUR": 7.07463742483198,
-        "Commission": 30,
+        "Commission": 0,
         "Currency": "USD",
         "Date": "16-06-2020",
         "ExchangeRate": 1.1308,
         "ISIN": "MHY7542C1306",
         "OrderID": "",
-        "OrderType": "dividendo",
+        "OrderType": "dividend",
         "Price": 0,
         "ProductName": "",
-        "Quantity": 0
+        "Quantity": 0,
+        "TransactionType": ""
     },
     {
         "Amount": -991,
@@ -4208,38 +4538,41 @@
         "ExchangeRate": 1.1348,
         "ISIN": "BE0003816338",
         "OrderID": "c4d57b26-17da-4af0-8260-012053412583",
-        "OrderType": "compra",
+        "OrderType": "stockbuy",
         "Price": 9.91,
         "ProductName": "CMB Tech NV",
-        "Quantity": 100
+        "Quantity": 100,
+        "TransactionType": ""
     },
     {
         "Amount": 43.5,
         "AmountEUR": 38.2417582417582,
-        "Commission": 30,
+        "Commission": 0,
         "Currency": "USD",
         "Date": "10-06-2020",
         "ExchangeRate": 1.1375,
         "ISIN": "BE0003816338",
         "OrderID": "",
-        "OrderType": "dividendo",
+        "OrderType": "dividend",
         "Price": 0,
         "ProductName": "",
-        "Quantity": 0
+        "Quantity": 0,
+        "TransactionType": ""
     },
     {
         "Amount": -13.05,
         "AmountEUR": -11.4725274725275,
-        "Commission": 30,
+        "Commission": 0,
         "Currency": "USD",
         "Date": "10-06-2020",
         "ExchangeRate": 1.1375,
         "ISIN": "BE0003816338",
         "OrderID": "",
-        "OrderType": "imposto sobre dividendo",
+        "OrderType": "dividendtax",
         "Price": 0,
         "ProductName": "",
-        "Quantity": 0
+        "Quantity": 0,
+        "TransactionType": ""
     },
     {
         "Amount": -346.2,
@@ -4250,10 +4583,11 @@
         "ExchangeRate": 1.1294,
         "ISIN": "US8288061091",
         "OrderID": "c5d0a7e8-4939-4484-8eef-c0c6ff3794f4",
-        "OrderType": "compra",
+        "OrderType": "stockbuy",
         "Price": 86.55,
         "ProductName": "Simon Property Group",
-        "Quantity": 4
+        "Quantity": 4,
+        "TransactionType": ""
     },
     {
         "Amount": -519.3,
@@ -4264,10 +4598,11 @@
         "ExchangeRate": 1.1294,
         "ISIN": "US8288061091",
         "OrderID": "c5d0a7e8-4939-4484-8eef-c0c6ff3794f4",
-        "OrderType": "compra",
+        "OrderType": "stockbuy",
         "Price": 86.55,
         "ProductName": "Simon Property Group",
-        "Quantity": 6
+        "Quantity": 6,
+        "TransactionType": ""
     },
     {
         "Amount": 1672,
@@ -4278,10 +4613,11 @@
         "ExchangeRate": 1.1294,
         "ISIN": "US13123X1028",
         "OrderID": "8ef00d14-32c8-47d0-aef3-44dc8e69be34",
-        "OrderType": "venda",
+        "OrderType": "stocksale",
         "Price": 2.09,
         "ProductName": "Callon Petroleum",
-        "Quantity": 800
+        "Quantity": 800,
+        "TransactionType": ""
     },
     {
         "Amount": 209,
@@ -4292,10 +4628,11 @@
         "ExchangeRate": 1.1294,
         "ISIN": "US13123X1028",
         "OrderID": "8ef00d14-32c8-47d0-aef3-44dc8e69be34",
-        "OrderType": "venda",
+        "OrderType": "stocksale",
         "Price": 2.09,
         "ProductName": "Callon Petroleum",
-        "Quantity": 100
+        "Quantity": 100,
+        "TransactionType": ""
     },
     {
         "Amount": -621,
@@ -4306,10 +4643,11 @@
         "ExchangeRate": 1.1294,
         "ISIN": "US13123X1028",
         "OrderID": "a679d210-e442-49e8-86c3-5885e5669fd0",
-        "OrderType": "compra",
+        "OrderType": "stockbuy",
         "Price": 2.07,
         "ProductName": "Callon Petroleum",
-        "Quantity": 300
+        "Quantity": 300,
+        "TransactionType": ""
     },
     {
         "Amount": -828,
@@ -4320,10 +4658,11 @@
         "ExchangeRate": 1.1294,
         "ISIN": "US13123X1028",
         "OrderID": "45b13e8f-7f8e-477b-8296-8ecf22a3337a",
-        "OrderType": "compra",
+        "OrderType": "stockbuy",
         "Price": 2.07,
         "ProductName": "Callon Petroleum",
-        "Quantity": 400
+        "Quantity": 400,
+        "TransactionType": ""
     },
     {
         "Amount": -207,
@@ -4334,10 +4673,11 @@
         "ExchangeRate": 1.1294,
         "ISIN": "US13123X1028",
         "OrderID": "a679d210-e442-49e8-86c3-5885e5669fd0",
-        "OrderType": "compra",
+        "OrderType": "stockbuy",
         "Price": 2.07,
         "ProductName": "Callon Petroleum",
-        "Quantity": 100
+        "Quantity": 100,
+        "TransactionType": ""
     },
     {
         "Amount": -207,
@@ -4348,10 +4688,11 @@
         "ExchangeRate": 1.1294,
         "ISIN": "US13123X1028",
         "OrderID": "45b13e8f-7f8e-477b-8296-8ecf22a3337a",
-        "OrderType": "compra",
+        "OrderType": "stockbuy",
         "Price": 2.07,
         "ProductName": "Callon Petroleum",
-        "Quantity": 100
+        "Quantity": 100,
+        "TransactionType": ""
     },
     {
         "Amount": -648.9,
@@ -4362,10 +4703,11 @@
         "ExchangeRate": 1.1285,
         "ISIN": "BE0003816338",
         "OrderID": "90a71fee-0cb4-47ec-8d7d-c50bfd259e9d",
-        "OrderType": "compra",
+        "OrderType": "stockbuy",
         "Price": 10.3,
         "ProductName": "CMB Tech NV",
-        "Quantity": 63
+        "Quantity": 63,
+        "TransactionType": ""
     },
     {
         "Amount": -381.1,
@@ -4376,10 +4718,11 @@
         "ExchangeRate": 1.1285,
         "ISIN": "BE0003816338",
         "OrderID": "90a71fee-0cb4-47ec-8d7d-c50bfd259e9d",
-        "OrderType": "compra",
+        "OrderType": "stockbuy",
         "Price": 10.3,
         "ProductName": "CMB Tech NV",
-        "Quantity": 37
+        "Quantity": 37,
+        "TransactionType": ""
     },
     {
         "Amount": -1030,
@@ -4390,10 +4733,11 @@
         "ExchangeRate": 1.1285,
         "ISIN": "BE0003816338",
         "OrderID": "90a71fee-0cb4-47ec-8d7d-c50bfd259e9d",
-        "OrderType": "compra",
+        "OrderType": "stockbuy",
         "Price": 10.3,
         "ProductName": "CMB Tech NV",
-        "Quantity": 100
+        "Quantity": 100,
+        "TransactionType": ""
     },
     {
         "Amount": 5.25,
@@ -4404,10 +4748,11 @@
         "ExchangeRate": 1.133,
         "ISIN": "US13123X1028",
         "OrderID": "701556b6-70c6-47db-8715-6730f26a8cee",
-        "OrderType": "venda",
+        "OrderType": "stocksale",
         "Price": 1.05,
         "ProductName": "Callon Petroleum",
-        "Quantity": 5
+        "Quantity": 5,
+        "TransactionType": ""
     },
     {
         "Amount": 274.05,
@@ -4418,10 +4763,11 @@
         "ExchangeRate": 1.133,
         "ISIN": "US13123X1028",
         "OrderID": "701556b6-70c6-47db-8715-6730f26a8cee",
-        "OrderType": "venda",
+        "OrderType": "stocksale",
         "Price": 1.05,
         "ProductName": "Callon Petroleum",
-        "Quantity": 261
+        "Quantity": 261,
+        "TransactionType": ""
     },
     {
         "Amount": 2870.7,
@@ -4432,10 +4778,11 @@
         "ExchangeRate": 1.133,
         "ISIN": "US13123X1028",
         "OrderID": "701556b6-70c6-47db-8715-6730f26a8cee",
-        "OrderType": "venda",
+        "OrderType": "stocksale",
         "Price": 1.05,
         "ProductName": "Callon Petroleum",
-        "Quantity": 2734
+        "Quantity": 2734,
+        "TransactionType": ""
     },
     {
         "Amount": -1492.5,
@@ -4446,10 +4793,26 @@
         "ExchangeRate": 1.1194,
         "ISIN": "BE0003816338",
         "OrderID": "2e3a7da4-5314-49c1-9fbe-f76b3a7f8fb7",
-        "OrderType": "compra",
+        "OrderType": "stockbuy",
         "Price": 9.95,
         "ProductName": "CMB Tech NV",
-        "Quantity": 150
+        "Quantity": 150,
+        "TransactionType": ""
+    },
+    {
+        "Amount": 800,
+        "AmountEUR": 800,
+        "Commission": 0,
+        "Currency": "EUR",
+        "Date": "03-06-2020",
+        "ExchangeRate": 1,
+        "ISIN": "",
+        "OrderID": "",
+        "OrderType": "cashdeposit",
+        "Price": 0,
+        "ProductName": "Cash Deposit",
+        "Quantity": 0,
+        "TransactionType": ""
     },
     {
         "Amount": -477,
@@ -4460,10 +4823,11 @@
         "ExchangeRate": 1.0904,
         "ISIN": "BE0003816338",
         "OrderID": "1c0814cd-44f4-450e-845f-040127efabce",
-        "OrderType": "compra",
+        "OrderType": "stockbuy",
         "Price": 9.54,
         "ProductName": "CMB Tech NV",
-        "Quantity": 50
+        "Quantity": 50,
+        "TransactionType": ""
     },
     {
         "Amount": -1346.15,
@@ -4474,10 +4838,11 @@
         "ExchangeRate": 1.0875,
         "ISIN": "US13123X1028",
         "OrderID": "7282235b-24e3-42a0-adb8-36e0922e475f",
-        "OrderType": "compra",
+        "OrderType": "stockbuy",
         "Price": 0.7085,
         "ProductName": "Callon Petroleum",
-        "Quantity": 1900
+        "Quantity": 1900,
+        "TransactionType": ""
     },
     {
         "Amount": -96.6,
@@ -4488,10 +4853,11 @@
         "ExchangeRate": 1.0875,
         "ISIN": "US13123X1028",
         "OrderID": "7282235b-24e3-42a0-adb8-36e0922e475f",
-        "OrderType": "compra",
+        "OrderType": "stockbuy",
         "Price": 0.7,
         "ProductName": "Callon Petroleum",
-        "Quantity": 138
+        "Quantity": 138,
+        "TransactionType": ""
     },
     {
         "Amount": -70,
@@ -4502,10 +4868,11 @@
         "ExchangeRate": 1.0875,
         "ISIN": "US13123X1028",
         "OrderID": "7282235b-24e3-42a0-adb8-36e0922e475f",
-        "OrderType": "compra",
+        "OrderType": "stockbuy",
         "Price": 0.7,
         "ProductName": "Callon Petroleum",
-        "Quantity": 100
+        "Quantity": 100,
+        "TransactionType": ""
     },
     {
         "Amount": -138,
@@ -4516,10 +4883,11 @@
         "ExchangeRate": 1.0875,
         "ISIN": "US13123X1028",
         "OrderID": "7282235b-24e3-42a0-adb8-36e0922e475f",
-        "OrderType": "compra",
+        "OrderType": "stockbuy",
         "Price": 0.69,
         "ProductName": "Callon Petroleum",
-        "Quantity": 200
+        "Quantity": 200,
+        "TransactionType": ""
     },
     {
         "Amount": -8.97,
@@ -4530,10 +4898,11 @@
         "ExchangeRate": 1.0875,
         "ISIN": "US13123X1028",
         "OrderID": "7282235b-24e3-42a0-adb8-36e0922e475f",
-        "OrderType": "compra",
+        "OrderType": "stockbuy",
         "Price": 0.69,
         "ProductName": "Callon Petroleum",
-        "Quantity": 13
+        "Quantity": 13,
+        "TransactionType": ""
     },
     {
         "Amount": -48.99,
@@ -4544,10 +4913,11 @@
         "ExchangeRate": 1.0875,
         "ISIN": "US13123X1028",
         "OrderID": "7282235b-24e3-42a0-adb8-36e0922e475f",
-        "OrderType": "compra",
+        "OrderType": "stockbuy",
         "Price": 0.69,
         "ProductName": "Callon Petroleum",
-        "Quantity": 71
+        "Quantity": 71,
+        "TransactionType": ""
     },
     {
         "Amount": -60.03,
@@ -4558,10 +4928,11 @@
         "ExchangeRate": 1.0875,
         "ISIN": "US13123X1028",
         "OrderID": "7282235b-24e3-42a0-adb8-36e0922e475f",
-        "OrderType": "compra",
+        "OrderType": "stockbuy",
         "Price": 0.69,
         "ProductName": "Callon Petroleum",
-        "Quantity": 87
+        "Quantity": 87,
+        "TransactionType": ""
     },
     {
         "Amount": -67.32,
@@ -4572,10 +4943,11 @@
         "ExchangeRate": 1.0875,
         "ISIN": "US13123X1028",
         "OrderID": "7282235b-24e3-42a0-adb8-36e0922e475f",
-        "OrderType": "compra",
+        "OrderType": "stockbuy",
         "Price": 0.68,
         "ProductName": "Callon Petroleum",
-        "Quantity": 99
+        "Quantity": 99,
+        "TransactionType": ""
     },
     {
         "Amount": -62.56,
@@ -4586,10 +4958,11 @@
         "ExchangeRate": 1.0875,
         "ISIN": "US13123X1028",
         "OrderID": "7282235b-24e3-42a0-adb8-36e0922e475f",
-        "OrderType": "compra",
+        "OrderType": "stockbuy",
         "Price": 0.68,
         "ProductName": "Callon Petroleum",
-        "Quantity": 92
+        "Quantity": 92,
+        "TransactionType": ""
     },
     {
         "Amount": -68,
@@ -4600,10 +4973,11 @@
         "ExchangeRate": 1.0875,
         "ISIN": "US13123X1028",
         "OrderID": "7282235b-24e3-42a0-adb8-36e0922e475f",
-        "OrderType": "compra",
+        "OrderType": "stockbuy",
         "Price": 0.68,
         "ProductName": "Callon Petroleum",
-        "Quantity": 100
+        "Quantity": 100,
+        "TransactionType": ""
     },
     {
         "Amount": -68,
@@ -4614,10 +4988,11 @@
         "ExchangeRate": 1.0875,
         "ISIN": "US13123X1028",
         "OrderID": "7282235b-24e3-42a0-adb8-36e0922e475f",
-        "OrderType": "compra",
+        "OrderType": "stockbuy",
         "Price": 0.68,
         "ProductName": "Callon Petroleum",
-        "Quantity": 100
+        "Quantity": 100,
+        "TransactionType": ""
     },
     {
         "Amount": -68,
@@ -4628,10 +5003,11 @@
         "ExchangeRate": 1.0875,
         "ISIN": "US13123X1028",
         "OrderID": "7282235b-24e3-42a0-adb8-36e0922e475f",
-        "OrderType": "compra",
+        "OrderType": "stockbuy",
         "Price": 0.68,
         "ProductName": "Callon Petroleum",
-        "Quantity": 100
+        "Quantity": 100,
+        "TransactionType": ""
     },
     {
         "Amount": -485,
@@ -4642,10 +5018,11 @@
         "ExchangeRate": 1.0858,
         "ISIN": "BE0003816338",
         "OrderID": "8bc92679-c30d-4aa8-b9aa-c38f4d15d2ac",
-        "OrderType": "compra",
+        "OrderType": "stockbuy",
         "Price": 9.7,
         "ProductName": "CMB Tech NV",
-        "Quantity": 50
+        "Quantity": 50,
+        "TransactionType": ""
     },
     {
         "Amount": -532.5,
@@ -4656,10 +5033,11 @@
         "ExchangeRate": 1.0824,
         "ISIN": "MHY7542C1306",
         "OrderID": "781bb6d1-5d96-4283-8e4d-300cbbfec8d6",
-        "OrderType": "compra",
+        "OrderType": "stockbuy",
         "Price": 17.75,
         "ProductName": "Scorpio Tankers Inc",
-        "Quantity": 30
+        "Quantity": 30,
+        "TransactionType": ""
     },
     {
         "Amount": 84,
@@ -4670,10 +5048,11 @@
         "ExchangeRate": 1.0824,
         "ISIN": "US13123X1028",
         "OrderID": "6bb0f997-af1b-4101-b3ce-c784fce66d7c",
-        "OrderType": "venda",
+        "OrderType": "stocksale",
         "Price": 0.84,
         "ProductName": "Callon Petroleum",
-        "Quantity": 100
+        "Quantity": 100,
+        "TransactionType": ""
     },
     {
         "Amount": 84,
@@ -4684,10 +5063,11 @@
         "ExchangeRate": 1.0824,
         "ISIN": "US13123X1028",
         "OrderID": "6bb0f997-af1b-4101-b3ce-c784fce66d7c",
-        "OrderType": "venda",
+        "OrderType": "stocksale",
         "Price": 0.84,
         "ProductName": "Callon Petroleum",
-        "Quantity": 100
+        "Quantity": 100,
+        "TransactionType": ""
     },
     {
         "Amount": 84,
@@ -4698,10 +5078,11 @@
         "ExchangeRate": 1.0824,
         "ISIN": "US13123X1028",
         "OrderID": "6bb0f997-af1b-4101-b3ce-c784fce66d7c",
-        "OrderType": "venda",
+        "OrderType": "stocksale",
         "Price": 0.84,
         "ProductName": "Callon Petroleum",
-        "Quantity": 100
+        "Quantity": 100,
+        "TransactionType": ""
     },
     {
         "Amount": 168,
@@ -4712,10 +5093,11 @@
         "ExchangeRate": 1.0824,
         "ISIN": "US13123X1028",
         "OrderID": "6bb0f997-af1b-4101-b3ce-c784fce66d7c",
-        "OrderType": "venda",
+        "OrderType": "stocksale",
         "Price": 0.84,
         "ProductName": "Callon Petroleum",
-        "Quantity": 200
+        "Quantity": 200,
+        "TransactionType": ""
     },
     {
         "Amount": 336,
@@ -4726,10 +5108,11 @@
         "ExchangeRate": 1.0824,
         "ISIN": "US13123X1028",
         "OrderID": "6bb0f997-af1b-4101-b3ce-c784fce66d7c",
-        "OrderType": "venda",
+        "OrderType": "stocksale",
         "Price": 0.84,
         "ProductName": "Callon Petroleum",
-        "Quantity": 400
+        "Quantity": 400,
+        "TransactionType": ""
     },
     {
         "Amount": 84,
@@ -4740,10 +5123,11 @@
         "ExchangeRate": 1.0824,
         "ISIN": "US13123X1028",
         "OrderID": "6bb0f997-af1b-4101-b3ce-c784fce66d7c",
-        "OrderType": "venda",
+        "OrderType": "stocksale",
         "Price": 0.84,
         "ProductName": "Callon Petroleum",
-        "Quantity": 100
+        "Quantity": 100,
+        "TransactionType": ""
     },
     {
         "Amount": 924,
@@ -4754,10 +5138,11 @@
         "ExchangeRate": 1.0824,
         "ISIN": "US13123X1028",
         "OrderID": "6bb0f997-af1b-4101-b3ce-c784fce66d7c",
-        "OrderType": "venda",
+        "OrderType": "stocksale",
         "Price": 0.84,
         "ProductName": "Callon Petroleum",
-        "Quantity": 1100
+        "Quantity": 1100,
+        "TransactionType": ""
     },
     {
         "Amount": 84,
@@ -4768,10 +5153,11 @@
         "ExchangeRate": 1.0824,
         "ISIN": "US13123X1028",
         "OrderID": "6bb0f997-af1b-4101-b3ce-c784fce66d7c",
-        "OrderType": "venda",
+        "OrderType": "stocksale",
         "Price": 0.84,
         "ProductName": "Callon Petroleum",
-        "Quantity": 100
+        "Quantity": 100,
+        "TransactionType": ""
     },
     {
         "Amount": 84,
@@ -4782,10 +5168,11 @@
         "ExchangeRate": 1.0824,
         "ISIN": "US13123X1028",
         "OrderID": "6bb0f997-af1b-4101-b3ce-c784fce66d7c",
-        "OrderType": "venda",
+        "OrderType": "stocksale",
         "Price": 0.84,
         "ProductName": "Callon Petroleum",
-        "Quantity": 100
+        "Quantity": 100,
+        "TransactionType": ""
     },
     {
         "Amount": 252,
@@ -4796,10 +5183,11 @@
         "ExchangeRate": 1.0824,
         "ISIN": "US13123X1028",
         "OrderID": "6bb0f997-af1b-4101-b3ce-c784fce66d7c",
-        "OrderType": "venda",
+        "OrderType": "stocksale",
         "Price": 0.84,
         "ProductName": "Callon Petroleum",
-        "Quantity": 300
+        "Quantity": 300,
+        "TransactionType": ""
     },
     {
         "Amount": 84,
@@ -4810,10 +5198,11 @@
         "ExchangeRate": 1.0824,
         "ISIN": "US13123X1028",
         "OrderID": "6bb0f997-af1b-4101-b3ce-c784fce66d7c",
-        "OrderType": "venda",
+        "OrderType": "stocksale",
         "Price": 0.84,
         "ProductName": "Callon Petroleum",
-        "Quantity": 100
+        "Quantity": 100,
+        "TransactionType": ""
     },
     {
         "Amount": 84,
@@ -4824,10 +5213,11 @@
         "ExchangeRate": 1.0824,
         "ISIN": "US13123X1028",
         "OrderID": "6bb0f997-af1b-4101-b3ce-c784fce66d7c",
-        "OrderType": "venda",
+        "OrderType": "stocksale",
         "Price": 0.84,
         "ProductName": "Callon Petroleum",
-        "Quantity": 100
+        "Quantity": 100,
+        "TransactionType": ""
     },
     {
         "Amount": 168,
@@ -4838,10 +5228,11 @@
         "ExchangeRate": 1.0824,
         "ISIN": "US13123X1028",
         "OrderID": "6bb0f997-af1b-4101-b3ce-c784fce66d7c",
-        "OrderType": "venda",
+        "OrderType": "stocksale",
         "Price": 0.84,
         "ProductName": "Callon Petroleum",
-        "Quantity": 200
+        "Quantity": 200,
+        "TransactionType": ""
     },
     {
         "Amount": -504,
@@ -4852,10 +5243,11 @@
         "ExchangeRate": 1.0843,
         "ISIN": "BE0003816338",
         "OrderID": "437e8b83-bff9-4530-8409-5ad045ca2267",
-        "OrderType": "compra",
+        "OrderType": "stockbuy",
         "Price": 10.08,
         "ProductName": "CMB Tech NV",
-        "Quantity": 50
+        "Quantity": 50,
+        "TransactionType": ""
     },
     {
         "Amount": 2123.5,
@@ -4866,10 +5258,11 @@
         "ExchangeRate": 1.0843,
         "ISIN": "US30303M1027",
         "OrderID": "392a7761-446a-47ac-8b12-5716b6724855",
-        "OrderType": "venda",
+        "OrderType": "stocksale",
         "Price": 212.35,
         "ProductName": "Meta Platforms Inc",
-        "Quantity": 10
+        "Quantity": 10,
+        "TransactionType": ""
     },
     {
         "Amount": -1093.5,
@@ -4880,10 +5273,26 @@
         "ExchangeRate": 1.0843,
         "ISIN": "MHY7542C1306",
         "OrderID": "a95d9b65-1b01-4095-aa76-59026cd429e1",
-        "OrderType": "compra",
+        "OrderType": "stockbuy",
         "Price": 21.87,
         "ProductName": "Scorpio Tankers Inc",
-        "Quantity": 50
+        "Quantity": 50,
+        "TransactionType": ""
+    },
+    {
+        "Amount": 900,
+        "AmountEUR": 900,
+        "Commission": 0,
+        "Currency": "EUR",
+        "Date": "05-05-2020",
+        "ExchangeRate": 1,
+        "ISIN": "",
+        "OrderID": "",
+        "OrderType": "cashdeposit",
+        "Price": 0,
+        "ProductName": "Cash Deposit",
+        "Quantity": 0,
+        "TransactionType": ""
     },
     {
         "Amount": -43.12,
@@ -4894,10 +5303,11 @@
         "ExchangeRate": 1.0876,
         "ISIN": "US13123X1028",
         "OrderID": "9422f7df-e23a-44fc-b9a2-371a7577014d",
-        "OrderType": "compra",
+        "OrderType": "stockbuy",
         "Price": 0.88,
         "ProductName": "Callon Petroleum",
-        "Quantity": 49
+        "Quantity": 49,
+        "TransactionType": ""
     },
     {
         "Amount": -88,
@@ -4908,10 +5318,11 @@
         "ExchangeRate": 1.0876,
         "ISIN": "US13123X1028",
         "OrderID": "9422f7df-e23a-44fc-b9a2-371a7577014d",
-        "OrderType": "compra",
+        "OrderType": "stockbuy",
         "Price": 0.88,
         "ProductName": "Callon Petroleum",
-        "Quantity": 100
+        "Quantity": 100,
+        "TransactionType": ""
     },
     {
         "Amount": 1129.35,
@@ -4922,10 +5333,11 @@
         "ExchangeRate": 1.08,
         "ISIN": "US5168061068",
         "OrderID": "3de54269-9fd4-4e02-b371-d62f39b139ee",
-        "OrderType": "venda",
+        "OrderType": "stocksale",
         "Price": 0.7529,
         "ProductName": "Laredo Petroleum",
-        "Quantity": 1500
+        "Quantity": 1500,
+        "TransactionType": ""
     },
     {
         "Amount": -246,
@@ -4936,10 +5348,11 @@
         "ExchangeRate": 1.08,
         "ISIN": "US5168061068",
         "OrderID": "c83c3bd1-7f63-4421-9dee-6b2edf84aa27",
-        "OrderType": "compra",
+        "OrderType": "stockbuy",
         "Price": 0.82,
         "ProductName": "Laredo Petroleum",
-        "Quantity": 300
+        "Quantity": 300,
+        "TransactionType": ""
     },
     {
         "Amount": -328,
@@ -4950,10 +5363,11 @@
         "ExchangeRate": 1.08,
         "ISIN": "US5168061068",
         "OrderID": "c83c3bd1-7f63-4421-9dee-6b2edf84aa27",
-        "OrderType": "compra",
+        "OrderType": "stockbuy",
         "Price": 0.82,
         "ProductName": "Laredo Petroleum",
-        "Quantity": 400
+        "Quantity": 400,
+        "TransactionType": ""
     },
     {
         "Amount": -246,
@@ -4964,10 +5378,11 @@
         "ExchangeRate": 1.08,
         "ISIN": "US5168061068",
         "OrderID": "c83c3bd1-7f63-4421-9dee-6b2edf84aa27",
-        "OrderType": "compra",
+        "OrderType": "stockbuy",
         "Price": 0.82,
         "ProductName": "Laredo Petroleum",
-        "Quantity": 300
+        "Quantity": 300,
+        "TransactionType": ""
     },
     {
         "Amount": -256.66,
@@ -4978,10 +5393,11 @@
         "ExchangeRate": 1.08,
         "ISIN": "US5168061068",
         "OrderID": "c83c3bd1-7f63-4421-9dee-6b2edf84aa27",
-        "OrderType": "compra",
+        "OrderType": "stockbuy",
         "Price": 0.82,
         "ProductName": "Laredo Petroleum",
-        "Quantity": 313
+        "Quantity": 313,
+        "TransactionType": ""
     },
     {
         "Amount": -153.34,
@@ -4992,10 +5408,11 @@
         "ExchangeRate": 1.08,
         "ISIN": "US5168061068",
         "OrderID": "c83c3bd1-7f63-4421-9dee-6b2edf84aa27",
-        "OrderType": "compra",
+        "OrderType": "stockbuy",
         "Price": 0.82,
         "ProductName": "Laredo Petroleum",
-        "Quantity": 187
+        "Quantity": 187,
+        "TransactionType": ""
     },
     {
         "Amount": 161.14,
@@ -5006,10 +5423,11 @@
         "ExchangeRate": 1.08,
         "ISIN": "US5168061068",
         "OrderID": "43fcf66c-5e63-453b-9b98-03e170ddadf1",
-        "OrderType": "venda",
+        "OrderType": "stocksale",
         "Price": 0.8057,
         "ProductName": "Laredo Petroleum",
-        "Quantity": 200
+        "Quantity": 200,
+        "TransactionType": ""
     },
     {
         "Amount": 161.14,
@@ -5020,10 +5438,11 @@
         "ExchangeRate": 1.08,
         "ISIN": "US5168061068",
         "OrderID": "43fcf66c-5e63-453b-9b98-03e170ddadf1",
-        "OrderType": "venda",
+        "OrderType": "stocksale",
         "Price": 0.8057,
         "ProductName": "Laredo Petroleum",
-        "Quantity": 200
+        "Quantity": 200,
+        "TransactionType": ""
     },
     {
         "Amount": 80.5,
@@ -5034,10 +5453,11 @@
         "ExchangeRate": 1.08,
         "ISIN": "US5168061068",
         "OrderID": "43fcf66c-5e63-453b-9b98-03e170ddadf1",
-        "OrderType": "venda",
+        "OrderType": "stocksale",
         "Price": 0.805,
         "ProductName": "Laredo Petroleum",
-        "Quantity": 100
+        "Quantity": 100,
+        "TransactionType": ""
     },
     {
         "Amount": 80.5,
@@ -5048,10 +5468,11 @@
         "ExchangeRate": 1.08,
         "ISIN": "US5168061068",
         "OrderID": "43fcf66c-5e63-453b-9b98-03e170ddadf1",
-        "OrderType": "venda",
+        "OrderType": "stocksale",
         "Price": 0.805,
         "ProductName": "Laredo Petroleum",
-        "Quantity": 100
+        "Quantity": 100,
+        "TransactionType": ""
     },
     {
         "Amount": 644,
@@ -5062,10 +5483,11 @@
         "ExchangeRate": 1.08,
         "ISIN": "US5168061068",
         "OrderID": "43fcf66c-5e63-453b-9b98-03e170ddadf1",
-        "OrderType": "venda",
+        "OrderType": "stocksale",
         "Price": 0.805,
         "ProductName": "Laredo Petroleum",
-        "Quantity": 800
+        "Quantity": 800,
+        "TransactionType": ""
     },
     {
         "Amount": 80.5,
@@ -5076,10 +5498,11 @@
         "ExchangeRate": 1.08,
         "ISIN": "US5168061068",
         "OrderID": "43fcf66c-5e63-453b-9b98-03e170ddadf1",
-        "OrderType": "venda",
+        "OrderType": "stocksale",
         "Price": 0.805,
         "ProductName": "Laredo Petroleum",
-        "Quantity": 100
+        "Quantity": 100,
+        "TransactionType": ""
     },
     {
         "Amount": -1399.35,
@@ -5090,10 +5513,11 @@
         "ExchangeRate": 1.08,
         "ISIN": "US5168061068",
         "OrderID": "a7e75f7d-d302-4123-91b1-7d145e2b484f",
-        "OrderType": "compra",
+        "OrderType": "stockbuy",
         "Price": 0.9329,
         "ProductName": "Laredo Petroleum",
-        "Quantity": 1500
+        "Quantity": 1500,
+        "TransactionType": ""
     },
     {
         "Amount": 92,
@@ -5104,10 +5528,11 @@
         "ExchangeRate": 1.08,
         "ISIN": "US5168061068",
         "OrderID": "ba4241d4-27d7-4564-b258-516e483740b6",
-        "OrderType": "venda",
+        "OrderType": "stocksale",
         "Price": 0.92,
         "ProductName": "Laredo Petroleum",
-        "Quantity": 100
+        "Quantity": 100,
+        "TransactionType": ""
     },
     {
         "Amount": 184,
@@ -5118,10 +5543,11 @@
         "ExchangeRate": 1.08,
         "ISIN": "US5168061068",
         "OrderID": "ba4241d4-27d7-4564-b258-516e483740b6",
-        "OrderType": "venda",
+        "OrderType": "stocksale",
         "Price": 0.92,
         "ProductName": "Laredo Petroleum",
-        "Quantity": 200
+        "Quantity": 200,
+        "TransactionType": ""
     },
     {
         "Amount": 92,
@@ -5132,10 +5558,11 @@
         "ExchangeRate": 1.08,
         "ISIN": "US5168061068",
         "OrderID": "ba4241d4-27d7-4564-b258-516e483740b6",
-        "OrderType": "venda",
+        "OrderType": "stocksale",
         "Price": 0.92,
         "ProductName": "Laredo Petroleum",
-        "Quantity": 100
+        "Quantity": 100,
+        "TransactionType": ""
     },
     {
         "Amount": 276,
@@ -5146,10 +5573,11 @@
         "ExchangeRate": 1.08,
         "ISIN": "US5168061068",
         "OrderID": "ba4241d4-27d7-4564-b258-516e483740b6",
-        "OrderType": "venda",
+        "OrderType": "stocksale",
         "Price": 0.92,
         "ProductName": "Laredo Petroleum",
-        "Quantity": 300
+        "Quantity": 300,
+        "TransactionType": ""
     },
     {
         "Amount": 184,
@@ -5160,10 +5588,11 @@
         "ExchangeRate": 1.08,
         "ISIN": "US5168061068",
         "OrderID": "ba4241d4-27d7-4564-b258-516e483740b6",
-        "OrderType": "venda",
+        "OrderType": "stocksale",
         "Price": 0.92,
         "ProductName": "Laredo Petroleum",
-        "Quantity": 200
+        "Quantity": 200,
+        "TransactionType": ""
     },
     {
         "Amount": 92,
@@ -5174,10 +5603,11 @@
         "ExchangeRate": 1.08,
         "ISIN": "US5168061068",
         "OrderID": "ba4241d4-27d7-4564-b258-516e483740b6",
-        "OrderType": "venda",
+        "OrderType": "stocksale",
         "Price": 0.92,
         "ProductName": "Laredo Petroleum",
-        "Quantity": 100
+        "Quantity": 100,
+        "TransactionType": ""
     },
     {
         "Amount": -900,
@@ -5188,10 +5618,11 @@
         "ExchangeRate": 1.08,
         "ISIN": "US5168061068",
         "OrderID": "692757f7-7c33-47e7-a9cc-e3003834c2d1",
-        "OrderType": "compra",
+        "OrderType": "stockbuy",
         "Price": 0.9,
         "ProductName": "Laredo Petroleum",
-        "Quantity": 1000
+        "Quantity": 1000,
+        "TransactionType": ""
     },
     {
         "Amount": -239.94,
@@ -5202,10 +5633,11 @@
         "ExchangeRate": 1.086,
         "ISIN": "US13123X1028",
         "OrderID": "b58f9d25-8777-4a87-9118-6ab2bc2cba93",
-        "OrderType": "compra",
+        "OrderType": "stockbuy",
         "Price": 0.3999,
         "ProductName": "Callon Petroleum",
-        "Quantity": 600
+        "Quantity": 600,
+        "TransactionType": ""
     },
     {
         "Amount": -39.98,
@@ -5216,10 +5648,11 @@
         "ExchangeRate": 1.086,
         "ISIN": "US13123X1028",
         "OrderID": "b58f9d25-8777-4a87-9118-6ab2bc2cba93",
-        "OrderType": "compra",
+        "OrderType": "stockbuy",
         "Price": 0.3998,
         "ProductName": "Callon Petroleum",
-        "Quantity": 100
+        "Quantity": 100,
+        "TransactionType": ""
     },
     {
         "Amount": -39.99,
@@ -5230,10 +5663,11 @@
         "ExchangeRate": 1.086,
         "ISIN": "US13123X1028",
         "OrderID": "b58f9d25-8777-4a87-9118-6ab2bc2cba93",
-        "OrderType": "compra",
+        "OrderType": "stockbuy",
         "Price": 0.3999,
         "ProductName": "Callon Petroleum",
-        "Quantity": 100
+        "Quantity": 100,
+        "TransactionType": ""
     },
     {
         "Amount": -39.98,
@@ -5244,10 +5678,11 @@
         "ExchangeRate": 1.086,
         "ISIN": "US13123X1028",
         "OrderID": "b58f9d25-8777-4a87-9118-6ab2bc2cba93",
-        "OrderType": "compra",
+        "OrderType": "stockbuy",
         "Price": 0.3998,
         "ProductName": "Callon Petroleum",
-        "Quantity": 100
+        "Quantity": 100,
+        "TransactionType": ""
     },
     {
         "Amount": -39.98,
@@ -5258,10 +5693,26 @@
         "ExchangeRate": 1.086,
         "ISIN": "US13123X1028",
         "OrderID": "b58f9d25-8777-4a87-9118-6ab2bc2cba93",
-        "OrderType": "compra",
+        "OrderType": "stockbuy",
         "Price": 0.3998,
         "ProductName": "Callon Petroleum",
-        "Quantity": 100
+        "Quantity": 100,
+        "TransactionType": ""
+    },
+    {
+        "Amount": 900,
+        "AmountEUR": 900,
+        "Commission": 0,
+        "Currency": "EUR",
+        "Date": "07-04-2020",
+        "ExchangeRate": 1,
+        "ISIN": "",
+        "OrderID": "",
+        "OrderType": "cashdeposit",
+        "Price": 0,
+        "ProductName": "Cash Deposit",
+        "Quantity": 0,
+        "TransactionType": ""
     },
     {
         "Amount": -200,
@@ -5272,10 +5723,11 @@
         "ExchangeRate": 1.0934,
         "ISIN": "US13123X1028",
         "OrderID": "b0dedaca-0ce1-440f-ad4b-8f678f323159",
-        "OrderType": "compra",
+        "OrderType": "stockbuy",
         "Price": 0.4,
         "ProductName": "Callon Petroleum",
-        "Quantity": 500
+        "Quantity": 500,
+        "TransactionType": ""
     },
     {
         "Amount": -40,
@@ -5286,10 +5738,11 @@
         "ExchangeRate": 1.0934,
         "ISIN": "US13123X1028",
         "OrderID": "b0dedaca-0ce1-440f-ad4b-8f678f323159",
-        "OrderType": "compra",
+        "OrderType": "stockbuy",
         "Price": 0.4,
         "ProductName": "Callon Petroleum",
-        "Quantity": 100
+        "Quantity": 100,
+        "TransactionType": ""
     },
     {
         "Amount": -11.34,
@@ -5300,10 +5753,11 @@
         "ExchangeRate": 1.1157,
         "ISIN": "US13123X1028",
         "OrderID": "f34441be-b5e6-433a-b0e5-4583554b91c1",
-        "OrderType": "compra",
+        "OrderType": "stockbuy",
         "Price": 0.63,
         "ProductName": "Callon Petroleum",
-        "Quantity": 18
+        "Quantity": 18,
+        "TransactionType": ""
     },
     {
         "Amount": -63,
@@ -5314,10 +5768,11 @@
         "ExchangeRate": 1.1157,
         "ISIN": "US13123X1028",
         "OrderID": "f34441be-b5e6-433a-b0e5-4583554b91c1",
-        "OrderType": "compra",
+        "OrderType": "stockbuy",
         "Price": 0.63,
         "ProductName": "Callon Petroleum",
-        "Quantity": 100
+        "Quantity": 100,
+        "TransactionType": ""
     },
     {
         "Amount": -63,
@@ -5328,10 +5783,11 @@
         "ExchangeRate": 1.1157,
         "ISIN": "US13123X1028",
         "OrderID": "f34441be-b5e6-433a-b0e5-4583554b91c1",
-        "OrderType": "compra",
+        "OrderType": "stockbuy",
         "Price": 0.63,
         "ProductName": "Callon Petroleum",
-        "Quantity": 100
+        "Quantity": 100,
+        "TransactionType": ""
     },
     {
         "Amount": -63,
@@ -5342,10 +5798,11 @@
         "ExchangeRate": 1.1157,
         "ISIN": "US13123X1028",
         "OrderID": "f34441be-b5e6-433a-b0e5-4583554b91c1",
-        "OrderType": "compra",
+        "OrderType": "stockbuy",
         "Price": 0.63,
         "ProductName": "Callon Petroleum",
-        "Quantity": 100
+        "Quantity": 100,
+        "TransactionType": ""
     },
     {
         "Amount": -63,
@@ -5356,10 +5813,11 @@
         "ExchangeRate": 1.1157,
         "ISIN": "US13123X1028",
         "OrderID": "f34441be-b5e6-433a-b0e5-4583554b91c1",
-        "OrderType": "compra",
+        "OrderType": "stockbuy",
         "Price": 0.63,
         "ProductName": "Callon Petroleum",
-        "Quantity": 100
+        "Quantity": 100,
+        "TransactionType": ""
     },
     {
         "Amount": -63,
@@ -5370,10 +5828,11 @@
         "ExchangeRate": 1.1157,
         "ISIN": "US13123X1028",
         "OrderID": "f34441be-b5e6-433a-b0e5-4583554b91c1",
-        "OrderType": "compra",
+        "OrderType": "stockbuy",
         "Price": 0.63,
         "ProductName": "Callon Petroleum",
-        "Quantity": 100
+        "Quantity": 100,
+        "TransactionType": ""
     },
     {
         "Amount": -63,
@@ -5384,10 +5843,11 @@
         "ExchangeRate": 1.1157,
         "ISIN": "US13123X1028",
         "OrderID": "f34441be-b5e6-433a-b0e5-4583554b91c1",
-        "OrderType": "compra",
+        "OrderType": "stockbuy",
         "Price": 0.63,
         "ProductName": "Callon Petroleum",
-        "Quantity": 100
+        "Quantity": 100,
+        "TransactionType": ""
     },
     {
         "Amount": -51.66,
@@ -5398,10 +5858,11 @@
         "ExchangeRate": 1.1157,
         "ISIN": "US13123X1028",
         "OrderID": "f34441be-b5e6-433a-b0e5-4583554b91c1",
-        "OrderType": "compra",
+        "OrderType": "stockbuy",
         "Price": 0.63,
         "ProductName": "Callon Petroleum",
-        "Quantity": 82
+        "Quantity": 82,
+        "TransactionType": ""
     },
     {
         "Amount": -63,
@@ -5412,10 +5873,11 @@
         "ExchangeRate": 1.1157,
         "ISIN": "US13123X1028",
         "OrderID": "f34441be-b5e6-433a-b0e5-4583554b91c1",
-        "OrderType": "compra",
+        "OrderType": "stockbuy",
         "Price": 0.63,
         "ProductName": "Callon Petroleum",
-        "Quantity": 100
+        "Quantity": 100,
+        "TransactionType": ""
     },
     {
         "Amount": -354.2,
@@ -5426,10 +5888,26 @@
         "ExchangeRate": 1.1157,
         "ISIN": "PA1436583006",
         "OrderID": "3797a4d5-04d7-431a-a8ad-b1d2d121ffcc",
-        "OrderType": "compra",
+        "OrderType": "stockbuy",
         "Price": 16.1,
         "ProductName": "Carnival Corp",
-        "Quantity": 22
+        "Quantity": 22,
+        "TransactionType": ""
+    },
+    {
+        "Amount": 1000,
+        "AmountEUR": 1000,
+        "Commission": 0,
+        "Currency": "EUR",
+        "Date": "13-03-2020",
+        "ExchangeRate": 1,
+        "ISIN": "",
+        "OrderID": "",
+        "OrderType": "cashdeposit",
+        "Price": 0,
+        "ProductName": "Cash Deposit",
+        "Quantity": 0,
+        "TransactionType": ""
     },
     {
         "Amount": -143.25,
@@ -5440,10 +5918,11 @@
         "ExchangeRate": 1.1125,
         "ISIN": "US13123X1028",
         "OrderID": "c164cb16-98af-413c-a1b9-573671334a65",
-        "OrderType": "compra",
+        "OrderType": "stockbuy",
         "Price": 1.91,
         "ProductName": "Callon Petroleum",
-        "Quantity": 75
+        "Quantity": 75,
+        "TransactionType": ""
     },
     {
         "Amount": -382,
@@ -5454,10 +5933,11 @@
         "ExchangeRate": 1.1125,
         "ISIN": "US13123X1028",
         "OrderID": "c164cb16-98af-413c-a1b9-573671334a65",
-        "OrderType": "compra",
+        "OrderType": "stockbuy",
         "Price": 1.91,
         "ProductName": "Callon Petroleum",
-        "Quantity": 200
+        "Quantity": 200,
+        "TransactionType": ""
     },
     {
         "Amount": -635.4,
@@ -5468,10 +5948,41 @@
         "ExchangeRate": 1.1122,
         "ISIN": "PA1436583006",
         "OrderID": "6e7c2beb-0903-49c6-bf56-1aa9525449f8",
-        "OrderType": "compra",
+        "OrderType": "stockbuy",
         "Price": 31.77,
         "ProductName": "Carnival Corp",
-        "Quantity": 20
+        "Quantity": 20,
+        "TransactionType": ""
+    },
+    {
+        "Amount": 600,
+        "AmountEUR": 600,
+        "Commission": 0,
+        "Currency": "EUR",
+        "Date": "28-02-2020",
+        "ExchangeRate": 1,
+        "ISIN": "",
+        "OrderID": "",
+        "OrderType": "cashdeposit",
+        "Price": 0,
+        "ProductName": "Cash Deposit",
+        "Quantity": 0,
+        "TransactionType": ""
+    },
+    {
+        "Amount": 450,
+        "AmountEUR": 450,
+        "Commission": 0,
+        "Currency": "EUR",
+        "Date": "25-02-2020",
+        "ExchangeRate": 1,
+        "ISIN": "",
+        "OrderID": "",
+        "OrderType": "cashdeposit",
+        "Price": 0,
+        "ProductName": "Cash Deposit",
+        "Quantity": 0,
+        "TransactionType": ""
     },
     {
         "Amount": -132.94,
@@ -5482,10 +5993,11 @@
         "ExchangeRate": 1.0842,
         "ISIN": "US13123X1028",
         "OrderID": "aa81602a-04f5-4f62-8ffa-2e2e8a191664",
-        "OrderType": "compra",
+        "OrderType": "stockbuy",
         "Price": 2.89,
         "ProductName": "Callon Petroleum",
-        "Quantity": 46
+        "Quantity": 46,
+        "TransactionType": ""
     },
     {
         "Amount": -625.8,
@@ -5496,10 +6008,11 @@
         "ExchangeRate": 1.1029,
         "ISIN": "US30303M1027",
         "OrderID": "7b7389b4-0606-42b5-ad91-018db815fcaa",
-        "OrderType": "compra",
+        "OrderType": "stockbuy",
         "Price": 208.6,
         "ProductName": "Meta Platforms Inc",
-        "Quantity": 3
+        "Quantity": 3,
+        "TransactionType": ""
     },
     {
         "Amount": 400.4,
@@ -5510,10 +6023,11 @@
         "ExchangeRate": 1.1025,
         "ISIN": "US13123X1028",
         "OrderID": "769b4041-0cbc-4f45-a6cd-0fb020be7789",
-        "OrderType": "venda",
+        "OrderType": "stocksale",
         "Price": 3.08,
         "ProductName": "Callon Petroleum",
-        "Quantity": 130
+        "Quantity": 130,
+        "TransactionType": ""
     },
     {
         "Amount": -354,
@@ -5524,10 +6038,11 @@
         "ExchangeRate": 1.1088,
         "ISIN": "US13123X1028",
         "OrderID": "0c9f8766-e14c-4c05-80d3-ea3972eebe7b",
-        "OrderType": "compra",
+        "OrderType": "stockbuy",
         "Price": 3.54,
         "ProductName": "Callon Petroleum",
-        "Quantity": 100
+        "Quantity": 100,
+        "TransactionType": ""
     },
     {
         "Amount": 642.25,
@@ -5538,10 +6053,11 @@
         "ExchangeRate": 1,
         "ISIN": "DE0007472060",
         "OrderID": "83cbc850-c74c-4ec4-8965-3e90f9ace5a1",
-        "OrderType": "venda",
+        "OrderType": "stocksale",
         "Price": 128.45,
         "ProductName": "Wirecard AG",
-        "Quantity": 5
+        "Quantity": 5,
+        "TransactionType": ""
     },
     {
         "Amount": -630.4,
@@ -5552,10 +6068,11 @@
         "ExchangeRate": 1.1108,
         "ISIN": "US13123X1028",
         "OrderID": "5aae2939-b748-4f68-bbb4-eae27a76ef22",
-        "OrderType": "compra",
+        "OrderType": "stockbuy",
         "Price": 3.94,
         "ProductName": "Callon Petroleum",
-        "Quantity": 160
+        "Quantity": 160,
+        "TransactionType": ""
     },
     {
         "Amount": 92,
@@ -5566,10 +6083,11 @@
         "ExchangeRate": 1.1108,
         "ISIN": "VGG2161P1080",
         "OrderID": "18219776-0678-46b1-b005-173d099815fd",
-        "OrderType": "venda",
+        "OrderType": "stocksale",
         "Price": 0.92,
         "ProductName": "China SXT Pharmaceuticals",
-        "Quantity": 100
+        "Quantity": 100,
+        "TransactionType": ""
     },
     {
         "Amount": 92,
@@ -5580,10 +6098,11 @@
         "ExchangeRate": 1.1108,
         "ISIN": "VGG2161P1080",
         "OrderID": "18219776-0678-46b1-b005-173d099815fd",
-        "OrderType": "venda",
+        "OrderType": "stocksale",
         "Price": 0.92,
         "ProductName": "China SXT Pharmaceuticals",
-        "Quantity": 100
+        "Quantity": 100,
+        "TransactionType": ""
     },
     {
         "Amount": 184,
@@ -5594,10 +6113,11 @@
         "ExchangeRate": 1.1108,
         "ISIN": "VGG2161P1080",
         "OrderID": "18219776-0678-46b1-b005-173d099815fd",
-        "OrderType": "venda",
+        "OrderType": "stocksale",
         "Price": 0.92,
         "ProductName": "China SXT Pharmaceuticals",
-        "Quantity": 200
+        "Quantity": 200,
+        "TransactionType": ""
     },
     {
         "Amount": -91.99,
@@ -5608,10 +6128,11 @@
         "ExchangeRate": 1.1169,
         "ISIN": "VGG2161P1080",
         "OrderID": "fc6e3489-14a4-4144-80f1-996cd38f7ef4",
-        "OrderType": "compra",
+        "OrderType": "stockbuy",
         "Price": 0.9199,
         "ProductName": "China SXT Pharmaceuticals",
-        "Quantity": 100
+        "Quantity": 100,
+        "TransactionType": ""
     },
     {
         "Amount": -91.99,
@@ -5622,10 +6143,11 @@
         "ExchangeRate": 1.1169,
         "ISIN": "VGG2161P1080",
         "OrderID": "fc6e3489-14a4-4144-80f1-996cd38f7ef4",
-        "OrderType": "compra",
+        "OrderType": "stockbuy",
         "Price": 0.9199,
         "ProductName": "China SXT Pharmaceuticals",
-        "Quantity": 100
+        "Quantity": 100,
+        "TransactionType": ""
     },
     {
         "Amount": -91,
@@ -5636,10 +6158,11 @@
         "ExchangeRate": 1.1169,
         "ISIN": "VGG2161P1080",
         "OrderID": "fc6e3489-14a4-4144-80f1-996cd38f7ef4",
-        "OrderType": "compra",
+        "OrderType": "stockbuy",
         "Price": 0.91,
         "ProductName": "China SXT Pharmaceuticals",
-        "Quantity": 100
+        "Quantity": 100,
+        "TransactionType": ""
     },
     {
         "Amount": -91,
@@ -5650,10 +6173,11 @@
         "ExchangeRate": 1.1169,
         "ISIN": "VGG2161P1080",
         "OrderID": "fc6e3489-14a4-4144-80f1-996cd38f7ef4",
-        "OrderType": "compra",
+        "OrderType": "stockbuy",
         "Price": 0.91,
         "ProductName": "China SXT Pharmaceuticals",
-        "Quantity": 100
+        "Quantity": 100,
+        "TransactionType": ""
     },
     {
         "Amount": 10.85,
@@ -5664,10 +6188,11 @@
         "ExchangeRate": 1.1169,
         "ISIN": "CA05156X1087",
         "OrderID": "9f171109-33fe-4ec4-ad76-6589c40b8808",
-        "OrderType": "venda",
+        "OrderType": "stocksale",
         "Price": 2.17,
         "ProductName": "AURORA CANNABIS INC. C",
-        "Quantity": 5
+        "Quantity": 5,
+        "TransactionType": ""
     },
     {
         "Amount": 651,
@@ -5678,10 +6203,11 @@
         "ExchangeRate": 1.1169,
         "ISIN": "CA05156X1087",
         "OrderID": "9f171109-33fe-4ec4-ad76-6589c40b8808",
-        "OrderType": "venda",
+        "OrderType": "stocksale",
         "Price": 2.17,
         "ProductName": "AURORA CANNABIS INC. C",
-        "Quantity": 300
+        "Quantity": 300,
+        "TransactionType": ""
     },
     {
         "Amount": -213,
@@ -5692,10 +6218,11 @@
         "ExchangeRate": 1.1169,
         "ISIN": "CA05156X1087",
         "OrderID": "cb1f2282-b0fe-4fbe-9dfb-1f5a68780a72",
-        "OrderType": "compra",
+        "OrderType": "stockbuy",
         "Price": 2.13,
         "ProductName": "AURORA CANNABIS INC. C",
-        "Quantity": 100
+        "Quantity": 100,
+        "TransactionType": ""
     },
     {
         "Amount": -213,
@@ -5706,10 +6233,11 @@
         "ExchangeRate": 1.1169,
         "ISIN": "CA05156X1087",
         "OrderID": "cb1f2282-b0fe-4fbe-9dfb-1f5a68780a72",
-        "OrderType": "compra",
+        "OrderType": "stockbuy",
         "Price": 2.13,
         "ProductName": "AURORA CANNABIS INC. C",
-        "Quantity": 100
+        "Quantity": 100,
+        "TransactionType": ""
     },
     {
         "Amount": -223.65,
@@ -5720,10 +6248,11 @@
         "ExchangeRate": 1.1169,
         "ISIN": "CA05156X1087",
         "OrderID": "cb1f2282-b0fe-4fbe-9dfb-1f5a68780a72",
-        "OrderType": "compra",
+        "OrderType": "stockbuy",
         "Price": 2.13,
         "ProductName": "AURORA CANNABIS INC. C",
-        "Quantity": 105
+        "Quantity": 105,
+        "TransactionType": ""
     },
     {
         "Amount": 654,
@@ -5734,10 +6263,11 @@
         "ExchangeRate": 1.1169,
         "ISIN": "CA05156X1087",
         "OrderID": "8acfa949-2d15-4234-b743-7d86ef60ec4d",
-        "OrderType": "venda",
+        "OrderType": "stocksale",
         "Price": 2.18,
         "ProductName": "AURORA CANNABIS INC. C",
-        "Quantity": 300
+        "Quantity": 300,
+        "TransactionType": ""
     },
     {
         "Amount": -430,
@@ -5748,10 +6278,11 @@
         "ExchangeRate": 1.1169,
         "ISIN": "CA05156X1087",
         "OrderID": "e979e49d-c4a8-421a-98ad-da1cdfd5b49e",
-        "OrderType": "compra",
+        "OrderType": "stockbuy",
         "Price": 2.15,
         "ProductName": "AURORA CANNABIS INC. C",
-        "Quantity": 200
+        "Quantity": 200,
+        "TransactionType": ""
     },
     {
         "Amount": -187.05,
@@ -5762,10 +6293,11 @@
         "ExchangeRate": 1.1169,
         "ISIN": "CA05156X1087",
         "OrderID": "e979e49d-c4a8-421a-98ad-da1cdfd5b49e",
-        "OrderType": "compra",
+        "OrderType": "stockbuy",
         "Price": 2.15,
         "ProductName": "AURORA CANNABIS INC. C",
-        "Quantity": 87
+        "Quantity": 87,
+        "TransactionType": ""
     },
     {
         "Amount": -27.95,
@@ -5776,10 +6308,11 @@
         "ExchangeRate": 1.1169,
         "ISIN": "CA05156X1087",
         "OrderID": "e979e49d-c4a8-421a-98ad-da1cdfd5b49e",
-        "OrderType": "compra",
+        "OrderType": "stockbuy",
         "Price": 2.15,
         "ProductName": "AURORA CANNABIS INC. C",
-        "Quantity": 13
+        "Quantity": 13,
+        "TransactionType": ""
     },
     {
         "Amount": -632.5,
@@ -5790,10 +6323,11 @@
         "ExchangeRate": 1,
         "ISIN": "DE0007472060",
         "OrderID": "b37deb31-18df-47a9-8037-f7d5ad515fc2",
-        "OrderType": "compra",
+        "OrderType": "stockbuy",
         "Price": 126.5,
         "ProductName": "Wirecard AG",
-        "Quantity": 5
+        "Quantity": 5,
+        "TransactionType": ""
     },
     {
         "Amount": 1143,
@@ -5804,10 +6338,11 @@
         "ExchangeRate": 1.1142,
         "ISIN": "US0846707026",
         "OrderID": "958a603f-31aa-4454-ae1a-b6d21128f3f5",
-        "OrderType": "venda",
+        "OrderType": "stocksale",
         "Price": 228.6,
         "ProductName": "Berkshire Hathaway B",
-        "Quantity": 5
+        "Quantity": 5,
+        "TransactionType": ""
     },
     {
         "Amount": -1536.15,
@@ -5818,10 +6353,11 @@
         "ExchangeRate": 1.1115,
         "ISIN": "US30303M1027",
         "OrderID": "79413f61-816d-4a72-8f8d-5e5764bfc11f",
-        "OrderType": "compra",
+        "OrderType": "stockbuy",
         "Price": 219.45,
         "ProductName": "Meta Platforms Inc",
-        "Quantity": 7
+        "Quantity": 7,
+        "TransactionType": ""
     },
     {
         "Amount": 344,
@@ -5832,10 +6368,11 @@
         "ExchangeRate": 1.1115,
         "ISIN": "CA05156X1087",
         "OrderID": "bf98e731-8cc3-4117-b218-9e05f74475f2",
-        "OrderType": "venda",
+        "OrderType": "stocksale",
         "Price": 1.72,
         "ProductName": "AURORA CANNABIS INC. C",
-        "Quantity": 200
+        "Quantity": 200,
+        "TransactionType": ""
     },
     {
         "Amount": 1032,
@@ -5846,10 +6383,11 @@
         "ExchangeRate": 1.1115,
         "ISIN": "CA05156X1087",
         "OrderID": "bf98e731-8cc3-4117-b218-9e05f74475f2",
-        "OrderType": "venda",
+        "OrderType": "stocksale",
         "Price": 1.72,
         "ProductName": "AURORA CANNABIS INC. C",
-        "Quantity": 600
+        "Quantity": 600,
+        "TransactionType": ""
     },
     {
         "Amount": 172,
@@ -5860,10 +6398,11 @@
         "ExchangeRate": 1.1115,
         "ISIN": "CA05156X1087",
         "OrderID": "bf98e731-8cc3-4117-b218-9e05f74475f2",
-        "OrderType": "venda",
+        "OrderType": "stocksale",
         "Price": 1.72,
         "ProductName": "AURORA CANNABIS INC. C",
-        "Quantity": 100
+        "Quantity": 100,
+        "TransactionType": ""
     },
     {
         "Amount": 172,
@@ -5874,10 +6413,11 @@
         "ExchangeRate": 1.1115,
         "ISIN": "CA05156X1087",
         "OrderID": "bf98e731-8cc3-4117-b218-9e05f74475f2",
-        "OrderType": "venda",
+        "OrderType": "stocksale",
         "Price": 1.72,
         "ProductName": "AURORA CANNABIS INC. C",
-        "Quantity": 100
+        "Quantity": 100,
+        "TransactionType": ""
     },
     {
         "Amount": -501,
@@ -5888,10 +6428,11 @@
         "ExchangeRate": 1.1115,
         "ISIN": "CA05156X1087",
         "OrderID": "7a1166f6-22a7-41a0-8c1d-e8c5da16e19c",
-        "OrderType": "compra",
+        "OrderType": "stockbuy",
         "Price": 1.67,
         "ProductName": "AURORA CANNABIS INC. C",
-        "Quantity": 300
+        "Quantity": 300,
+        "TransactionType": ""
     },
     {
         "Amount": -1169,
@@ -5902,10 +6443,11 @@
         "ExchangeRate": 1.1115,
         "ISIN": "CA05156X1087",
         "OrderID": "7a1166f6-22a7-41a0-8c1d-e8c5da16e19c",
-        "OrderType": "compra",
+        "OrderType": "stockbuy",
         "Price": 1.67,
         "ProductName": "AURORA CANNABIS INC. C",
-        "Quantity": 700
+        "Quantity": 700,
+        "TransactionType": ""
     },
     {
         "Amount": 1592.57,
@@ -5916,10 +6458,11 @@
         "ExchangeRate": 1.1115,
         "ISIN": "US0846707026",
         "OrderID": "3264aecf-a5e9-4ee1-a6ca-c62ddde1a0a0",
-        "OrderType": "venda",
+        "OrderType": "stocksale",
         "Price": 227.51,
         "ProductName": "Berkshire Hathaway B",
-        "Quantity": 7
+        "Quantity": 7,
+        "TransactionType": ""
     },
     {
         "Amount": 97.7,
@@ -5930,10 +6473,11 @@
         "ExchangeRate": 1.1115,
         "ISIN": "US0079031078",
         "OrderID": "aa5104ef-b2d5-4eba-856b-a9891c0bb9a0",
-        "OrderType": "venda",
+        "OrderType": "stocksale",
         "Price": 48.85,
         "ProductName": "Advanced Micro Devices Inc",
-        "Quantity": 2
+        "Quantity": 2,
+        "TransactionType": ""
     },
     {
         "Amount": -96.12,
@@ -5944,10 +6488,11 @@
         "ExchangeRate": 1.1091,
         "ISIN": "US0079031078",
         "OrderID": "d76edb27-3670-4fb4-9a08-3b2ff60c45f9",
-        "OrderType": "compra",
+        "OrderType": "stockbuy",
         "Price": 48.06,
         "ProductName": "Advanced Micro Devices Inc",
-        "Quantity": 2
+        "Quantity": 2,
+        "TransactionType": ""
     },
     {
         "Amount": -2740.8,
@@ -5958,10 +6503,11 @@
         "ExchangeRate": 1.111,
         "ISIN": "US0846707026",
         "OrderID": "3a61df63-0aa4-4328-b489-356d705a0ac7",
-        "OrderType": "compra",
+        "OrderType": "stockbuy",
         "Price": 228.4,
         "ProductName": "Berkshire Hathaway B",
-        "Quantity": 12
+        "Quantity": 12,
+        "TransactionType": ""
     },
     {
         "Amount": 2795,
@@ -5972,10 +6518,11 @@
         "ExchangeRate": 1.1115,
         "ISIN": "US30303M1027",
         "OrderID": "12969e68-540d-4306-b986-98239268d163",
-        "OrderType": "venda",
+        "OrderType": "stocksale",
         "Price": 215,
         "ProductName": "Meta Platforms Inc",
-        "Quantity": 13
+        "Quantity": 13,
+        "TransactionType": ""
     },
     {
         "Amount": -423.94,
@@ -5986,10 +6533,11 @@
         "ExchangeRate": 1.1172,
         "ISIN": "US30303M1027",
         "OrderID": "57ba90f2-a64f-4733-82d6-1e89de024826",
-        "OrderType": "compra",
+        "OrderType": "stockbuy",
         "Price": 211.97,
         "ProductName": "Meta Platforms Inc",
-        "Quantity": 2
+        "Quantity": 2,
+        "TransactionType": ""
     },
     {
         "Amount": -2331.67,
@@ -6000,10 +6548,11 @@
         "ExchangeRate": 1.1172,
         "ISIN": "US30303M1027",
         "OrderID": "57ba90f2-a64f-4733-82d6-1e89de024826",
-        "OrderType": "compra",
+        "OrderType": "stockbuy",
         "Price": 211.97,
         "ProductName": "Meta Platforms Inc",
-        "Quantity": 11
+        "Quantity": 11,
+        "TransactionType": ""
     },
     {
         "Amount": 738.28,
@@ -6014,10 +6563,11 @@
         "ExchangeRate": 1.1174,
         "ISIN": "US92826C8394",
         "OrderID": "709ee4fb-1605-4c13-846a-b2b210515101",
-        "OrderType": "venda",
+        "OrderType": "stocksale",
         "Price": 184.57,
         "ProductName": "Visa Inc",
-        "Quantity": 4
+        "Quantity": 4,
+        "TransactionType": ""
     },
     {
         "Amount": 276,
@@ -6028,10 +6578,11 @@
         "ExchangeRate": 1.1174,
         "ISIN": "US17275R1023",
         "OrderID": "b3be464f-7030-44e9-af71-19508e3b5f17",
-        "OrderType": "venda",
+        "OrderType": "stocksale",
         "Price": 46,
         "ProductName": "Cisco Systems",
-        "Quantity": 6
+        "Quantity": 6,
+        "TransactionType": ""
     },
     {
         "Amount": 919.8,
@@ -6042,10 +6593,11 @@
         "ExchangeRate": 1.1174,
         "ISIN": "US5949181045",
         "OrderID": "7f6158b0-f1f9-4575-95e3-800f1eaae7bf",
-        "OrderType": "venda",
+        "OrderType": "stocksale",
         "Price": 153.3,
         "ProductName": "Microsoft Corp",
-        "Quantity": 6
+        "Quantity": 6,
+        "TransactionType": ""
     },
     {
         "Amount": 910,
@@ -6056,66 +6608,71 @@
         "ExchangeRate": 1.1137,
         "ISIN": "US17275R1023",
         "OrderID": "11fd232e-fd32-45e7-9336-39e1f82f74c2",
-        "OrderType": "venda",
+        "OrderType": "stocksale",
         "Price": 45.5,
         "ProductName": "Cisco Systems",
-        "Quantity": 20
+        "Quantity": 20,
+        "TransactionType": ""
     },
     {
         "Amount": 3.06,
         "AmountEUR": 2.74759809643531,
-        "Commission": 30,
+        "Commission": 0,
         "Currency": "USD",
         "Date": "12-12-2019",
         "ExchangeRate": 1.1137,
         "ISIN": "US5949181045",
         "OrderID": "",
-        "OrderType": "dividendo",
+        "OrderType": "dividend",
         "Price": 0,
         "ProductName": "",
-        "Quantity": 0
+        "Quantity": 0,
+        "TransactionType": ""
     },
     {
         "Amount": -0.46,
         "AmountEUR": -0.413037622339948,
-        "Commission": 30,
+        "Commission": 0,
         "Currency": "USD",
         "Date": "12-12-2019",
         "ExchangeRate": 1.1137,
         "ISIN": "US5949181045",
         "OrderID": "",
-        "OrderType": "imposto sobre dividendo",
+        "OrderType": "dividendtax",
         "Price": 0,
         "ProductName": "",
-        "Quantity": 0
+        "Quantity": 0,
+        "TransactionType": ""
     },
     {
         "Amount": 1.2,
         "AmountEUR": 1.08293475318112,
-        "Commission": 30,
+        "Commission": 0,
         "Currency": "USD",
         "Date": "04-12-2019",
         "ExchangeRate": 1.1081,
         "ISIN": "US92826C8394",
         "OrderID": "",
-        "OrderType": "dividendo",
+        "OrderType": "dividend",
         "Price": 0,
         "ProductName": "",
-        "Quantity": 0
+        "Quantity": 0,
+        "TransactionType": ""
     },
     {
         "Amount": -0.18,
         "AmountEUR": -0.162440212977168,
-        "Commission": 30,
+        "Commission": 0,
         "Currency": "USD",
         "Date": "04-12-2019",
         "ExchangeRate": 1.1081,
         "ISIN": "US92826C8394",
         "OrderID": "",
-        "OrderType": "imposto sobre dividendo",
+        "OrderType": "dividendtax",
         "Price": 0,
         "ProductName": "",
-        "Quantity": 0
+        "Quantity": 0,
+        "TransactionType": ""
     },
     {
         "Amount": -1180.4,
@@ -6126,10 +6683,41 @@
         "ExchangeRate": 1.1034,
         "ISIN": "US17275R1023",
         "OrderID": "9d830342-ea9f-44af-8003-e89614b2cda4",
-        "OrderType": "compra",
+        "OrderType": "stockbuy",
         "Price": 45.4,
         "ProductName": "Cisco Systems",
-        "Quantity": 26
+        "Quantity": 26,
+        "TransactionType": ""
+    },
+    {
+        "Amount": 500,
+        "AmountEUR": 500,
+        "Commission": 0,
+        "Currency": "EUR",
+        "Date": "15-11-2019",
+        "ExchangeRate": 1,
+        "ISIN": "",
+        "OrderID": "",
+        "OrderType": "cashdeposit",
+        "Price": 0,
+        "ProductName": "Cash Deposit",
+        "Quantity": 0,
+        "TransactionType": ""
+    },
+    {
+        "Amount": 500,
+        "AmountEUR": 500,
+        "Commission": 0,
+        "Currency": "EUR",
+        "Date": "15-11-2019",
+        "ExchangeRate": 1,
+        "ISIN": "",
+        "OrderID": "",
+        "OrderType": "cashdeposit",
+        "Price": 0,
+        "ProductName": "Cash Deposit",
+        "Quantity": 0,
+        "TransactionType": ""
     },
     {
         "Amount": -865.5,
@@ -6140,10 +6728,11 @@
         "ExchangeRate": 1.1034,
         "ISIN": "US5949181045",
         "OrderID": "70231bb4-e907-4fa9-a42e-140c26035e1d",
-        "OrderType": "compra",
+        "OrderType": "stockbuy",
         "Price": 144.25,
         "ProductName": "Microsoft Corp",
-        "Quantity": 6
+        "Quantity": 6,
+        "TransactionType": ""
     },
     {
         "Amount": -709.16,
@@ -6154,9 +6743,55 @@
         "ExchangeRate": 1.109,
         "ISIN": "US92826C8394",
         "OrderID": "3ca5abf9-80db-4afd-a1e4-fb8ef2d5657d",
-        "OrderType": "compra",
+        "OrderType": "stockbuy",
         "Price": 177.29,
         "ProductName": "Visa Inc",
-        "Quantity": 4
+        "Quantity": 4,
+        "TransactionType": ""
+    },
+    {
+        "Amount": 1500,
+        "AmountEUR": 1500,
+        "Commission": 0,
+        "Currency": "EUR",
+        "Date": "06-11-2019",
+        "ExchangeRate": 1,
+        "ISIN": "",
+        "OrderID": "",
+        "OrderType": "cashdeposit",
+        "Price": 0,
+        "ProductName": "Cash Deposit",
+        "Quantity": 0,
+        "TransactionType": ""
+    },
+    {
+        "Amount": 0.01,
+        "AmountEUR": 0.01,
+        "Commission": 0,
+        "Currency": "EUR",
+        "Date": "04-11-2019",
+        "ExchangeRate": 1,
+        "ISIN": "",
+        "OrderID": "",
+        "OrderType": "cashdeposit",
+        "Price": 0,
+        "ProductName": "Cash Deposit",
+        "Quantity": 0,
+        "TransactionType": ""
+    },
+    {
+        "Amount": 1,
+        "AmountEUR": 1,
+        "Commission": 0,
+        "Currency": "EUR",
+        "Date": "01-11-2019",
+        "ExchangeRate": 1,
+        "ISIN": "",
+        "OrderID": "",
+        "OrderType": "cashdeposit",
+        "Price": 0,
+        "ProductName": "Cash Deposit",
+        "Quantity": 0,
+        "TransactionType": ""
     }
 ]

@@ -16,8 +16,8 @@ func (p *StockProcessor) ProcessTransactions(transactions []models.ProcessedTran
 	// Group transactions by ISIN
 	transactionsByISIN := groupTransactionsByISIN(transactions)
 
-	var saleDetails []models.SaleDetail
-	var remainingPurchases []models.PurchaseLot
+	var stockSaleDetails []models.SaleDetail // Renamed from saleDetails
+	var stockHoldings []models.PurchaseLot   // Renamed from remainingPurchases
 
 	for isin, txs := range transactionsByISIN {
 		purchases, sales := separatePurchaseAndSales(txs)
@@ -66,7 +66,7 @@ func (p *StockProcessor) ProcessTransactions(transactions []models.ProcessedTran
 					Commission:    commission,
 					Delta:         (salePrice - buyPrice) * float64(matchedQty),
 				}
-				saleDetails = append(saleDetails, saleDetail)
+				stockSaleDetails = append(stockSaleDetails, saleDetail) // Appending to renamed variable
 
 				// Update quantities
 				remainingQty -= matchedQty
@@ -79,10 +79,10 @@ func (p *StockProcessor) ProcessTransactions(transactions []models.ProcessedTran
 			}
 		}
 
-		// Record remaining purchases
+		// Record remaining stock holdings
 		for _, p := range purchasePtrs {
 			if p.Quantity > 0 {
-				remainingPurchases = append(remainingPurchases, models.PurchaseLot{
+				stockHoldings = append(stockHoldings, models.PurchaseLot{ // Appending to renamed variable
 					BuyDate:      p.Date,
 					ProductName:  p.ProductName,
 					ISIN:         isin,
@@ -96,7 +96,7 @@ func (p *StockProcessor) ProcessTransactions(transactions []models.ProcessedTran
 		}
 	}
 
-	return saleDetails, remainingPurchases
+	return stockSaleDetails, stockHoldings // Returning renamed variables
 }
 
 // Helper functions remain the same as before
@@ -114,9 +114,9 @@ func groupTransactionsByISIN(transactions []models.ProcessedTransaction) map[str
 func separatePurchaseAndSales(transactions []models.ProcessedTransaction) (purchases, sales []models.ProcessedTransaction) {
 	for _, tx := range transactions {
 		switch tx.OrderType {
-		case "compra":
+		case "stockbuy":
 			purchases = append(purchases, tx)
-		case "venda":
+		case "stocksale":
 			sales = append(sales, tx)
 		}
 	}

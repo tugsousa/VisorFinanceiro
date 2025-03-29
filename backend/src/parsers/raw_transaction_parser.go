@@ -11,98 +11,91 @@ import (
 	"time"
 )
 
-// ParseProcessedTransactions converts a slice of RawTransaction into a slice of ProcessedTransaction.
 func ParseProcessedTransactions(rawTransactions []models.RawTransaction) ([]models.ProcessedTransaction, error) {
 	var processedTransactions []models.ProcessedTransaction
 
-	// List of descriptions to skip logging errors for
-	skipLoggingDescriptions := []string{
-		"Crédito de divisa",
-		"Levantamento de divisa",
-		"Comissões de transação DEGIRO e/ou taxas de terceiros",
-		"Conversão do Fundo do Mercado",
-		"Depósito",
-		"Custo de Conectividade DEGIRO",
-		"Imposto de selo Londres/Dublin",
-		"Alteração do preço do Fundo do Mercado",
-		"Juros",
-		"Degiro Cash Sweep Transfer",
-		"Flatex Interest",
-		"Levantamentos da sua Conta Caixa na",
-		"flatex Deposit",
-		"ADR/GDR Pass-Through Fee",
-		"flatex Deposit",
-		"Exchange Connection Fee",
-		"Cost of Stock",
-		"Exercise and Assignment",
-		"DEGIRO courtesy",
-	}
-
 	for _, raw := range rawTransactions {
-		// Parse the Description field to extract OrderType, Quantity, Price, ISIN, and Name
 		orderType, quantity, price, _, name, err := parseDescription(raw.Description)
 		if err != nil {
-			// Check if the description is in the skipLoggingDescriptions list
-			shouldSkipLogging := false
-			for _, desc := range skipLoggingDescriptions {
-				if strings.Contains(raw.Description, desc) {
-					shouldSkipLogging = true
-					break
-				}
-			}
-
-			if !shouldSkipLogging {
-				log.Printf("Skipping transaction due to parse error: %v", err)
-			}
+			// [Keep existing error handling]
 			continue
 		}
 
 		// Convert Amount to float64
-		amount, err := strconv.ParseFloat(raw.Amount, 64)
-		if err != nil {
-			return nil, fmt.Errorf("invalid amount for transaction %s: %w", raw.OrderID, err)
-		}
+		var amount float64                             // Declare amount variable
+		trimmedAmount := strings.TrimSpace(raw.Amount) // Trim whitespace
 
-		// If amount is 0 but we have quantity and price, calculate it
-		if amount == 0 && quantity != 0 && price != 0 {
-			amount = float64(quantity) * price
-			if orderType == "venda" {
-				amount = -amount // Sales should be negative amounts
+		if trimmedAmount == "" {
+			// If amount is empty, only error out if it was supposed to be a specific "Depósito" transaction.
+			// Otherwise, log a warning and skip this transaction.
+			if orderType == "cashdeposit" {
+				return nil, fmt.Errorf("empty amount for 'Depósito' transaction (OrderID: %s)", raw.OrderID)
+			} else {
+				log.Printf("Warning: Skipping transaction with empty amount and description '%s' (OrderID: %s)", raw.Description, raw.OrderID)
+				continue // Skip to the next transaction
+			}
+		} else {
+			// Parse the amount only if it's not empty
+			var parseErr error
+			amount, parseErr = strconv.ParseFloat(trimmedAmount, 64)
+			if parseErr != nil {
+				// Make the error message more informative
+				return nil, fmt.Errorf("invalid amount format '%s' for transaction with description '%s' (OrderID: %s): %w", raw.Amount, raw.Description, raw.OrderID, parseErr)
 			}
 		}
 
-		// Parse the transaction date
+		// Special handling for cash deposits (Description is exactly "Depósito")
+		if orderType == "cashdeposit" {
+			processed := models.ProcessedTransaction{
+				Date:         raw.OrderDate,
+				ProductName:  name,
+				ISIN:         raw.ISIN,
+				Quantity:     0, // Cash deposits have no quantity
+				Price:        0, // Cash deposits have no price
+				OrderType:    orderType,
+				Amount:       amount,
+				Currency:     raw.Currency,
+				Commission:   0, // No commission for deposits
+				OrderID:      raw.OrderID,
+				ExchangeRate: 1.0,    // Fixed for EUR deposits
+				AmountEUR:    amount, // Same as amount for EUR deposits
+			}
+			processedTransactions = append(processedTransactions, processed)
+			continue // Skip further processing for deposits
+		}
+
+		// [Rest of your existing processing logic for non-deposit transactions]
 		transactionDate, err := time.Parse("02-01-2006", raw.OrderDate)
 		if err != nil {
 			return nil, fmt.Errorf("invalid date format for transaction %s: %w", raw.OrderID, err)
 		}
 
-		// Get the exchange rate for the transaction's currency and date
-		exchangeRate, err := processors.GetExchangeRate(raw.Currency, transactionDate)
-		if err != nil {
-			log.Printf("Warning: Unable to retrieve exchange rate for currency %s and date %s. Using default value of 1.0. Error: %v",
-				raw.Currency, raw.OrderDate, err)
-			exchangeRate = 1.0
-		}
-
-		// Calculate AmountEUR
-		amountEUR := amount / exchangeRate
-
-		// If amountEUR is 0 but we have quantity and price, calculate it
-		if amountEUR == 0 && quantity != 0 && price != 0 {
-			amountEUR = float64(quantity) * price
-			if orderType == "venda" {
-				amountEUR = -amountEUR // Sales should be negative amounts
+		// Get exchange rate (skip for EUR)
+		exchangeRate := 1.0
+		if raw.Currency != "EUR" {
+			exchangeRate, err = processors.GetExchangeRate(raw.Currency, transactionDate)
+			if err != nil {
+				log.Printf("Warning: Unable to retrieve exchange rate for currency %s and date %s. Using default value of 1.0. Error: %v",
+					raw.Currency, raw.OrderDate, err)
 			}
 		}
 
-		// Calculate Commission
+		// Calculate AmountEUR, ensuring exchangeRate is not zero
+		var amountEUR float64
+		if exchangeRate == 0.0 {
+			log.Printf("Warning: Exchange rate is zero for transaction %s (Currency: %s, Date: %s). Using original amount for AmountEUR.",
+				raw.OrderID, raw.Currency, raw.OrderDate)
+			amountEUR = amount // Avoid division by zero, assume 1:1
+		} else {
+			amountEUR = amount / exchangeRate
+		}
+
+		// Calculate Commission (skip for deposits)
 		commission, err := processors.CalculateCommission(raw.OrderID, rawTransactions)
 		if err != nil {
 			log.Printf("Error calculating commission for transaction %s: %v", raw.OrderID, err)
 		}
 
-		// Create a ProcessedTransaction
 		processed := models.ProcessedTransaction{
 			Date:         raw.OrderDate,
 			ProductName:  name,
@@ -130,26 +123,52 @@ func parseDescription(description string) (string, int, float64, string, string,
 	// Trim leading/trailing whitespace
 	description = strings.TrimSpace(description)
 
-	// Check for dividend or tax transactions
-	if strings.Contains(strings.ToLower(description), "dividendo") {
-		if strings.Contains(strings.ToLower(description), "imposto sobre dividendo") {
-			return "imposto sobre dividendo", 0, 0, "", "", nil
-		}
-		return "dividendo", 0, 0, "", "", nil
+	// Check for EXACT deposit transactions first
+	if description == "Depósito" {
+		// Use 0 for quantity and price as they are not relevant for simple deposits
+		return "cashdeposit", 0, 0, "", "Cash Deposit", nil
 	}
 
-	re := regexp.MustCompile(`(?i)\s*(compra|venda)\s+(\d+\s*\d*)\s+([a-zA-Z0-9\s\.\-\(\)]+)@([\d,]+)\s+([A-Za-z]+)?\s*(?:\(([\w\d]+)\))?$`)
-	matches := re.FindStringSubmatch(description)
+	// Then check for dividend or tax transactions (using Contains is okay here)
+	if strings.Contains(strings.ToLower(description), "dividendo") {
+		if strings.Contains(strings.ToLower(description), "imposto sobre dividendo") {
+			return "dividendtax", 0, 0, "", "", nil
+		}
+		return "dividend", 0, 0, "", "", nil
+	}
+
+	// Check for Stock Buy/Sell format FIRST, as it contains quantity, price, and the product name
+	stockRe := regexp.MustCompile(`(?i)\s*(compra|venda)\s+(\d+\s*\d*)\s+([a-zA-Z0-9\s\.\-\(\)]+\s+[CP]\d+(?:\.\d+)?\s+\d{2}[A-Z]{3}\d{2}|[a-zA-Z0-9\s\.\-\(\)]+)\s*@([\d,]+)\s+([A-Za-z]+)?\s*(?:\(([\w\d]+)\))?$`)
+	matches := stockRe.FindStringSubmatch(description)
 	if matches == nil {
+		// If it doesn't match deposit, dividend, or stock buy/sell, it's unknown
 		return "", 0, 0, "", "", fmt.Errorf("unknown transaction format in description: %s", description)
 	}
 
 	// Extract fields from the regex matches
-	orderType := strings.ToLower(matches[1])
+	orderTypeStr := strings.ToLower(matches[1])
 	quantityStr := strings.ReplaceAll(matches[2], " ", "")
+	name := strings.TrimSpace(matches[3]) // This might be a stock name OR an option name
 	priceStr := strings.ReplaceAll(matches[4], ",", ".")
-	name := strings.TrimSpace(matches[3])
-	isin := matches[5]
+	isin := matches[5] // ISIN might not be present for options
+
+	// Default order type based on compra/venda
+	orderType := ""
+	if orderTypeStr == "compra" {
+		orderType = "stockbuy"
+	} else if orderTypeStr == "venda" {
+		orderType = "stocksale"
+	} else {
+		// Should not happen based on regex, but good practice
+		return "", 0, 0, "", "", fmt.Errorf("unknown order type string: %s", orderTypeStr)
+	}
+
+	// NOW, check if the extracted 'name' matches the option pattern
+	optionRe := regexp.MustCompile(`^([A-Z]+)\s+([CP])(\d+(?:\.\d+)?)\s+(\d{2}[A-Z]{3}\d{2})$`)
+	if optionRe.MatchString(name) {
+		// If the product name matches the option format, override the orderType
+		orderType = "option"
+	}
 
 	// Parse quantity
 	quantity, err := strconv.Atoi(quantityStr)

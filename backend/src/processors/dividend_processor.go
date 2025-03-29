@@ -17,7 +17,7 @@ func CalculateDividends(transactions []models.ProcessedTransaction) DividendResu
 	for _, t := range transactions {
 		// Determine if the transaction is a "dividendo" or "imposto sobre dividendo"
 		transactionType := strings.ToLower(t.OrderType)
-		if transactionType != "dividendo" && transactionType != "imposto sobre dividendo" {
+		if transactionType != "dividend" && transactionType != "dividendtax" {
 			continue // Skip other transaction types
 		}
 
@@ -51,9 +51,9 @@ func CalculateDividends(transactions []models.ProcessedTransaction) DividendResu
 		}
 
 		// Add the amount to the appropriate field (gross_amt or taxed_amt)
-		if transactionType == "dividendo" {
+		if transactionType == "dividend" {
 			result[year][country]["gross_amt"] += amount
-		} else if transactionType == "imposto sobre dividendo" {
+		} else if transactionType == "dividendtax" {
 			result[year][country]["taxed_amt"] += amount
 		}
 	}
