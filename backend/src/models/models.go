@@ -22,6 +22,7 @@ type ProcessedTransaction struct {
 	Price           float64
 	OrderType       string  // e.g., "compra", "venda", "dividendo"
 	TransactionType string  // e.g., "stock", "option", "comission", "cashCredit"
+	Description     string  // Original description from RawTransaction
 	Amount          float64 // Transaction amount in original currency
 	Currency        string  // Original currency (e.g., "USD", "EUR")
 	Commission      float64 // Commission/fees
@@ -58,6 +59,38 @@ type PurchaseLot struct {
 	BuyAmount    float64 `json:"buy_amount"`     // Purchase amount in original currency
 	BuyCurrency  string  `json:"buy_currency"`   // Original purchase currency
 	BuyAmountEUR float64 `json:"buy_amount_eur"` // Purchase amount in EUR
+}
+
+// OptionSaleDetail represents the details of a closed option position (buy/sell pair)
+type OptionSaleDetail struct {
+	OpenDate       string  `json:"open_date"`
+	CloseDate      string  `json:"close_date"`
+	ProductName    string  `json:"product_name"` // e.g., "FLW P31.00 18MAR22"
+	Quantity       int     `json:"quantity"`
+	OpenPrice      float64 `json:"open_price"`
+	OpenAmount     float64 `json:"open_amount"` // Open amount in original currency
+	OpenCurrency   string  `json:"open_currency"`
+	OpenAmountEUR  float64 `json:"open_amount_eur"` // Open amount in EUR
+	ClosePrice     float64 `json:"close_price"`
+	CloseAmount    float64 `json:"close_amount"` // Close amount in original currency
+	CloseCurrency  string  `json:"close_currency"`
+	CloseAmountEUR float64 `json:"close_amount_eur"` // Close amount in EUR
+	Commission     float64 `json:"commission"`       // Total commission for the round trip (or allocated portion)
+	Delta          float64 `json:"delta"`            // Profit/Loss (CloseAmountEUR - OpenAmountEUR for long, OpenAmountEUR - CloseAmountEUR for short)
+	OpenOrderID    string  `json:"open_order_id"`    // Optional: Order ID of the opening transaction
+	CloseOrderID   string  `json:"close_order_id"`   // Optional: Order ID of the closing transaction
+}
+
+// OptionHolding represents an open option position (either long or short)
+type OptionHolding struct {
+	OpenDate      string  `json:"open_date"`
+	ProductName   string  `json:"product_name"`
+	Quantity      int     `json:"quantity"` // Positive for long positions, negative for short positions
+	OpenPrice     float64 `json:"open_price"`
+	OpenAmount    float64 `json:"open_amount"` // Open amount in original currency
+	OpenCurrency  string  `json:"open_currency"`
+	OpenAmountEUR float64 `json:"open_amount_eur"` // Open amount in EUR
+	OpenOrderID   string  `json:"open_order_id"`   // Optional: Order ID of the opening transaction
 }
 
 // ExchangeRate represents the structure of the exchange rate JSON file.

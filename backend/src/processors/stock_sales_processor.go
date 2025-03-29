@@ -2,8 +2,9 @@ package processors
 
 import (
 	"TAXFOLIO/src/models"
+	"TAXFOLIO/src/utils" // Import the new utils package
 	"sort"
-	"time"
+	// "time" // No longer needed directly if using utils.ParseDate
 )
 
 type StockProcessor struct{}
@@ -36,7 +37,7 @@ func (p *StockProcessor) ProcessTransactions(transactions []models.ProcessedTran
 
 			for remainingQty > 0 && len(purchasePtrs) > 0 {
 				currentPurchase := purchasePtrs[0]
-				matchedQty := min(remainingQty, currentPurchase.Quantity)
+				matchedQty := utils.MinInt(remainingQty, currentPurchase.Quantity) // Use utils.MinInt
 
 				// Calculate prorated amounts
 				saleRatio := float64(matchedQty) / float64(sale.Quantity)
@@ -55,16 +56,16 @@ func (p *StockProcessor) ProcessTransactions(transactions []models.ProcessedTran
 					ProductName:   sale.ProductName,
 					ISIN:          isin,
 					Quantity:      matchedQty,
-					SaleAmount:    sale.Amount * saleRatio,
+					SaleAmount:    sale.Amount * saleRatio, // Keep original precision unless specified
 					SaleCurrency:  sale.Currency,
-					SaleAmountEUR: sale.AmountEUR * saleRatio,
+					SaleAmountEUR: utils.RoundFloat(sale.AmountEUR*saleRatio, 2), // Round to 2 decimal places
 					SalePrice:     salePrice,
-					BuyAmount:     currentPurchase.Amount * purchaseRatio,
+					BuyAmount:     currentPurchase.Amount * purchaseRatio, // Keep original precision unless specified
 					BuyCurrency:   currentPurchase.Currency,
-					BuyAmountEUR:  currentPurchase.AmountEUR * purchaseRatio,
-					BuyPrice:      buyPrice, // Use the original unit price
-					Commission:    commission,
-					Delta:         (salePrice - buyPrice) * float64(matchedQty),
+					BuyAmountEUR:  utils.RoundFloat(currentPurchase.AmountEUR*purchaseRatio, 2),  // Round to 2 decimal places
+					BuyPrice:      buyPrice,                                                      // Use the original unit price
+					Commission:    utils.RoundFloat(commission, 2),                               // Round to 2 decimal places
+					Delta:         utils.RoundFloat((salePrice-buyPrice)*float64(matchedQty), 2), // Round to 2 decimal places
 				}
 				stockSaleDetails = append(stockSaleDetails, saleDetail) // Appending to renamed variable
 
@@ -87,10 +88,10 @@ func (p *StockProcessor) ProcessTransactions(transactions []models.ProcessedTran
 					ProductName:  p.ProductName,
 					ISIN:         isin,
 					Quantity:     p.Quantity,
-					BuyAmount:    p.Amount,
+					BuyAmount:    p.Amount, // Keep original precision unless specified
 					BuyCurrency:  p.Currency,
-					BuyAmountEUR: p.AmountEUR,
-					BuyPrice:     p.Price, // Use the original price
+					BuyAmountEUR: utils.RoundFloat(p.AmountEUR, 2), // Round to 2 decimal places
+					BuyPrice:     p.Price,                          // Use the original price
 				})
 			}
 		}
@@ -125,24 +126,14 @@ func separatePurchaseAndSales(transactions []models.ProcessedTransaction) (purch
 
 func sortPurchasesByDate(purchases []models.ProcessedTransaction) {
 	sort.Slice(purchases, func(i, j int) bool {
-		return parseDate(purchases[i].Date).Before(parseDate(purchases[j].Date))
+		return utils.ParseDate(purchases[i].Date).Before(utils.ParseDate(purchases[j].Date)) // Use utils.ParseDate
 	})
 }
 
 func sortSalesByDate(sales []models.ProcessedTransaction) {
 	sort.Slice(sales, func(i, j int) bool {
-		return parseDate(sales[i].Date).Before(parseDate(sales[j].Date))
+		return utils.ParseDate(sales[i].Date).Before(utils.ParseDate(sales[j].Date)) // Use utils.ParseDate
 	})
 }
 
-func parseDate(dateStr string) time.Time {
-	t, _ := time.Parse("02-01-2006", dateStr) // Adjust format if needed
-	return t
-}
-
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}
+// Removed local helper functions (minInt, parseDate) as they are now in the utils package

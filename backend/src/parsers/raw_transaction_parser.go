@@ -109,6 +109,7 @@ func ParseProcessedTransactions(rawTransactions []models.RawTransaction) ([]mode
 			OrderID:      raw.OrderID,
 			ExchangeRate: exchangeRate,
 			AmountEUR:    amountEUR,
+			Description:  raw.Description, // Copy the original description
 		}
 
 		processedTransactions = append(processedTransactions, processed)

@@ -39,11 +39,17 @@ func (h *UploadHandler) HandleUpload(w http.ResponseWriter, r *http.Request) {
 	// Use the new variable names matching the processor's return values
 	stockSaleDetails, stockHoldings := stockProcessor.ProcessTransactions(processedTransactions)
 
+	// Process option transactions
+	optionProcessor := processors.NewOptionProcessor()
+	optionSaleDetails, optionHoldings := optionProcessor.ProcessTransactions(processedTransactions)
+
 	// Prepare response using the new field names
 	response := map[string]interface{}{
-		"dividendResult":   dividendResult,
-		"stockSaleDetails": stockSaleDetails, // Renamed key
-		"stockHoldings":    stockHoldings,    // Renamed key
+		"dividendResult":    dividendResult,
+		"stockSaleDetails":  stockSaleDetails, // Renamed key
+		"stockHoldings":     stockHoldings,    // Renamed key
+		"optionSaleDetails": optionSaleDetails,
+		"optionHoldings":    optionHoldings,
 		// ... other data you want to return
 	}
 	// Return the processed transactions as JSON
