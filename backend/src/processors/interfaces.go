@@ -22,3 +22,8 @@ type StockProcessor interface {
 type OptionProcessor interface {
 	Process(transactions []models.ProcessedTransaction) ([]models.OptionSaleDetail, []models.OptionHolding)
 }
+
+// CashMovementProcessor defines the interface for processing cash deposits and withdrawals.
+type CashMovementProcessor interface {
+	Process(transactions []models.ProcessedTransaction) []models.CashMovement
+}

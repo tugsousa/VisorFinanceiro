@@ -33,6 +33,7 @@ func main() {
 	dividendProcessor := processors.NewDividendProcessor()
 	stockProcessor := processors.NewStockProcessor()
 	optionProcessor := processors.NewOptionProcessor()
+	cashMovementProcessor := processors.NewCashMovementProcessor() // Added
 
 	// Instantiate the service with dependencies
 	uploadService := services.NewUploadService(
@@ -41,6 +42,7 @@ func main() {
 		dividendProcessor,
 		stockProcessor,
 		optionProcessor,
+		cashMovementProcessor, // Added
 	)
 
 	// Initialize the upload handler with the service

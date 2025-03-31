@@ -139,7 +139,7 @@ func parseDescription(description string) (string, int, float64, string, string,
 	description = strings.TrimSpace(description)
 
 	// Check for EXACT deposit transactions first
-	if description == "Depósito" {
+	if description == "Depósito" || description == "flatex Deposit" {
 		// Use 0 for quantity and price as they are not relevant for simple deposits
 		return "cashdeposit", 0, 0, "", "Cash Deposit", nil
 	}

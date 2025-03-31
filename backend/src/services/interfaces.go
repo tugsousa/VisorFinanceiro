@@ -13,6 +13,7 @@ type UploadResult struct {
 	StockHoldings     []models.PurchaseLot
 	OptionSaleDetails []models.OptionSaleDetail
 	OptionHoldings    []models.OptionHolding
+	CashMovements     []models.CashMovement // Added for cash deposits/withdrawals
 	// Add other potential results here if needed
 }
 

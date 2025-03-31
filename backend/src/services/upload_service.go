@@ -9,11 +9,12 @@ import (
 
 // uploadServiceImpl implements the UploadService interface.
 type uploadServiceImpl struct {
-	csvParser            parsers.CSVParser
-	transactionProcessor parsers.TransactionProcessor
-	dividendProcessor    processors.DividendProcessor
-	stockProcessor       processors.StockProcessor
-	optionProcessor      processors.OptionProcessor
+	csvParser             parsers.CSVParser
+	transactionProcessor  parsers.TransactionProcessor
+	dividendProcessor     processors.DividendProcessor
+	stockProcessor        processors.StockProcessor
+	optionProcessor       processors.OptionProcessor
+	cashMovementProcessor processors.CashMovementProcessor // Added
 }
 
 // NewUploadService creates a new instance of UploadService with its dependencies.
@@ -23,13 +24,15 @@ func NewUploadService(
 	dividendProcessor processors.DividendProcessor,
 	stockProcessor processors.StockProcessor,
 	optionProcessor processors.OptionProcessor,
+	cashMovementProcessor processors.CashMovementProcessor, // Added
 ) UploadService {
 	return &uploadServiceImpl{
-		csvParser:            csvParser,
-		transactionProcessor: transactionProcessor,
-		dividendProcessor:    dividendProcessor,
-		stockProcessor:       stockProcessor,
-		optionProcessor:      optionProcessor,
+		csvParser:             csvParser,
+		transactionProcessor:  transactionProcessor,
+		dividendProcessor:     dividendProcessor,
+		stockProcessor:        stockProcessor,
+		optionProcessor:       optionProcessor,
+		cashMovementProcessor: cashMovementProcessor, // Added
 	}
 }
 
@@ -57,13 +60,17 @@ func (s *uploadServiceImpl) ProcessUpload(fileReader io.Reader) (*UploadResult, 
 	// 5. Process option transactions
 	optionSaleDetails, optionHoldings := s.optionProcessor.Process(processedTransactions)
 
-	// 6. Aggregate results
+	// 6. Process cash movements
+	cashMovements := s.cashMovementProcessor.Process(processedTransactions) // Added
+
+	// 7. Aggregate results (renumbered)
 	result := &UploadResult{
 		DividendResult:    dividendResult,
 		StockSaleDetails:  stockSaleDetails,
 		StockHoldings:     stockHoldings,
 		OptionSaleDetails: optionSaleDetails,
 		OptionHoldings:    optionHoldings,
+		CashMovements:     cashMovements, // Added
 	}
 
 	return result, nil
