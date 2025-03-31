@@ -98,12 +98,10 @@ type OptionHolding struct {
 
 // CashMovement represents a cash deposit or withdrawal
 type CashMovement struct {
-	Date      string  `json:"date"`       // Date of the movement
-	Type      string  `json:"type"`       // "deposit" or "withdrawal"
-	Amount    float64 `json:"amount"`     // Amount in original currency
-	Currency  string  `json:"currency"`   // Original currency
-	AmountEUR float64 `json:"amount_eur"` // Amount in EUR
-	OrderID   string  `json:"order_id"`   // Optional: Order ID if available
+	Date     string  `json:"date"`     // Date of the movement
+	Type     string  `json:"type"`     // "deposit" or "withdrawal"
+	Amount   float64 `json:"amount"`   // Amount in original currency
+	Currency string  `json:"currency"` // Original currency
 }
 
 // ExchangeRate represents the structure of the exchange rate JSON file.

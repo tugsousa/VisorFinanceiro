@@ -21,12 +21,10 @@ func (p *cashMovementProcessor) Process(transactions []models.ProcessedTransacti
 		// Check for cash deposits
 		if strings.ToLower(tx.OrderType) == "cashdeposit" {
 			movement := models.CashMovement{
-				Date:      tx.Date,
-				Type:      "deposit", // Currently only handling deposits
-				Amount:    tx.Amount,
-				Currency:  tx.Currency,
-				AmountEUR: tx.AmountEUR,
-				OrderID:   tx.OrderID,
+				Date:     tx.Date,
+				Type:     "deposit", // Currently only handling deposits
+				Amount:   tx.Amount,
+				Currency: tx.Currency,
 			}
 			cashMovements = append(cashMovements, movement)
 		}
