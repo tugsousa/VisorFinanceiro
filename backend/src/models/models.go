@@ -33,21 +33,23 @@ type ProcessedTransaction struct {
 }
 
 type SaleDetail struct {
-	SaleDate      string
-	BuyDate       string
-	ProductName   string
-	ISIN          string
-	Quantity      int
-	SalePrice     float64
-	SaleAmount    float64 // Sale amount in original currency
-	SaleCurrency  string
-	SaleAmountEUR float64 // Sale amount in EUR
-	BuyPrice      float64
-	BuyAmount     float64 // Purchase amount in original currency
-	Commission    float64 // Commission/fees
-	BuyCurrency   string
-	BuyAmountEUR  float64 // Purchase amount in EUR
-	Delta         float64 // Profit/Loss (SaleAmountEUR - BuyAmountEUR)
+	SaleDate         string
+	BuyDate          string
+	ProductName      string
+	ISIN             string
+	Quantity         int
+	SalePrice        float64
+	SaleAmount       float64 // Sale amount in original currency
+	SaleCurrency     string
+	SaleAmountEUR    float64 // Sale amount in EUR
+	BuyPrice         float64
+	BuyAmount        float64 // Purchase amount in original currency
+	BuyExchangeRate  float64 // Exchange rate used for the buy transaction
+	Commission       float64 // Commission/fees
+	BuyCurrency      string
+	BuyAmountEUR     float64 // Purchase amount in EUR
+	SaleExchangeRate float64 // Exchange rate used for the sale transaction
+	Delta            float64 // Profit/Loss (SaleAmountEUR - BuyAmountEUR)
 }
 
 // PurchaseLot represents remaining unsold purchase lots

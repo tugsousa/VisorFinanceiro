@@ -76,21 +76,23 @@ func (p *stockProcessorImpl) Process(transactions []models.ProcessedTransaction)
 				saleAmountEUR := utils.RoundFloat(sale.AmountEUR*saleRatio, 2)
 
 				saleDetail := models.SaleDetail{
-					SaleDate:      sale.Date,
-					BuyDate:       currentPurchase.Date,
-					ProductName:   sale.ProductName,
-					ISIN:          isin,
-					Quantity:      matchedQty,
-					SaleAmount:    sale.Amount * saleRatio, // Keep original precision unless specified
-					SaleCurrency:  sale.Currency,
-					SaleAmountEUR: saleAmountEUR, // Use pre-calculated value
-					SalePrice:     salePrice,
-					BuyAmount:     currentPurchase.Amount * purchaseRatio, // Keep original precision unless specified
-					BuyCurrency:   currentPurchase.Currency,
-					BuyAmountEUR:  buyAmountEUR,                                    // Use pre-calculated value
-					BuyPrice:      buyPrice,                                        // Use the original unit price
-					Commission:    utils.RoundFloat(totalDetailCommission, 2),      // Use the combined commission
-					Delta:         utils.RoundFloat(buyAmountEUR+saleAmountEUR, 2), // Use pre-calculated values
+					SaleDate:         sale.Date,
+					BuyDate:          currentPurchase.Date,
+					ProductName:      sale.ProductName,
+					ISIN:             isin,
+					Quantity:         matchedQty,
+					SaleAmount:       sale.Amount * saleRatio, // Keep original precision unless specified
+					SaleCurrency:     sale.Currency,
+					SaleAmountEUR:    saleAmountEUR, // Use pre-calculated value
+					SalePrice:        salePrice,
+					SaleExchangeRate: sale.ExchangeRate,                      // Add sale exchange rate
+					BuyAmount:        currentPurchase.Amount * purchaseRatio, // Keep original precision unless specified
+					BuyCurrency:      currentPurchase.Currency,
+					BuyAmountEUR:     buyAmountEUR,                                    // Use pre-calculated value
+					BuyPrice:         buyPrice,                                        // Use the original unit price
+					BuyExchangeRate:  currentPurchase.ExchangeRate,                    // Add buy exchange rate
+					Commission:       utils.RoundFloat(totalDetailCommission, 2),      // Use the combined commission
+					Delta:            utils.RoundFloat(buyAmountEUR+saleAmountEUR, 2), // Use pre-calculated values
 				}
 				stockSaleDetails = append(stockSaleDetails, saleDetail) // Appending to renamed variable
 
