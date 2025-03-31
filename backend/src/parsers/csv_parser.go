@@ -9,7 +9,16 @@ import (
 	"time"
 )
 
-func ParseCSV(file io.Reader) ([]models.RawTransaction, error) {
+// csvParserImpl implements the CSVParser interface.
+type csvParserImpl struct{}
+
+// NewCSVParser creates a new instance of CSVParser.
+func NewCSVParser() CSVParser {
+	return &csvParserImpl{}
+}
+
+// Parse implements the CSVParser interface.
+func (p *csvParserImpl) Parse(file io.Reader) ([]models.RawTransaction, error) {
 	reader := csv.NewReader(file)
 	reader.FieldsPerRecord = -1 // Allow variable number of fields per record
 

@@ -9,17 +9,18 @@ import (
 	// "time" // No longer needed directly if using utils.ParseDate
 )
 
-// OptionProcessor handles the processing of option transactions.
-type OptionProcessor struct{}
+// optionProcessorImpl implements the OptionProcessor interface.
+type optionProcessorImpl struct{}
 
-// NewOptionProcessor creates a new OptionProcessor.
-func NewOptionProcessor() *OptionProcessor {
-	return &OptionProcessor{}
+// NewOptionProcessor creates a new instance of OptionProcessor.
+func NewOptionProcessor() OptionProcessor { // Return the interface type
+	return &optionProcessorImpl{} // Return the implementation struct
 }
 
-// ProcessTransactions processes a list of transactions to identify and match option trades.
-// It returns details of closed option trades and currently open option holdings.
-func (p *OptionProcessor) ProcessTransactions(transactions []models.ProcessedTransaction) ([]models.OptionSaleDetail, []models.OptionHolding) {
+// Process implements the OptionProcessor interface.
+// It processes a list of transactions to identify and match option trades,
+// returning details of closed option trades and currently open option holdings.
+func (p *optionProcessorImpl) Process(transactions []models.ProcessedTransaction) ([]models.OptionSaleDetail, []models.OptionHolding) {
 	optionTransactions := filterOptionTransactions(transactions)
 	transactionsByProduct := groupTransactionsByProduct(optionTransactions)
 

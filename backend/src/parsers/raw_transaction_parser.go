@@ -11,7 +11,20 @@ import (
 	"time"
 )
 
-func ParseProcessedTransactions(rawTransactions []models.RawTransaction) ([]models.ProcessedTransaction, error) {
+// transactionProcessorImpl implements the TransactionProcessor interface.
+type transactionProcessorImpl struct{}
+
+// NewTransactionProcessor creates a new instance of TransactionProcessor.
+func NewTransactionProcessor() TransactionProcessor {
+	return &transactionProcessorImpl{}
+}
+
+// Process implements the TransactionProcessor interface.
+// It converts raw transactions into processed transactions, including parsing descriptions
+// and fetching initial data like exchange rates and commissions.
+// NOTE: Dependencies on the 'processors' package here are not ideal for separation of concerns
+// and could be refactored further.
+func (p *transactionProcessorImpl) Process(rawTransactions []models.RawTransaction) ([]models.ProcessedTransaction, error) {
 	var processedTransactions []models.ProcessedTransaction
 
 	for _, raw := range rawTransactions {
@@ -97,19 +110,20 @@ func ParseProcessedTransactions(rawTransactions []models.RawTransaction) ([]mode
 		}
 
 		processed := models.ProcessedTransaction{
-			Date:         raw.OrderDate,
-			ProductName:  name,
-			ISIN:         raw.ISIN,
-			Quantity:     quantity,
-			Price:        price,
-			OrderType:    orderType,
-			Amount:       amount,
-			Currency:     raw.Currency,
-			Commission:   commission,
-			OrderID:      raw.OrderID,
-			ExchangeRate: exchangeRate,
-			AmountEUR:    amountEUR,
-			Description:  raw.Description, // Copy the original description
+			Date:             raw.OrderDate,
+			ProductName:      name,
+			ISIN:             raw.ISIN,
+			Quantity:         quantity,
+			OriginalQuantity: quantity, // Set OriginalQuantity to the initial quantity
+			Price:            price,
+			OrderType:        orderType,
+			Amount:           amount,
+			Currency:         raw.Currency,
+			Commission:       commission,
+			OrderID:          raw.OrderID,
+			ExchangeRate:     exchangeRate,
+			AmountEUR:        amountEUR,
+			Description:      raw.Description, // Copy the original description
 		}
 
 		processedTransactions = append(processedTransactions, processed)

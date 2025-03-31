@@ -15,20 +15,21 @@ type RawTransaction struct {
 }
 
 type ProcessedTransaction struct {
-	Date            string // Use time.Time for dates
-	ProductName     string
-	ISIN            string
-	Quantity        int
-	Price           float64
-	OrderType       string  // e.g., "compra", "venda", "dividendo"
-	TransactionType string  // e.g., "stock", "option", "comission", "cashCredit"
-	Description     string  // Original description from RawTransaction
-	Amount          float64 // Transaction amount in original currency
-	Currency        string  // Original currency (e.g., "USD", "EUR")
-	Commission      float64 // Commission/fees
-	OrderID         string
-	ExchangeRate    float64 // Exchange rate to EUR (if applicable)
-	AmountEUR       float64 // Transaction amount in EUR (calculated)
+	Date             string // Use time.Time for dates
+	ProductName      string
+	ISIN             string
+	Quantity         int
+	OriginalQuantity int // Original quantity of the purchase lot before any sales
+	Price            float64
+	OrderType        string  // e.g., "compra", "venda", "dividendo"
+	TransactionType  string  // e.g., "stock", "option", "comission", "cashCredit"
+	Description      string  // Original description from RawTransaction
+	Amount           float64 // Transaction amount in original currency
+	Currency         string  // Original currency (e.g., "USD", "EUR")
+	Commission       float64 // Commission/fees
+	OrderID          string
+	ExchangeRate     float64 // Exchange rate to EUR (if applicable)
+	AmountEUR        float64 // Transaction amount in EUR (calculated)
 }
 
 type SaleDetail struct {

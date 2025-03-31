@@ -1,85 +1,57 @@
 package handlers
 
 import (
-	"TAXFOLIO/src/models"
-	"TAXFOLIO/src/parsers"
-	"TAXFOLIO/src/processors"
+	"TAXFOLIO/src/services" // Import the new services package
 	"encoding/json"
 	"fmt"
 	"net/http"
+	// "TAXFOLIO/src/models" // No longer directly needed
+	// "TAXFOLIO/src/parsers" // No longer directly needed
+	// "TAXFOLIO/src/processors" // No longer directly needed
 )
 
-// UploadHandler handles file uploads and CSV parsing.
-type UploadHandler struct{}
-
-func NewUploadHandler() *UploadHandler {
-	return &UploadHandler{}
+// UploadHandler handles file uploads by delegating to UploadService.
+type UploadHandler struct {
+	uploadService services.UploadService // Dependency on the service interface
 }
 
+// NewUploadHandler creates a new UploadHandler with its dependencies.
+func NewUploadHandler(service services.UploadService) *UploadHandler {
+	return &UploadHandler{
+		uploadService: service,
+	}
+}
+
+// HandleUpload receives the file, passes it to the service, and returns the result.
 func (h *UploadHandler) HandleUpload(w http.ResponseWriter, r *http.Request) {
-	// Parse the uploaded file
-	rawTransactions, err := h.parseUploadedFile(r)
-	if err != nil {
-		http.Error(w, fmt.Sprintf("Error parsing uploaded file: %v", err), http.StatusBadRequest)
+	// 1. Parse multipart form to get the file (max 10 MB file size)
+	if err := r.ParseMultipartForm(10 << 20); err != nil {
+		http.Error(w, fmt.Sprintf("failed to parse multipart form: %v", err), http.StatusBadRequest)
 		return
 	}
 
-	// Process RawTransaction into ProcessedTransaction
-	processedTransactions, err := parsers.ParseProcessedTransactions(rawTransactions)
+	// 2. Get the file from the request
+	file, _, err := r.FormFile("file")
 	if err != nil {
-		http.Error(w, fmt.Sprintf("Error processing transactions: %v", err), http.StatusInternalServerError)
+		http.Error(w, fmt.Sprintf("failed to retrieve file from request: %v", err), http.StatusBadRequest)
+		return
+	}
+	defer file.Close() // Ensure the file is closed
+
+	// 3. Delegate processing to the UploadService
+	result, err := h.uploadService.ProcessUpload(file)
+	if err != nil {
+		// Determine appropriate HTTP status code based on error type if needed
+		// For now, using InternalServerError for any processing error
+		http.Error(w, fmt.Sprintf("Error processing upload: %v", err), http.StatusInternalServerError)
 		return
 	}
 
-	// Calculate dividends
-	dividendResult := processors.CalculateDividends(processedTransactions)
-
-	// Process stock transactions
-	stockProcessor := processors.NewStockProcessor()
-	// Use the new variable names matching the processor's return values
-	stockSaleDetails, stockHoldings := stockProcessor.ProcessTransactions(processedTransactions)
-
-	// Process option transactions
-	optionProcessor := processors.NewOptionProcessor()
-	optionSaleDetails, optionHoldings := optionProcessor.ProcessTransactions(processedTransactions)
-
-	// Prepare response using the new field names
-	response := map[string]interface{}{
-		"dividendResult":    dividendResult,
-		"stockSaleDetails":  stockSaleDetails, // Renamed key
-		"stockHoldings":     stockHoldings,    // Renamed key
-		"optionSaleDetails": optionSaleDetails,
-		"optionHoldings":    optionHoldings,
-		// ... other data you want to return
-	}
-	// Return the processed transactions as JSON
+	// 4. Return the result as JSON
 	w.Header().Set("Content-Type", "application/json")
-	//if err := json.NewEncoder(w).Encode(rawTransactions); err != nil {
-	//if err := json.NewEncoder(w).Encode(processedTransactions); err != nil {
-	//if err := json.NewEncoder(w).Encode(dividendResult); err != nil {
-	if err := json.NewEncoder(w).Encode(response); err != nil {
+	if err := json.NewEncoder(w).Encode(result); err != nil {
 		http.Error(w, "Error generating JSON response", http.StatusInternalServerError)
 	}
 }
 
-func (h *UploadHandler) parseUploadedFile(r *http.Request) ([]models.RawTransaction, error) {
-	// Parse multipart form (max 10 MB file size)
-	if err := r.ParseMultipartForm(10 << 20); err != nil {
-		return nil, fmt.Errorf("failed to parse multipart form: %w", err)
-	}
-
-	// Get the file from the request
-	file, _, err := r.FormFile("file")
-	if err != nil {
-		return nil, fmt.Errorf("failed to retrieve file from request: %w", err)
-	}
-	defer file.Close()
-
-	// Parse the CSV file
-	transactions, err := parsers.ParseCSV(file)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse CSV file: %w", err)
-	}
-
-	return transactions, nil
-}
+// parseUploadedFile function is removed as its logic is now handled by the service layer.

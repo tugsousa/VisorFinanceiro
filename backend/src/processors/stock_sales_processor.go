@@ -7,13 +7,16 @@ import (
 	// "time" // No longer needed directly if using utils.ParseDate
 )
 
-type StockProcessor struct{}
+// stockProcessorImpl implements the StockProcessor interface.
+type stockProcessorImpl struct{}
 
-func NewStockProcessor() *StockProcessor {
-	return &StockProcessor{}
+// NewStockProcessor creates a new instance of StockProcessor.
+func NewStockProcessor() StockProcessor { // Return the interface type
+	return &stockProcessorImpl{} // Return the implementation struct
 }
 
-func (p *StockProcessor) ProcessTransactions(transactions []models.ProcessedTransaction) ([]models.SaleDetail, []models.PurchaseLot) {
+// Process implements the StockProcessor interface.
+func (p *stockProcessorImpl) Process(transactions []models.ProcessedTransaction) ([]models.SaleDetail, []models.PurchaseLot) {
 	// Group transactions by ISIN
 	transactionsByISIN := groupTransactionsByISIN(transactions)
 
@@ -33,7 +36,7 @@ func (p *StockProcessor) ProcessTransactions(transactions []models.ProcessedTran
 
 		for _, sale := range sales {
 			remainingQty := sale.Quantity
-			totalCommission := sale.Commission
+			// totalCommission := sale.Commission // Removed unused variable
 
 			for remainingQty > 0 && len(purchasePtrs) > 0 {
 				currentPurchase := purchasePtrs[0]
@@ -41,14 +44,36 @@ func (p *StockProcessor) ProcessTransactions(transactions []models.ProcessedTran
 
 				// Calculate prorated amounts
 				saleRatio := float64(matchedQty) / float64(sale.Quantity)
-				purchaseRatio := float64(matchedQty) / float64(currentPurchase.Quantity)
+				// Corrected: Use OriginalQuantity for accurate proration of the initial cost
+				// Add a check for zero OriginalQuantity to prevent division by zero, although unlikely for purchases.
+				var purchaseRatio float64
+				if currentPurchase.OriginalQuantity > 0 {
+					purchaseRatio = float64(matchedQty) / float64(currentPurchase.OriginalQuantity)
+				} else {
+					// Handle potential edge case or error, though OriginalQuantity should be > 0 for a purchase
+					purchaseRatio = 0 // Or log an error
+				}
 
 				// Calculate unit prices (use original prices, not prorated amounts)
 				salePrice := sale.Price
 				buyPrice := currentPurchase.Price
 
-				// Calculate prorated commission
-				commission := totalCommission * saleRatio
+				// Calculate prorated SALE commission
+				proratedSaleCommission := sale.Commission * saleRatio // Use sale.Commission directly
+
+				// Determine buy commission to add (only for the first sale touching this purchase)
+				buyCommissionToAdd := 0.0
+				if currentPurchase.Commission > 0 {
+					buyCommissionToAdd = currentPurchase.Commission
+					currentPurchase.Commission = 0 // Mark purchase commission as used for subsequent matches
+				}
+
+				// Calculate total commission for this sale detail
+				totalDetailCommission := proratedSaleCommission + buyCommissionToAdd
+
+				// Calculate EUR amounts before creating the struct
+				buyAmountEUR := utils.RoundFloat(currentPurchase.AmountEUR*purchaseRatio, 2)
+				saleAmountEUR := utils.RoundFloat(sale.AmountEUR*saleRatio, 2)
 
 				saleDetail := models.SaleDetail{
 					SaleDate:      sale.Date,
@@ -58,14 +83,14 @@ func (p *StockProcessor) ProcessTransactions(transactions []models.ProcessedTran
 					Quantity:      matchedQty,
 					SaleAmount:    sale.Amount * saleRatio, // Keep original precision unless specified
 					SaleCurrency:  sale.Currency,
-					SaleAmountEUR: utils.RoundFloat(sale.AmountEUR*saleRatio, 2), // Round to 2 decimal places
+					SaleAmountEUR: saleAmountEUR, // Use pre-calculated value
 					SalePrice:     salePrice,
 					BuyAmount:     currentPurchase.Amount * purchaseRatio, // Keep original precision unless specified
 					BuyCurrency:   currentPurchase.Currency,
-					BuyAmountEUR:  utils.RoundFloat(currentPurchase.AmountEUR*purchaseRatio, 2),  // Round to 2 decimal places
-					BuyPrice:      buyPrice,                                                      // Use the original unit price
-					Commission:    utils.RoundFloat(commission, 2),                               // Round to 2 decimal places
-					Delta:         utils.RoundFloat((salePrice-buyPrice)*float64(matchedQty), 2), // Round to 2 decimal places
+					BuyAmountEUR:  buyAmountEUR,                                    // Use pre-calculated value
+					BuyPrice:      buyPrice,                                        // Use the original unit price
+					Commission:    utils.RoundFloat(totalDetailCommission, 2),      // Use the combined commission
+					Delta:         utils.RoundFloat(buyAmountEUR+saleAmountEUR, 2), // Use pre-calculated values
 				}
 				stockSaleDetails = append(stockSaleDetails, saleDetail) // Appending to renamed variable
 

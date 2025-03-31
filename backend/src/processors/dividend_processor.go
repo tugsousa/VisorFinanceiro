@@ -6,12 +6,18 @@ import (
 	"strings"
 )
 
-// DividendResult represents the grouped dividend amounts by year, country, and type (gross or taxed).
-type DividendResult map[string]map[string]map[string]float64
+// dividendProcessorImpl implements the DividendProcessor interface.
+type dividendProcessorImpl struct{}
 
-// CalculateDividends processes the transactions and groups dividend amounts by year, country, and type.
-func CalculateDividends(transactions []models.ProcessedTransaction) DividendResult {
+// NewDividendProcessor creates a new instance of DividendProcessor.
+func NewDividendProcessor() DividendProcessor {
+	return &dividendProcessorImpl{}
+}
+
+// Calculate processes the transactions and groups dividend amounts by year, country, and type.
+func (p *dividendProcessorImpl) Calculate(transactions []models.ProcessedTransaction) DividendResult {
 	// Map to hold the results grouped by year, country, and type of amount (gross or taxed)
+	// Use the DividendResult type defined in interfaces.go
 	result := make(DividendResult)
 
 	for _, t := range transactions {

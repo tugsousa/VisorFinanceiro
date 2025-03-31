@@ -2,6 +2,9 @@ package main
 
 import (
 	"TAXFOLIO/src/handlers"
+	"TAXFOLIO/src/parsers"    // Import parsers
+	"TAXFOLIO/src/processors" // Import processors
+	"TAXFOLIO/src/services"   // Import services
 	"log"
 	"net/http"
 )
@@ -24,8 +27,24 @@ func enableCORS(next http.Handler) http.Handler {
 }
 
 func main() {
-	// Initialize the upload handler
-	uploadHandler := handlers.NewUploadHandler()
+	// Instantiate concrete implementations
+	csvParser := parsers.NewCSVParser()
+	transactionProcessor := parsers.NewTransactionProcessor()
+	dividendProcessor := processors.NewDividendProcessor()
+	stockProcessor := processors.NewStockProcessor()
+	optionProcessor := processors.NewOptionProcessor()
+
+	// Instantiate the service with dependencies
+	uploadService := services.NewUploadService(
+		csvParser,
+		transactionProcessor,
+		dividendProcessor,
+		stockProcessor,
+		optionProcessor,
+	)
+
+	// Initialize the upload handler with the service
+	uploadHandler := handlers.NewUploadHandler(uploadService)
 
 	// Set up routes with CORS enabled
 	router := http.NewServeMux()
