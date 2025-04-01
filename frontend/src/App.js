@@ -6,7 +6,7 @@ import DetailedView from './pages/DetailedView';
 import Layout from './layouts/Layout';
 import Holdings from './pages/HoldingsPage';
 import Dividends from './pages/DividendsPage';
-import Cash from './pages/CashPage';
+import Tax from './pages/TaxPage';
 
 function App() {
   return (
@@ -18,7 +18,7 @@ function App() {
           <Route path="/detailed" element={<DetailedView />} />
           <Route path="/holdings" element={<Holdings />} />
           <Route path="/dividends" element={<Dividends />} />
-          <Route path="/cash" element={<Cash />} />
+          <Route path="/tax" element={<Tax />} />
         </Routes>
       </Layout>
     </Router>

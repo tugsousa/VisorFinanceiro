@@ -15,6 +15,9 @@ type uploadServiceImpl struct {
 	stockProcessor        processors.StockProcessor
 	optionProcessor       processors.OptionProcessor
 	cashMovementProcessor processors.CashMovementProcessor // Added
+
+	// Store the latest result
+	latestResult *UploadResult
 }
 
 // NewUploadService creates a new instance of UploadService with its dependencies.
@@ -73,5 +76,19 @@ func (s *uploadServiceImpl) ProcessUpload(fileReader io.Reader) (*UploadResult, 
 		CashMovements:     cashMovements, // Added
 	}
 
+	// Store the latest result before returning
+	s.latestResult = result
+
 	return result, nil
+}
+
+// GetLatestUploadResult returns the most recently processed upload result.
+func (s *uploadServiceImpl) GetLatestUploadResult() (*UploadResult, error) {
+	if s.latestResult == nil {
+		// Return an empty result or an error if no upload has been processed yet
+		// For simplicity, returning an empty result for now.
+		// Consider returning an error like fmt.Errorf("no upload processed yet")
+		return &UploadResult{}, nil
+	}
+	return s.latestResult, nil
 }

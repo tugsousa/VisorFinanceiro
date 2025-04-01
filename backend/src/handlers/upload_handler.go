@@ -54,4 +54,56 @@ func (h *UploadHandler) HandleUpload(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// HandleGetStockSales retrieves the latest processed stock sale details.
+func (h *UploadHandler) HandleGetStockSales(w http.ResponseWriter, r *http.Request) {
+	// 1. Get the latest result from the service
+	result, err := h.uploadService.GetLatestUploadResult()
+	if err != nil {
+		// Handle potential errors, e.g., if no data is available yet
+		http.Error(w, fmt.Sprintf("Error retrieving latest results: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	// 2. Return only the StockSaleDetails as JSON
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(result.StockSaleDetails); err != nil {
+		http.Error(w, "Error generating JSON response for stock sales", http.StatusInternalServerError)
+	}
+}
+
+// HandleGetOptionSales retrieves the latest processed option sale details.
+func (h *UploadHandler) HandleGetOptionSales(w http.ResponseWriter, r *http.Request) {
+	// 1. Get the latest result from the service
+	result, err := h.uploadService.GetLatestUploadResult()
+	if err != nil {
+		// Handle potential errors, e.g., if no data is available yet
+		// Return an empty JSON object or array if no data is found, instead of an error,
+		// to match the frontend's expectation of potentially empty data.
+		if err.Error() == "no upload result available yet" { // Assuming the service returns a specific error
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK) // OK status, but empty data
+			// Return an empty JSON object that includes the expected key with an empty array
+			json.NewEncoder(w).Encode(map[string][]interface{}{"OptionSaleDetails": {}})
+			return
+		}
+		// For other errors, return an internal server error
+		http.Error(w, fmt.Sprintf("Error retrieving latest results: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	// 2. Return only the OptionSaleDetails as JSON
+	// Ensure we return an object with the OptionSaleDetails key, even if the array is nil/empty
+	response := map[string]interface{}{
+		"OptionSaleDetails": result.OptionSaleDetails,
+	}
+	if result.OptionSaleDetails == nil {
+		response["OptionSaleDetails"] = []interface{}{} // Ensure it's an empty array, not null
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		http.Error(w, "Error generating JSON response for option sales", http.StatusInternalServerError)
+	}
+}
+
 // parseUploadedFile function is removed as its logic is now handled by the service layer.

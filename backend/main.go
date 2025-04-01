@@ -51,6 +51,8 @@ func main() {
 	// Set up routes with CORS enabled
 	router := http.NewServeMux()
 	router.HandleFunc("POST /upload", uploadHandler.HandleUpload)
+	router.HandleFunc("GET /api/stock-sales", uploadHandler.HandleGetStockSales)   // Added route for stock sales
+	router.HandleFunc("GET /api/option-sales", uploadHandler.HandleGetOptionSales) // Added route for option sales
 	router.HandleFunc("GET /", func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("TAXFOLIO Backend is running"))
 	})

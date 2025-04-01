@@ -5,7 +5,7 @@ import {
   Dashboard as DashboardIcon,
   Assessment as HoldingsIcon,
   AttachMoney as DividendsIcon,
-  AccountBalance as CashIcon
+  ReceiptLong as TaxIcon // Changed from CashIcon
 } from '@mui/icons-material';
 
 export default function Layout({ children }) {
@@ -91,10 +91,10 @@ export default function Layout({ children }) {
               <DividendsIcon />
             </IconButton>
           </Tooltip>
-          <Tooltip title="Cash" placement="right" arrow>
+          <Tooltip title="Tax" placement="right" arrow> {/* Changed title */}
             <IconButton 
               component={Link} 
-              to="/cash" 
+              to="/tax"
               color="inherit"
               sx={{
                 color: 'text.secondary',
@@ -104,7 +104,7 @@ export default function Layout({ children }) {
                 }
               }}
             >
-              <CashIcon />
+              <TaxIcon /> {/* Changed icon */}
             </IconButton>
           </Tooltip>
         </Box>
