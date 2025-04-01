@@ -92,11 +92,6 @@ const getDay = (dateString) => {
 };
 
 
-// Function to get country code from ISIN
-const getCountryCode = (isin) => {
-  return isin ? isin.substring(0, 2) : '';
-};
-
 export default function TaxPage() {
   // Initialize selectedYear to empty string to avoid MUI warning if availableYears is initially empty
   const [selectedYear, setSelectedYear] = useState('');
@@ -259,18 +254,39 @@ export default function TaxPage() {
     { realizacao: 0, aquisicao: 0, despesas: 0, imposto: 0 } // Initial values
   ), [stockSaleDetails]); // Recalculate only when stockSaleDetails changes
 
-  // Calculate totals for the currently filtered option data
-  const optionTotals = useMemo(() => optionSaleDetails.reduce(
-    (acc, row) => {
-      // Use the correct key 'delta' for 'Rendimento Líquido'
-      acc.rendimentoLiquido += row.delta || 0;
-      // Placeholder for Imposto Pago - using commission for now as an example
-      // *** Adjust 'row.commission' if Imposto Pago comes from a different field ***
-      acc.imposto += row.commission || 0;
+  // Group and aggregate option data by country
+  const groupedOptionData = useMemo(() => {
+    const grouped = optionSaleDetails.reduce((acc, row) => {
+      const country = row.country_code || 'Unknown'; // Handle missing country code
+      if (!acc[country]) {
+        acc[country] = {
+          country_code: country,
+          rendimentoLiquido: 0,
+          impostoPago: 0, // Initialize impostoPago to 0
+        };
+      }
+      // Calculate net income: delta - commission
+      const netIncome = (row.delta || 0) - (row.commission || 0);
+      acc[country].rendimentoLiquido += netIncome;
+      // Imposto Pago is always 0 as per requirement
+      // acc[country].impostoPago += 0; // No need to add 0 explicitly
+
+      return acc;
+    }, {});
+
+    // Convert the grouped object back to an array
+    return Object.values(grouped);
+  }, [optionSaleDetails]); // Recalculate when optionSaleDetails changes
+
+  // Calculate totals for the grouped option data
+  const optionTotals = useMemo(() => groupedOptionData.reduce(
+    (acc, group) => {
+      acc.rendimentoLiquido += group.rendimentoLiquido || 0;
+      acc.imposto += group.impostoPago || 0; // Sum the impostoPago (which is 0)
       return acc;
     },
-    { rendimentoLiquido: 0, imposto: 0 } // Initial values, imposto is 0 for now
-  ), [optionSaleDetails]); // Recalculate only when optionSaleDetails changes
+    { rendimentoLiquido: 0, imposto: 0 } // Initial values
+  ), [groupedOptionData]); // Recalculate only when groupedOptionData changes
 
   // Use filtered data directly
   // const filteredData = stockSaleDetails; // No longer needed
@@ -314,22 +330,11 @@ export default function TaxPage() {
 
   return (
     <Box>
-      {/* Main Title */}
-      <Typography variant="h4" component="h1" gutterBottom>
-        Anexo J - 9 Rendimentos de Incrementos Patrimoniais (Categoria G)
-       </Typography>
-
-      {/* Section 9.2 Title - Moved up as 9.1 is removed */}
-      <Typography variant="h5" component="h2" gutterBottom sx={{ mt: 4 }}> {/* Adjusted margin top */}
-        9.2 Incrementos Patrimoniais de Opção de Englobamento
+      {/* Year Filter - Moved to top */}
+      <Typography variant="subtitle1" gutterBottom> {/* Removed sx={{ mt: 2 }} */}
+        Select Year
       </Typography>
-
-
-      {/* Year Filter - Moved here to apply to section 9.2 */}
-      <Typography variant="subtitle1" gutterBottom sx={{ mt: 2 }}>
-        Select Year for Section 9.2 Tables:
-      </Typography>
-      <Box sx={{ mb: 3, maxWidth: 150 }}>
+      <Box sx={{ mb: 3, maxWidth: 150 }}> {/* Kept mb: 3 */}
         <FormControl fullWidth size="small">
           <InputLabel id="year-select-label">Year</InputLabel>
           <Select
@@ -350,6 +355,16 @@ export default function TaxPage() {
         </FormControl>
       </Box>
 
+      {/* Main Title */}
+      <Typography variant="h4" component="h1" gutterBottom sx={{ mt: 2 }}> {/* Added margin top */}
+        Anexo J - 9 Rendimentos de Incrementos Patrimoniais (Categoria G)
+       </Typography>
+
+      {/* Section 9.2 Title - Moved up as 9.1 is removed */}
+      <Typography variant="h5" component="h2" gutterBottom sx={{ mt: 4 }}> {/* Kept original margin top */}
+        9.2 Incrementos Patrimoniais de Opção de Englobamento
+      </Typography>
+
       {/* Stock Error Display - Corrected: Only one block */}
       {error && (
         <Typography color="error" sx={{ mb: 2 }}>
@@ -359,7 +374,7 @@ export default function TaxPage() {
 
       {/* Table 9.2 A: Stock Sale Details */}
       <Typography variant="h6" component="h2" gutterBottom sx={{ mt: 4 }}>
-         A - Alienação Onerosa de Partes Sociais e Outros Valores Mobiliários [art.º 10.º, n.º 1, al. b), do CIRS] (Código G01)
+         A - Alienação Onerosa de Partes Sociais e Outros Valores Mobiliários [art.º 10.º, n.º 1, al. b), do CIRS]
       </Typography>
       <TableContainer component={Paper} sx={{ mb: 1 }}> {/* Reduced bottom margin */}
         <Table size="small" aria-label="stock sale details table">
@@ -390,7 +405,8 @@ export default function TaxPage() {
               // Use a more stable key if available, like a unique ID from the backend if SaleDetail gets one
               <TableRow key={`${row.ISIN}-${row.SaleDate}-${index}`}>
                 <StyledTableBodyCell>{951 + index}</StyledTableBodyCell>
-                <StyledTableBodyCell>{getCountryCode(row.ISIN)}</StyledTableBodyCell>
+                {/* Display the full country_code string */}
+                <StyledTableBodyCell>{row.country_code || ''}</StyledTableBodyCell>
                 <StyledTableBodyCell>G01</StyledTableBodyCell>
                 <StyledTableBodyCell>{getYear(row.SaleDate)}</StyledTableBodyCell>
                 <StyledTableBodyCell>{getMonth(row.SaleDate)}</StyledTableBodyCell>
@@ -452,59 +468,47 @@ export default function TaxPage() {
 
       {/* Table 9.2 B: Option Sale Details */}
       <Typography variant="h6" component="h2" gutterBottom sx={{ mt: 4 }}>
-         B - Outros Incrementos Patrimoniais de Opção de Englobamento [art.º 10.º, n.º 1, als. c), e) e h), do CIRS] (Código G30)
+         B - Outros Incrementos Patrimoniais de Opção de Englobamento [art.º 10.º, n.º 1, als. c), e) e h), do CIRS]
       </Typography>
       <TableContainer component={Paper} sx={{ mb: 1 }}> {/* Reduced bottom margin */}
         <Table size="small" aria-label="option sale details table">
           <TableHead>
             <TableRow>
-              {/* Add empty cell for visual counter column */}
-              <StyledTableCell sx={{ width: '30px' }}></StyledTableCell>
               <StyledTableCell>Nº Linha<br />(991 a ...)</StyledTableCell>
               <StyledTableCell>Código Rendimento</StyledTableCell>
               <StyledTableCell>País da Fonte</StyledTableCell>
               <StyledTableCell>Rendimento Líquido</StyledTableCell>
               <StyledTableCell>Imposto Pago<br />no Estrangeiro</StyledTableCell>
               <StyledTableCell>País da<br />Contraparte</StyledTableCell>
-              {/* Add empty cell for delete button column */}
-              <StyledTableCell sx={{ width: '50px' }}></StyledTableCell>
             </TableRow>
           </TableHead>
           <TableBody>
-            {/* Example Row Structure - Replace with map when data/editing is implemented */}
-            {optionSaleDetails.length > 0 ? (
-              optionSaleDetails.map((row, index) => (
-                // Use the correct key 'close_date' in the key prop
-                <TableRow key={`${row.product_name || 'option'}-${row.close_date}-${index}`}>
-                   <StyledTableBodyCell sx={{ fontWeight: 'bold' }}>{index + 1}</StyledTableBodyCell> {/* Visual Counter */}
+            {/* Render grouped and aggregated option data */}
+            {groupedOptionData.length > 0 ? (
+              groupedOptionData.map((group, index) => (
+                // Use country_code in the key for stability
+                <TableRow key={`${group.country_code}-${index}`}>
                    <StyledTableBodyCell>{991 + index}</StyledTableBodyCell>
-                   {/* Placeholder cells resembling inputs/selects */}
-                   <StyledTableBodyCell align="left">G30 - Operações relativas a instrum...</StyledTableBodyCell> {/* Placeholder */}
-                   {/* Placeholder for País da Fonte - Needs data */}
+                   <StyledTableBodyCell align="left">G30</StyledTableBodyCell>
+                   {/* Display the country code */}
+                   <StyledTableBodyCell align="left">{group.country_code}</StyledTableBodyCell>
+                   {/* Display the aggregated Rendimento Líquido */}
+                   <StyledTableBodyCell>{(group.rendimentoLiquido || 0).toFixed(2)}</StyledTableBodyCell>
+                   {/* Display the Imposto Pago (always 0) */}
+                   <StyledTableBodyCell>{(group.impostoPago || 0).toFixed(2)}</StyledTableBodyCell>
+                   {/* Placeholder for País da Contraparte */}
                    <StyledTableBodyCell align="left"></StyledTableBodyCell>
-                   {/* Use the correct key 'delta' for Rendimento Líquido */}
-                   <StyledTableBodyCell>{(row.delta || 0).toFixed(2)}</StyledTableBodyCell>
-                   {/* Placeholder for Imposto Pago - using commission for now */}
-                   {/* *** Adjust 'row.commission' if Imposto Pago comes from a different field *** */}
-                   <StyledTableBodyCell>{(row.commission || 0).toFixed(2)}</StyledTableBodyCell>
-                   {/* Placeholder for País da Contraparte - Needs data */}
-                   <StyledTableBodyCell align="left"></StyledTableBodyCell>
-                   <StyledTableBodyCell>
-                     <IconButton size="small" disabled> {/* Disable delete for now */}
-                       <DeleteIcon fontSize="small" />
-                     </IconButton>
-                   </StyledTableBodyCell>
                  </TableRow>
               ))
             ) : !optionError ? (
               <TableRow>
-                 {/* Adjusted colSpan for new columns (counter + delete) */}
-                <StyledTableBodyCell colSpan={8}>No option sale data available for the selected year.</StyledTableBodyCell>
+                 {/* Adjusted colSpan */}
+                <StyledTableBodyCell colSpan={6}>No option sale data available for the selected year.</StyledTableBodyCell>
               </TableRow>
             ) : (
               <TableRow>
                  {/* Show error message if fetch failed */}
-                <StyledTableBodyCell colSpan={8}>Error loading option data.</StyledTableBodyCell>
+                <StyledTableBodyCell colSpan={6}>Error loading option data.</StyledTableBodyCell>
               </TableRow>
             )}
              {/* Static example row from image if needed for layout testing */}
