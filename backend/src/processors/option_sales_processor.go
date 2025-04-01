@@ -247,6 +247,7 @@ func createOptionSaleDetail(openTx, closeTx *models.ProcessedTransaction, quanti
 		Delta:          delta,
 		OpenOrderID:    openTx.OrderID,
 		CloseOrderID:   closeTx.OrderID,
+		CountryCode:    utils.GetCountryCodeString(openTx.ISIN), // Add country code using the utility function
 	}
 }
 

@@ -93,6 +93,7 @@ func (p *stockProcessorImpl) Process(transactions []models.ProcessedTransaction)
 					BuyExchangeRate:  currentPurchase.ExchangeRate,                    // Add buy exchange rate
 					Commission:       utils.RoundFloat(totalDetailCommission, 2),      // Use the combined commission
 					Delta:            utils.RoundFloat(buyAmountEUR+saleAmountEUR, 2), // Use pre-calculated values
+					CountryCode:      utils.GetCountryCodeString(isin),                // Add country code using the utility function
 				}
 				stockSaleDetails = append(stockSaleDetails, saleDetail) // Appending to renamed variable
 

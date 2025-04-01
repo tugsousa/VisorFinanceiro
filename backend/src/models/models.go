@@ -50,6 +50,7 @@ type SaleDetail struct {
 	BuyAmountEUR     float64 // Purchase amount in EUR
 	SaleExchangeRate float64 // Exchange rate used for the sale transaction
 	Delta            float64 // Profit/Loss (SaleAmountEUR - BuyAmountEUR)
+	CountryCode      string  `json:"country_code"` // Country code derived from ISIN (e.g., "840 - United States of America (the)")
 }
 
 // PurchaseLot represents remaining unsold purchase lots
@@ -82,6 +83,7 @@ type OptionSaleDetail struct {
 	Delta          float64 `json:"delta"`            // Profit/Loss (CloseAmountEUR - OpenAmountEUR for long, OpenAmountEUR - CloseAmountEUR for short)
 	OpenOrderID    string  `json:"open_order_id"`    // Optional: Order ID of the opening transaction
 	CloseOrderID   string  `json:"close_order_id"`   // Optional: Order ID of the closing transaction
+	CountryCode    string  `json:"country_code"`     // Country code derived from ISIN (e.g., "840 - United States of America (the)")
 }
 
 // OptionHolding represents an open option position (either long or short)
