@@ -2,6 +2,7 @@ package processors
 
 import (
 	"TAXFOLIO/src/models"
+	"TAXFOLIO/src/utils" // Added import for country utils
 	"math"
 	"strings"
 )
@@ -38,7 +39,8 @@ func (p *dividendProcessorImpl) Calculate(transactions []models.ProcessedTransac
 		if len(t.ISIN) < 2 {
 			continue // Skip invalid ISINs
 		}
-		country := t.ISIN[:2]
+		// Get the formatted country string (e.g., "840 - United States of America (the)")
+		countryFormattedString := utils.GetCountryCodeString(t.ISIN)
 
 		// Use AmountEUR directly (already converted to EUR)
 		amount := t.AmountEUR
@@ -50,17 +52,18 @@ func (p *dividendProcessorImpl) Calculate(transactions []models.ProcessedTransac
 		if _, ok := result[year]; !ok {
 			result[year] = make(map[string]map[string]float64)
 		}
-		if _, ok := result[year][country]; !ok {
-			result[year][country] = make(map[string]float64)
-			result[year][country]["gross_amt"] = 0.0
-			result[year][country]["taxed_amt"] = 0.0
+		// Use the formatted country string as the key
+		if _, ok := result[year][countryFormattedString]; !ok {
+			result[year][countryFormattedString] = make(map[string]float64)
+			result[year][countryFormattedString]["gross_amt"] = 0.0
+			result[year][countryFormattedString]["taxed_amt"] = 0.0
 		}
 
-		// Add the amount to the appropriate field (gross_amt or taxed_amt)
+		// Add the amount to the appropriate field (gross_amt or taxed_amt) using the formatted key
 		if transactionType == "dividend" {
-			result[year][country]["gross_amt"] += amount
+			result[year][countryFormattedString]["gross_amt"] += amount
 		} else if transactionType == "dividendtax" {
-			result[year][country]["taxed_amt"] += amount
+			result[year][countryFormattedString]["taxed_amt"] += amount
 		}
 	}
 
