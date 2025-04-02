@@ -19,7 +19,56 @@ import {
 } from '@mui/material';
 import DeleteIcon from '@mui/icons-material/Delete'; // Import Delete Icon
 
-// Styled components for the table to match the image
+// CSS for the new summary tables
+const summaryTableStyles = `
+  .summary-container {
+      margin-top: 10px;
+      width: 100%;
+      margin-bottom: 20px; /* Add some bottom margin */
+  }
+  .summary-table {
+      width: 100%;
+      border-collapse: collapse;
+      background-color: white;
+      color: #0288d1; /* Blue text color */
+      font-family: Arial, sans-serif; /* Match font */
+  }
+  .summary-table td {
+      border: none;
+      padding: 4px; /* Reduced padding */
+      font-size: 12px; /* Slightly smaller font */
+      background-color: white;
+      line-height: 1.2; /* Tighter line height */
+      vertical-align: middle; /* Align vertically */
+  }
+  .summary-header {
+      border-bottom: 1px solid #ccc !important;
+      text-align: center;
+      padding-bottom: 3px;
+      font-weight: bold; /* Make headers bold */
+  }
+  /* Special handling for headers with line breaks */
+  .summary-header .header-line {
+      display: block; /* Ensure lines stack */
+  }
+  .summary-header .header-separator {
+      display: block; /* Hide separator by default */
+      content: " - ";
+      white-space: pre;
+      font-weight: normal; /* Separator not bold */
+      line-height: 0.5; /* Reduce space taken by separator */
+  }
+  .summary-value {
+      text-align: right;
+  }
+  .control-sum {
+      text-align: left;
+      font-weight: bold; /* Make "Soma de Controlo" bold */
+  }
+`;
+
+
+// Styled components for the main data tables (unchanged)
 const StyledTableCell = styled(TableCell)(({ theme }) => ({
   backgroundColor: '#90caf9', // Darker blue header (Material UI blue[200])
   color: theme.palette.common.black,
@@ -411,6 +460,9 @@ export default function TaxPage() {
 
   return (
     <Box>
+      {/* Inject summary table styles */}
+      <style dangerouslySetInnerHTML={{ __html: summaryTableStyles }} />
+
       {/* Year Filter - Moved to top */}
       <Typography variant="subtitle1" gutterBottom> {/* Removed sx={{ mt: 2 }} */}
         Select Year
@@ -503,29 +555,43 @@ export default function TaxPage() {
       {/* Add Line Button (Placeholder/Disabled) */}
 
       {/* Dividend Totals Section (8A) */}
-      <Typography variant="body1" component="h3" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
-        Soma de Controlo (8A)
-      </Typography>
-      <TableContainer component={Paper} sx={{ mb: 4, maxWidth: '80%' }}>
-        <Table size="small" aria-label="dividend control sum table">
-          <TableHead>
-            <TableRow>
-              <StyledTableCell>Rendimento Bruto</StyledTableCell>
-              <StyledTableCell>Imposto Pago no Estrangeiro<br />No país da fonte</StyledTableCell>
-              <StyledTableCell>Imposto Pago no Estrangeiro<br />Imposto Retido</StyledTableCell>
-              <StyledTableCell>Imposto Retido em Portugal<br />Retenção na Fonte</StyledTableCell>
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            <TableRow>
-              <StyledTableBodyCell>{dividendTotals.rendimentoBruto.toFixed(2)} €</StyledTableBodyCell>
-              <StyledTableBodyCell>{dividendTotals.impostoFonte.toFixed(2)} €</StyledTableBodyCell>
-              <StyledTableBodyCell>{dividendTotals.impostoRetido.toFixed(2)} €</StyledTableBodyCell> {/* Placeholder total */}
-              <StyledTableBodyCell>{dividendTotals.retencaoFonte.toFixed(2)} €</StyledTableBodyCell> {/* Placeholder total */}
-            </TableRow>
-          </TableBody>
-        </Table>
-      </TableContainer>
+      {/* Dividend Totals Section (8A) - New HTML Structure */}
+      <div className="summary-container">
+        <table className="summary-table">
+          <thead> {/* Use thead for semantic structure */}
+            <tr>
+              <td className="summary-header"></td> {/* Empty header for the first column */}
+              <td className="summary-header">
+                  <span className="header-line">Rendimento Bruto</span>
+              </td>
+              <td className="summary-header">
+                  <span className="header-line">Imposto Pago no Estrangeiro</span>
+                  <span className="header-separator">-</span>
+                  <span className="header-line">No país da fonte</span>
+              </td>
+              <td className="summary-header">
+                  <span className="header-line">Imposto Pago no Estrangeiro</span>
+                  <span className="header-separator">-</span>
+                  <span className="header-line">Imposto Retido</span>
+              </td>
+              <td className="summary-header">
+                  <span className="header-line">Imposto Retido em Portugal</span>
+                  <span className="header-separator">-</span>
+                  <span className="header-line">Retenção na Fonte</span>
+              </td>
+            </tr>
+          </thead>
+          <tbody> {/* Use tbody for semantic structure */}
+            <tr>
+              <td className="control-sum">Soma de Controlo</td>
+              <td className="summary-value">{dividendTotals.rendimentoBruto.toFixed(2)} €</td>
+              <td className="summary-value">{dividendTotals.impostoFonte.toFixed(2)} €</td>
+              <td className="summary-value">{dividendTotals.impostoRetido.toFixed(2)} €</td>
+              <td className="summary-value">{dividendTotals.retencaoFonte.toFixed(2)} €</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
 
 
       {/* Main Title */}
@@ -607,30 +673,37 @@ export default function TaxPage() {
       </TableContainer>
 
       {/* Stock Totals Section (9.2A) */}
-      <Typography variant="body1" component="h3" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}> {/* Reverted margin top */}
-        Soma de Controlo (9.2A)
-      </Typography>
-      <TableContainer component={Paper} sx={{ mb: 4, maxWidth: '80%' }}>
-        <Table size="small" aria-label="stock control sum table">
-          <TableHead>
-            <TableRow>
-              {/* Use StyledTableCell for consistency or create specific styles */}
-              <StyledTableCell>Valor Realização</StyledTableCell>
-              <StyledTableCell>Valor Aquisição</StyledTableCell>
-              <StyledTableCell>Despesas e Encargos</StyledTableCell>
-              <StyledTableCell>Imposto pago no Estrangeiro</StyledTableCell>
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            <TableRow>
-              <StyledTableBodyCell>{stockTotals.realizacao.toFixed(2)} €</StyledTableBodyCell>
-              <StyledTableBodyCell>{stockTotals.aquisicao.toFixed(2)} €</StyledTableBodyCell>
-              <StyledTableBodyCell>{stockTotals.despesas.toFixed(2)} €</StyledTableBodyCell>
-              <StyledTableBodyCell>{stockTotals.imposto.toFixed(2)} €</StyledTableBodyCell>
-            </TableRow>
-          </TableBody>
-        </Table>
-      </TableContainer>
+      {/* Stock Totals Section (9.2A) - New HTML Structure */}
+      <div className="summary-container">
+        <table className="summary-table">
+          <thead>
+            <tr>
+              <td className="summary-header"></td> {/* Empty header */}
+              <td className="summary-header">
+                  <span className="header-line">Valor Realização</span>
+              </td>
+              <td className="summary-header">
+                  <span className="header-line">Valor Aquisição</span>
+              </td>
+              <td className="summary-header">
+                  <span className="header-line">Despesas e Encargos</span>
+              </td>
+              <td className="summary-header">
+                  <span className="header-line">Imposto pago no Estrangeiro</span>
+              </td>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td className="control-sum">Soma de Controlo</td>
+              <td className="summary-value">{stockTotals.realizacao.toFixed(2)} €</td>
+              <td className="summary-value">{stockTotals.aquisicao.toFixed(2)} €</td>
+              <td className="summary-value">{stockTotals.despesas.toFixed(2)} €</td>
+              <td className="summary-value">{stockTotals.imposto.toFixed(2)} €</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
 
       {/* Option Error Display */}
       {optionError && (
@@ -704,26 +777,29 @@ export default function TaxPage() {
       </TableContainer>
 
       {/* Option Totals Section (9.2B) */}
-      <Typography variant="body1" component="h3" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}> {/* Reverted margin top */}
-        Soma de Controlo (9.2B)
-      </Typography>
-      <TableContainer component={Paper} sx={{ mb: 4, maxWidth: '50%' }}> {/* Adjust width as needed */}
-        <Table size="small" aria-label="option control sum table">
-          <TableHead>
-            <TableRow>
-              <StyledTableCell>Rendimento Líquido</StyledTableCell>
-              <StyledTableCell>Imposto pago no Estrangeiro</StyledTableCell>
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            <TableRow>
-              <StyledTableBodyCell>{optionTotals.rendimentoLiquido.toFixed(2)} €</StyledTableBodyCell>
-              {/* Use calculated total for imposto */}
-              <StyledTableBodyCell>{optionTotals.imposto.toFixed(2)} €</StyledTableBodyCell>
-            </TableRow>
-          </TableBody>
-        </Table>
-      </TableContainer>
+      {/* Option Totals Section (9.2B) - New HTML Structure */}
+      <div className="summary-container">
+        <table className="summary-table">
+          <thead>
+            <tr>
+              <td className="summary-header"></td> {/* Empty header */}
+              <td className="summary-header">
+                  <span className="header-line">Rendimento Líquido</span>
+              </td>
+              <td className="summary-header">
+                  <span className="header-line">Imposto pago no Estrangeiro</span>
+              </td>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td className="control-sum">Soma de Controlo</td>
+              <td className="summary-value">{optionTotals.rendimentoLiquido.toFixed(2)} €</td>
+              <td className="summary-value">{optionTotals.imposto.toFixed(2)} €</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
 
     </Box>
   );
