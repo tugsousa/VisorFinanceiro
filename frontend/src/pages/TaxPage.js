@@ -14,10 +14,7 @@ import {
   TableRow,
   Paper,
   styled,
-  Button, // Import Button
-  IconButton // Import IconButton for delete icon
 } from '@mui/material';
-import DeleteIcon from '@mui/icons-material/Delete'; // Import Delete Icon
 
 // CSS for the new summary tables
 const summaryTableStyles = `
@@ -72,12 +69,12 @@ const summaryTableStyles = `
 const StyledTableCell = styled(TableCell)(({ theme }) => ({
   backgroundColor: '#e5f5ff', // Header Background Color (White)
   color: '#50809b', // Keep Header Text Color
-  fontWeight: 'bold',
+  fontWeight: 'normal',
   border: '1px solid #0084cc', // Keep Border Color
   textAlign: 'center',
-  padding: '6px 8px', // Reduced padding
-  fontSize: '0.8rem', // Smaller font size
-  verticalAlign: 'top', // Align header text top
+  padding: '1px 2px', // Reduced padding
+  fontSize: '0.75rem', // Smaller font size
+  verticalAlign: 'center', // Align header text top
 }));
 
 const StyledNestedTableCell = styled(TableCell)(({ theme }) => ({
@@ -86,8 +83,9 @@ const StyledNestedTableCell = styled(TableCell)(({ theme }) => ({
   fontWeight: 'normal', // Normal weight for sub-headers
   border: '1px solid #0084cc', // Keep Border Color
   textAlign: 'center',
-  padding: '4px 6px', // Reduced padding
+  padding: '1px 2px', // Reduced padding
   fontSize: '0.75rem', // Smaller font size
+  verticalAlign: 'middle', // Explicitly set middle alignment
 }));
 
 const StyledTableBodyCell = styled(TableCell)(({ theme, align = 'center' }) => ({ // Allow alignment override
@@ -489,14 +487,14 @@ export default function TaxPage() {
         </FormControl>
       </Box>
       {/* Main Title */}
-      <Typography variant="h4" component="h1" gutterBottom sx={{ mt: 2 , color: '#0183cb' }}> {/* Added margin top */}
+      <Typography variant="h4" component="h1" gutterBottom sx={{ mt: 2 , color: '#0183cb', borderBottom: '1px solid #0183cb', pb: 1 ,  fontSize: '1.25rem'}}> {/* Added borderBottom and paddingBottom */}
         Anexo J - 8 Rendimentos Capitais (Categoria E)
        </Typography>
 
       {/* Wrap Section A (Dividends) */}
       <Box sx={{ pl: 2 }}>
         {/* Section Title A (under 8) */}
-        <Typography variant="h5" component="h2" gutterBottom sx={{ mt: 4, color: '#8d98a8' }}> {/* New Title Color */}
+        <Typography variant="h5" component="h2" gutterBottom sx={{ mt: 4, mb: 1, color: '#8d98a8', border: '1px solid grey', padding: '2px 8px', display: 'inline-block',  fontSize: '0.75rem' }}> {/* Changed mb: 2 to mb: 1 */}
           A
         </Typography>
 
@@ -599,14 +597,14 @@ export default function TaxPage() {
 
 
       {/* Main Title 9 */}
-      <Typography variant="h4" component="h1" gutterBottom sx={{ mt: 2, color: '#0183cb' }}> {/* New Title Color */}
+      <Typography variant="h4" component="h1" gutterBottom sx={{ mt: 2, color: '#0183cb', borderBottom: '1px solid #0183cb', pb: 1 ,  fontSize: '1.25rem'}}> {/* Added borderBottom and paddingBottom */}
         Anexo J - 9 Rendimentos de Incrementos Patrimoniais (Categoria G)
        </Typography>
 
       {/* Wrap Section 9.2 and its subsections */}
       <Box sx={{ pl: 2 }}>
         {/* Section 9.2 Title */}
-        <Typography variant="h5" component="h2" gutterBottom sx={{ mt: 4, color: '#58839b' }}> {/* New Title Color */}
+        <Typography variant="h5" component="h2" gutterBottom sx={{ mt: 4, color: '#58839b',  fontSize: '1rem' }}> {/* New Title Color */}
           9.2 Incrementos Patrimoniais de Opção de Englobamento
         </Typography>
 
@@ -619,10 +617,15 @@ export default function TaxPage() {
 
         {/* Wrap Subsection 9.2 A (Stock Sales) */}
         <Box sx={{ pl: 2 }}>
-          {/* Table 9.2 A Title */}
-          <Typography variant="h6" component="h2" gutterBottom sx={{ mt: 4, color: '#8d98a8' }}> {/* New Title Color */}
-             A - Alienação Onerosa de Partes Sociais e Outros Valores Mobiliários [art.º 10.º, n.º 1, al. b), do CIRS]
-          </Typography>
+          {/* Refactored Title 9.2 A to box 'A' and align baseline */}
+          <Box sx={{ mt: 4, display: 'flex', alignItems: 'baseline', mb: 1 }}> {/* Use Flexbox for alignment, added mb */}
+            <Typography variant="h5" component="span" sx={{ border: '0.5px solid grey', padding: '2px 8px', display: 'inline-block', mr: 1, color: '#8d98a8',  fontSize: '0.75rem' }}> {/* Boxed 'A' */}
+              A
+            </Typography>
+            <Typography variant="h6" component="span" sx={{ color: '#8d98a8',  fontSize: '0.75rem' }}> {/* Rest of the title */}
+               Alienação Onerosa de Partes Sociais e Outros Valores Mobiliários [art.º 10.º, n.º 1, al. b), do CIRS]
+            </Typography>
+          </Box>
           <TableContainer component={Paper} sx={{ mb: 1 }}> {/* Reduced bottom margin */}
             <Table size="small" aria-label="stock sale details table">
               <TableHead>
@@ -724,9 +727,18 @@ export default function TaxPage() {
         )}
 
         {/* Table 9.2 B Title */}
-        <Typography variant="h6" component="h2" gutterBottom sx={{ mt: 4, color: '#8d98a8' }}> {/* New Title Color */}
-           B - Outros Incrementos Patrimoniais de Opção de Englobamento [art.º 10.º, n.º 1, als. c), e) e h), do CIRS]
-        </Typography>
+        {/* Note: The 'B' identifier itself is part of the title string here, not separate like 'A' above. */}
+        {/* If you want 'B' boxed separately, the structure needs changing. */}
+        {/* For now, applying border to the whole title H6 as requested might look odd. */}
+        {/* Refactored Title 9.2 B to box only the 'B' and align baseline */}
+        <Box sx={{ mt: 4, display: 'flex', alignItems: 'baseline', mb: 1 }}> {/* Ensured alignItems is baseline, added mb */}
+          <Typography variant="h5" component="span" sx={{ border: '1px solid grey', padding: '2px 8px', display: 'inline-block', mr: 1, color: '#8d98a8',  fontSize: '0.75rem' }}> {/* Boxed 'B' */}
+            B
+          </Typography>
+          <Typography variant="h6" component="span" sx={{ color: '#8d98a8',  fontSize: '0.75rem' }}> {/* Rest of the title */}
+             Outros Incrementos Patrimoniais de Opção de Englobamento [art.º 10.º, n.º 1, als. c), e) e h), do CIRS]
+          </Typography>
+        </Box>
         <TableContainer component={Paper} sx={{ mb: 1 }}> {/* Reduced bottom margin */}
           <Table size="small" aria-label="option sale details table">
             <TableHead>
