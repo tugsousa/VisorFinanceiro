@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"TAXFOLIO/src/models"
 	"TAXFOLIO/src/services" // Import the new services package
 	"encoding/json"
 	"fmt"
@@ -107,3 +108,35 @@ func (h *UploadHandler) HandleGetOptionSales(w http.ResponseWriter, r *http.Requ
 }
 
 // parseUploadedFile function is removed as its logic is now handled by the service layer.
+
+// HandleGetDividendTaxSummary retrieves the latest processed dividend tax summary.
+func (h *UploadHandler) HandleGetDividendTaxSummary(w http.ResponseWriter, r *http.Request) {
+	// 1. Get the dividend tax summary from the service
+	taxSummary, err := h.uploadService.GetDividendTaxSummary()
+	if err != nil {
+		// Handle potential errors, e.g., if no data is available yet
+		// Check for the specific error message used in the service
+		if err.Error() == "no upload processed yet, cannot generate dividend tax summary" {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK) // OK status, but empty data
+			// Return an empty JSON object or map
+			json.NewEncoder(w).Encode(map[string]interface{}{}) // Return empty map
+			return
+		}
+		// For other errors, return an internal server error
+		http.Error(w, fmt.Sprintf("Error retrieving dividend tax summary: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	// 2. Return the DividendTaxResult as JSON
+	// Ensure we return an empty map if the result is nil (though the service check should prevent this)
+	if taxSummary == nil {
+		// Use the correct type from the models package
+		taxSummary = make(models.DividendTaxResult) // Ensure it's an empty map, not null
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(taxSummary); err != nil {
+		http.Error(w, "Error generating JSON response for dividend tax summary", http.StatusInternalServerError)
+	}
+}

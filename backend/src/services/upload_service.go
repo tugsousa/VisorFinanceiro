@@ -1,6 +1,7 @@
 package services
 
 import (
+	"TAXFOLIO/src/models"
 	"TAXFOLIO/src/parsers"
 	"TAXFOLIO/src/processors"
 	"fmt"
@@ -16,8 +17,9 @@ type uploadServiceImpl struct {
 	optionProcessor       processors.OptionProcessor
 	cashMovementProcessor processors.CashMovementProcessor // Added
 
-	// Store the latest result
-	latestResult *UploadResult
+	// Store the latest result and the transactions that generated it
+	latestResult                *UploadResult
+	latestProcessedTransactions []models.ProcessedTransaction // Added to store transactions
 }
 
 // NewUploadService creates a new instance of UploadService with its dependencies.
@@ -76,8 +78,9 @@ func (s *uploadServiceImpl) ProcessUpload(fileReader io.Reader) (*UploadResult, 
 		CashMovements:     cashMovements, // Added
 	}
 
-	// Store the latest result before returning
+	// Store the latest result and transactions before returning
 	s.latestResult = result
+	s.latestProcessedTransactions = processedTransactions // Store the transactions
 
 	return result, nil
 }
@@ -91,4 +94,18 @@ func (s *uploadServiceImpl) GetLatestUploadResult() (*UploadResult, error) {
 		return &UploadResult{}, nil
 	}
 	return s.latestResult, nil
+}
+
+// GetDividendTaxSummary calculates and returns the dividend summary specifically for tax reporting.
+func (s *uploadServiceImpl) GetDividendTaxSummary() (models.DividendTaxResult, error) {
+	if s.latestProcessedTransactions == nil {
+		// Return an empty result or an error if no upload has been processed yet
+		// Returning an error is likely better here to indicate no data is available.
+		return nil, fmt.Errorf("no upload processed yet, cannot generate dividend tax summary")
+	}
+
+	// Use the stored transactions to calculate the tax summary
+	taxSummary := s.dividendProcessor.CalculateTaxSummary(s.latestProcessedTransactions)
+
+	return taxSummary, nil
 }

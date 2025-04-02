@@ -20,5 +20,6 @@ type UploadResult struct {
 // UploadService defines the interface for the core upload processing logic.
 type UploadService interface {
 	ProcessUpload(fileReader io.Reader) (*UploadResult, error)
-	GetLatestUploadResult() (*UploadResult, error) // Added method to get stored result
+	GetLatestUploadResult() (*UploadResult, error)            // Added method to get stored result
+	GetDividendTaxSummary() (models.DividendTaxResult, error) // Added method for the new tax summary
 }

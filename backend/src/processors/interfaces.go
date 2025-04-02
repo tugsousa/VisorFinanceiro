@@ -10,7 +10,8 @@ type DividendResult map[string]map[string]map[string]float64
 
 // DividendProcessor defines the interface for calculating dividend results.
 type DividendProcessor interface {
-	Calculate(transactions []models.ProcessedTransaction) DividendResult
+	Calculate(transactions []models.ProcessedTransaction) DividendResult // Deprecated: Use CalculateTaxSummary for tax-specific format
+	CalculateTaxSummary(transactions []models.ProcessedTransaction) models.DividendTaxResult
 }
 
 // StockProcessor defines the interface for processing stock transactions.

@@ -102,15 +102,20 @@ export default function TaxPage() {
   const [availableYears, setAvailableYears] = useState([]);
   const [error, setError] = useState(null); // For stock error handling
   const [optionError, setOptionError] = useState(null); // Separate error state for options
+  const [dividendTaxData, setDividendTaxData] = useState([]); // State for the new dividend tax table data
+  const [allDividendTaxData, setAllDividendTaxData] = useState({}); // Store all fetched dividend data (object format)
+  const [dividendError, setDividendError] = useState(null); // Error state for dividends
 
-  // Fetch actual data (stock and option sales) and available years from backend
+  // Fetch actual data (stock, option sales, dividend tax) and available years from backend
   useEffect(() => {
     const fetchData = async () => {
       setError(null); // Reset stock error state
       setOptionError(null); // Reset option error state
-      let allYears = new Set(); // Use a Set to collect unique years from both sources
+      setDividendError(null); // Reset dividend error state
+      let allYears = new Set(); // Use a Set to collect unique years from all sources
       let currentStockSales = [];
       let currentOptionSales = [];
+      let currentDividendData = {}; // Initialize as empty object
       let latestYearOverall = ''; // Initialize as empty string
 
       // Fetch Stock Sales
@@ -186,8 +191,34 @@ export default function TaxPage() {
         setOptionError(`Failed to load option sales data: ${e.message}`);
       }
 
-      // Combine years and set state
-      const sortedYears = [...allYears].sort((a, b) => b - a);
+      // Fetch Dividend Tax Summary
+      try {
+        const dividendResponse = await fetch('http://localhost:8080/api/dividend-tax-summary');
+        if (!dividendResponse.ok) {
+          const errorText = await dividendResponse.text();
+          throw new Error(`HTTP error! status: ${dividendResponse.status} - ${errorText || 'No error details'}`);
+        }
+        const dividendData = await dividendResponse.json();
+        currentDividendData = dividendData || {}; // Expecting an object like { "2023": { "Country": {...} } }
+        setAllDividendTaxData(currentDividendData); // Store the raw object format
+
+        // Add years from dividend data to the set
+        Object.keys(currentDividendData).forEach(year => {
+          if (year && !isNaN(year)) { // Basic validation for year key
+             allYears.add(Number(year)); // Add year as number
+          }
+        });
+
+      } catch (e) {
+        console.error("Failed to fetch dividend tax data:", e);
+        setDividendError(`Failed to load dividend tax data: ${e.message}`);
+        // Ensure data state is empty on error
+        setAllDividendTaxData({});
+      }
+
+
+      // Combine years from all sources and set state
+      const sortedYears = [...allYears].sort((a, b) => b - a); // Sort descending
       // Use empty array if no years found
       const finalAvailableYears = sortedYears.length > 0 ? sortedYears : [];
       setAvailableYears(finalAvailableYears);
@@ -200,13 +231,33 @@ export default function TaxPage() {
       // Ensure comparison is between numbers
       if (latestYearOverall) {
         const numLatestYear = Number(latestYearOverall); // Convert to number
+        const stringLatestYear = String(latestYearOverall); // Keep string version for object key access
+
         setStockSaleDetails(currentStockSales.filter(item => getYear(item.SaleDate) === numLatestYear));
         // Use the correct key 'close_date' for filtering and compare numbers
         setOptionSaleDetails(currentOptionSales.filter(item => getYear(item.close_date) === numLatestYear));
+
+        // Filter initial dividend data (transform object for the selected year into an array)
+        const initialDividendYearData = currentDividendData[stringLatestYear] || {};
+        const transformedInitialDividends = Object.entries(initialDividendYearData).map(([country, details], index) => ({
+          id: `${stringLatestYear}-${country}-${index}`, // Create a unique ID
+          linha: 801 + index,
+          codigo: 'E11',
+          paisFonte: country,
+          rendimentoBruto: details.gross_amt || 0,
+          impostoFonte: Math.abs(details.taxed_amt || 0), // Use absolute value for tax paid
+          // Add other fields as needed, potentially placeholders
+          impostoRetido: 0, // Placeholder
+          nifEntidade: '', // Placeholder
+          retencaoFonte: 0, // Placeholder
+        }));
+        setDividendTaxData(transformedInitialDividends);
+
       } else {
-        // If no year could be determined, ensure details are empty
+        // If no year could be determined, ensure all details are empty
         setStockSaleDetails([]);
         setOptionSaleDetails([]);
+        setDividendTaxData([]); // Clear dividend data too
       }
 
     };
@@ -235,10 +286,29 @@ export default function TaxPage() {
       });
       setOptionSaleDetails(filteredOptions);
 
+      // Filter Dividend Tax Data
+      const stringSelectedYear = String(selectedYearValue); // Ensure string for key access
+      const dividendYearData = allDividendTaxData[stringSelectedYear] || {};
+      const transformedDividends = Object.entries(dividendYearData).map(([country, details], index) => ({
+        id: `${stringSelectedYear}-${country}-${index}`, // Create a unique ID
+        linha: 801 + index,
+        codigo: 'E11',
+        paisFonte: country,
+        rendimentoBruto: details.gross_amt || 0,
+        impostoFonte: Math.abs(details.taxed_amt || 0), // Use absolute value for tax paid
+        // Add other fields as needed, potentially placeholders
+        impostoRetido: 0, // Placeholder - Needs clarification if this comes from backend
+        nifEntidade: '', // Placeholder
+        retencaoFonte: 0, // Placeholder - Needs clarification if this comes from backend
+      }));
+      setDividendTaxData(transformedDividends);
+
+
     } else {
       // If year is cleared or invalid, show no data
       setStockSaleDetails([]);
       setOptionSaleDetails([]);
+      setDividendTaxData([]); // Clear dividend data too
     }
   };
 
@@ -288,6 +358,20 @@ export default function TaxPage() {
     { rendimentoLiquido: 0, imposto: 0 } // Initial values
   ), [groupedOptionData]); // Recalculate only when groupedOptionData changes
 
+  // Calculate totals for the currently filtered dividend tax data
+  const dividendTotals = useMemo(() => dividendTaxData.reduce(
+    (acc, row) => {
+      acc.rendimentoBruto += row.rendimentoBruto || 0;
+      acc.impostoFonte += row.impostoFonte || 0; // Summing the 'Imposto Pago no Estrangeiro - No país da fonte' column
+      // Add other totals if needed, e.g., Imposto Retido, Retenção na Fonte
+      acc.impostoRetido += row.impostoRetido || 0; // Assuming this field exists and needs summing
+      acc.retencaoFonte += row.retencaoFonte || 0; // Assuming this field exists and needs summing
+      return acc;
+    },
+    { rendimentoBruto: 0, impostoFonte: 0, impostoRetido: 0, retencaoFonte: 0 } // Initial values
+  ), [dividendTaxData]); // Recalculate only when dividendTaxData changes
+
+
   // Use filtered data directly
   // const filteredData = stockSaleDetails; // No longer needed
 
@@ -317,9 +401,6 @@ export default function TaxPage() {
           </TableBody>
         </Table>
       </TableContainer>
-      {showAddButton && (
-        <Button variant="contained" size="small" sx={{ mb: 4 }} disabled>+ Adicionar Linha</Button>
-      )}
       {/* Optional: Add placeholder Soma de Controlo */}
        <Typography variant="body2" sx={{ mb: 4, fontStyle: 'italic' }}>
          Soma de Controlo for {title} - Placeholder
@@ -354,6 +435,98 @@ export default function TaxPage() {
           </Select>
         </FormControl>
       </Box>
+      {/* Main Title */}
+      <Typography variant="h4" component="h1" gutterBottom sx={{ mt: 2 }}> {/* Added margin top */}
+        Anexo J - 8 Rendimentos Capitais (Categoria E)
+       </Typography>
+
+      {/* Section 9.2 Title - Moved up as 9.1 is removed */}
+      <Typography variant="h5" component="h2" gutterBottom sx={{ mt: 4 }}> {/* Kept original margin top */}
+        A
+      </Typography>
+
+      {/* Dividend Error Display */}
+      {dividendError && (
+        <Typography color="error" sx={{ mb: 2, mt: 2 }}>
+          Dividend Tax Error: {dividendError}
+        </Typography>
+      )}
+
+      {/* Table 8 A: Dividend Tax Details */}
+      <TableContainer component={Paper} sx={{ mb: 1 }}>
+        <Table size="small" aria-label="dividend tax details table">
+          <TableHead>
+            <TableRow>
+              <StyledTableCell rowSpan={2}>Nº Linha<br />(801 a ...)</StyledTableCell>
+              <StyledTableCell rowSpan={2}>Código Rendimento</StyledTableCell>
+              <StyledTableCell rowSpan={2}>País da Fonte</StyledTableCell>
+              <StyledTableCell rowSpan={2}>Rendimento Bruto</StyledTableCell>
+              <StyledTableCell colSpan={3}>Imposto Pago no Estrangeiro</StyledTableCell>
+              <StyledTableCell colSpan={2}>Imposto Retido em Portugal</StyledTableCell>
+            </TableRow>
+            <TableRow>
+              <StyledNestedTableCell>No país da fonte</StyledNestedTableCell>
+              <StyledNestedTableCell>País do Agente Pagador Diretiva da Poupança 2003/48/CE<br />Código do País</StyledNestedTableCell>
+              <StyledNestedTableCell>Imposto retido</StyledNestedTableCell>
+              <StyledNestedTableCell>NIF da Entidade Retentora</StyledNestedTableCell>
+              <StyledNestedTableCell>Retenção na Fonte</StyledNestedTableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {dividendTaxData.length > 0 ? (
+              dividendTaxData.map((row) => (
+                <TableRow key={row.id}>
+                  <StyledTableBodyCell>{row.linha}</StyledTableBodyCell>
+                  <StyledTableBodyCell align="left">{row.codigo}</StyledTableBodyCell>
+                  <StyledTableBodyCell align="left">{row.paisFonte}</StyledTableBodyCell>
+                  <StyledTableBodyCell>{row.rendimentoBruto.toFixed(2)} €</StyledTableBodyCell>
+                  <StyledTableBodyCell>{row.impostoFonte.toFixed(2)} €</StyledTableBodyCell>
+                  {/* Placeholders for the next 4 columns as per image */}
+                  <StyledTableBodyCell></StyledTableBodyCell> {/* Código do País */}
+                  <StyledTableBodyCell>{row.impostoRetido.toFixed(2)}</StyledTableBodyCell> {/* Imposto retido */}
+                  <StyledTableBodyCell align="left">{row.nifEntidade}</StyledTableBodyCell> {/* NIF da Entidade Retentora */}
+                  <StyledTableBodyCell>{row.retencaoFonte.toFixed(2)}</StyledTableBodyCell> {/* Retenção na Fonte */}
+                </TableRow>
+              ))
+            ) : !dividendError ? (
+              <TableRow>
+                <StyledTableBodyCell colSpan={9}>No dividend data available for the selected year.</StyledTableBodyCell>
+              </TableRow>
+            ) : (
+               <TableRow>
+                 <StyledTableBodyCell colSpan={9}>Error loading dividend data.</StyledTableBodyCell>
+               </TableRow>
+            )}
+          </TableBody>
+        </Table>
+      </TableContainer>
+      {/* Add Line Button (Placeholder/Disabled) */}
+
+      {/* Dividend Totals Section (8A) */}
+      <Typography variant="body1" component="h3" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+        Soma de Controlo (8A)
+      </Typography>
+      <TableContainer component={Paper} sx={{ mb: 4, maxWidth: '80%' }}>
+        <Table size="small" aria-label="dividend control sum table">
+          <TableHead>
+            <TableRow>
+              <StyledTableCell>Rendimento Bruto</StyledTableCell>
+              <StyledTableCell>Imposto Pago no Estrangeiro<br />No país da fonte</StyledTableCell>
+              <StyledTableCell>Imposto Pago no Estrangeiro<br />Imposto Retido</StyledTableCell>
+              <StyledTableCell>Imposto Retido em Portugal<br />Retenção na Fonte</StyledTableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            <TableRow>
+              <StyledTableBodyCell>{dividendTotals.rendimentoBruto.toFixed(2)} €</StyledTableBodyCell>
+              <StyledTableBodyCell>{dividendTotals.impostoFonte.toFixed(2)} €</StyledTableBodyCell>
+              <StyledTableBodyCell>{dividendTotals.impostoRetido.toFixed(2)} €</StyledTableBodyCell> {/* Placeholder total */}
+              <StyledTableBodyCell>{dividendTotals.retencaoFonte.toFixed(2)} €</StyledTableBodyCell> {/* Placeholder total */}
+            </TableRow>
+          </TableBody>
+        </Table>
+      </TableContainer>
+
 
       {/* Main Title */}
       <Typography variant="h4" component="h1" gutterBottom sx={{ mt: 2 }}> {/* Added margin top */}
@@ -411,12 +584,12 @@ export default function TaxPage() {
                 <StyledTableBodyCell>{getYear(row.SaleDate)}</StyledTableBodyCell>
                 <StyledTableBodyCell>{getMonth(row.SaleDate)}</StyledTableBodyCell>
                 <StyledTableBodyCell>{getDay(row.SaleDate)}</StyledTableBodyCell> {/* Added Dia */}
-                <StyledTableBodyCell>{row.SaleAmountEUR.toFixed(2)}</StyledTableBodyCell>
+                <StyledTableBodyCell>{row.SaleAmountEUR.toFixed(2)} €</StyledTableBodyCell>
                 <StyledTableBodyCell>{getYear(row.BuyDate)}</StyledTableBodyCell>
                 <StyledTableBodyCell>{getMonth(row.BuyDate)}</StyledTableBodyCell>
                 <StyledTableBodyCell>{getDay(row.BuyDate)}</StyledTableBodyCell> {/* Added Dia */}
                 {/* Apply Math.abs() here */}
-                <StyledTableBodyCell>{Math.abs(row.BuyAmountEUR).toFixed(2)}</StyledTableBodyCell>
+                <StyledTableBodyCell>{Math.abs(row.BuyAmountEUR).toFixed(2)} €</StyledTableBodyCell>
                 <StyledTableBodyCell>{row.Commission.toFixed(2)}</StyledTableBodyCell>
                 {/* Placeholder cells for new columns */}
                 <StyledTableBodyCell></StyledTableBodyCell>
@@ -491,11 +664,11 @@ export default function TaxPage() {
                    <StyledTableBodyCell>{991 + index}</StyledTableBodyCell>
                    <StyledTableBodyCell align="left">G30</StyledTableBodyCell>
                    {/* Display the country code */}
-                   <StyledTableBodyCell align="left">{group.country_code}</StyledTableBodyCell>
+                    <StyledTableBodyCell align="left">{group.country_code}</StyledTableBodyCell>
                    {/* Display the aggregated Rendimento Líquido */}
-                   <StyledTableBodyCell>{(group.rendimentoLiquido || 0).toFixed(2)}</StyledTableBodyCell>
+                   <StyledTableBodyCell>{(group.rendimentoLiquido || 0).toFixed(2)} €</StyledTableBodyCell>
                    {/* Display the Imposto Pago (always 0) */}
-                   <StyledTableBodyCell>{(group.impostoPago || 0).toFixed(2)}</StyledTableBodyCell>
+                   <StyledTableBodyCell>{(group.impostoPago || 0).toFixed(2)} €</StyledTableBodyCell>
                    {/* Placeholder for País da Contraparte */}
                    <StyledTableBodyCell align="left"></StyledTableBodyCell>
                  </TableRow>

@@ -5,6 +5,7 @@ import (
 	"TAXFOLIO/src/utils" // Added import for country utils
 	"math"
 	"strings"
+	"time" // Import time package
 )
 
 // dividendProcessorImpl implements the DividendProcessor interface.
@@ -16,54 +17,101 @@ func NewDividendProcessor() DividendProcessor {
 }
 
 // Calculate processes the transactions and groups dividend amounts by year, country, and type.
+// Deprecated: Use CalculateTaxSummary for the new tax-specific format.
 func (p *dividendProcessorImpl) Calculate(transactions []models.ProcessedTransaction) DividendResult {
-	// Map to hold the results grouped by year, country, and type of amount (gross or taxed)
-	// Use the DividendResult type defined in interfaces.go
+	// ... (existing implementation remains for potential other uses) ...
 	result := make(DividendResult)
 
 	for _, t := range transactions {
-		// Determine if the transaction is a "dividendo" or "imposto sobre dividendo"
 		transactionType := strings.ToLower(t.OrderType)
 		if transactionType != "dividend" && transactionType != "dividendtax" {
-			continue // Skip other transaction types
+			continue
 		}
 
-		// Extract the year from the Date field
-		dateParts := strings.Split(t.Date, "-")
-		if len(dateParts) != 3 {
-			continue // Skip invalid dates
+		parsedTime, err := time.Parse("02-01-2006", t.Date) // Assuming DD-MM-YYYY format
+		if err != nil {
+			// Handle or log the error if the date format is incorrect
+			continue
 		}
-		year := dateParts[2] // Extract the year
+		year := parsedTime.Format("2006") // Extract the year as string "YYYY"
 
-		// Get the country code from ISIN (first 2 characters)
 		if len(t.ISIN) < 2 {
-			continue // Skip invalid ISINs
+			continue
 		}
-		// Get the formatted country string (e.g., "840 - United States of America (the)")
 		countryFormattedString := utils.GetCountryCodeString(t.ISIN)
+		amount := roundToTwoDecimalPlaces(t.AmountEUR)
 
-		// Use AmountEUR directly (already converted to EUR)
-		amount := t.AmountEUR
-
-		// Round the amount to 2 decimal places
-		amount = roundToTwoDecimalPlaces(amount)
-
-		// Initialize the map for the year and country if they don't exist
 		if _, ok := result[year]; !ok {
 			result[year] = make(map[string]map[string]float64)
 		}
-		// Use the formatted country string as the key
 		if _, ok := result[year][countryFormattedString]; !ok {
 			result[year][countryFormattedString] = make(map[string]float64)
 			result[year][countryFormattedString]["gross_amt"] = 0.0
 			result[year][countryFormattedString]["taxed_amt"] = 0.0
 		}
 
-		// Add the amount to the appropriate field (gross_amt or taxed_amt) using the formatted key
 		if transactionType == "dividend" {
 			result[year][countryFormattedString]["gross_amt"] += amount
 		} else if transactionType == "dividendtax" {
 			result[year][countryFormattedString]["taxed_amt"] += amount
+		}
+	}
+	return result
+}
+
+// CalculateTaxSummary processes transactions and returns dividend data aggregated for tax reporting.
+func (p *dividendProcessorImpl) CalculateTaxSummary(transactions []models.ProcessedTransaction) models.DividendTaxResult {
+	result := make(models.DividendTaxResult)
+
+	for _, t := range transactions {
+		transactionType := strings.ToLower(t.OrderType)
+		if transactionType != "dividend" && transactionType != "dividendtax" {
+			continue // Skip other transaction types
+		}
+
+		// Extract the year from the Date field (assuming DD-MM-YYYY format)
+		parsedTime, err := time.Parse("02-01-2006", t.Date)
+		if err != nil {
+			// Handle or log the error if the date format is incorrect
+			// For now, skip this transaction
+			continue
+		}
+		year := parsedTime.Format("2006") // Extract the year as string "YYYY"
+
+		// Get the formatted country string (e.g., "840 - United States of America (the)")
+		if len(t.ISIN) < 2 {
+			continue // Skip invalid ISINs
+		}
+		countryFormattedString := utils.GetCountryCodeString(t.ISIN)
+
+		// Use AmountEUR directly and round it
+		amount := roundToTwoDecimalPlaces(t.AmountEUR)
+
+		// Initialize maps if they don't exist
+		if _, ok := result[year]; !ok {
+			result[year] = make(map[string]models.DividendCountrySummary)
+		}
+
+		// Get the current summary for the country, or initialize if it doesn't exist
+		summary := result[year][countryFormattedString] // This works even if the key doesn't exist yet (returns zero-value struct)
+
+		// Add the amount to the appropriate field
+		if transactionType == "dividend" {
+			summary.GrossAmt += amount
+		} else if transactionType == "dividendtax" {
+			summary.TaxedAmt += amount // Tax is usually negative, so += works
+		}
+
+		// Update the map with the modified summary
+		result[year][countryFormattedString] = summary
+	}
+
+	// Optional: Round final aggregated amounts again if needed due to potential floating point inaccuracies
+	for year, countries := range result {
+		for country, summary := range countries {
+			summary.GrossAmt = roundToTwoDecimalPlaces(summary.GrossAmt)
+			summary.TaxedAmt = roundToTwoDecimalPlaces(summary.TaxedAmt)
+			result[year][country] = summary
 		}
 	}
 
