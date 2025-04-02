@@ -370,7 +370,7 @@ export default function SalesSummary({ data }) {
       <Typography variant="h6" gutterBottom sx={{ mt: 4 }}>
         {selectedYear === 'all' ? 'Sales Summary by Year and ISIN' : `Sales Summary for ${selectedYear} by ISIN`}
       </Typography>
-      <TableContainer>
+      <TableContainer sx={{ width: '60%', margin: 'auto', mt: 2 }}> {/* Added width, margin, and top margin */}
         <Table size="small" stickyHeader>
           <TableHead>
             <TableRow>

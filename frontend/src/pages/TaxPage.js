@@ -22,22 +22,21 @@ import DeleteIcon from '@mui/icons-material/Delete'; // Import Delete Icon
 // CSS for the new summary tables
 const summaryTableStyles = `
   .summary-container {
-      margin-top: 10px;
-      width: 100%;
-      margin-bottom: 20px; /* Add some bottom margin */
+      margin: 10px auto 20px auto;
+      width: 60%;
   }
   .summary-table {
       width: 100%;
       border-collapse: collapse;
-      background-color: white;
-      color: #0288d1; /* Blue text color */
+      background-color:rgb(255, 255, 255); /* New Summary Background */
+      color: #50809b; /* White text for contrast */
       font-family: Arial, sans-serif; /* Match font */
   }
   .summary-table td {
       border: none;
       padding: 4px; /* Reduced padding */
       font-size: 12px; /* Slightly smaller font */
-      background-color: white;
+      /* background-color: white; <- Removed, inherits from .summary-table */
       line-height: 1.2; /* Tighter line height */
       vertical-align: middle; /* Align vertically */
   }
@@ -46,6 +45,7 @@ const summaryTableStyles = `
       text-align: center;
       padding-bottom: 3px;
       font-weight: bold; /* Make headers bold */
+      border-bottom: 1px solid #50809b !important; /* Use non-summary border color */
   }
   /* Special handling for headers with line breaks */
   .summary-header .header-line {
@@ -68,12 +68,12 @@ const summaryTableStyles = `
 `;
 
 
-// Styled components for the main data tables (unchanged)
+// Styled components for the main data tables (swapped header/body background based on feedback)
 const StyledTableCell = styled(TableCell)(({ theme }) => ({
-  backgroundColor: '#90caf9', // Darker blue header (Material UI blue[200])
-  color: theme.palette.common.black,
+  backgroundColor: '#e5f5ff', // Header Background Color (White)
+  color: '#50809b', // Keep Header Text Color
   fontWeight: 'bold',
-  border: '1px solid #b0bec5', // Light grey border
+  border: '1px solid #0084cc', // Keep Border Color
   textAlign: 'center',
   padding: '6px 8px', // Reduced padding
   fontSize: '0.8rem', // Smaller font size
@@ -81,17 +81,18 @@ const StyledTableCell = styled(TableCell)(({ theme }) => ({
 }));
 
 const StyledNestedTableCell = styled(TableCell)(({ theme }) => ({
-  backgroundColor: '#90caf9', // Darker blue header (Material UI blue[200])
-  color: theme.palette.common.black,
+  backgroundColor: '#e5f5ff', // Header Background Color (White)e5f5ff 
+  color: '#50809b', // Keep Header Text Color
   fontWeight: 'normal', // Normal weight for sub-headers
-  border: '1px solid #b0bec5', // Light grey border
+  border: '1px solid #0084cc', // Keep Border Color
   textAlign: 'center',
   padding: '4px 6px', // Reduced padding
   fontSize: '0.75rem', // Smaller font size
 }));
 
 const StyledTableBodyCell = styled(TableCell)(({ theme, align = 'center' }) => ({ // Allow alignment override
-  border: '1px solid #b0bec5', // Light grey border
+  border: '1px solid #0084cc', // Keep Border Color
+  backgroundColor: '#ffffff', // Body Background Color (Light Blue)
   textAlign: align,
   padding: '4px 6px', // Reduced padding
   fontSize: '0.8rem', // Smaller font size
@@ -488,12 +489,12 @@ export default function TaxPage() {
         </FormControl>
       </Box>
       {/* Main Title */}
-      <Typography variant="h4" component="h1" gutterBottom sx={{ mt: 2 }}> {/* Added margin top */}
+      <Typography variant="h4" component="h1" gutterBottom sx={{ mt: 2 , color: '#0183cb' }}> {/* Added margin top */}
         Anexo J - 8 Rendimentos Capitais (Categoria E)
        </Typography>
 
-      {/* Section 9.2 Title - Moved up as 9.1 is removed */}
-      <Typography variant="h5" component="h2" gutterBottom sx={{ mt: 4 }}> {/* Kept original margin top */}
+      {/* Section Title A (under 8) */}
+      <Typography variant="h5" component="h2" gutterBottom sx={{ mt: 4, color: '#8d98a8' }}> {/* New Title Color */}
         A
       </Typography>
 
@@ -594,13 +595,13 @@ export default function TaxPage() {
       </div>
 
 
-      {/* Main Title */}
-      <Typography variant="h4" component="h1" gutterBottom sx={{ mt: 2 }}> {/* Added margin top */}
+      {/* Main Title 9 */}
+      <Typography variant="h4" component="h1" gutterBottom sx={{ mt: 2, color: '#0183cb' }}> {/* New Title Color */}
         Anexo J - 9 Rendimentos de Incrementos Patrimoniais (Categoria G)
        </Typography>
 
-      {/* Section 9.2 Title - Moved up as 9.1 is removed */}
-      <Typography variant="h5" component="h2" gutterBottom sx={{ mt: 4 }}> {/* Kept original margin top */}
+      {/* Section 9.2 Title */}
+      <Typography variant="h5" component="h2" gutterBottom sx={{ mt: 4, color: '#58839b' }}> {/* New Title Color */}
         9.2 Incrementos Patrimoniais de Opção de Englobamento
       </Typography>
 
@@ -611,8 +612,8 @@ export default function TaxPage() {
         </Typography>
       )}
 
-      {/* Table 9.2 A: Stock Sale Details */}
-      <Typography variant="h6" component="h2" gutterBottom sx={{ mt: 4 }}>
+      {/* Table 9.2 A Title */}
+      <Typography variant="h6" component="h2" gutterBottom sx={{ mt: 4, color: '#8d98a8' }}> {/* New Title Color */}
          A - Alienação Onerosa de Partes Sociais e Outros Valores Mobiliários [art.º 10.º, n.º 1, al. b), do CIRS]
       </Typography>
       <TableContainer component={Paper} sx={{ mb: 1 }}> {/* Reduced bottom margin */}
@@ -712,8 +713,8 @@ export default function TaxPage() {
         </Typography>
       )}
 
-      {/* Table 9.2 B: Option Sale Details */}
-      <Typography variant="h6" component="h2" gutterBottom sx={{ mt: 4 }}>
+      {/* Table 9.2 B Title */}
+      <Typography variant="h6" component="h2" gutterBottom sx={{ mt: 4, color: '#8d98a8' }}> {/* New Title Color */}
          B - Outros Incrementos Patrimoniais de Opção de Englobamento [art.º 10.º, n.º 1, als. c), e) e h), do CIRS]
       </Typography>
       <TableContainer component={Paper} sx={{ mb: 1 }}> {/* Reduced bottom margin */}

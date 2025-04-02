@@ -200,7 +200,7 @@ export default function DividendSummary({ data }) {
       <Typography variant="h6" gutterBottom sx={{ mt: 4 }}>
         {selectedYear === 'all' ? 'All Dividend Records' : `Dividend Records for ${selectedYear}`}
       </Typography>
-      <TableContainer>
+      <TableContainer sx={{ width: '60%', margin: 'auto', mt: 2 }}> {/* Added width, margin, and top margin */}
         <Table size="small" stickyHeader>
           <TableHead>
             <TableRow>
