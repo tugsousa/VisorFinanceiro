@@ -493,10 +493,12 @@ export default function TaxPage() {
         Anexo J - 8 Rendimentos Capitais (Categoria E)
        </Typography>
 
-      {/* Section Title A (under 8) */}
-      <Typography variant="h5" component="h2" gutterBottom sx={{ mt: 4, color: '#8d98a8' }}> {/* New Title Color */}
-        A
-      </Typography>
+      {/* Wrap Section A (Dividends) */}
+      <Box sx={{ pl: 2 }}>
+        {/* Section Title A (under 8) */}
+        <Typography variant="h5" component="h2" gutterBottom sx={{ mt: 4, color: '#8d98a8' }}> {/* New Title Color */}
+          A
+        </Typography>
 
       {/* Dividend Error Display */}
       {dividendError && (
@@ -593,6 +595,7 @@ export default function TaxPage() {
           </tbody>
         </table>
       </div>
+    </Box> {/* End Wrap Section A (Dividends) */}
 
 
       {/* Main Title 9 */}
@@ -600,10 +603,12 @@ export default function TaxPage() {
         Anexo J - 9 Rendimentos de Incrementos Patrimoniais (Categoria G)
        </Typography>
 
-      {/* Section 9.2 Title */}
-      <Typography variant="h5" component="h2" gutterBottom sx={{ mt: 4, color: '#58839b' }}> {/* New Title Color */}
-        9.2 Incrementos Patrimoniais de Opção de Englobamento
-      </Typography>
+      {/* Wrap Section 9.2 and its subsections */}
+      <Box sx={{ pl: 2 }}>
+        {/* Section 9.2 Title */}
+        <Typography variant="h5" component="h2" gutterBottom sx={{ mt: 4, color: '#58839b' }}> {/* New Title Color */}
+          9.2 Incrementos Patrimoniais de Opção de Englobamento
+        </Typography>
 
       {/* Stock Error Display - Corrected: Only one block */}
       {error && (
@@ -612,14 +617,16 @@ export default function TaxPage() {
         </Typography>
       )}
 
-      {/* Table 9.2 A Title */}
-      <Typography variant="h6" component="h2" gutterBottom sx={{ mt: 4, color: '#8d98a8' }}> {/* New Title Color */}
-         A - Alienação Onerosa de Partes Sociais e Outros Valores Mobiliários [art.º 10.º, n.º 1, al. b), do CIRS]
-      </Typography>
-      <TableContainer component={Paper} sx={{ mb: 1 }}> {/* Reduced bottom margin */}
-        <Table size="small" aria-label="stock sale details table">
-          <TableHead>
-            <TableRow>
+        {/* Wrap Subsection 9.2 A (Stock Sales) */}
+        <Box sx={{ pl: 2 }}>
+          {/* Table 9.2 A Title */}
+          <Typography variant="h6" component="h2" gutterBottom sx={{ mt: 4, color: '#8d98a8' }}> {/* New Title Color */}
+             A - Alienação Onerosa de Partes Sociais e Outros Valores Mobiliários [art.º 10.º, n.º 1, al. b), do CIRS]
+          </Typography>
+          <TableContainer component={Paper} sx={{ mb: 1 }}> {/* Reduced bottom margin */}
+            <Table size="small" aria-label="stock sale details table">
+              <TableHead>
+                <TableRow>
               <StyledTableCell rowSpan={2}>Nº Linha<br />(951 a ...)</StyledTableCell>
               <StyledTableCell rowSpan={2}>País da Fonte</StyledTableCell>
               <StyledTableCell rowSpan={2}>Código</StyledTableCell>
@@ -705,22 +712,25 @@ export default function TaxPage() {
           </tbody>
         </table>
       </div>
+    </Box> {/* End Wrap Subsection 9.2 A */}
 
-      {/* Option Error Display */}
-      {optionError && (
-        <Typography color="error" sx={{ mb: 2, mt: 4 }}>
-          Option Sales Error: {optionError}
+      {/* Wrap Subsection 9.2 B (Option Sales) */}
+      <Box sx={{ pl: 2 }}>
+        {/* Option Error Display */}
+        {optionError && (
+          <Typography color="error" sx={{ mb: 2, mt: 4 }}>
+            Option Sales Error: {optionError}
+          </Typography>
+        )}
+
+        {/* Table 9.2 B Title */}
+        <Typography variant="h6" component="h2" gutterBottom sx={{ mt: 4, color: '#8d98a8' }}> {/* New Title Color */}
+           B - Outros Incrementos Patrimoniais de Opção de Englobamento [art.º 10.º, n.º 1, als. c), e) e h), do CIRS]
         </Typography>
-      )}
-
-      {/* Table 9.2 B Title */}
-      <Typography variant="h6" component="h2" gutterBottom sx={{ mt: 4, color: '#8d98a8' }}> {/* New Title Color */}
-         B - Outros Incrementos Patrimoniais de Opção de Englobamento [art.º 10.º, n.º 1, als. c), e) e h), do CIRS]
-      </Typography>
-      <TableContainer component={Paper} sx={{ mb: 1 }}> {/* Reduced bottom margin */}
-        <Table size="small" aria-label="option sale details table">
-          <TableHead>
-            <TableRow>
+        <TableContainer component={Paper} sx={{ mb: 1 }}> {/* Reduced bottom margin */}
+          <Table size="small" aria-label="option sale details table">
+            <TableHead>
+              <TableRow>
               <StyledTableCell>Nº Linha<br />(991 a ...)</StyledTableCell>
               <StyledTableCell>Código Rendimento</StyledTableCell>
               <StyledTableCell>País da Fonte</StyledTableCell>
@@ -801,7 +811,9 @@ export default function TaxPage() {
           </tbody>
         </table>
       </div>
+    </Box> {/* End Wrap Subsection 9.2 B */}
 
-    </Box>
+    </Box> {/* End Wrap Section 9.2 */}
+  </Box>
   );
 }
