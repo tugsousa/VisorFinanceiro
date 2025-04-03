@@ -140,3 +140,41 @@ func (h *UploadHandler) HandleGetDividendTaxSummary(w http.ResponseWriter, r *ht
 		http.Error(w, "Error generating JSON response for dividend tax summary", http.StatusInternalServerError)
 	}
 }
+
+// Helper function to send JSON errors
+func sendJSONError(w http.ResponseWriter, message string, statusCode int) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(statusCode)
+	json.NewEncoder(w).Encode(map[string]string{"error": message})
+}
+
+// HandleGetDividendTransactions retrieves the list of individual dividend transactions.
+func (h *UploadHandler) HandleGetDividendTransactions(w http.ResponseWriter, r *http.Request) {
+	// 1. Get the dividend transactions from the service
+	dividendTransactions, err := h.uploadService.GetDividendTransactions()
+	if err != nil {
+		// Handle potential errors, e.g., if no data is available yet
+		if err.Error() == "no upload processed yet, cannot retrieve dividend transactions" {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK) // OK status, but empty data
+			// Return an empty JSON array
+			json.NewEncoder(w).Encode([]models.ProcessedTransaction{}) // Already returns JSON
+			return
+		}
+		// For other errors, return a JSON error response
+		sendJSONError(w, fmt.Sprintf("Error retrieving dividend transactions: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	// 2. Return the transactions as JSON
+	// Ensure we return an empty array if the result is nil
+	if dividendTransactions == nil {
+		dividendTransactions = []models.ProcessedTransaction{} // Ensure it's an empty array, not null
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(dividendTransactions); err != nil {
+		// Handle JSON encoding error by sending a JSON error response
+		sendJSONError(w, "Error generating JSON response for dividend transactions", http.StatusInternalServerError)
+	}
+}

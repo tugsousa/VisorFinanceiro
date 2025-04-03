@@ -6,6 +6,7 @@ import (
 	"TAXFOLIO/src/processors"
 	"fmt"
 	"io"
+	"strings"
 )
 
 // uploadServiceImpl implements the UploadService interface.
@@ -108,4 +109,22 @@ func (s *uploadServiceImpl) GetDividendTaxSummary() (models.DividendTaxResult, e
 	taxSummary := s.dividendProcessor.CalculateTaxSummary(s.latestProcessedTransactions)
 
 	return taxSummary, nil
+}
+
+// GetDividendTransactions retrieves the list of individual dividend transactions from the latest upload.
+func (s *uploadServiceImpl) GetDividendTransactions() ([]models.ProcessedTransaction, error) {
+	if s.latestProcessedTransactions == nil {
+		// Return an error if no upload has been processed yet
+		return nil, fmt.Errorf("no upload processed yet, cannot retrieve dividend transactions")
+	}
+
+	dividends := []models.ProcessedTransaction{}
+	for _, tx := range s.latestProcessedTransactions {
+		// Assuming OrderType "dividend" identifies dividend transactions (case-insensitive check is safer)
+		if tx.OrderType != "" && strings.ToLower(tx.OrderType) == "dividend" {
+			dividends = append(dividends, tx)
+		}
+	}
+
+	return dividends, nil
 }

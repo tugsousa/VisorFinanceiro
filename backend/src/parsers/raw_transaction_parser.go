@@ -144,15 +144,30 @@ func parseDescription(description string) (string, int, float64, string, string,
 		return "cashdeposit", 0, 0, "", "Cash Deposit", nil
 	}
 
-	// Then check for dividend or tax transactions (using Contains is okay here)
-	if strings.Contains(strings.ToLower(description), "dividendo") {
-		if strings.Contains(strings.ToLower(description), "imposto sobre dividendo") {
-			return "dividendtax", 0, 0, "", "", nil
-		}
+	// Check for EXACT "Dividendo" transaction first (without product name in description)
+	if description == "Dividendo" {
+		// Return "dividend" type, but empty name as it's not in the description
 		return "dividend", 0, 0, "", "", nil
 	}
+	// Check for EXACT "Imposto sobre Dividendo" (without product name) - less likely but possible
+	if description == "Imposto sobre Dividendo" {
+		return "dividendtax", 0, 0, "", "", nil
+	}
 
-	// Check for Stock Buy/Sell format FIRST, as it contains quantity, price, and the product name
+	// Then check for dividend or tax transactions WITH product name in description
+	dividendRe := regexp.MustCompile(`(?i)(?:Dividendo|Imposto sobre Dividendo)\s+(.+?)(?:\s+\(.+\))?$`)
+	dividendMatches := dividendRe.FindStringSubmatch(description)
+	if dividendMatches != nil {
+		productName := strings.TrimSpace(dividendMatches[1])
+		// Check the original description again to be sure about tax vs regular dividend
+		if strings.Contains(strings.ToLower(description), "imposto sobre dividendo") {
+			return "dividendtax", 0, 0, "", productName, nil
+		}
+		// If the regex matched but it wasn't tax, assume it's a regular dividend
+		return "dividend", 0, 0, "", productName, nil
+	}
+
+	// Check for Stock Buy/Sell format, as it contains quantity, price, and the product name
 	stockRe := regexp.MustCompile(`(?i)\s*(compra|venda)\s+(\d+\s*\d*)\s+([a-zA-Z0-9\s\.\-\(\)]+\s+[CP]\d+(?:\.\d+)?\s+\d{2}[A-Z]{3}\d{2}|[a-zA-Z0-9\s\.\-\(\)]+)\s*@([\d,]+)\s+([A-Za-z]+)?\s*(?:\(([\w\d]+)\))?$`)
 	matches := stockRe.FindStringSubmatch(description)
 	if matches == nil {
