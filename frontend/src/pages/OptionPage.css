@@ -1,0 +1,31 @@
+.option-page-container {
+    padding: 20px;
+    font-family: sans-serif;
+}
+
+.option-sales-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 20px;
+    font-size: 0.9em;
+}
+
+.option-sales-table th,
+.option-sales-table td {
+    border: 1px solid #ddd;
+    padding: 8px;
+    text-align: left;
+}
+
+.option-sales-table th {
+    background-color: #f2f2f2;
+    font-weight: bold;
+}
+
+.option-sales-table tr:nth-child(even) {
+    background-color: #f9f9f9;
+}
+
+.option-sales-table tr:hover {
+    background-color: #f1f1f1;
+}

@@ -83,8 +83,8 @@ func (h *UploadHandler) HandleGetOptionSales(w http.ResponseWriter, r *http.Requ
 		if err.Error() == "no upload result available yet" { // Assuming the service returns a specific error
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusOK) // OK status, but empty data
-			// Return an empty JSON object that includes the expected key with an empty array
-			json.NewEncoder(w).Encode(map[string][]interface{}{"OptionSaleDetails": {}})
+			// Return an empty JSON object that includes the expected key with an empty *array*
+			json.NewEncoder(w).Encode(map[string][]interface{}{"OptionSaleDetails": []interface{}{}}) // Return empty array
 			return
 		}
 		// For other errors, return an internal server error

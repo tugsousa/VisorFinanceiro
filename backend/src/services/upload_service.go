@@ -89,10 +89,8 @@ func (s *uploadServiceImpl) ProcessUpload(fileReader io.Reader) (*UploadResult, 
 // GetLatestUploadResult returns the most recently processed upload result.
 func (s *uploadServiceImpl) GetLatestUploadResult() (*UploadResult, error) {
 	if s.latestResult == nil {
-		// Return an empty result or an error if no upload has been processed yet
-		// For simplicity, returning an empty result for now.
-		// Consider returning an error like fmt.Errorf("no upload processed yet")
-		return &UploadResult{}, nil
+		// Return an error if no upload has been processed yet, matching the handler's expectation
+		return nil, fmt.Errorf("no upload result available yet")
 	}
 	return s.latestResult, nil
 }

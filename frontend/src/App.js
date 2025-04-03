@@ -7,6 +7,7 @@ import Layout from './layouts/Layout';
 import Holdings from './pages/HoldingsPage';
 import Dividends from './pages/DividendsPage';
 import Tax from './pages/TaxPage';
+import OptionPage from './pages/OptionPage'; // Import the new page
 
 function App() {
   return (
@@ -19,6 +20,7 @@ function App() {
           <Route path="/holdings" element={<Holdings />} />
           <Route path="/dividends" element={<Dividends />} />
           <Route path="/tax" element={<Tax />} />
+          <Route path="/options" element={<OptionPage />} /> {/* Add route for OptionPage */}
         </Routes>
       </Layout>
     </Router>

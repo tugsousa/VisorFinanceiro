@@ -2,6 +2,7 @@
   "name": "frontend",
   "version": "0.1.0",
   "private": true,
+  "proxy": "http://localhost:8080",
   "dependencies": {
     "@babel/plugin-proposal-optional-chaining": "^7.21.0",
     "@emotion/react": "^11.14.0",
