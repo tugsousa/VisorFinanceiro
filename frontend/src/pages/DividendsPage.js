@@ -55,6 +55,40 @@ const getMonth = (dateString) => {
 
 const MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
+// Simple hash function for string to number
+const simpleHash = (str) => {
+  if (!str) return 0;
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    const char = str.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash |= 0; // Convert to 32bit integer
+  }
+  return Math.abs(hash);
+};
+
+const GOLDEN_ANGLE = 137.5; // Approximate golden angle in degrees
+
+// Generate HSL color based on ISIN index for better distribution
+const getColorForIsin = (index, total) => {
+  if (total <= 0) return 'rgba(200, 200, 200, 0.7)'; // Fallback
+  const hue = (index * GOLDEN_ANGLE) % 360;
+  // Vary saturation and lightness slightly based on index but keep them reasonable
+  const saturation = 60 + (index * 5) % 31; // 60-90%
+  const lightness = 65 + (index * 3) % 16; // 65-80%
+  return `hsla(${hue.toFixed(0)}, ${saturation}%, ${lightness}%, 0.75)`;
+};
+
+// Generate border color (slightly darker/more saturated)
+const getBorderColorForIsin = (index, total) => {
+   if (total <= 0) return 'rgba(150, 150, 150, 1)'; // Fallback
+   const hue = (index * GOLDEN_ANGLE) % 360; // Keep hue consistent
+   const saturation = 70 + (index * 5) % 26; // 70-95%
+   const lightness = 50 + (index * 3) % 16; // 50-65%
+   return `hsl(${hue.toFixed(0)}, ${saturation}%, ${lightness}%)`;
+}
+
+
 export default function DividendsPage() {
   const [selectedYear, setSelectedYear] = useState('all');
   const [allTransactions, setAllTransactions] = useState([]);
@@ -123,58 +157,82 @@ export default function DividendsPage() {
     });
   }, [allTransactions, selectedYear]);
 
-  // Prepare data for the chart (monthly or yearly)
+  // Calculate total EUR amount for the filtered transactions
+  const totalFilteredAmountEUR = useMemo(() => {
+    return filteredDividendTransactions.reduce((sum, tx) => sum + (tx.AmountEUR || 0), 0);
+  }, [filteredDividendTransactions]);
+
+  // Prepare data for the STACKED chart (monthly or yearly by ISIN)
   const chartData = useMemo(() => {
+    const uniqueIsins = [...new Set(filteredDividendTransactions.map(tx => tx.ISIN || 'Unknown'))].sort();
+    const datasets = [];
+    let labels = [];
+
     if (selectedYear === 'all') {
-      // Calculate yearly totals
-      const yearlyTotals = {};
+      // Yearly view
+      const yearlyTotalsByIsin = {}; // { year: { isin: total } }
+      const allYears = new Set();
+
       filteredDividendTransactions.forEach(tx => {
         const year = getYear(tx.Date);
+        const isin = tx.ISIN || 'Unknown';
         if (year && tx.AmountEUR) {
-          yearlyTotals[year] = (yearlyTotals[year] || 0) + tx.AmountEUR;
+          allYears.add(String(year)); // Collect all years with data
+          if (!yearlyTotalsByIsin[year]) {
+            yearlyTotalsByIsin[year] = {};
+          }
+          yearlyTotalsByIsin[year][isin] = (yearlyTotalsByIsin[year][isin] || 0) + tx.AmountEUR;
         }
       });
 
-      const sortedYears = Object.keys(yearlyTotals).sort((a, b) => Number(a) - Number(b));
-      const data = sortedYears.map(year => yearlyTotals[year]);
+      labels = Array.from(allYears).sort((a, b) => Number(a) - Number(b));
+      const totalIsins = uniqueIsins.length; // Get total count
 
-      return {
-        labels: sortedYears,
-        datasets: [
-          {
-            label: 'Total Gross Dividends per Year',
-            data: data,
-            backgroundColor: 'rgba(153, 102, 255, 0.6)', // Purple for yearly
-            borderColor: 'rgba(153, 102, 255, 1)',
-            borderWidth: 1,
-          },
-        ],
-      };
+      uniqueIsins.forEach((isin, index) => { // Add index
+        const data = labels.map(year => yearlyTotalsByIsin[year]?.[isin] || 0);
+        datasets.push({
+          label: isin, // ISIN as label
+          data: data,
+          // Use index-based color functions
+          backgroundColor: getColorForIsin(index, totalIsins),
+          borderColor: getBorderColorForIsin(index, totalIsins),
+          borderWidth: 1,
+        });
+      });
 
     } else {
-      // Calculate monthly totals for the selected year
-      const monthlyTotals = Array(12).fill(0); // Index 0 for Jan, 1 for Feb, etc.
+      // Monthly view for the selected year
+      labels = MONTH_NAMES;
+      const monthlyTotalsByIsin = {}; // { isin: [month1_total, month2_total, ...] }
+
+      uniqueIsins.forEach(isin => {
+        monthlyTotalsByIsin[isin] = Array(12).fill(0); // Initialize monthly totals for this ISIN
+      });
+
       filteredDividendTransactions.forEach(tx => {
-        // No need to check year again, filteredDividendTransactions already filtered
+        // Already filtered by year
         const month = getMonth(tx.Date); // 1-12
+        const isin = tx.ISIN || 'Unknown';
         if (month && tx.AmountEUR) {
-          monthlyTotals[month - 1] += tx.AmountEUR;
+          monthlyTotalsByIsin[isin][month - 1] += tx.AmountEUR;
         }
       });
 
-      return {
-        labels: MONTH_NAMES,
-        datasets: [
-          {
-            label: `Gross Dividends Received (${selectedYear})`,
-            data: monthlyTotals,
-            backgroundColor: 'rgba(75, 192, 192, 0.6)', // Teal for monthly
-            borderColor: 'rgba(75, 192, 192, 1)',
-            borderWidth: 1,
-          },
-        ],
-      };
+      const totalIsins = uniqueIsins.length; // Get total count
+      uniqueIsins.forEach((isin, index) => { // Add index
+        datasets.push({
+          label: isin, // ISIN as label
+          data: monthlyTotalsByIsin[isin],
+           // Use index-based color functions
+          backgroundColor: getColorForIsin(index, totalIsins),
+          borderColor: getBorderColorForIsin(index, totalIsins),
+          borderWidth: 1,
+        });
+      });
     }
+
+    return { labels, datasets };
+
   }, [filteredDividendTransactions, selectedYear]);
 
   const chartOptions = useMemo(() => ({
@@ -190,15 +248,54 @@ export default function DividendsPage() {
       },
       tooltip: {
         callbacks: {
-          label: (context) => {
-            let label = context.dataset.label || '';
-            if (label) {
-              label += ': ';
+          // Return null to hide the default label (e.g., "ISIN: €Value")
+          label: function(context) {
+            return null;
+          },
+          // Add individual dividend details for the specific ISIN and period
+          afterBody: (tooltipItems) => {
+            // Find all transactions contributing to the hovered bar/stack segment
+            const tooltipItem = tooltipItems.find(item => item.datasetIndex !== undefined && item.dataIndex !== undefined);
+            if (!tooltipItem) return [];
+
+            const dataIndex = tooltipItem.dataIndex; // Index for the label (year/month)
+            const datasetIndex = tooltipItem.datasetIndex; // Index for the dataset (ISIN)
+            const isinLabel = chartData.datasets[datasetIndex]?.label; // Get the ISIN for this dataset
+
+            let relevantTransactions = [];
+
+            if (selectedYear === 'all') {
+              // Yearly view: label is the year
+              const yearLabel = chartData.labels[dataIndex];
+              const year = parseInt(yearLabel, 10);
+              relevantTransactions = filteredDividendTransactions.filter(tx =>
+                getYear(tx.Date) === year && (tx.ISIN || 'Unknown') === isinLabel
+              );
+            } else {
+              // Monthly view: dataIndex corresponds to month (0-11)
+              const monthIndex = dataIndex; // 0 = Jan, 1 = Feb, etc.
+              const year = parseInt(selectedYear, 10);
+              relevantTransactions = filteredDividendTransactions.filter(tx => {
+                // getMonth returns 1-12, so compare with monthIndex + 1
+                return getMonth(tx.Date) === monthIndex + 1 &&
+                       getYear(tx.Date) === year &&
+                       (tx.ISIN || 'Unknown') === isinLabel;
+              });
             }
-            if (context.parsed.y !== null) {
-              label += new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(context.parsed.y);
+
+            // Only show details if they belong to the specific ISIN segment hovered
+            const details = relevantTransactions.map(tx =>
+              `  • ${tx.ProductName || 'Unknown'}: ${new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(tx.AmountEUR || 0)}`
+            );
+
+            // Limit the number of details shown
+            const maxDetails = 5;
+            if (details.length > maxDetails) {
+              const remainingCount = details.length - maxDetails;
+              return [...details.slice(0, maxDetails), `  ...and ${remainingCount} more`];
             }
-            return label;
+
+            return details.length > 0 ? ['', ...details] : []; // Add empty line for spacing if details exist
           }
         }
       }
@@ -206,19 +303,22 @@ export default function DividendsPage() {
     scales: {
       y: {
         beginAtZero: true,
+        stacked: true, // Enable stacking on Y axis
         title: {
           display: true,
           text: 'Gross Amount (€)'
         }
       },
       x: {
+        stacked: true, // Enable stacking on X axis
         title: {
           display: true,
           text: selectedYear === 'all' ? 'Year' : 'Month',
         }
       }
     }
-  }), [selectedYear]); // Re-calculate options when selectedYear changes
+    // Add dependencies
+  }), [selectedYear, filteredDividendTransactions, chartData.datasets, chartData.labels]); // chartData needed for tooltip
 
   return (
     <Box>
@@ -250,6 +350,17 @@ export default function DividendsPage() {
           {loading && <CircularProgress size={24} />}
           {error && <Typography color="error">Error: {error}</Typography>}
         </Grid>
+        {/* Display Total Amount */}
+        {!loading && !error && filteredDividendTransactions.length > 0 && (
+          <Grid item xs={12} sm="auto" sx={{ textAlign: { xs: 'left', sm: 'right' }, mt: { xs: 1, sm: 0 } }}>
+             <Typography variant="subtitle1" component="div">
+               Total Dividends ({selectedYear === 'all' ? 'All Years' : selectedYear}):
+               <Typography component="span" sx={{ fontWeight: 'bold', ml: 1 }}>
+                 {new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(totalFilteredAmountEUR)}
+               </Typography>
+             </Typography>
+          </Grid>
+        )}
       </Grid>
 
 
@@ -281,34 +392,37 @@ export default function DividendsPage() {
             <Table size="small" stickyHeader>
               <TableHead>
                 <TableRow>
-                  {/* *** Assumption: Relevant columns from processedTransactions *** */}
                   <TableCell>Date</TableCell>
-                  <TableCell>Product Name</TableCell> {/* Changed from Ticker */}
-                  <TableCell>ISIN</TableCell> {/* Added ISIN */}
-                  <TableCell>Description</TableCell>
-                  <TableCell align="right">Amount (€)</TableCell>
-                  <TableCell>Currency</TableCell>
-                  {/* Add more columns as needed */}
+                  <TableCell>Product Name</TableCell>
+                  <TableCell>ISIN</TableCell>
+                  <TableCell>Country Code</TableCell> {/* Added Country Code */}
+                  <TableCell align="right">Amount</TableCell> {/* Original Amount */}
+                  <TableCell align="right">Exchange Rate</TableCell> {/* Added Exchange Rate */}
+                  <TableCell align="right">Amount EUR</TableCell> {/* Amount in EUR */}
                 </TableRow>
               </TableHead>
               <TableBody>
                 {filteredDividendTransactions.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={6} align="center">
+                    {/* Adjusted colSpan to match new number of columns */}
+                    <TableCell colSpan={7} align="center">
                       No dividend transactions found for the selected period.
                     </TableCell>
                   </TableRow>
                 ) : (
                   filteredDividendTransactions.map((tx, index) => (
-                    // *** Assumption: tx object has these fields. Use a unique ID if available ***
-                    <TableRow key={tx.ID || `${tx.Date}-${tx.ISIN}-${index}`} hover> {/* Use ISIN in key */}
-                      <TableCell>{tx.Date}</TableCell>
-                      <TableCell>{tx.ProductName || 'N/A'}</TableCell> {/* Display ProductName */}
-                      <TableCell>{tx.ISIN || 'N/A'}</TableCell> {/* Display ISIN */}
-                      <TableCell>{tx.Description || 'N/A'}</TableCell>
+                    // Use a unique ID if available, otherwise construct a key
+                    <TableRow key={tx.OrderID || tx.ID || `${tx.Date}-${tx.ISIN}-${index}`} hover>
+                      <TableCell>{tx.Date || 'N/A'}</TableCell>
+                      <TableCell>{tx.ProductName || 'N/A'}</TableCell>
+                      <TableCell>{tx.ISIN || 'N/A'}</TableCell>
+                      <TableCell>{tx.country_code || 'N/A'}</TableCell> {/* Display Country Code */}
+                      {/* Display original Amount and Currency */}
+                      <TableCell align="right">{`${tx.Amount?.toFixed(2) ?? 'N/A'} ${tx.Currency || ''}`}</TableCell>
+                      {/* Display Exchange Rate */}
+                      <TableCell align="right">{tx.ExchangeRate?.toFixed(4) ?? 'N/A'}</TableCell>
+                      {/* Display AmountEUR */}
                       <TableCell align="right">{tx.AmountEUR?.toFixed(2) ?? 'N/A'}</TableCell>
-                      <TableCell>{tx.Currency || 'N/A'}</TableCell>
-                      {/* Render more cells */}
                     </TableRow>
                   ))
                 )}

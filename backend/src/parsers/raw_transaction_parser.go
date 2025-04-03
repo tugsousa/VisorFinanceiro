@@ -3,6 +3,7 @@ package parsers
 import (
 	"TAXFOLIO/src/models"
 	"TAXFOLIO/src/processors"
+	"TAXFOLIO/src/utils" // Import the utils package
 	"fmt"
 	"log"
 	"regexp"
@@ -109,9 +110,15 @@ func (p *transactionProcessorImpl) Process(rawTransactions []models.RawTransacti
 			log.Printf("Error calculating commission for transaction %s: %v", raw.OrderID, err)
 		}
 
+		// Determine the correct product name
+		productNameForProcessed := name // Default to name from parseDescription
+		if orderType == "dividend" || orderType == "dividendtax" {
+			productNameForProcessed = raw.Name // Use raw.Name for dividends/dividend tax
+		}
+
 		processed := models.ProcessedTransaction{
 			Date:             raw.OrderDate,
-			ProductName:      name,
+			ProductName:      productNameForProcessed, // Use the determined product name
 			ISIN:             raw.ISIN,
 			Quantity:         quantity,
 			OriginalQuantity: quantity, // Set OriginalQuantity to the initial quantity
@@ -123,7 +130,8 @@ func (p *transactionProcessorImpl) Process(rawTransactions []models.RawTransacti
 			OrderID:          raw.OrderID,
 			ExchangeRate:     exchangeRate,
 			AmountEUR:        amountEUR,
-			Description:      raw.Description, // Copy the original description
+			Description:      raw.Description,                      // Copy the original description
+			CountryCode:      utils.GetCountryCodeString(raw.ISIN), // Populate CountryCode
 		}
 
 		processedTransactions = append(processedTransactions, processed)

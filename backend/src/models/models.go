@@ -30,6 +30,7 @@ type ProcessedTransaction struct {
 	OrderID          string
 	ExchangeRate     float64 // Exchange rate to EUR (if applicable)
 	AmountEUR        float64 // Transaction amount in EUR (calculated)
+	CountryCode      string  `json:"country_code,omitempty"` // Country code derived from ISIN
 }
 
 type SaleDetail struct {
