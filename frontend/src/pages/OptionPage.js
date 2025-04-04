@@ -47,6 +47,100 @@ const OptionPage = () => {
         fetchOptionSales();
     }, []); // Empty dependency array means this effect runs once on mount
 
+    const calculateDaysHeld = (openDateStr, closeDateStr) => {
+        if (!openDateStr || !closeDateStr) {
+            return 'N/A'; // Return N/A if either date is missing
+        }
+
+        // Helper function to parse potentially ambiguous date strings
+        const parseDate = (dateStr) => {
+            if (!dateStr) return new Date(NaN); // Handle null/undefined input
+
+            const trimmedDateStr = dateStr.trim(); // Trim whitespace
+            let parsedDate = new Date(NaN); // Initialize as invalid
+
+            // 1. Try parsing 'DD-MM-YYYY HH:MM:SS' format
+            let parts = trimmedDateStr.match(/^(\d{1,2})-(\d{1,2})-(\d{4}) (\d{2}):(\d{2}):(\d{2})$/);
+            if (parts) {
+                const day = parseInt(parts[1]);
+                const month = parseInt(parts[2]) - 1; // Adjust month index
+                const year = parseInt(parts[3]);
+                const hour = parseInt(parts[4]);
+                const minute = parseInt(parts[5]);
+                const second = parseInt(parts[6]);
+                if (day >= 1 && day <= 31 && month >= 0 && month <= 11 && hour >= 0 && hour <= 23 && minute >= 0 && minute <= 59 && second >= 0 && second <= 59) {
+                    const date = new Date(Date.UTC(year, month, day, hour, minute, second));
+                    if (!isNaN(date.getTime()) && date.getUTCFullYear() === year && date.getUTCMonth() === month && date.getUTCDate() === day) {
+                        console.log(`Parsed "${trimmedDateStr}" using DD-MM-YYYY HH:MM:SS ->`, date.toISOString());
+                        return date;
+                    }
+                }
+            }
+
+            // 2. Try parsing 'DD-MM-YYYY' format
+            parts = trimmedDateStr.match(/^(\d{1,2})-(\d{1,2})-(\d{4})$/);
+            if (parts) {
+                const day = parseInt(parts[1]);
+                const month = parseInt(parts[2]) - 1; // Adjust month index
+                const year = parseInt(parts[3]);
+                if (day >= 1 && day <= 31 && month >= 0 && month <= 11) {
+                   const date = new Date(Date.UTC(year, month, day));
+                   if (!isNaN(date.getTime()) && date.getUTCFullYear() === year && date.getUTCMonth() === month && date.getUTCDate() === day) {
+                       console.log(`Parsed "${trimmedDateStr}" using DD-MM-YYYY ->`, date.toISOString());
+                       return date;
+                   }
+                }
+            }
+
+            // 3. Try parsing 'YYYY-MM-DD HH:MM:SS' format
+            parts = trimmedDateStr.match(/^(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2}):(\d{2})$/);
+            if (parts) {
+                const date = new Date(Date.UTC(parseInt(parts[1]), parseInt(parts[2]) - 1, parseInt(parts[3]), parseInt(parts[4]), parseInt(parts[5]), parseInt(parts[6])));
+                if (!isNaN(date.getTime())) {
+                    console.log(`Parsed "${trimmedDateStr}" using YYYY-MM-DD HH:MM:SS ->`, date.toISOString());
+                    return date;
+                }
+            }
+
+            // 4. Try direct parsing (handles ISO 8601, RFC 2822, etc., as a fallback)
+            parsedDate = new Date(trimmedDateStr);
+            if (!isNaN(parsedDate.getTime())) {
+                 console.log(`Parsed "${trimmedDateStr}" using direct new Date() ->`, parsedDate.toISOString());
+                return parsedDate;
+            }
+
+            // 5. If all parsing attempts fail, return an invalid date object
+            console.warn(`Failed to parse date string: "${dateStr}" (trimmed: "${trimmedDateStr}")`);
+            return new Date(NaN);
+        };
+
+        try {
+            const openDate = parseDate(openDateStr);
+            const closeDate = parseDate(closeDateStr);
+
+            // Check if dates are valid after parsing attempts
+            if (isNaN(openDate.getTime()) || isNaN(closeDate.getTime())) {
+                console.error("Could not parse dates for calculation:", openDateStr, closeDateStr);
+                return 'Invalid Date'; // Return 'Invalid Date' if parsing failed
+             }
+
+             // Ensure closeDate is not before openDate (can happen with data entry errors)
+             console.log("Comparing dates:", { openDateStr, openDate: openDate?.toISOString(), closeDateStr, closeDate: closeDate?.toISOString() }); // Log ISO strings for clarity
+             if (closeDate < openDate) {
+                 console.warn("Close date is before open date:", openDateStr, closeDateStr);
+                 return 'Check Dates'; // Or handle as appropriate
+            }
+
+            const differenceInTime = closeDate.getTime() - openDate.getTime();
+            const differenceInDays = Math.round(differenceInTime / (1000 * 3600 * 24)); // Convert ms to days
+            return differenceInDays;
+        } catch (error) {
+            console.error("Error calculating days held:", error);
+            return 'Error';
+        }
+    };
+
+
     if (loading) {
         return <div>Loading option sales data...</div>;
     }
@@ -66,15 +160,15 @@ const OptionPage = () => {
                         <tr>
                             <th>Open Date</th>
                             <th>Close Date</th>
+                            <th>Days Held</th>
                             <th>Product Name</th>
                             <th>Quantity</th>
                             <th>Open Price</th>
-                            <th>Open Amount ({optionSales[0]?.open_currency})</th>
                             <th>Close Price</th>
+                            <th>Open Amount ({optionSales[0]?.open_currency})</th>
                             <th>Close Amount ({optionSales[0]?.close_currency})</th>
                             <th>Commission</th>
                             <th>Delta</th>
-                            <th>Country</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -82,15 +176,15 @@ const OptionPage = () => {
                             <tr key={sale.open_order_id || sale.close_order_id || index}> {/* Use a stable key */}
                                 <td>{sale.open_date}</td>
                                 <td>{sale.close_date || 'N/A'}</td>
+                                <td>{calculateDaysHeld(sale.open_date, sale.close_date)}</td>
                                 <td>{sale.product_name}</td>
                                 <td>{sale.quantity}</td>
                                 <td>{sale.open_price?.toFixed(2)}</td>
-                                <td>{sale.open_amount_eur?.toFixed(2)}</td>
                                 <td>{sale.close_price?.toFixed(2)}</td>
+                                <td>{sale.open_amount_eur?.toFixed(2)}</td>
                                 <td>{sale.close_amount_eur?.toFixed(2)}</td>
                                 <td>{sale.commission?.toFixed(2)}</td>
                                 <td>{sale.delta?.toFixed(2)}</td>
-                                <td>{sale.country_code}</td>
                             </tr>
                         ))}
                     </tbody>
