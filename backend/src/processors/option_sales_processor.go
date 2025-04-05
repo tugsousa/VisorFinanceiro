@@ -250,14 +250,7 @@ func createOptionSaleDetail(openTx, closeTx *models.ProcessedTransaction, quanti
 	}
 	totalCommissionMatched := (openCommissionPerUnit + closeCommissionPerUnit) * float64(quantity)
 
-	// Calculate Delta: Profit/Loss = Proceeds - Cost (before commission)
-	if isLongPosition { // Closing a long position (Sell closes Buy)
-		// Proceeds = closeAmountEURMatched (from sell), Cost = openAmountEURMatched (from buy)
-		delta = closeAmountEURMatched - openAmountEURMatched
-	} else { // Closing a short position (Buy closes Sell)
-		// Proceeds = openAmountEURMatched (from initial sell), Cost = closeAmountEURMatched (from closing buy)
-		delta = openAmountEURMatched - closeAmountEURMatched
-	}
+	delta = openAmountEURMatched + closeAmountEURMatched
 
 	return models.OptionSaleDetail{
 		OpenDate:       openTx.Date,

@@ -366,7 +366,8 @@ const OptionPage = () => {
                             </TableHead>
                             <TableBody>
                                 {filteredOptionSales.map((sale, index) => (
-                                    <TableRow hover key={sale.open_order_id || sale.close_order_id || `${sale.open_date}-${index}`}> {/* More robust key */}
+                                    // Use a combination of IDs, dates, and index for a more unique key
+                                    <TableRow hover key={`${sale.open_order_id || 'no-open-id'}-${sale.close_date || 'no-close-date'}-${index}`}>
                                         <TableCell>{sale.open_date}</TableCell>
                                         <TableCell>{sale.close_date || 'N/A'}</TableCell>
                                         <TableCell>{calculateDaysHeld(sale.open_date, sale.close_date)}</TableCell>
