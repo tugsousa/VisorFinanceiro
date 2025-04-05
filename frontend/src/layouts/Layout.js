@@ -6,7 +6,8 @@ import {
   Assessment as HoldingsIcon,
   AttachMoney as DividendsIcon,
   ReceiptLong as TaxIcon, // Changed from CashIcon
-  ShowChart as OptionsIcon // Added icon for Options
+  ShowChart as OptionsIcon, // Added icon for Options
+  Analytics as StockIcon // Added icon for Stocks
 } from '@mui/icons-material';
 
 export default function Layout({ children }) {
@@ -74,6 +75,22 @@ export default function Layout({ children }) {
               }}
             >
               <HoldingsIcon />
+            </IconButton>
+          </Tooltip>
+          <Tooltip title="Stock Sales" placement="right" arrow> {/* Added Stock Sales link */}
+            <IconButton
+              component={Link}
+              to="/stocks"
+              color="inherit"
+              sx={{
+                color: 'text.secondary',
+                '&:hover': {
+                  backgroundColor: 'rgba(25, 118, 210, 0.08)',
+                  color: 'primary.main'
+                }
+              }}
+            >
+              <StockIcon />
             </IconButton>
           </Tooltip>
           <Tooltip title="Options" placement="right" arrow> {/* Added Options link */}
