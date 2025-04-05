@@ -63,6 +63,36 @@ const getMonth = (dateString) => {
 
 const MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
+// Helper function to extract company name from product name
+const getCompanyName = (productName) => {
+  if (!productName || typeof productName !== 'string') return 'Unknown';
+  // Assume company name is the first part before a space
+  const parts = productName.split(' ');
+  return parts[0] || 'Unknown';
+};
+
+// --- Color Generation Functions (adapted from DividendsPage) ---
+const GOLDEN_ANGLE = 137.5; // Approximate golden angle in degrees
+
+// Generate HSL color based on company index for better distribution
+const getColorForCompany = (index, total) => {
+  if (total <= 0) return 'rgba(200, 200, 200, 0.7)'; // Fallback
+  const hue = (index * GOLDEN_ANGLE) % 360;
+  const saturation = 60 + (index * 5) % 31; // 60-90%
+  const lightness = 65 + (index * 3) % 16; // 65-80%
+  return `hsla(${hue.toFixed(0)}, ${saturation}%, ${lightness}%, 0.75)`;
+};
+
+// Generate border color (slightly darker/more saturated)
+const getBorderColorForCompany = (index, total) => {
+   if (total <= 0) return 'rgba(150, 150, 150, 1)'; // Fallback
+   const hue = (index * GOLDEN_ANGLE) % 360; // Keep hue consistent
+   const saturation = 70 + (index * 5) % 26; // 70-95%
+   const lightness = 50 + (index * 3) % 16; // 50-65%
+   return `hsl(${hue.toFixed(0)}, ${saturation}%, ${lightness}%)`;
+}
+// --- End Color Generation Functions ---
+
 
 const OptionPage = () => {
     const [allOptionSales, setAllOptionSales] = useState([]); // Renamed from optionSales
@@ -149,79 +179,138 @@ const OptionPage = () => {
         return filteredOptionSales.reduce((sum, sale) => sum + (sale.delta || 0), 0);
     }, [filteredOptionSales]);
 
-    // Prepare data for the chart (sum of delta)
+    // Prepare data for the STACKED chart (monthly or yearly by Company)
     const chartData = useMemo(() => {
+        const uniqueCompanies = [...new Set(filteredOptionSales.map(sale => getCompanyName(sale.product_name)))].sort();
         const datasets = [];
         let labels = [];
-        const deltaData = [];
 
         if (selectedYear === 'all') {
-            // Yearly view: Sum delta per year
-            const yearlyTotals = {}; // { year: totalDelta }
+            // Yearly view: Sum delta per year, stacked by company
+            const yearlyTotalsByCompany = {}; // { year: { company: totalDelta } }
             const allYearsInData = new Set();
 
             filteredOptionSales.forEach(sale => {
                 const year = getYear(sale.close_date);
+                const company = getCompanyName(sale.product_name);
                 if (year && sale.delta !== undefined && sale.delta !== null) {
                     allYearsInData.add(String(year)); // Collect all years with data
-                    yearlyTotals[year] = (yearlyTotals[year] || 0) + sale.delta;
+                    if (!yearlyTotalsByCompany[year]) {
+                        yearlyTotalsByCompany[year] = {};
+                    }
+                    yearlyTotalsByCompany[year][company] = (yearlyTotalsByCompany[year][company] || 0) + sale.delta;
                 }
             });
 
             labels = Array.from(allYearsInData).sort((a, b) => Number(a) - Number(b));
-            labels.forEach(year => {
-                deltaData.push(yearlyTotals[year] || 0);
+            const totalCompanies = uniqueCompanies.length;
+
+            uniqueCompanies.forEach((company, index) => {
+                const data = labels.map(year => yearlyTotalsByCompany[year]?.[company] || 0);
+                datasets.push({
+                    label: company, // Company name as label
+                    data: data,
+                    backgroundColor: getColorForCompany(index, totalCompanies),
+                    borderColor: getBorderColorForCompany(index, totalCompanies),
+                    borderWidth: 1,
+                });
             });
 
         } else {
-            // Monthly view for the selected year: Sum delta per month
+            // Monthly view for the selected year: Sum delta per month, stacked by company
             labels = MONTH_NAMES;
-            const monthlyTotals = Array(12).fill(0); // Initialize monthly totals
+            const monthlyTotalsByCompany = {}; // { company: [month1_total, month2_total, ...] }
+
+            uniqueCompanies.forEach(company => {
+                monthlyTotalsByCompany[company] = Array(12).fill(0); // Initialize monthly totals for this company
+            });
 
             filteredOptionSales.forEach(sale => {
                 // Already filtered by year
                 const month = getMonth(sale.close_date); // 1-12
+                const company = getCompanyName(sale.product_name);
                 if (month && sale.delta !== undefined && sale.delta !== null) {
-                    monthlyTotals[month - 1] += sale.delta;
+                    monthlyTotalsByCompany[company][month - 1] += sale.delta;
                 }
             });
-            deltaData.push(...monthlyTotals);
-        }
 
-        datasets.push({
-            label: 'Total Delta (€)',
-            data: deltaData,
-            backgroundColor: 'rgba(75, 192, 192, 0.6)', // Teal color
-            borderColor: 'rgba(75, 192, 192, 1)',
-            borderWidth: 1,
-        });
+            const totalCompanies = uniqueCompanies.length;
+            uniqueCompanies.forEach((company, index) => {
+                datasets.push({
+                    label: company, // Company name as label
+                    data: monthlyTotalsByCompany[company],
+                    backgroundColor: getColorForCompany(index, totalCompanies),
+                    borderColor: getBorderColorForCompany(index, totalCompanies),
+                    borderWidth: 1,
+                });
+            });
+        }
 
         return { labels, datasets };
 
-    }, [filteredOptionSales, selectedYear]);
+    }, [filteredOptionSales, selectedYear]); // Ensure dependencies are correct
 
     const chartOptions = useMemo(() => ({
         responsive: true,
         maintainAspectRatio: false, // Allow chart to resize height
         plugins: {
             legend: {
-                display: false, // Hide legend as there's only one dataset
+                display: true, // Show legend for companies
+                position: 'top',
             },
             title: {
                 display: true,
-                text: selectedYear === 'all' ? 'Total Option Delta per Year' : `Monthly Option Delta - ${selectedYear}`,
+                text: selectedYear === 'all' ? 'Total Option Delta per Year by Company' : `Monthly Option Delta by Company - ${selectedYear}`,
             },
             tooltip: {
                 callbacks: {
+                    // Hide the default label (e.g., "Company: €Value")
                     label: function(context) {
-                        let label = context.dataset.label || '';
-                        if (label) {
-                            label += ': ';
+                        return null;
+                    },
+                    // Add individual option sale details for the specific company and period
+                    afterBody: (tooltipItems) => {
+                        const tooltipItem = tooltipItems.find(item => item.datasetIndex !== undefined && item.dataIndex !== undefined);
+                        if (!tooltipItem) return [];
+
+                        const dataIndex = tooltipItem.dataIndex; // Index for the label (year/month)
+                        const datasetIndex = tooltipItem.datasetIndex; // Index for the dataset (company)
+                        const companyLabel = chartData.datasets[datasetIndex]?.label; // Get the company for this dataset
+
+                        let relevantSales = [];
+
+                        if (selectedYear === 'all') {
+                            // Yearly view: label is the year
+                            const yearLabel = chartData.labels[dataIndex];
+                            const year = parseInt(yearLabel, 10);
+                            relevantSales = filteredOptionSales.filter(sale =>
+                                getYear(sale.close_date) === year && getCompanyName(sale.product_name) === companyLabel
+                            );
+                        } else {
+                            // Monthly view: dataIndex corresponds to month (0-11)
+                            const monthIndex = dataIndex; // 0 = Jan, 1 = Feb, etc.
+                            const year = parseInt(selectedYear, 10);
+                            relevantSales = filteredOptionSales.filter(sale => {
+                                // getMonth returns 1-12, so compare with monthIndex + 1
+                                return getMonth(sale.close_date) === monthIndex + 1 &&
+                                       getYear(sale.close_date) === year &&
+                                       getCompanyName(sale.product_name) === companyLabel;
+                            });
                         }
-                        if (context.parsed.y !== null) {
-                            label += new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(context.parsed.y);
+
+                        // Format details for the tooltip
+                        const details = relevantSales.map(sale =>
+                            `  • ${sale.product_name}: ${new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(sale.delta || 0)}`
+                        );
+
+                        // Limit the number of details shown
+                        const maxDetails = 5;
+                        if (details.length > maxDetails) {
+                            const remainingCount = details.length - maxDetails;
+                            return [...details.slice(0, maxDetails), `  ...and ${remainingCount} more`];
                         }
-                        return label;
+
+                        return details.length > 0 ? ['', ...details] : []; // Add empty line for spacing if details exist
                     }
                 }
             }
@@ -229,19 +318,21 @@ const OptionPage = () => {
         scales: {
             y: {
                 beginAtZero: true,
+                stacked: true, // Enable stacking on Y axis
                 title: {
                     display: true,
                     text: 'Total Delta (€)'
                 }
             },
             x: {
+                stacked: true, // Enable stacking on X axis
                 title: {
                     display: true,
                     text: selectedYear === 'all' ? 'Year' : 'Month',
                 }
             }
         }
-    }), [selectedYear]); // <-- Add semicolon here
+    }), [selectedYear, filteredOptionSales, chartData.datasets, chartData.labels]); // Added chartData dependencies for tooltip
 
     // Original calculateDaysHeld function
     const calculateDaysHeld = (openDateStr, closeDateStr) => {
@@ -263,7 +354,13 @@ const OptionPage = () => {
             }
 
             const differenceInTime = closeDate.getTime() - openDate.getTime();
-            const differenceInDays = Math.round(differenceInTime / (1000 * 3600 * 24)); // Convert ms to days
+            let differenceInDays = Math.round(differenceInTime / (1000 * 3600 * 24)); // Convert ms to days
+
+            // Ensure DaysHeld is at least 1 if open and close are on the same day
+            if (differenceInDays === 0) {
+                differenceInDays = 1;
+            }
+
             return differenceInDays;
         } catch (error) {
             console.error("Error calculating days held:", error);
@@ -275,19 +372,28 @@ const OptionPage = () => {
     const calculateAnnualizedReturn = (sale) => {
         const daysHeld = calculateDaysHeld(sale.open_date, sale.close_date);
         const delta = sale.delta;
-        const openAmount = sale.open_amount_eur;
+        const openAmount = Math.abs(sale.open_amount_eur); // Use absolute value for premium received
 
         // Validate inputs
-        if (typeof daysHeld !== 'number' || daysHeld <= 0 || delta === undefined || delta === null || openAmount === undefined || openAmount === null || openAmount === 0) {
+        // Check if daysHeld is a valid positive number
+        // Check if delta is a number
+        // Check if openAmount is a positive number (premium received should be positive for calculation)
+        if (typeof daysHeld !== 'number' || daysHeld <= 0 || typeof delta !== 'number' || typeof openAmount !== 'number' || openAmount <= 0) {
+             // Log specific reasons for N/A if needed for debugging
+             // console.log("Annualized Return N/A:", { daysHeld, delta, openAmount });
             return 'N/A';
         }
 
         try {
-            // Simple linear annualization: delta * 365 / daysHeld
-            const annualizedDelta = delta * 365 / daysHeld;
-            return annualizedDelta; // Return the raw number for formatting/styling later
+            // Calculate annualized percentage return: (Return / Investment) * (365 / Days)
+            // Return = delta
+            // Investment = open_amount_eur (premium received, should be positive)
+            const returnRatio = delta / openAmount;
+            const annualizedReturnRatio = returnRatio * (365 / daysHeld);
+            // Return the ratio (e.g., 0.1 for 10%) - formatting happens in the table cell
+            return annualizedReturnRatio;
         } catch (error) {
-            console.error("Error calculating annualized delta:", error, sale);
+            console.error("Error calculating annualized return:", error, sale);
             return 'Calc Error';
         }
     };
@@ -388,31 +494,34 @@ const OptionPage = () => {
                             </TableHead>
                             <TableBody>
                                 {filteredOptionSales.map((sale, index) => {
-                                    const annualizedReturn = calculateAnnualizedReturn(sale); // Renamed variable back
+                                    const annualizedReturnRatio = calculateAnnualizedReturn(sale); // Now calculates the ratio
                                     let returnDisplay = 'N/A';
                                     let returnColor = 'inherit'; // Default text color
-
-                                    if (typeof annualizedReturn === 'number') {
-                                        // Displaying as percentage again
-                                        returnDisplay = `${(annualizedReturn * 100).toFixed(2)}%`;
-                                        if (annualizedReturn > 0) {
-                                            returnColor = 'success.main'; // Use theme's success color (usually green)
-                                        } else if (annualizedReturn < 0) {
-                                            returnColor = 'error.main'; // Use theme's error color (usually red)
+                                    // Format the ratio as a percentage
+                                    if (typeof annualizedReturnRatio === 'number') {
+                                        returnDisplay = `${(annualizedReturnRatio * 100).toFixed(2)}%`;
+                                        if (annualizedReturnRatio > 0) {
+                                            returnColor = 'success.main'; // Green for positive return
+                                        } else if (annualizedReturnRatio < 0) {
+                                            returnColor = 'error.main'; // Red for negative return
                                         }
+                                        // Keep default color for 0% return
                                     } else {
-                                        returnDisplay = annualizedReturn; // Display 'N/A' or 'Calc Error'
+                                        returnDisplay = annualizedReturnRatio; // Display 'N/A' or 'Calc Error'
                                     }
 
+                                    const daysHeldDisplay = calculateDaysHeld(sale.open_date, sale.close_date);
+
                                     return (
+                                        // Use a combination of IDs, dates, and index for a more unique key
                                         // Use a combination of IDs, dates, and index for a more unique key
                                         <TableRow hover key={`${sale.open_order_id || 'no-open-id'}-${sale.close_date || 'no-close-date'}-${index}`}>
                                             <TableCell>{sale.open_date}</TableCell>
                                             <TableCell>{sale.close_date || 'N/A'}</TableCell>
-                                        <TableCell>{calculateDaysHeld(sale.open_date, sale.close_date)}</TableCell>
-                                        <TableCell>{sale.product_name}</TableCell>
-                                        <TableCell align="right">{sale.quantity}</TableCell>
-                                        <TableCell align="right">{sale.open_price?.toFixed(2)}</TableCell>
+                                            <TableCell>{daysHeldDisplay}</TableCell> {/* Use calculated display value */}
+                                            <TableCell>{sale.product_name}</TableCell>
+                                            <TableCell align="right">{sale.quantity}</TableCell>
+                                            <TableCell align="right">{sale.open_price?.toFixed(2)}</TableCell>
                                         <TableCell align="right">{sale.close_price?.toFixed(2)}</TableCell>
                                         <TableCell align="right">{sale.open_amount_eur?.toFixed(2)}</TableCell>
                                         <TableCell align="right">{sale.close_amount_eur?.toFixed(2)}</TableCell>
