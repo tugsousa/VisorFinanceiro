@@ -20,6 +20,7 @@ type uploadServiceImpl struct {
 
 	// Store the latest result and the transactions that generated it
 	latestResult                *UploadResult
+	latestRawTransactions       []models.RawTransaction       // Added to store raw transactions
 	latestProcessedTransactions []models.ProcessedTransaction // Added to store transactions
 }
 
@@ -81,6 +82,7 @@ func (s *uploadServiceImpl) ProcessUpload(fileReader io.Reader) (*UploadResult, 
 
 	// Store the latest result and transactions before returning
 	s.latestResult = result
+	s.latestRawTransactions = rawTransactions             // Store the raw transactions
 	s.latestProcessedTransactions = processedTransactions // Store the transactions
 
 	return result, nil
@@ -125,4 +127,22 @@ func (s *uploadServiceImpl) GetDividendTransactions() ([]models.ProcessedTransac
 	}
 
 	return dividends, nil
+}
+
+// GetRawTransactions retrieves the list of raw transactions from the latest upload.
+func (s *uploadServiceImpl) GetRawTransactions() ([]models.RawTransaction, error) {
+	if s.latestRawTransactions == nil {
+		// Return an error if no upload has been processed yet
+		return nil, fmt.Errorf("no upload processed yet, cannot retrieve raw transactions")
+	}
+	return s.latestRawTransactions, nil
+}
+
+// GetProcessedTransactions retrieves the list of all processed transactions from the latest upload.
+func (s *uploadServiceImpl) GetProcessedTransactions() ([]models.ProcessedTransaction, error) {
+	if s.latestProcessedTransactions == nil {
+		// Return an error if no upload has been processed yet
+		return nil, fmt.Errorf("no upload processed yet, cannot retrieve processed transactions")
+	}
+	return s.latestProcessedTransactions, nil
 }

@@ -178,3 +178,59 @@ func (h *UploadHandler) HandleGetDividendTransactions(w http.ResponseWriter, r *
 		sendJSONError(w, "Error generating JSON response for dividend transactions", http.StatusInternalServerError)
 	}
 }
+
+// HandleGetRawTransactions retrieves the list of raw transactions from the latest upload.
+func (h *UploadHandler) HandleGetRawTransactions(w http.ResponseWriter, r *http.Request) {
+	// 1. Get the raw transactions from the service
+	rawTransactions, err := h.uploadService.GetRawTransactions()
+	if err != nil {
+		// Handle potential errors, e.g., if no data is available yet
+		if err.Error() == "no upload processed yet, cannot retrieve raw transactions" {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK) // OK status, but empty data
+			json.NewEncoder(w).Encode([]models.RawTransaction{})
+			return
+		}
+		// For other errors, return a JSON error response
+		sendJSONError(w, fmt.Sprintf("Error retrieving raw transactions: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	// 2. Return the transactions as JSON
+	if rawTransactions == nil {
+		rawTransactions = []models.RawTransaction{} // Ensure empty array, not null
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(rawTransactions); err != nil {
+		sendJSONError(w, "Error generating JSON response for raw transactions", http.StatusInternalServerError)
+	}
+}
+
+// HandleGetProcessedTransactions retrieves the list of all processed transactions from the latest upload.
+func (h *UploadHandler) HandleGetProcessedTransactions(w http.ResponseWriter, r *http.Request) {
+	// 1. Get the processed transactions from the service
+	processedTransactions, err := h.uploadService.GetProcessedTransactions()
+	if err != nil {
+		// Handle potential errors, e.g., if no data is available yet
+		if err.Error() == "no upload processed yet, cannot retrieve processed transactions" {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK) // OK status, but empty data
+			json.NewEncoder(w).Encode([]models.ProcessedTransaction{})
+			return
+		}
+		// For other errors, return a JSON error response
+		sendJSONError(w, fmt.Sprintf("Error retrieving processed transactions: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	// 2. Return the transactions as JSON
+	if processedTransactions == nil {
+		processedTransactions = []models.ProcessedTransaction{} // Ensure empty array, not null
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(processedTransactions); err != nil {
+		sendJSONError(w, "Error generating JSON response for processed transactions", http.StatusInternalServerError)
+	}
+}

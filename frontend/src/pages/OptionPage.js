@@ -1,10 +1,75 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
+import {
+  Typography,
+  Box,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  Paper,
+  CircularProgress,
+  Grid
+} from '@mui/material';
+import { Bar } from 'react-chartjs-2';
+import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend } from 'chart.js';
 import './OptionPage.css'; // Assuming you might want some basic styling
 
+// Register ChartJS components
+ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend);
+
+// Simplified Date Parsing and Year/Month Extraction (Focus on DD-MM-YYYY)
+const parseDateDDMMYYYY = (dateString) => {
+  if (!dateString || typeof dateString !== 'string') return null;
+  // Try DD-MM-YYYY first (common format)
+  const parts = dateString.match(/^(\d{1,2})-(\d{1,2})-(\d{4})/);
+  if (parts) {
+    const day = parseInt(parts[1], 10);
+    const month = parseInt(parts[2], 10) - 1; // JS months are 0-indexed
+    const year = parseInt(parts[3], 10);
+    if (!isNaN(day) && !isNaN(month) && !isNaN(year) && month >= 0 && month <= 11 && day >= 1 && day <= 31) {
+      const date = new Date(Date.UTC(year, month, day));
+      // Final check if the constructed date is valid and matches the input year/month/day
+      if (!isNaN(date.getTime()) && date.getUTCFullYear() === year && date.getUTCMonth() === month && date.getUTCDate() === day) {
+        return date;
+      }
+    }
+  }
+  // Fallback: Try direct parsing (handles ISO etc.)
+  try {
+      const date = new Date(dateString);
+      if (!isNaN(date.getTime())) return date;
+  } catch (e) {}
+
+  console.warn(`Failed to parse date string: ${dateString}`);
+  return null;
+};
+
+const getYear = (dateString) => {
+  const date = parseDateDDMMYYYY(dateString);
+  return date ? date.getUTCFullYear() : null;
+};
+
+const getMonth = (dateString) => {
+  const date = parseDateDDMMYYYY(dateString);
+  // Adding 1 because getUTCMonth() is 0-indexed (0 for January)
+  return date ? date.getUTCMonth() + 1 : null;
+};
+
+const MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+
 const OptionPage = () => {
-    const [optionSales, setOptionSales] = useState([]);
+    const [allOptionSales, setAllOptionSales] = useState([]); // Renamed from optionSales
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
+    const [selectedYear, setSelectedYear] = useState('all');
+    const [availableYears, setAvailableYears] = useState([]);
 
     useEffect(() => {
         const fetchOptionSales = async () => {
@@ -15,8 +80,24 @@ const OptionPage = () => {
                     throw new Error(`HTTP error! status: ${response.status}`);
                 }
                 const data = await response.json();
-                // Assuming the API returns an object with an "OptionSaleDetails" array
-                setOptionSales(data.OptionSaleDetails || []);
+                const salesData = data.OptionSaleDetails || [];
+                setAllOptionSales(salesData); // Store all fetched data
+
+                // Extract available years from CLOSE date
+                const years = new Set();
+                salesData.forEach(sale => {
+                    // Use close_date for year filtering/charting
+                    const year = getYear(sale.close_date);
+                    if (year) {
+                        years.add(year);
+                    }
+                });
+                const sortedYears = Array.from(years).sort((a, b) => b - a); // Descending
+                setAvailableYears(['all', ...sortedYears]);
+
+                // Set initial year selection (e.g., latest year or 'all')
+                setSelectedYear(sortedYears[0] ? String(sortedYears[0]) : 'all');
+
                 setError(null);
             } catch (e) {
                 console.error("Error fetching option sales:", e);
@@ -38,7 +119,8 @@ const OptionPage = () => {
                 } else {
                     setError("Failed to load option sales data.");
                 }
-                setOptionSales([]); // Clear data on error
+                setAllOptionSales([]); // Clear data on error
+                setAvailableYears(['all']);
             } finally {
                 setLoading(false);
             }
@@ -47,88 +129,137 @@ const OptionPage = () => {
         fetchOptionSales();
     }, []); // Empty dependency array means this effect runs once on mount
 
+    const handleYearChange = (event) => {
+        setSelectedYear(event.target.value);
+    };
+
+    // Filter option sales based on selected year (using close_date)
+    const filteredOptionSales = useMemo(() => {
+        if (!allOptionSales) return [];
+        return allOptionSales.filter(sale => {
+            if (selectedYear === 'all') return true; // Include if 'all' years selected
+
+            const transactionYear = getYear(sale.close_date); // Filter based on close date year
+            return transactionYear === Number(selectedYear);
+        });
+    }, [allOptionSales, selectedYear]);
+
+    // Calculate total delta for the filtered transactions
+    const totalFilteredDelta = useMemo(() => {
+        return filteredOptionSales.reduce((sum, sale) => sum + (sale.delta || 0), 0);
+    }, [filteredOptionSales]);
+
+    // Prepare data for the chart (sum of delta)
+    const chartData = useMemo(() => {
+        const datasets = [];
+        let labels = [];
+        const deltaData = [];
+
+        if (selectedYear === 'all') {
+            // Yearly view: Sum delta per year
+            const yearlyTotals = {}; // { year: totalDelta }
+            const allYearsInData = new Set();
+
+            filteredOptionSales.forEach(sale => {
+                const year = getYear(sale.close_date);
+                if (year && sale.delta !== undefined && sale.delta !== null) {
+                    allYearsInData.add(String(year)); // Collect all years with data
+                    yearlyTotals[year] = (yearlyTotals[year] || 0) + sale.delta;
+                }
+            });
+
+            labels = Array.from(allYearsInData).sort((a, b) => Number(a) - Number(b));
+            labels.forEach(year => {
+                deltaData.push(yearlyTotals[year] || 0);
+            });
+
+        } else {
+            // Monthly view for the selected year: Sum delta per month
+            labels = MONTH_NAMES;
+            const monthlyTotals = Array(12).fill(0); // Initialize monthly totals
+
+            filteredOptionSales.forEach(sale => {
+                // Already filtered by year
+                const month = getMonth(sale.close_date); // 1-12
+                if (month && sale.delta !== undefined && sale.delta !== null) {
+                    monthlyTotals[month - 1] += sale.delta;
+                }
+            });
+            deltaData.push(...monthlyTotals);
+        }
+
+        datasets.push({
+            label: 'Total Delta (€)',
+            data: deltaData,
+            backgroundColor: 'rgba(75, 192, 192, 0.6)', // Teal color
+            borderColor: 'rgba(75, 192, 192, 1)',
+            borderWidth: 1,
+        });
+
+        return { labels, datasets };
+
+    }, [filteredOptionSales, selectedYear]);
+
+    const chartOptions = useMemo(() => ({
+        responsive: true,
+        maintainAspectRatio: false, // Allow chart to resize height
+        plugins: {
+            legend: {
+                display: false, // Hide legend as there's only one dataset
+            },
+            title: {
+                display: true,
+                text: selectedYear === 'all' ? 'Total Option Delta per Year' : `Monthly Option Delta - ${selectedYear}`,
+            },
+            tooltip: {
+                callbacks: {
+                    label: function(context) {
+                        let label = context.dataset.label || '';
+                        if (label) {
+                            label += ': ';
+                        }
+                        if (context.parsed.y !== null) {
+                            label += new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(context.parsed.y);
+                        }
+                        return label;
+                    }
+                }
+            }
+        },
+        scales: {
+            y: {
+                beginAtZero: true,
+                title: {
+                    display: true,
+                    text: 'Total Delta (€)'
+                }
+            },
+            x: {
+                title: {
+                    display: true,
+                    text: selectedYear === 'all' ? 'Year' : 'Month',
+                }
+            }
+        }
+    }), [selectedYear]);
+
+    // Original calculateDaysHeld function (no changes needed here)
     const calculateDaysHeld = (openDateStr, closeDateStr) => {
         if (!openDateStr || !closeDateStr) {
             return 'N/A'; // Return N/A if either date is missing
         }
-
-        // Helper function to parse potentially ambiguous date strings
-        const parseDate = (dateStr) => {
-            if (!dateStr) return new Date(NaN); // Handle null/undefined input
-
-            const trimmedDateStr = dateStr.trim(); // Trim whitespace
-            let parsedDate = new Date(NaN); // Initialize as invalid
-
-            // 1. Try parsing 'DD-MM-YYYY HH:MM:SS' format
-            let parts = trimmedDateStr.match(/^(\d{1,2})-(\d{1,2})-(\d{4}) (\d{2}):(\d{2}):(\d{2})$/);
-            if (parts) {
-                const day = parseInt(parts[1]);
-                const month = parseInt(parts[2]) - 1; // Adjust month index
-                const year = parseInt(parts[3]);
-                const hour = parseInt(parts[4]);
-                const minute = parseInt(parts[5]);
-                const second = parseInt(parts[6]);
-                if (day >= 1 && day <= 31 && month >= 0 && month <= 11 && hour >= 0 && hour <= 23 && minute >= 0 && minute <= 59 && second >= 0 && second <= 59) {
-                    const date = new Date(Date.UTC(year, month, day, hour, minute, second));
-                    if (!isNaN(date.getTime()) && date.getUTCFullYear() === year && date.getUTCMonth() === month && date.getUTCDate() === day) {
-                        console.log(`Parsed "${trimmedDateStr}" using DD-MM-YYYY HH:MM:SS ->`, date.toISOString());
-                        return date;
-                    }
-                }
-            }
-
-            // 2. Try parsing 'DD-MM-YYYY' format
-            parts = trimmedDateStr.match(/^(\d{1,2})-(\d{1,2})-(\d{4})$/);
-            if (parts) {
-                const day = parseInt(parts[1]);
-                const month = parseInt(parts[2]) - 1; // Adjust month index
-                const year = parseInt(parts[3]);
-                if (day >= 1 && day <= 31 && month >= 0 && month <= 11) {
-                   const date = new Date(Date.UTC(year, month, day));
-                   if (!isNaN(date.getTime()) && date.getUTCFullYear() === year && date.getUTCMonth() === month && date.getUTCDate() === day) {
-                       console.log(`Parsed "${trimmedDateStr}" using DD-MM-YYYY ->`, date.toISOString());
-                       return date;
-                   }
-                }
-            }
-
-            // 3. Try parsing 'YYYY-MM-DD HH:MM:SS' format
-            parts = trimmedDateStr.match(/^(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2}):(\d{2})$/);
-            if (parts) {
-                const date = new Date(Date.UTC(parseInt(parts[1]), parseInt(parts[2]) - 1, parseInt(parts[3]), parseInt(parts[4]), parseInt(parts[5]), parseInt(parts[6])));
-                if (!isNaN(date.getTime())) {
-                    console.log(`Parsed "${trimmedDateStr}" using YYYY-MM-DD HH:MM:SS ->`, date.toISOString());
-                    return date;
-                }
-            }
-
-            // 4. Try direct parsing (handles ISO 8601, RFC 2822, etc., as a fallback)
-            parsedDate = new Date(trimmedDateStr);
-            if (!isNaN(parsedDate.getTime())) {
-                 console.log(`Parsed "${trimmedDateStr}" using direct new Date() ->`, parsedDate.toISOString());
-                return parsedDate;
-            }
-
-            // 5. If all parsing attempts fail, return an invalid date object
-            console.warn(`Failed to parse date string: "${dateStr}" (trimmed: "${trimmedDateStr}")`);
-            return new Date(NaN);
-        };
-
         try {
-            const openDate = parseDate(openDateStr);
-            const closeDate = parseDate(closeDateStr);
+            const openDate = parseDateDDMMYYYY(openDateStr); // Use consistent parsing
+            const closeDate = parseDateDDMMYYYY(closeDateStr); // Use consistent parsing
 
-            // Check if dates are valid after parsing attempts
-            if (isNaN(openDate.getTime()) || isNaN(closeDate.getTime())) {
-                console.error("Could not parse dates for calculation:", openDateStr, closeDateStr);
-                return 'Invalid Date'; // Return 'Invalid Date' if parsing failed
+            if (!openDate || !closeDate || isNaN(openDate.getTime()) || isNaN(closeDate.getTime())) {
+                console.warn("Could not parse dates for calculation:", openDateStr, closeDateStr);
+                return 'Invalid Date';
              }
 
-             // Ensure closeDate is not before openDate (can happen with data entry errors)
-             console.log("Comparing dates:", { openDateStr, openDate: openDate?.toISOString(), closeDateStr, closeDate: closeDate?.toISOString() }); // Log ISO strings for clarity
              if (closeDate < openDate) {
                  console.warn("Close date is before open date:", openDateStr, closeDateStr);
-                 return 'Check Dates'; // Or handle as appropriate
+                 return 'Check Dates';
             }
 
             const differenceInTime = closeDate.getTime() - openDate.getTime();
@@ -142,55 +273,119 @@ const OptionPage = () => {
 
 
     if (loading) {
-        return <div>Loading option sales data...</div>;
+        return <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '50vh' }}><CircularProgress /></Box>;
     }
 
     if (error) {
-        return <div style={{ color: 'red' }}>{error}</div>;
+        return <Typography color="error" sx={{ textAlign: 'center', mt: 4 }}>Error: {error}</Typography>;
     }
 
     return (
-        <div className="option-page-container">
-            <h1>Option Sales</h1>
-            {optionSales.length === 0 ? (
-                <p>No option sales data available.</p>
-            ) : (
-                <table className="option-sales-table">
-                    <thead>
-                        <tr>
-                            <th>Open Date</th>
-                            <th>Close Date</th>
-                            <th>Days Held</th>
-                            <th>Product Name</th>
-                            <th>Quantity</th>
-                            <th>Open Price</th>
-                            <th>Close Price</th>
-                            <th>Open Amount ({optionSales[0]?.open_currency})</th>
-                            <th>Close Amount ({optionSales[0]?.close_currency})</th>
-                            <th>Commission</th>
-                            <th>Delta</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {optionSales.map((sale, index) => (
-                            <tr key={sale.open_order_id || sale.close_order_id || index}> {/* Use a stable key */}
-                                <td>{sale.open_date}</td>
-                                <td>{sale.close_date || 'N/A'}</td>
-                                <td>{calculateDaysHeld(sale.open_date, sale.close_date)}</td>
-                                <td>{sale.product_name}</td>
-                                <td>{sale.quantity}</td>
-                                <td>{sale.open_price?.toFixed(2)}</td>
-                                <td>{sale.close_price?.toFixed(2)}</td>
-                                <td>{sale.open_amount_eur?.toFixed(2)}</td>
-                                <td>{sale.close_amount_eur?.toFixed(2)}</td>
-                                <td>{sale.commission?.toFixed(2)}</td>
-                                <td>{sale.delta?.toFixed(2)}</td>
-                            </tr>
-                        ))}
-                    </tbody>
-                </table>
+        <Box sx={{ p: 3 }}> {/* Added Padding */}
+            <Typography variant="h4" component="h1" gutterBottom>
+                Option Sales Analysis
+            </Typography>
+
+            {/* Year Filter and Loading/Error Indicator */}
+            <Grid container spacing={2} sx={{ mb: 3, alignItems: 'center' }}>
+                <Grid item>
+                    <FormControl sx={{ minWidth: 150 }} size="small">
+                        <InputLabel id="year-select-label">Year</InputLabel>
+                        <Select
+                            labelId="year-select-label"
+                            value={selectedYear}
+                            label="Year"
+                            onChange={handleYearChange}
+                            disabled={loading || error || availableYears.length <= 1} // Disable if only 'all'
+                        >
+                            {availableYears.map(year => (
+                                <MenuItem key={year} value={String(year)}>
+                                    {year === 'all' ? 'All Years' : year}
+                                </MenuItem>
+                            ))}
+                        </Select>
+                    </FormControl>
+                </Grid>
+                <Grid item>
+                    {/* Loading/Error indicators were moved to the top level return */}
+                </Grid>
+                 {/* Display Total Delta */}
+                 {!loading && !error && filteredOptionSales.length > 0 && (
+                    <Grid item xs={12} sm="auto" sx={{ textAlign: { xs: 'left', sm: 'right' }, mt: { xs: 1, sm: 0 }, flexGrow: 1 }}>
+                        <Typography variant="subtitle1" component="div">
+                            Total Delta ({selectedYear === 'all' ? 'All Years' : selectedYear}):
+                            <Typography component="span" sx={{ fontWeight: 'bold', ml: 1 }}>
+                                {new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(totalFilteredDelta)}
+                            </Typography>
+                        </Typography>
+                    </Grid>
+                 )}
+            </Grid>
+
+            {/* Option Delta Chart */}
+            {!loading && !error && (
+                <Paper elevation={3} sx={{ p: 2, mb: 3 }}>
+                    <Box sx={{ height: 400 }}>
+                        {chartData.datasets && chartData.datasets.length > 0 && chartData.datasets[0].data.some(d => d !== 0) ? ( // Check if there's non-zero data
+                           <Bar options={chartOptions} data={chartData} />
+                        ) : (
+                           <Typography variant="body1" color="textSecondary" sx={{ textAlign: 'center', pt: '150px' }}>
+                              No option delta data available for the selected period.
+                           </Typography>
+                        )}
+                    </Box>
+                </Paper>
             )}
-        </div>
+
+
+            {/* Option Sales Table */}
+            <Typography variant="h6" gutterBottom>
+                Option Sales Details ({selectedYear === 'all' ? 'All Years' : selectedYear})
+            </Typography>
+            {filteredOptionSales.length === 0 && !loading && !error ? (
+                <Typography sx={{ mt: 2, textAlign: 'center' }}>No option sales data available for the selected period.</Typography>
+            ) : (
+                <Paper elevation={3} sx={{ overflow: 'hidden' }}> {/* Added Paper and overflow hidden */}
+                    <TableContainer sx={{ maxHeight: 600 }}> {/* Added max height for scroll */}
+                        <Table stickyHeader size="small" className="option-sales-table"> {/* Added size small */}
+                            <TableHead>
+                                <TableRow>
+                                    <TableCell>Open Date</TableCell>
+                                    <TableCell>Close Date</TableCell>
+                                    <TableCell>Days Held</TableCell>
+                                    <TableCell>Product Name</TableCell>
+                                    <TableCell align="right">Quantity</TableCell>
+                                    <TableCell align="right">Open Price</TableCell>
+                                    <TableCell align="right">Close Price</TableCell>
+                                    {/* Simplified currency display */}
+                                    <TableCell align="right">Open Amount (€)</TableCell>
+                                    <TableCell align="right">Close Amount (€)</TableCell>
+                                    <TableCell align="right">Commission (€)</TableCell>
+                                    <TableCell align="right">Delta (€)</TableCell>
+                                </TableRow>
+                            </TableHead>
+                            <TableBody>
+                                {filteredOptionSales.map((sale, index) => (
+                                    <TableRow hover key={sale.open_order_id || sale.close_order_id || `${sale.open_date}-${index}`}> {/* More robust key */}
+                                        <TableCell>{sale.open_date}</TableCell>
+                                        <TableCell>{sale.close_date || 'N/A'}</TableCell>
+                                        <TableCell>{calculateDaysHeld(sale.open_date, sale.close_date)}</TableCell>
+                                        <TableCell>{sale.product_name}</TableCell>
+                                        <TableCell align="right">{sale.quantity}</TableCell>
+                                        <TableCell align="right">{sale.open_price?.toFixed(2)}</TableCell>
+                                        <TableCell align="right">{sale.close_price?.toFixed(2)}</TableCell>
+                                        <TableCell align="right">{sale.open_amount_eur?.toFixed(2)}</TableCell>
+                                        <TableCell align="right">{sale.close_amount_eur?.toFixed(2)}</TableCell>
+                                        <TableCell align="right">{sale.commission?.toFixed(2)}</TableCell>
+                                        <TableCell align="right">{sale.delta?.toFixed(2)}</TableCell>
+                                    </TableRow>
+                                ))}
+                            </TableBody>
+                        </Table>
+                    </TableContainer>
+                </Paper>
+            )}
+        </Box>
     );
 };
 
