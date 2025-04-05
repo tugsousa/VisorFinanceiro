@@ -175,38 +175,62 @@ func sortTransactionsByDate(transactions []models.ProcessedTransaction) {
 func createOptionSaleDetail(openTx, closeTx *models.ProcessedTransaction, quantity int, isLongPosition bool) models.OptionSaleDetail {
 	var delta float64
 	// Ensure quantities are not zero before division
-	openQty := openTx.Quantity
-	if openQty == 0 {
-		openQty = 1
-	} // Avoid division by zero
-	closeQty := closeTx.Quantity
+	// Use OriginalQuantity for per-unit calculations of the opening leg
+	openOriginalQty := openTx.OriginalQuantity
+	if openOriginalQty == 0 {
+		log.Printf("Warning: Open transaction %s for product %s has OriginalQuantity zero. Falling back to Quantity.", openTx.OrderID, openTx.ProductName)
+		openOriginalQty = openTx.Quantity // Fallback, though might still be wrong if modified
+		if openOriginalQty == 0 {
+			log.Printf("Error: Open transaction %s for product %s has zero OriginalQuantity and Quantity. Cannot calculate per-unit values accurately.", openTx.OrderID, openTx.ProductName)
+			openOriginalQty = 1 // Avoid division by zero, but result will be wrong
+		}
+	}
+	// Use the closing transaction's current quantity for its per-unit calculation (usually not needed unless it also represents a partial fill)
+	closeQty := closeTx.Quantity // Assuming closeTx quantity represents the amount in *this* specific closing event
 	if closeQty == 0 {
+		// If the closing transaction quantity is 0 (e.g., exercise assignment), we might still need its price/commission info
+		// but per-unit amount calculation based on quantity doesn't make sense.
+		// Let's keep it 1 to avoid division by zero for commission, but amount per unit will be based on Price if Amount is 0.
 		closeQty = 1
-	} // Avoid division by zero
+	}
 
 	// Calculate amounts per unit for the matched quantity
 	openAmountPerUnit := 0.0
-	if openQty != 0 {
-		openAmountPerUnit = openTx.Amount / float64(openQty)
+	if openOriginalQty != 0 {
+		openAmountPerUnit = openTx.Amount / float64(openOriginalQty) // Use Original Qty
 	}
 	closeAmountPerUnit := 0.0
-	if closeQty != 0 {
+	// Handle cases like exercise/assignment where Amount might be 0 but Price isn't necessarily
+	if closeTx.Amount != 0 && closeQty != 0 {
 		closeAmountPerUnit = closeTx.Amount / float64(closeQty)
+	} else if closeTx.Price != 0 { // If amount is 0, use price as per-unit value
+		closeAmountPerUnit = closeTx.Price
 	}
+	// If both Amount and Price are 0 for closeTx, closeAmountPerUnit remains 0
 
 	// Calculate EUR amounts per unit for the matched quantity
 	openAmountEURPerUnit := 0.0
-	if openQty != 0 && openTx.ExchangeRate != 0 {
-		openAmountEURPerUnit = (openTx.Amount / float64(openQty)) / openTx.ExchangeRate
-	} else if openQty != 0 { // Handle zero exchange rate case
-		openAmountEURPerUnit = openAmountPerUnit // Assume 1:1 if rate is missing/zero
+	if openOriginalQty != 0 { // Use Original Qty
+		if openTx.ExchangeRate != 0 {
+			openAmountEURPerUnit = (openTx.Amount / float64(openOriginalQty)) / openTx.ExchangeRate
+		} else {
+			openAmountEURPerUnit = openAmountPerUnit // Assume 1:1 if rate is missing/zero
+		}
 	}
 
 	closeAmountEURPerUnit := 0.0
-	if closeQty != 0 && closeTx.ExchangeRate != 0 {
-		closeAmountEURPerUnit = (closeTx.Amount / float64(closeQty)) / closeTx.ExchangeRate
-	} else if closeQty != 0 { // Handle zero exchange rate case
-		closeAmountEURPerUnit = closeAmountPerUnit // Assume 1:1 if rate is missing/zero
+	if closeQty != 0 { // Use closeQty for closing leg
+		if closeTx.ExchangeRate != 0 {
+			// Base EUR calculation on Amount if available, otherwise Price
+			if closeTx.Amount != 0 {
+				closeAmountEURPerUnit = (closeTx.Amount / float64(closeQty)) / closeTx.ExchangeRate
+			} else if closeTx.Price != 0 {
+				// Assume Price is in the original currency if Amount is 0
+				closeAmountEURPerUnit = closeTx.Price / closeTx.ExchangeRate
+			}
+		} else {
+			closeAmountEURPerUnit = closeAmountPerUnit // Assume 1:1 if rate is missing/zero
+		}
 	}
 
 	// Calculate total amounts for the matched quantity
@@ -217,18 +241,23 @@ func createOptionSaleDetail(openTx, closeTx *models.ProcessedTransaction, quanti
 
 	// Commission allocation (simple prorata based on quantity matched)
 	openCommissionPerUnit := 0.0
-	if openQty != 0 {
-		openCommissionPerUnit = openTx.Commission / float64(openQty)
+	if openOriginalQty != 0 { // Use Original Qty
+		openCommissionPerUnit = openTx.Commission / float64(openOriginalQty)
 	}
 	closeCommissionPerUnit := 0.0
-	if closeQty != 0 {
+	if closeQty != 0 { // Use closeQty for closing leg
 		closeCommissionPerUnit = closeTx.Commission / float64(closeQty)
 	}
 	totalCommissionMatched := (openCommissionPerUnit + closeCommissionPerUnit) * float64(quantity)
 
-	// Calculate Delta: Net change = Close Amount + Open Amount (before commission)
-	// Note: Amounts already have correct signs (+credit/buy, -debit/sell) based on transaction type
-	delta = openAmountEURMatched + closeAmountEURMatched
+	// Calculate Delta: Profit/Loss = Proceeds - Cost (before commission)
+	if isLongPosition { // Closing a long position (Sell closes Buy)
+		// Proceeds = closeAmountEURMatched (from sell), Cost = openAmountEURMatched (from buy)
+		delta = closeAmountEURMatched - openAmountEURMatched
+	} else { // Closing a short position (Buy closes Sell)
+		// Proceeds = openAmountEURMatched (from initial sell), Cost = closeAmountEURMatched (from closing buy)
+		delta = openAmountEURMatched - closeAmountEURMatched
+	}
 
 	return models.OptionSaleDetail{
 		OpenDate:       openTx.Date,
