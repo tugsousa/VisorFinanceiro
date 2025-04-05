@@ -241,9 +241,9 @@ const OptionPage = () => {
                 }
             }
         }
-    }), [selectedYear]);
+    }), [selectedYear]); // <-- Add semicolon here
 
-    // Original calculateDaysHeld function (no changes needed here)
+    // Original calculateDaysHeld function
     const calculateDaysHeld = (openDateStr, closeDateStr) => {
         if (!openDateStr || !closeDateStr) {
             return 'N/A'; // Return N/A if either date is missing
@@ -268,6 +268,27 @@ const OptionPage = () => {
         } catch (error) {
             console.error("Error calculating days held:", error);
             return 'Error';
+        }
+    };
+
+    // Calculate Annualized Return
+    const calculateAnnualizedReturn = (sale) => {
+        const daysHeld = calculateDaysHeld(sale.open_date, sale.close_date);
+        const delta = sale.delta;
+        const openAmount = sale.open_amount_eur;
+
+        // Validate inputs
+        if (typeof daysHeld !== 'number' || daysHeld <= 0 || delta === undefined || delta === null || openAmount === undefined || openAmount === null || openAmount === 0) {
+            return 'N/A';
+        }
+
+        try {
+            // Simple linear annualization: delta * 365 / daysHeld
+            const annualizedDelta = delta * 365 / daysHeld;
+            return annualizedDelta; // Return the raw number for formatting/styling later
+        } catch (error) {
+            console.error("Error calculating annualized delta:", error, sale);
+            return 'Calc Error';
         }
     };
 
@@ -362,14 +383,32 @@ const OptionPage = () => {
                                     <TableCell align="right">Close Amount (€)</TableCell>
                                     <TableCell align="right">Commission (€)</TableCell>
                                     <TableCell align="right">Delta (€)</TableCell>
+                                    <TableCell align="right">Annualized Return (%)</TableCell> {/* Changed Header Back */}
                                 </TableRow>
                             </TableHead>
                             <TableBody>
-                                {filteredOptionSales.map((sale, index) => (
-                                    // Use a combination of IDs, dates, and index for a more unique key
-                                    <TableRow hover key={`${sale.open_order_id || 'no-open-id'}-${sale.close_date || 'no-close-date'}-${index}`}>
-                                        <TableCell>{sale.open_date}</TableCell>
-                                        <TableCell>{sale.close_date || 'N/A'}</TableCell>
+                                {filteredOptionSales.map((sale, index) => {
+                                    const annualizedReturn = calculateAnnualizedReturn(sale); // Renamed variable back
+                                    let returnDisplay = 'N/A';
+                                    let returnColor = 'inherit'; // Default text color
+
+                                    if (typeof annualizedReturn === 'number') {
+                                        // Displaying as percentage again
+                                        returnDisplay = `${(annualizedReturn * 100).toFixed(2)}%`;
+                                        if (annualizedReturn > 0) {
+                                            returnColor = 'success.main'; // Use theme's success color (usually green)
+                                        } else if (annualizedReturn < 0) {
+                                            returnColor = 'error.main'; // Use theme's error color (usually red)
+                                        }
+                                    } else {
+                                        returnDisplay = annualizedReturn; // Display 'N/A' or 'Calc Error'
+                                    }
+
+                                    return (
+                                        // Use a combination of IDs, dates, and index for a more unique key
+                                        <TableRow hover key={`${sale.open_order_id || 'no-open-id'}-${sale.close_date || 'no-close-date'}-${index}`}>
+                                            <TableCell>{sale.open_date}</TableCell>
+                                            <TableCell>{sale.close_date || 'N/A'}</TableCell>
                                         <TableCell>{calculateDaysHeld(sale.open_date, sale.close_date)}</TableCell>
                                         <TableCell>{sale.product_name}</TableCell>
                                         <TableCell align="right">{sale.quantity}</TableCell>
@@ -379,8 +418,13 @@ const OptionPage = () => {
                                         <TableCell align="right">{sale.close_amount_eur?.toFixed(2)}</TableCell>
                                         <TableCell align="right">{sale.commission?.toFixed(2)}</TableCell>
                                         <TableCell align="right">{sale.delta?.toFixed(2)}</TableCell>
+                                        {/* New Cell with conditional styling */}
+                                        <TableCell align="right" sx={{ color: returnColor }}>
+                                            {returnDisplay}
+                                        </TableCell>
                                     </TableRow>
-                                ))}
+                                );
+                            })}
                             </TableBody>
                         </Table>
                     </TableContainer>

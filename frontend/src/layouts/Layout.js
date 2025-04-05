@@ -76,9 +76,25 @@ export default function Layout({ children }) {
               <HoldingsIcon />
             </IconButton>
           </Tooltip>
+          <Tooltip title="Options" placement="right" arrow> {/* Added Options link */}
+            <IconButton
+              component={Link}
+              to="/options"
+              color="inherit"
+              sx={{
+                color: 'text.secondary',
+                '&:hover': {
+                  backgroundColor: 'rgba(25, 118, 210, 0.08)',
+                  color: 'primary.main'
+                }
+              }}
+            >
+              <OptionsIcon />
+            </IconButton>
+          </Tooltip>
           <Tooltip title="Dividends" placement="right" arrow>
-            <IconButton 
-              component={Link} 
+            <IconButton
+              component={Link}
               to="/dividends" 
               color="inherit"
               sx={{
@@ -106,22 +122,6 @@ export default function Layout({ children }) {
               }}
             >
               <TaxIcon /> {/* Changed icon */}
-            </IconButton>
-          </Tooltip>
-          <Tooltip title="Options" placement="right" arrow> {/* Added Options link */}
-            <IconButton
-              component={Link}
-              to="/options"
-              color="inherit"
-              sx={{
-                color: 'text.secondary',
-                '&:hover': {
-                  backgroundColor: 'rgba(25, 118, 210, 0.08)',
-                  color: 'primary.main'
-                }
-              }}
-            >
-              <OptionsIcon />
             </IconButton>
           </Tooltip>
         </Box>
