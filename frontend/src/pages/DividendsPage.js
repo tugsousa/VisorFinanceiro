@@ -162,40 +162,41 @@ export default function DividendsPage() {
     return filteredDividendTransactions.reduce((sum, tx) => sum + (tx.AmountEUR || 0), 0);
   }, [filteredDividendTransactions]);
 
-  // Prepare data for the STACKED chart (monthly or yearly by ISIN)
+  // Prepare data for the STACKED chart (monthly or yearly by ProductName)
   const chartData = useMemo(() => {
-    const uniqueIsins = [...new Set(filteredDividendTransactions.map(tx => tx.ISIN || 'Unknown'))].sort();
+    // Group by ProductName instead of ISIN
+    const uniqueProductNames = [...new Set(filteredDividendTransactions.map(tx => tx.ProductName || 'Unknown Product'))].sort();
     const datasets = [];
     let labels = [];
 
     if (selectedYear === 'all') {
       // Yearly view
-      const yearlyTotalsByIsin = {}; // { year: { isin: total } }
+      const yearlyTotalsByProduct = {}; // { year: { productName: total } }
       const allYears = new Set();
 
       filteredDividendTransactions.forEach(tx => {
         const year = getYear(tx.Date);
-        const isin = tx.ISIN || 'Unknown';
+        const productName = tx.ProductName || 'Unknown Product'; // Use ProductName
         if (year && tx.AmountEUR) {
           allYears.add(String(year)); // Collect all years with data
-          if (!yearlyTotalsByIsin[year]) {
-            yearlyTotalsByIsin[year] = {};
+          if (!yearlyTotalsByProduct[year]) {
+            yearlyTotalsByProduct[year] = {};
           }
-          yearlyTotalsByIsin[year][isin] = (yearlyTotalsByIsin[year][isin] || 0) + tx.AmountEUR;
+          yearlyTotalsByProduct[year][productName] = (yearlyTotalsByProduct[year][productName] || 0) + tx.AmountEUR;
         }
       });
 
       labels = Array.from(allYears).sort((a, b) => Number(a) - Number(b));
-      const totalIsins = uniqueIsins.length; // Get total count
+      const totalProducts = uniqueProductNames.length; // Get total count
 
-      uniqueIsins.forEach((isin, index) => { // Add index
-        const data = labels.map(year => yearlyTotalsByIsin[year]?.[isin] || 0);
+      uniqueProductNames.forEach((productName, index) => { // Iterate by productName
+        const data = labels.map(year => yearlyTotalsByProduct[year]?.[productName] || 0);
         datasets.push({
-          label: isin, // ISIN as label
+          label: productName, // Use ProductName as label
           data: data,
-          // Use index-based color functions
-          backgroundColor: getColorForIsin(index, totalIsins),
-          borderColor: getBorderColorForIsin(index, totalIsins),
+          // Use index-based color functions (can keep using the same functions, just based on product index now)
+          backgroundColor: getColorForIsin(index, totalProducts), // Renaming function might be good later
+          borderColor: getBorderColorForIsin(index, totalProducts), // Renaming function might be good later
           borderWidth: 1,
         });
       });
@@ -203,29 +204,29 @@ export default function DividendsPage() {
     } else {
       // Monthly view for the selected year
       labels = MONTH_NAMES;
-      const monthlyTotalsByIsin = {}; // { isin: [month1_total, month2_total, ...] }
+      const monthlyTotalsByProduct = {}; // { productName: [month1_total, month2_total, ...] }
 
-      uniqueIsins.forEach(isin => {
-        monthlyTotalsByIsin[isin] = Array(12).fill(0); // Initialize monthly totals for this ISIN
+      uniqueProductNames.forEach(productName => {
+        monthlyTotalsByProduct[productName] = Array(12).fill(0); // Initialize monthly totals for this product
       });
 
       filteredDividendTransactions.forEach(tx => {
         // Already filtered by year
         const month = getMonth(tx.Date); // 1-12
-        const isin = tx.ISIN || 'Unknown';
+        const productName = tx.ProductName || 'Unknown Product'; // Use ProductName
         if (month && tx.AmountEUR) {
-          monthlyTotalsByIsin[isin][month - 1] += tx.AmountEUR;
+          monthlyTotalsByProduct[productName][month - 1] += tx.AmountEUR;
         }
       });
 
-      const totalIsins = uniqueIsins.length; // Get total count
-      uniqueIsins.forEach((isin, index) => { // Add index
+      const totalProducts = uniqueProductNames.length; // Get total count
+      uniqueProductNames.forEach((productName, index) => { // Iterate by productName
         datasets.push({
-          label: isin, // ISIN as label
-          data: monthlyTotalsByIsin[isin],
+          label: productName, // Use ProductName as label
+          data: monthlyTotalsByProduct[productName],
            // Use index-based color functions
-          backgroundColor: getColorForIsin(index, totalIsins),
-          borderColor: getBorderColorForIsin(index, totalIsins),
+          backgroundColor: getColorForIsin(index, totalProducts), // Renaming function might be good later
+          borderColor: getBorderColorForIsin(index, totalProducts), // Renaming function might be good later
           borderWidth: 1,
         });
       });
@@ -259,8 +260,8 @@ export default function DividendsPage() {
             if (!tooltipItem) return [];
 
             const dataIndex = tooltipItem.dataIndex; // Index for the label (year/month)
-            const datasetIndex = tooltipItem.datasetIndex; // Index for the dataset (ISIN)
-            const isinLabel = chartData.datasets[datasetIndex]?.label; // Get the ISIN for this dataset
+            const datasetIndex = tooltipItem.datasetIndex; // Index for the dataset (ProductName)
+            const productLabel = chartData.datasets[datasetIndex]?.label; // Get the ProductName for this dataset
 
             let relevantTransactions = [];
 
@@ -269,7 +270,7 @@ export default function DividendsPage() {
               const yearLabel = chartData.labels[dataIndex];
               const year = parseInt(yearLabel, 10);
               relevantTransactions = filteredDividendTransactions.filter(tx =>
-                getYear(tx.Date) === year && (tx.ISIN || 'Unknown') === isinLabel
+                getYear(tx.Date) === year && (tx.ProductName || 'Unknown Product') === productLabel
               );
             } else {
               // Monthly view: dataIndex corresponds to month (0-11)
@@ -279,13 +280,14 @@ export default function DividendsPage() {
                 // getMonth returns 1-12, so compare with monthIndex + 1
                 return getMonth(tx.Date) === monthIndex + 1 &&
                        getYear(tx.Date) === year &&
-                       (tx.ISIN || 'Unknown') === isinLabel;
+                       (tx.ProductName || 'Unknown Product') === productLabel;
               });
             }
 
-            // Only show details if they belong to the specific ISIN segment hovered
+            // Only show details if they belong to the specific ProductName segment hovered
+            // Tooltip detail format remains the same (shows ProductName and Amount)
             const details = relevantTransactions.map(tx =>
-              `  • ${tx.ProductName || 'Unknown'}: ${new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(tx.AmountEUR || 0)}`
+              `  • ${tx.ProductName || 'Unknown Product'}: ${new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(tx.AmountEUR || 0)}`
             );
 
             // Limit the number of details shown
