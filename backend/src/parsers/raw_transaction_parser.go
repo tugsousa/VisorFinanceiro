@@ -61,7 +61,7 @@ func (p *transactionProcessorImpl) Process(rawTransactions []models.RawTransacti
 		// Special handling for cash deposits (Description is exactly "Depósito")
 		if orderType == "cashdeposit" {
 			processed := models.ProcessedTransaction{
-				Date:         raw.OrderDate,
+				Date:         raw.ValueDate,
 				ProductName:  name,
 				ISIN:         raw.ISIN,
 				Quantity:     0, // Cash deposits have no quantity
