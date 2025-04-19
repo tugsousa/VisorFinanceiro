@@ -16,6 +16,7 @@ import {
   CircularProgress,
   Grid
 } from '@mui/material';
+import YearlySalesChart from '../components/YearlySalesChart';
 // Removed ChartJS imports as chart is not needed
 
 // Simplified Date Parsing and Year Extraction (Focus on DD-MM-YYYY)
@@ -242,7 +243,10 @@ const StockPage = () => {
                  )}
             </Grid>
 
-            {/* Removed Chart Section */}
+            {/* Yearly Sales Chart */}
+            <Box sx={{ mb: 4 }}>
+              <YearlySalesChart stockSales={filteredStockSales} />
+            </Box>
 
             {/* Stock Sales Table */}
             <Typography variant="h6" gutterBottom>
