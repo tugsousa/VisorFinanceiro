@@ -1,7 +1,6 @@
 // src/App.js
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import UploadPage from './pages/UploadPage';
-import Dashboard from './pages/Dashboard';
 import DetailedView from './pages/DetailedView';
 import Layout from './layouts/Layout';
 import Holdings from './pages/HoldingsPage';
@@ -16,7 +15,6 @@ function App() {
       <Layout>
         <Routes>
           <Route path="/" element={<UploadPage />} />
-          <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/detailed" element={<DetailedView />} />
           <Route path="/holdings" element={<Holdings />} />
           <Route path="/dividends" element={<Dividends />} />

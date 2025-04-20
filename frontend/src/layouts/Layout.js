@@ -2,7 +2,6 @@ import { Box, AppBar, Toolbar, Typography, Drawer, IconButton, Tooltip } from '@
 import { Link } from 'react-router-dom';
 import {
   Upload as UploadIcon,
-  Dashboard as DashboardIcon,
   Assessment as HoldingsIcon,
   AttachMoney as DividendsIcon,
   ReceiptLong as TaxIcon, // Changed from CashIcon
@@ -43,22 +42,6 @@ export default function Layout({ children }) {
               }}
             >
               <UploadIcon />
-            </IconButton>
-          </Tooltip>
-          <Tooltip title="Dashboard" placement="right" arrow>
-            <IconButton 
-              component={Link} 
-              to="/dashboard" 
-              color="inherit"
-              sx={{
-                color: 'text.secondary',
-                '&:hover': {
-                  backgroundColor: 'rgba(25, 118, 210, 0.08)',
-                  color: 'primary.main'
-                }
-              }}
-            >
-              <DashboardIcon />
             </IconButton>
           </Tooltip>
           <Tooltip title="Holdings" placement="right" arrow>
