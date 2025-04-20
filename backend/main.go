@@ -57,6 +57,8 @@ func main() {
 	router.HandleFunc("GET /api/dividend-transactions", uploadHandler.HandleGetDividendTransactions)   // Added route for individual dividend transactions
 	router.HandleFunc("GET /api/raw-transactions", uploadHandler.HandleGetRawTransactions)             // Added route for raw transactions
 	router.HandleFunc("GET /api/processed-transactions", uploadHandler.HandleGetProcessedTransactions) // Added route for processed transactions
+	router.HandleFunc("GET /api/holdings/stocks", uploadHandler.HandleGetStockHoldings)                // Added route for stock holdings
+	router.HandleFunc("GET /api/holdings/options", uploadHandler.HandleGetOptionHoldings)              // Added route for option holdings
 	router.HandleFunc("GET /", func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("TAXFOLIO Backend is running"))
 	})

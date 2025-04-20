@@ -146,3 +146,19 @@ func (s *uploadServiceImpl) GetProcessedTransactions() ([]models.ProcessedTransa
 	}
 	return s.latestProcessedTransactions, nil
 }
+
+// GetStockHoldings retrieves the current stock holdings from the latest upload.
+func (s *uploadServiceImpl) GetStockHoldings() ([]models.PurchaseLot, error) {
+	if s.latestResult == nil {
+		return nil, fmt.Errorf("no upload processed yet, cannot retrieve stock holdings")
+	}
+	return s.latestResult.StockHoldings, nil
+}
+
+// GetOptionHoldings retrieves the current option holdings from the latest upload.
+func (s *uploadServiceImpl) GetOptionHoldings() ([]models.OptionHolding, error) {
+	if s.latestResult == nil {
+		return nil, fmt.Errorf("no upload processed yet, cannot retrieve option holdings")
+	}
+	return s.latestResult.OptionHoldings, nil
+}

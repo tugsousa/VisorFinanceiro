@@ -234,3 +234,59 @@ func (h *UploadHandler) HandleGetProcessedTransactions(w http.ResponseWriter, r 
 		sendJSONError(w, "Error generating JSON response for processed transactions", http.StatusInternalServerError)
 	}
 }
+
+// HandleGetStockHoldings retrieves the current stock holdings from the latest upload.
+func (h *UploadHandler) HandleGetStockHoldings(w http.ResponseWriter, r *http.Request) {
+	// 1. Get the stock holdings from the service
+	stockHoldings, err := h.uploadService.GetStockHoldings()
+	if err != nil {
+		// Handle potential errors, e.g., if no data is available yet
+		if err.Error() == "no upload processed yet, cannot retrieve stock holdings" {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			json.NewEncoder(w).Encode([]models.PurchaseLot{})
+			return
+		}
+		// For other errors, return a JSON error response
+		sendJSONError(w, fmt.Sprintf("Error retrieving stock holdings: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	// 2. Return the holdings as JSON
+	if stockHoldings == nil {
+		stockHoldings = []models.PurchaseLot{} // Ensure empty array, not null
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(stockHoldings); err != nil {
+		sendJSONError(w, "Error generating JSON response for stock holdings", http.StatusInternalServerError)
+	}
+}
+
+// HandleGetOptionHoldings retrieves the current option holdings from the latest upload.
+func (h *UploadHandler) HandleGetOptionHoldings(w http.ResponseWriter, r *http.Request) {
+	// 1. Get the option holdings from the service
+	optionHoldings, err := h.uploadService.GetOptionHoldings()
+	if err != nil {
+		// Handle potential errors, e.g., if no data is available yet
+		if err.Error() == "no upload processed yet, cannot retrieve option holdings" {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			json.NewEncoder(w).Encode([]models.OptionHolding{})
+			return
+		}
+		// For other errors, return a JSON error response
+		sendJSONError(w, fmt.Sprintf("Error retrieving option holdings: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	// 2. Return the holdings as JSON
+	if optionHoldings == nil {
+		optionHoldings = []models.OptionHolding{} // Ensure empty array, not null
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(optionHoldings); err != nil {
+		sendJSONError(w, "Error generating JSON response for option holdings", http.StatusInternalServerError)
+	}
+}

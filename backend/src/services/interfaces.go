@@ -25,4 +25,6 @@ type UploadService interface {
 	GetDividendTransactions() ([]models.ProcessedTransaction, error)  // Added method to get dividend transactions
 	GetRawTransactions() ([]models.RawTransaction, error)             // Added method to get raw transactions
 	GetProcessedTransactions() ([]models.ProcessedTransaction, error) // Added method to get all processed transactions
+	GetStockHoldings() ([]models.PurchaseLot, error)                  // Added method to get stock holdings
+	GetOptionHoldings() ([]models.OptionHolding, error)               // Added method to get option holdings
 }
