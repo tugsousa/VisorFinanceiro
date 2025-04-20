@@ -39,24 +39,67 @@ export default function HoldingsPage() {
           optionsResponse.json()
         ]);
         
-        // Transform stock holdings data
-        const transformedStocks = (stocks || []).map(stock => ({
-          symbol: stock.isin, // Using ISIN as symbol for now
-          quantity: stock.quantity,
-          averageCost: stock.buyPrice.toFixed(2),
-          currentValue: (stock.buyPrice * stock.quantity).toFixed(2)
+        // Transform and group stock holdings data by product_name
+        const stockGroups = (stocks || []).reduce((acc, stock) => {
+          if (!acc[stock.product_name]) {
+            acc[stock.product_name] = {
+              product_name: stock.product_name,
+              quantity: 0,
+              totalCost: 0,
+              totalValue: 0
+            };
+          }
+          acc[stock.product_name].quantity += stock.quantity;
+          acc[stock.product_name].totalCost += stock.buyPrice * stock.quantity;
+          acc[stock.product_name].totalValue += stock.buyPrice * stock.quantity;
+          return acc;
+        }, {});
+
+        const transformedStocks = Object.values(stockGroups).map(group => ({
+          product_name: group.product_name,
+          quantity: group.quantity,
+          averageCost: (group.totalCost / group.quantity).toFixed(2),
+          currentValue: group.totalValue.toFixed(2)
         }));
 
         // Transform option holdings data
         const transformedOptions = (options || []).map(option => {
-          // Parse option details from product_name (format: "COL P35.00 19DEC25")
-          const parts = option.product_name.split(' ');
+          let daysRemaining = 'N/A';
+          
+          try {
+            // Parse expiration date from product_name (format: "COL P35.00 19DEC25")
+            const parts = option.product_name.split(' ');
+            if (parts.length >= 3) {
+              // Find the part that matches the date format (DDMMMYY)
+              const datePart = parts.find(part => /^\d{2}[A-Z]{3}\d{2}$/.test(part));
+              if (datePart) {
+                // Convert expiration date to Date object (format: DDMMMYY)
+                const day = datePart.substring(0, 2);
+                const month = datePart.substring(2, 5);
+                const year = '20' + datePart.substring(5);
+                const expirationDate = new Date(`${day} ${month} ${year}`);
+                
+                // Calculate days remaining
+                const today = new Date();
+                const timeDiff = expirationDate.getTime() - today.getTime();
+                daysRemaining = Math.ceil(timeDiff / (1000 * 60 * 60 * 24));
+              } else {
+                console.warn(`No valid date found in product_name: ${option.product_name}`);
+              }
+            } else {
+              console.warn(`Unexpected product_name format: ${option.product_name}`);
+            }
+          } catch (e) {
+            console.warn(`Failed to parse expiration date from: ${option.product_name}`, e);
+          }
+          
           return {
-            symbol: parts[0],
-            optionType: parts[1],
-            strike: parts[2],
-            expiration: parts[3],
-            quantity: option.quantity
+            product_name: option.product_name,
+            expiration: typeof daysRemaining === 'number' 
+              ? (daysRemaining > 0 ? `${daysRemaining} days` : 'Expired')
+              : 'N/A',
+            quantity: option.quantity,
+            open_amount_eur: option.open_amount_eur
           };
         });
         
@@ -91,7 +134,7 @@ export default function HoldingsPage() {
         <Table>
           <TableHead>
             <TableRow>
-              <TableCell>Symbol</TableCell>
+              <TableCell>Product Name</TableCell>
               <TableCell>Quantity</TableCell>
               <TableCell>Average Cost</TableCell>
               <TableCell>Current Value</TableCell>
@@ -100,7 +143,7 @@ export default function HoldingsPage() {
           <TableBody>
             {stockHoldings.map((holding) => (
               <TableRow key={`${holding.symbol}-${holding.purchaseDate}`}>
-                <TableCell>{holding.symbol}</TableCell>
+                <TableCell>{holding.product_name}</TableCell>
                 <TableCell>{holding.quantity}</TableCell>
                 <TableCell>{holding.averageCost}</TableCell>
                 <TableCell>{holding.currentValue}</TableCell>
@@ -118,21 +161,19 @@ export default function HoldingsPage() {
             <Table>
               <TableHead>
                 <TableRow>
-                  <TableCell>Symbol</TableCell>
-                  <TableCell>Type</TableCell>
-                  <TableCell>Strike</TableCell>
+                  <TableCell>Product</TableCell>
                   <TableCell>Expiration</TableCell>
                   <TableCell>Quantity</TableCell>
+                  <TableCell>Amount (EUR)</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
                 {optionHoldings.map((holding) => (
                   <TableRow key={`${holding.symbol}-${holding.expiration}-${holding.strike}`}>
-                    <TableCell>{holding.symbol}</TableCell>
-                    <TableCell>{holding.optionType}</TableCell>
-                    <TableCell>{holding.strike}</TableCell>
+                    <TableCell>{holding.product_name}</TableCell>
                     <TableCell>{holding.expiration}</TableCell>
                     <TableCell>{holding.quantity}</TableCell>
+                    <TableCell>{holding.open_amount_eur}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>
