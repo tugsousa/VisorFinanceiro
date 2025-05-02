@@ -137,12 +137,25 @@ export default function Layout({ children }) {
             color: 'white', // Changed text color to white
           }}
         >
-          <Toolbar>
-            <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
-              TAXFOLIO
-            </Typography>
-            {/* Removed the Upload and Dashboard buttons */}
-          </Toolbar>
+            <Toolbar>
+              <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
+                TAXFOLIO
+              </Typography>
+              <Typography 
+                variant="body1" 
+                component={Link} 
+                to="/signin"
+                sx={{ 
+                  color: 'white',
+                  textDecoration: 'none',
+                  '&:hover': {
+                    textDecoration: 'underline'
+                  }
+                }}
+              >
+                Sign in
+              </Typography>
+            </Toolbar>
         </AppBar>
         <Box sx={{ p: 3, mt: 8 }}> {/* Added margin top to account for AppBar */}
           {children}
