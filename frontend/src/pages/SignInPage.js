@@ -7,18 +7,24 @@ function SignInPage() {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [success, setSuccess] = useState(false);
   const { login } = useContext(AuthContext);
   const navigate = useNavigate();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
+    setSuccess(false);
 
     try {
-      await login(username, password);
-      navigate('/');
+      const success = await login(username, password);
+      if (success) {
+        setSuccess(true);
+        setTimeout(() => navigate('/'), 1500);
+      }
     } catch (err) {
       setError('Invalid username or password');
+      console.error('Login error:', err);
     }
   };
 
@@ -26,6 +32,7 @@ function SignInPage() {
     <div className="auth-container">
       <h2>Sign In</h2>
       {error && <div className="error-message">{error}</div>}
+      {success && <div className="success-message">Login successful! Redirecting...</div>}
       <form onSubmit={handleSubmit}>
         <div className="form-group">
           <label htmlFor="username">Username</label>

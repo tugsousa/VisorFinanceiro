@@ -25,6 +25,9 @@ func enableCORS(next http.Handler) http.Handler {
 }
 
 func main() {
+	userHandler := handlers.NewUserHandler()
+
+	// Initialize parsers and processors
 	csvParser := parsers.NewCSVParser()
 	transactionProcessor := parsers.NewTransactionProcessor()
 	dividendProcessor := processors.NewDividendProcessor()
@@ -40,19 +43,12 @@ func main() {
 		optionProcessor,
 		cashMovementProcessor,
 	)
-
 	uploadHandler := handlers.NewUploadHandler(uploadService)
 
 	router := http.NewServeMux()
-	// Corrected route registration
-	router.HandleFunc("/api/register", handlers.RegisterUserHandler)
-	router.HandleFunc("/api/upload", uploadHandler.HandleUpload)
-	router.HandleFunc("/api/stock-sales", uploadHandler.HandleGetStockSales)
-	router.HandleFunc("/api/option-sales", uploadHandler.HandleGetOptionSales)
-	router.HandleFunc("/api/dividend-tax-summary", uploadHandler.HandleGetDividendTaxSummary)
-	router.HandleFunc("/api/dividend-transactions", uploadHandler.HandleGetDividendTransactions)
-	router.HandleFunc("/api/raw-transactions", uploadHandler.HandleGetRawTransactions)
-	router.HandleFunc("/api/processed-transactions", uploadHandler.HandleGetProcessedTransactions)
+
+	router.HandleFunc("/api/login", userHandler.LoginUserHandler)
+	router.HandleFunc("/api/register", userHandler.RegisterUserHandler)
 	router.HandleFunc("/api/holdings/stocks", uploadHandler.HandleGetStockHoldings)
 	router.HandleFunc("/api/holdings/options", uploadHandler.HandleGetOptionHoldings)
 	router.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
