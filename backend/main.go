@@ -1,14 +1,15 @@
 package main
 
 import (
-	"TAXFOLIO/src/database"
-	"TAXFOLIO/src/handlers"
-	_ "TAXFOLIO/src/model" // Ensure model package is initialized
-	"TAXFOLIO/src/parsers"
-	"TAXFOLIO/src/processors"
-	"TAXFOLIO/src/services"
 	"log"
 	"net/http"
+
+	"github.com/username/taxfolio/backend/src/database"
+	"github.com/username/taxfolio/backend/src/handlers"
+	_ "github.com/username/taxfolio/backend/src/model" // Ensure model package is initialized
+	"github.com/username/taxfolio/backend/src/parsers"
+	"github.com/username/taxfolio/backend/src/processors"
+	"github.com/username/taxfolio/backend/src/services"
 )
 
 func enableCORS(next http.Handler) http.Handler {
@@ -25,7 +26,7 @@ func enableCORS(next http.Handler) http.Handler {
 }
 
 func main() {
-	userHandler := handlers.NewUserHandler()
+	userHandler := handlers.NewUserHandler("your-secret-key-here") // TODO: Replace with actual JWT secret
 
 	// Initialize parsers and processors
 	csvParser := parsers.NewCSVParser()
