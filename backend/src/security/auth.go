@@ -15,6 +15,8 @@ const (
 	bcryptCost         = 12
 	TokenExpiry        = 15 * time.Minute
 	RefreshTokenExpiry = 7 * 24 * time.Hour
+	csrfTokenLength    = 32
+	csrfTokenName      = "X-CSRF-Token"
 )
 
 type AuthService struct {
@@ -25,6 +27,22 @@ func NewAuthService(secret string) *AuthService {
 	return &AuthService{
 		JWTSecret: secret,
 	}
+}
+
+func (a *AuthService) GenerateCSRFToken() (string, error) {
+	b := make([]byte, csrfTokenLength)
+	_, err := rand.Read(b)
+	if err != nil {
+		return "", err
+	}
+	return base64.URLEncoding.EncodeToString(b), nil
+}
+
+func (a *AuthService) ValidateCSRFToken(cookieToken, headerToken string) bool {
+	if cookieToken == "" || headerToken == "" {
+		return false
+	}
+	return cookieToken == headerToken
 }
 
 func (a *AuthService) HashPassword(password string) (string, error) {
@@ -87,5 +105,35 @@ func SetSecureCookie(w http.ResponseWriter, name, value string, expiry time.Time
 		HttpOnly: true,
 		Secure:   true,
 		SameSite: http.SameSiteStrictMode,
+	})
+}
+
+func CSRFTokenMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Skip CSRF check for safe methods
+		if r.Method == "GET" || r.Method == "HEAD" || r.Method == "OPTIONS" {
+			next.ServeHTTP(w, r)
+			return
+		}
+
+		// Get token from cookie and header
+		cookie, err := r.Cookie(csrfTokenName)
+		if err != nil {
+			http.Error(w, "CSRF token missing", http.StatusForbidden)
+			return
+		}
+
+		headerToken := r.Header.Get(csrfTokenName)
+		if headerToken == "" {
+			headerToken = r.FormValue(csrfTokenName)
+		}
+
+		// Validate tokens match
+		if cookie.Value != headerToken {
+			http.Error(w, "Invalid CSRF token", http.StatusForbidden)
+			return
+		}
+
+		next.ServeHTTP(w, r)
 	})
 }

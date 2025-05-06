@@ -27,18 +27,24 @@ func (h *UserHandler) LoginUserHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&credentials); err != nil {
-		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"error": "Invalid request body"})
 		return
 	}
 
 	user, err := model.GetUserByUsername(database.DB, credentials.Username)
 	if err != nil {
-		http.Error(w, "Invalid username or password", http.StatusUnauthorized)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusUnauthorized)
+		json.NewEncoder(w).Encode(map[string]string{"error": "Invalid username or password"})
 		return
 	}
 
 	if err := user.CheckPassword(credentials.Password); err != nil {
-		http.Error(w, "Invalid username or password", http.StatusUnauthorized)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusUnauthorized)
+		json.NewEncoder(w).Encode(map[string]string{"error": "Invalid username or password"})
 		return
 	}
 

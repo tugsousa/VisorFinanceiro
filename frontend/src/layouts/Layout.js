@@ -1,6 +1,6 @@
 import { Box, AppBar, Toolbar, Typography, Drawer, IconButton, Tooltip, Button } from '@mui/material';
 import { Link, useNavigate } from 'react-router-dom';
-import { AuthContext } from '../context/AuthContext';
+import { useAuth } from '../context/AuthContext';
 import {
   Upload as UploadIcon,
   Assessment as HoldingsIcon,
@@ -11,6 +11,8 @@ import {
 } from '@mui/icons-material';
 
 export default function Layout({ children }) {
+  const { user, logout } = useAuth();
+  const navigate = useNavigate();
   return (
     <Box sx={{ display: 'flex' }}>
       {/* White Sidebar */}
