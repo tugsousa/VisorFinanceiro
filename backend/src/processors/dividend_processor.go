@@ -1,11 +1,12 @@
 package processors
 
 import (
-	"TAXFOLIO/src/models"
-	"TAXFOLIO/src/utils" // Added import for country utils
 	"math"
 	"strings"
 	"time" // Import time package
+
+	"github.com/username/taxfolio/backend/src/models"
+	"github.com/username/taxfolio/backend/src/utils" // Added import for country utils
 )
 
 // dividendProcessorImpl implements the DividendProcessor interface.

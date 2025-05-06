@@ -1,12 +1,15 @@
 package services
 
 import (
-	"TAXFOLIO/src/models"
-	"TAXFOLIO/src/parsers"
-	"TAXFOLIO/src/processors"
 	"fmt"
 	"io"
+	"log"
 	"strings"
+
+	"github.com/username/taxfolio/backend/src/database"
+	"github.com/username/taxfolio/backend/src/models"
+	"github.com/username/taxfolio/backend/src/parsers"
+	"github.com/username/taxfolio/backend/src/processors"
 )
 
 // uploadServiceImpl implements the UploadService interface.
@@ -44,7 +47,7 @@ func NewUploadService(
 }
 
 // ProcessUpload handles the core logic of parsing the file and processing transactions.
-func (s *uploadServiceImpl) ProcessUpload(fileReader io.Reader) (*UploadResult, error) {
+func (s *uploadServiceImpl) ProcessUpload(fileReader io.Reader, userID int64) (*UploadResult, error) {
 	// 1. Parse CSV file
 	rawTransactions, err := s.csvParser.Parse(fileReader)
 	if err != nil {
@@ -80,21 +83,70 @@ func (s *uploadServiceImpl) ProcessUpload(fileReader io.Reader) (*UploadResult, 
 		CashMovements:     cashMovements, // Added
 	}
 
-	// Store the latest result and transactions before returning
+	// Store the latest result and transactions with userID before returning
 	s.latestResult = result
-	s.latestRawTransactions = rawTransactions             // Store the raw transactions
-	s.latestProcessedTransactions = processedTransactions // Store the transactions
+	s.latestRawTransactions = rawTransactions
+	s.latestProcessedTransactions = processedTransactions
+
+	// Store transactions in database with userID
+	for _, tx := range processedTransactions {
+		_, err := database.DB.Exec(`
+			INSERT INTO processed_transactions 
+			(user_id, date, product_name, isin, quantity, price, order_type, 
+			 transaction_type, amount, currency, commission, order_id, 
+			 exchange_rate, amount_eur, country_code)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			userID, tx.Date, tx.ProductName, tx.ISIN, tx.Quantity, tx.Price,
+			tx.OrderType, tx.TransactionType, tx.Amount, tx.Currency,
+			tx.Commission, tx.OrderID, tx.ExchangeRate, tx.AmountEUR, tx.CountryCode)
+		if err != nil {
+			log.Printf("Error storing transaction: %v", err)
+		}
+	}
 
 	return result, nil
 }
 
 // GetLatestUploadResult returns the most recently processed upload result.
-func (s *uploadServiceImpl) GetLatestUploadResult() (*UploadResult, error) {
-	if s.latestResult == nil {
-		// Return an error if no upload has been processed yet, matching the handler's expectation
-		return nil, fmt.Errorf("no upload result available yet")
+func (s *uploadServiceImpl) GetLatestUploadResult(userID int64) (*UploadResult, error) {
+	// Query database for user's latest result
+	rows, err := database.DB.Query(`
+		SELECT * FROM processed_transactions 
+		WHERE user_id = ?
+		ORDER BY date DESC
+		LIMIT 100`, userID)
+	if err != nil {
+		return nil, fmt.Errorf("error querying transactions: %w", err)
 	}
-	return s.latestResult, nil
+	defer rows.Close()
+
+	var transactions []models.ProcessedTransaction
+	for rows.Next() {
+		var tx models.ProcessedTransaction
+		err := rows.Scan(
+			&tx.Date, &tx.ProductName, &tx.ISIN, &tx.Quantity, &tx.Price,
+			&tx.OrderType, &tx.TransactionType, &tx.Amount, &tx.Currency,
+			&tx.Commission, &tx.OrderID, &tx.ExchangeRate, &tx.AmountEUR, &tx.CountryCode)
+		if err != nil {
+			return nil, fmt.Errorf("error scanning transaction: %w", err)
+		}
+		transactions = append(transactions, tx)
+	}
+
+	// Process transactions to generate result
+	dividendResult := s.dividendProcessor.Calculate(transactions)
+	stockSaleDetails, stockHoldings := s.stockProcessor.Process(transactions)
+	optionSaleDetails, optionHoldings := s.optionProcessor.Process(transactions)
+	cashMovements := s.cashMovementProcessor.Process(transactions)
+
+	return &UploadResult{
+		DividendResult:    dividendResult,
+		StockSaleDetails:  stockSaleDetails,
+		StockHoldings:     stockHoldings,
+		OptionSaleDetails: optionSaleDetails,
+		OptionHoldings:    optionHoldings,
+		CashMovements:     cashMovements,
+	}, nil
 }
 
 // GetDividendTaxSummary calculates and returns the dividend summary specifically for tax reporting.

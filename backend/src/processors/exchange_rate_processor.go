@@ -1,12 +1,13 @@
 package processors
 
 import (
-	"TAXFOLIO/src/models"
 	"encoding/json"
 	"fmt"
 	"os"
 	"strconv"
 	"time"
+
+	"github.com/username/taxfolio/backend/src/models"
 )
 
 var historicalRates models.ExchangeRate

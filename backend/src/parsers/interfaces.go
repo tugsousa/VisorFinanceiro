@@ -1,8 +1,9 @@
 package parsers
 
 import (
-	"TAXFOLIO/src/models"
 	"io"
+
+	"github.com/username/taxfolio/backend/src/models"
 )
 
 // CSVParser defines the interface for parsing CSV data into raw transactions.

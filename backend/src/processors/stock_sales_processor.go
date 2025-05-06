@@ -1,9 +1,10 @@
 package processors
 
 import (
-	"TAXFOLIO/src/models"
-	"TAXFOLIO/src/utils" // Import the new utils package
 	"sort"
+
+	"github.com/username/taxfolio/backend/src/models"
+	"github.com/username/taxfolio/backend/src/utils" // Import the new utils package
 	// "time" // No longer needed directly if using utils.ParseDate
 )
 

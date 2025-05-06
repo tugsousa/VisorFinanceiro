@@ -1,14 +1,12 @@
 package handlers
 
 import (
-	"TAXFOLIO/src/models"
-	"TAXFOLIO/src/services" // Import the new services package
 	"encoding/json"
 	"fmt"
 	"net/http"
-	// "TAXFOLIO/src/models" // No longer directly needed
-	// "TAXFOLIO/src/parsers" // No longer directly needed
-	// "TAXFOLIO/src/processors" // No longer directly needed
+
+	"github.com/username/taxfolio/backend/src/models"
+	"github.com/username/taxfolio/backend/src/services"
 )
 
 // UploadHandler handles file uploads by delegating to UploadService.
@@ -25,6 +23,13 @@ func NewUploadHandler(service services.UploadService) *UploadHandler {
 
 // HandleUpload receives the file, passes it to the service, and returns the result.
 func (h *UploadHandler) HandleUpload(w http.ResponseWriter, r *http.Request) {
+	// 0. Authentication - get user ID from JWT
+	userID, ok := r.Context().Value("userID").(int64)
+	if !ok {
+		http.Error(w, "authentication required", http.StatusUnauthorized)
+		return
+	}
+
 	// 1. Parse multipart form to get the file (max 10 MB file size)
 	if err := r.ParseMultipartForm(10 << 20); err != nil {
 		http.Error(w, fmt.Sprintf("failed to parse multipart form: %v", err), http.StatusBadRequest)
@@ -39,8 +44,8 @@ func (h *UploadHandler) HandleUpload(w http.ResponseWriter, r *http.Request) {
 	}
 	defer file.Close() // Ensure the file is closed
 
-	// 3. Delegate processing to the UploadService
-	result, err := h.uploadService.ProcessUpload(file)
+	// 3. Delegate processing to the UploadService with userID
+	result, err := h.uploadService.ProcessUpload(file, userID)
 	if err != nil {
 		// Determine appropriate HTTP status code based on error type if needed
 		// For now, using InternalServerError for any processing error
@@ -58,7 +63,8 @@ func (h *UploadHandler) HandleUpload(w http.ResponseWriter, r *http.Request) {
 // HandleGetStockSales retrieves the latest processed stock sale details.
 func (h *UploadHandler) HandleGetStockSales(w http.ResponseWriter, r *http.Request) {
 	// 1. Get the latest result from the service
-	result, err := h.uploadService.GetLatestUploadResult()
+	userID := r.Context().Value("userID").(int64)
+	result, err := h.uploadService.GetLatestUploadResult(userID)
 	if err != nil {
 		// Handle potential errors, e.g., if no data is available yet
 		http.Error(w, fmt.Sprintf("Error retrieving latest results: %v", err), http.StatusInternalServerError)
@@ -75,7 +81,8 @@ func (h *UploadHandler) HandleGetStockSales(w http.ResponseWriter, r *http.Reque
 // HandleGetOptionSales retrieves the latest processed option sale details.
 func (h *UploadHandler) HandleGetOptionSales(w http.ResponseWriter, r *http.Request) {
 	// 1. Get the latest result from the service
-	result, err := h.uploadService.GetLatestUploadResult()
+	userID := r.Context().Value("userID").(int64)
+	result, err := h.uploadService.GetLatestUploadResult(userID)
 	if err != nil {
 		// Handle potential errors, e.g., if no data is available yet
 		// Return an empty JSON object or array if no data is found, instead of an error,
@@ -151,14 +158,23 @@ func sendJSONError(w http.ResponseWriter, message string, statusCode int) {
 // HandleGetDividendTransactions retrieves the list of individual dividend transactions.
 func (h *UploadHandler) HandleGetDividendTransactions(w http.ResponseWriter, r *http.Request) {
 	// 1. Get the dividend transactions from the service
-	dividendTransactions, err := h.uploadService.GetDividendTransactions()
+	// Explicitly handle type conversion
+	transactions, err := h.uploadService.GetDividendTransactions()
+	var dividendTransactions []models.ProcessedTransaction
+	if transactions != nil {
+		dividendTransactions = make([]models.ProcessedTransaction, len(transactions))
+		for i, tx := range transactions {
+			dividendTransactions[i] = models.ProcessedTransaction(tx)
+		}
+	}
+
 	if err != nil {
 		// Handle potential errors, e.g., if no data is available yet
 		if err.Error() == "no upload processed yet, cannot retrieve dividend transactions" {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusOK) // OK status, but empty data
 			// Return an empty JSON array
-			json.NewEncoder(w).Encode([]models.ProcessedTransaction{}) // Already returns JSON
+			json.NewEncoder(w).Encode([]models.ProcessedTransaction{})
 			return
 		}
 		// For other errors, return a JSON error response
@@ -167,11 +183,6 @@ func (h *UploadHandler) HandleGetDividendTransactions(w http.ResponseWriter, r *
 	}
 
 	// 2. Return the transactions as JSON
-	// Ensure we return an empty array if the result is nil
-	if dividendTransactions == nil {
-		dividendTransactions = []models.ProcessedTransaction{} // Ensure it's an empty array, not null
-	}
-
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(dividendTransactions); err != nil {
 		// Handle JSON encoding error by sending a JSON error response
@@ -182,7 +193,26 @@ func (h *UploadHandler) HandleGetDividendTransactions(w http.ResponseWriter, r *
 // HandleGetRawTransactions retrieves the list of raw transactions from the latest upload.
 func (h *UploadHandler) HandleGetRawTransactions(w http.ResponseWriter, r *http.Request) {
 	// 1. Get the raw transactions from the service
-	rawTransactions, err := h.uploadService.GetRawTransactions()
+	// Explicit type conversion to handle potential package visibility issues
+	transactions, err := h.uploadService.GetRawTransactions()
+	var rawTransactions []models.RawTransaction
+	if transactions != nil {
+		rawTransactions = make([]models.RawTransaction, len(transactions))
+		for i, tx := range transactions {
+			rawTransactions[i] = models.RawTransaction{
+				OrderDate:    tx.OrderDate,
+				OrderTime:    tx.OrderTime,
+				ValueDate:    tx.ValueDate,
+				Name:         tx.Name,
+				ISIN:         tx.ISIN,
+				Description:  tx.Description,
+				ExchangeRate: tx.ExchangeRate,
+				Currency:     tx.Currency,
+				Amount:       tx.Amount,
+				OrderID:      tx.OrderID,
+			}
+		}
+	}
 	if err != nil {
 		// Handle potential errors, e.g., if no data is available yet
 		if err.Error() == "no upload processed yet, cannot retrieve raw transactions" {
@@ -210,7 +240,33 @@ func (h *UploadHandler) HandleGetRawTransactions(w http.ResponseWriter, r *http.
 // HandleGetProcessedTransactions retrieves the list of all processed transactions from the latest upload.
 func (h *UploadHandler) HandleGetProcessedTransactions(w http.ResponseWriter, r *http.Request) {
 	// 1. Get the processed transactions from the service
-	processedTransactions, err := h.uploadService.GetProcessedTransactions()
+	// Explicit type conversion to handle package visibility issues
+	transactions, err := h.uploadService.GetProcessedTransactions()
+	var processedTransactions []models.ProcessedTransaction
+	if transactions != nil {
+		processedTransactions = make([]models.ProcessedTransaction, len(transactions))
+		for i, tx := range transactions {
+			processedTransactions[i] = models.ProcessedTransaction{
+				Date:             tx.Date,
+				ProductName:      tx.ProductName,
+				ISIN:             tx.ISIN,
+				Quantity:         tx.Quantity,
+				OriginalQuantity: tx.OriginalQuantity,
+				Price:            tx.Price,
+				OrderType:        tx.OrderType,
+				TransactionType:  tx.TransactionType,
+				Description:      tx.Description,
+				Amount:           tx.Amount,
+				Currency:         tx.Currency,
+				Commission:       tx.Commission,
+				OrderID:          tx.OrderID,
+				ExchangeRate:     tx.ExchangeRate,
+				AmountEUR:        tx.AmountEUR,
+				CountryCode:      tx.CountryCode,
+			}
+		}
+	}
+
 	if err != nil {
 		// Handle potential errors, e.g., if no data is available yet
 		if err.Error() == "no upload processed yet, cannot retrieve processed transactions" {
@@ -238,7 +294,25 @@ func (h *UploadHandler) HandleGetProcessedTransactions(w http.ResponseWriter, r 
 // HandleGetStockHoldings retrieves the current stock holdings from the latest upload.
 func (h *UploadHandler) HandleGetStockHoldings(w http.ResponseWriter, r *http.Request) {
 	// 1. Get the stock holdings from the service
-	stockHoldings, err := h.uploadService.GetStockHoldings()
+	// Explicit type conversion for stock holdings
+	holdings, err := h.uploadService.GetStockHoldings()
+	var stockHoldings []models.PurchaseLot
+	if holdings != nil {
+		stockHoldings = make([]models.PurchaseLot, len(holdings))
+		for i, h := range holdings {
+			stockHoldings[i] = models.PurchaseLot{
+				BuyDate:      h.BuyDate,
+				ProductName:  h.ProductName,
+				ISIN:         h.ISIN,
+				Quantity:     h.Quantity,
+				BuyPrice:     h.BuyPrice,
+				BuyAmount:    h.BuyAmount,
+				BuyCurrency:  h.BuyCurrency,
+				BuyAmountEUR: h.BuyAmountEUR,
+			}
+		}
+	}
+
 	if err != nil {
 		// Handle potential errors, e.g., if no data is available yet
 		if err.Error() == "no upload processed yet, cannot retrieve stock holdings" {
@@ -266,7 +340,25 @@ func (h *UploadHandler) HandleGetStockHoldings(w http.ResponseWriter, r *http.Re
 // HandleGetOptionHoldings retrieves the current option holdings from the latest upload.
 func (h *UploadHandler) HandleGetOptionHoldings(w http.ResponseWriter, r *http.Request) {
 	// 1. Get the option holdings from the service
-	optionHoldings, err := h.uploadService.GetOptionHoldings()
+	// Explicit type conversion for option holdings
+	holdings, err := h.uploadService.GetOptionHoldings()
+	var optionHoldings []models.OptionHolding
+	if holdings != nil {
+		optionHoldings = make([]models.OptionHolding, len(holdings))
+		for i, h := range holdings {
+			optionHoldings[i] = models.OptionHolding{
+				OpenDate:      h.OpenDate,
+				ProductName:   h.ProductName,
+				Quantity:      h.Quantity,
+				OpenPrice:     h.OpenPrice,
+				OpenAmount:    h.OpenAmount,
+				OpenCurrency:  h.OpenCurrency,
+				OpenAmountEUR: h.OpenAmountEUR,
+				OpenOrderID:   h.OpenOrderID,
+			}
+		}
+	}
+
 	if err != nil {
 		// Handle potential errors, e.g., if no data is available yet
 		if err.Error() == "no upload processed yet, cannot retrieve option holdings" {

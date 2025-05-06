@@ -1,8 +1,9 @@
 package processors
 
 import (
-	"TAXFOLIO/src/models"
 	"strings"
+
+	"github.com/username/taxfolio/backend/src/models"
 )
 
 // cashMovementProcessor implements the CashMovementProcessor interface.

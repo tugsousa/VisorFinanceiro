@@ -1,7 +1,7 @@
 package processors
 
 import (
-	"TAXFOLIO/src/models"
+	"github.com/username/taxfolio/backend/src/models"
 )
 
 // DividendResult represents the grouped dividend amounts by year, country, and type.

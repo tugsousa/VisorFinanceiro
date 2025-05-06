@@ -1,12 +1,13 @@
 package parsers
 
 import (
-	"TAXFOLIO/src/models"
 	"encoding/csv"
 	"fmt"
 	"io"
 	"log"
 	"time"
+
+	"github.com/username/taxfolio/backend/src/models"
 )
 
 // csvParserImpl implements the CSVParser interface.
