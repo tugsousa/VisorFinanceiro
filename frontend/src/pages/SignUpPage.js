@@ -21,8 +21,10 @@ function SignUpPage() {
     }
 
     try {
-      await register(username, password);
-      navigate('/');
+      const success = await register(username, password);
+      if (success) {
+        navigate('/');
+      }
     } catch (err) {
       setError('Registration failed. Please try again.');
     }

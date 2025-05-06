@@ -3,6 +3,7 @@ package main
 import (
 	"TAXFOLIO/src/database"
 	"TAXFOLIO/src/handlers"
+	_ "TAXFOLIO/src/model" // Ensure model package is initialized
 	"TAXFOLIO/src/parsers"
 	"TAXFOLIO/src/processors"
 	"TAXFOLIO/src/services"
@@ -44,6 +45,7 @@ func main() {
 
 	router := http.NewServeMux()
 	// Corrected route registration
+	router.HandleFunc("/api/register", handlers.RegisterUserHandler)
 	router.HandleFunc("/api/upload", uploadHandler.HandleUpload)
 	router.HandleFunc("/api/stock-sales", uploadHandler.HandleGetStockSales)
 	router.HandleFunc("/api/option-sales", uploadHandler.HandleGetOptionSales)
