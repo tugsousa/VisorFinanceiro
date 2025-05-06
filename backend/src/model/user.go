@@ -31,16 +31,21 @@ func (u *User) CheckPassword(providedPassword string) error {
 	return nil
 }
 
-func (u *User) CreateUser(db *sql.DB) error {
+func (u *User) CreateUser(db *sql.DB) (int64, error) {
 	statement := `
 	INSERT INTO users (username, password)
 	VALUES (?, ?)
 	`
-	_, err := db.Exec(statement, u.Username, u.Password)
+	result, err := db.Exec(statement, u.Username, u.Password)
 	if err != nil {
-		return err
+		return 0, err
 	}
-	return nil
+
+	id, err := result.LastInsertId()
+	if err != nil {
+		return 0, err
+	}
+	return id, nil
 }
 
 func GetUserByUsername(db *sql.DB, username string) (*User, error) {

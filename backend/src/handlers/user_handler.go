@@ -22,13 +22,18 @@ func RegisterUserHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err = user.CreateUser(database.DB)
+	userID, err := user.CreateUser(database.DB)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
+	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"id":      userID,
+		"message": "User created successfully",
+	})
 }
 
 func LoginUserHandler(w http.ResponseWriter, r *http.Request) {
