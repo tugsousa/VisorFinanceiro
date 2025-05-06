@@ -5,53 +5,19 @@ import (
 	"net/http"
 	"time"
 
-	"golang.org/x/crypto/bcrypt"
-
 	"github.com/username/taxfolio/backend/src/database"
 	"github.com/username/taxfolio/backend/src/model"
-
-	"github.com/golang-jwt/jwt/v5"
+	"github.com/username/taxfolio/backend/src/security"
 )
 
 type UserHandler struct {
-	JWTSecret string
+	authService *security.AuthService
 }
 
-func NewUserHandler(jwtSecret string) *UserHandler {
+func NewUserHandler(authService *security.AuthService) *UserHandler {
 	return &UserHandler{
-		JWTSecret: jwtSecret,
+		authService: authService,
 	}
-}
-
-type Claims struct {
-	Username string `json:"username"`
-	jwt.RegisteredClaims
-}
-
-func (h *UserHandler) generateTokens(username string) (string, string, error) {
-	accessToken := jwt.NewWithClaims(jwt.SigningMethodHS256, Claims{
-		Username: username,
-		RegisteredClaims: jwt.RegisteredClaims{
-			ExpiresAt: jwt.NewNumericDate(time.Now().Add(15 * time.Minute)),
-		},
-	})
-	accessTokenString, err := accessToken.SignedString([]byte(h.JWTSecret))
-	if err != nil {
-		return "", "", err
-	}
-
-	refreshToken := jwt.NewWithClaims(jwt.SigningMethodHS256, Claims{
-		Username: username,
-		RegisteredClaims: jwt.RegisteredClaims{
-			ExpiresAt: jwt.NewNumericDate(time.Now().Add(7 * 24 * time.Hour)),
-		},
-	})
-	refreshTokenString, err := refreshToken.SignedString([]byte(h.JWTSecret))
-	if err != nil {
-		return "", "", err
-	}
-
-	return accessTokenString, refreshTokenString, nil
 }
 
 func (h *UserHandler) LoginUserHandler(w http.ResponseWriter, r *http.Request) {
@@ -76,9 +42,15 @@ func (h *UserHandler) LoginUserHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	accessToken, refreshToken, err := h.generateTokens(user.Username)
+	accessToken, err := h.authService.GenerateToken(user.Username)
 	if err != nil {
-		http.Error(w, "Failed to generate tokens", http.StatusInternalServerError)
+		http.Error(w, "Failed to generate access token", http.StatusInternalServerError)
+		return
+	}
+
+	refreshToken, err := h.authService.GenerateRefreshToken()
+	if err != nil {
+		http.Error(w, "Failed to generate refresh token", http.StatusInternalServerError)
 		return
 	}
 
@@ -111,18 +83,12 @@ func (h *UserHandler) AuthMiddleware(next http.HandlerFunc) http.HandlerFunc {
 			return
 		}
 
-		claims := &Claims{}
-		token, err := jwt.ParseWithClaims(tokenString, claims, func(token *jwt.Token) (interface{}, error) {
-			return []byte(h.JWTSecret), nil
-		})
-
-		if err != nil || !token.Valid {
+		if _, err := h.authService.ValidateToken(tokenString); err != nil {
 			http.Error(w, "Invalid token", http.StatusUnauthorized)
 			return
 		}
 
-		_, err = model.GetSessionByToken(database.DB, tokenString)
-		if err != nil {
+		if _, err := model.GetSessionByToken(database.DB, tokenString); err != nil {
 			http.Error(w, "Invalid session", http.StatusUnauthorized)
 			return
 		}
@@ -141,19 +107,21 @@ func (h *UserHandler) RefreshTokenHandler(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	claims := &Claims{}
-	token, err := jwt.ParseWithClaims(request.RefreshToken, claims, func(token *jwt.Token) (interface{}, error) {
-		return []byte(h.JWTSecret), nil
-	})
-
-	if err != nil || !token.Valid {
+	userID, err := h.authService.ValidateToken(request.RefreshToken)
+	if err != nil {
 		http.Error(w, "Invalid refresh token", http.StatusUnauthorized)
 		return
 	}
 
-	accessToken, refreshToken, err := h.generateTokens(claims.Username)
+	accessToken, err := h.authService.GenerateToken(userID)
 	if err != nil {
-		http.Error(w, "Failed to generate tokens", http.StatusInternalServerError)
+		http.Error(w, "Failed to generate access token", http.StatusInternalServerError)
+		return
+	}
+
+	refreshToken, err := h.authService.GenerateRefreshToken()
+	if err != nil {
+		http.Error(w, "Failed to generate refresh token", http.StatusInternalServerError)
 		return
 	}
 
@@ -184,12 +152,12 @@ func (h *UserHandler) RegisterUserHandler(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(user.Password), bcrypt.DefaultCost)
+	hashedPassword, err := h.authService.HashPassword(user.Password)
 	if err != nil {
 		http.Error(w, "Failed to hash password", http.StatusInternalServerError)
 		return
 	}
-	user.Password = string(hashedPassword)
+	user.Password = hashedPassword
 
 	if err := user.CreateUser(database.DB); err != nil {
 		http.Error(w, "Failed to create user", http.StatusInternalServerError)

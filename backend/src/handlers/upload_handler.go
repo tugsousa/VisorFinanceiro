@@ -36,13 +36,31 @@ func (h *UploadHandler) HandleUpload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 2. Get the file from the request
-	file, _, err := r.FormFile("file")
+	// 1.5 Input validation - check file type and size
+	if r.MultipartForm == nil || r.MultipartForm.File == nil {
+		http.Error(w, "no file uploaded", http.StatusBadRequest)
+		return
+	}
+
+	// 2. Get the file from the request with additional validation
+	file, fileHeader, err := r.FormFile("file")
 	if err != nil {
 		http.Error(w, fmt.Sprintf("failed to retrieve file from request: %v", err), http.StatusBadRequest)
 		return
 	}
-	defer file.Close() // Ensure the file is closed
+	defer file.Close()
+
+	// Validate file type (only allow CSV files)
+	if fileHeader.Header.Get("Content-Type") != "text/csv" {
+		http.Error(w, "only CSV files are allowed", http.StatusBadRequest)
+		return
+	}
+
+	// Validate file size (additional check)
+	if fileHeader.Size > 10<<20 { // 10 MB
+		http.Error(w, "file too large", http.StatusBadRequest)
+		return
+	}
 
 	// 3. Delegate processing to the UploadService with userID
 	result, err := h.uploadService.ProcessUpload(file, userID)

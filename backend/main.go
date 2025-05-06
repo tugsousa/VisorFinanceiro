@@ -3,14 +3,35 @@ package main
 import (
 	"log"
 	"net/http"
+	"time"
 
+	"github.com/gorilla/csrf"
 	"github.com/username/taxfolio/backend/src/database"
 	"github.com/username/taxfolio/backend/src/handlers"
 	_ "github.com/username/taxfolio/backend/src/model" // Ensure model package is initialized
 	"github.com/username/taxfolio/backend/src/parsers"
 	"github.com/username/taxfolio/backend/src/processors"
+	"github.com/username/taxfolio/backend/src/security"
 	"github.com/username/taxfolio/backend/src/services"
+	"golang.org/x/time/rate"
 )
+
+var (
+	csrfAuthKey = []byte("32-byte-long-auth-key") // TODO: Replace with actual secure key
+	// Rate limiter allowing 10 requests per second with burst of 30
+	limiter = rate.NewLimiter(rate.Every(time.Second), 30)
+)
+
+// rateLimitMiddleware applies rate limiting to all requests
+func rateLimitMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !limiter.Allow() {
+			http.Error(w, "Too many requests", http.StatusTooManyRequests)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
 
 func enableCORS(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -26,7 +47,8 @@ func enableCORS(next http.Handler) http.Handler {
 }
 
 func main() {
-	userHandler := handlers.NewUserHandler("your-secret-key-here") // TODO: Replace with actual JWT secret
+	authService := security.NewAuthService("your-secret-key-here") // TODO: Replace with actual JWT secret
+	userHandler := handlers.NewUserHandler(authService)
 
 	// Initialize parsers and processors
 	csvParser := parsers.NewCSVParser()
@@ -48,15 +70,31 @@ func main() {
 
 	router := http.NewServeMux()
 
-	router.HandleFunc("/api/login", userHandler.LoginUserHandler)
-	router.HandleFunc("/api/register", userHandler.RegisterUserHandler)
-	router.HandleFunc("/api/holdings/stocks", uploadHandler.HandleGetStockHoldings)
-	router.HandleFunc("/api/holdings/options", uploadHandler.HandleGetOptionHoldings)
+	// Public routes (no CSRF protection)
 	router.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("TAXFOLIO Backend is running"))
 	})
 
-	corsRouter := enableCORS(router)
+	// API routes with CSRF protection
+	apiRouter := http.NewServeMux()
+	apiRouter.HandleFunc("/api/login", userHandler.LoginUserHandler)
+	apiRouter.HandleFunc("/api/register", userHandler.RegisterUserHandler)
+	apiRouter.HandleFunc("/api/holdings/stocks", uploadHandler.HandleGetStockHoldings)
+	apiRouter.HandleFunc("/api/holdings/options", uploadHandler.HandleGetOptionHoldings)
+
+	// Apply CSRF protection to API routes
+	csrfMiddleware := csrf.Protect(
+		csrfAuthKey,
+		csrf.Secure(false), // Set to true in production with HTTPS
+		csrf.Path("/"),
+		csrf.ErrorHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			http.Error(w, "CSRF token invalid", http.StatusForbidden)
+		})),
+	)
+
+	protectedRouter := csrfMiddleware(apiRouter)
+	rateLimitedRouter := rateLimitMiddleware(protectedRouter)
+	corsRouter := enableCORS(rateLimitedRouter)
 	database.InitDB()
 
 	log.Println("Server running at http://localhost:8080")

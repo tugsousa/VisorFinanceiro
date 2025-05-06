@@ -1,5 +1,6 @@
-import { Box, AppBar, Toolbar, Typography, Drawer, IconButton, Tooltip } from '@mui/material';
-import { Link } from 'react-router-dom';
+import { Box, AppBar, Toolbar, Typography, Drawer, IconButton, Tooltip, Button } from '@mui/material';
+import { Link, useNavigate } from 'react-router-dom';
+import { AuthContext } from '../context/AuthContext';
 import {
   Upload as UploadIcon,
   Assessment as HoldingsIcon,
@@ -141,20 +142,39 @@ export default function Layout({ children }) {
               <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
                 TAXFOLIO
               </Typography>
-              <Typography 
-                variant="body1" 
-                component={Link} 
-                to="/signin"
-                sx={{ 
-                  color: 'white',
-                  textDecoration: 'none',
-                  '&:hover': {
-                    textDecoration: 'underline'
-                  }
-                }}
-              >
-                Sign in
-              </Typography>
+              {user ? (
+                <Button 
+                  color="inherit"
+                  onClick={() => {
+                    logout();
+                    navigate('/signin');
+                  }}
+                  sx={{
+                    color: 'white',
+                    textTransform: 'none',
+                    '&:hover': {
+                      textDecoration: 'underline'
+                    }
+                  }}
+                >
+                  Logout
+                </Button>
+              ) : (
+                <Typography 
+                  variant="body1" 
+                  component={Link} 
+                  to="/signin"
+                  sx={{ 
+                    color: 'white',
+                    textDecoration: 'none',
+                    '&:hover': {
+                      textDecoration: 'underline'
+                    }
+                  }}
+                >
+                  Sign in
+                </Typography>
+              )}
             </Toolbar>
         </AppBar>
         <Box sx={{ p: 3, mt: 8 }}> {/* Added margin top to account for AppBar */}
