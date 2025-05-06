@@ -78,6 +78,7 @@ func main() {
 	// API routes with CSRF protection
 	apiRouter := http.NewServeMux()
 	apiRouter.HandleFunc("/api/csrf-token", handlers.GetCSRFToken)
+	apiRouter.HandleFunc("/api/auth/csrf", handlers.GetCSRFToken)
 	apiRouter.HandleFunc("/api/login", userHandler.LoginUserHandler)
 	apiRouter.HandleFunc("/api/register", userHandler.RegisterUserHandler)
 	apiRouter.HandleFunc("/api/holdings/stocks", uploadHandler.HandleGetStockHoldings)
@@ -88,6 +89,9 @@ func main() {
 		csrfAuthKey,
 		csrf.Secure(false), // Set to true in production with HTTPS
 		csrf.Path("/"),
+		csrf.RequestHeader("X-CSRF-Token"),
+		csrf.CookieName("_gorilla_csrf"),
+		csrf.SameSite(csrf.SameSiteStrictMode),
 		csrf.ErrorHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "CSRF token invalid", http.StatusForbidden)
 		})),

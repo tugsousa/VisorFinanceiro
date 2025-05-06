@@ -67,20 +67,17 @@ export const AuthProvider = ({ children }) => {
   const login = async (username, password) => {
     try {
       setLoading(true);
-      // First fetch CSRF token
-      const csrfResponse = await fetch('/api/csrf-token', {
+      // Ensure we have latest CSRF token
+      const csrfResponse = await fetch('/api/auth/csrf', {
         credentials: 'include'
       });
-      const { csrfToken } = await csrfResponse.json();
-      setCsrfToken(csrfToken);
-
+      const { csrfToken: freshToken } = await csrfResponse.json();
+      
       const response = await fetch('/api/auth/login', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Accept': 'application/json',
-          'X-CSRF-Token': csrfToken,
-          'X-Requested-With': 'XMLHttpRequest',
+          'X-CSRF-Token': freshToken,
         },
         credentials: 'include',
         body: JSON.stringify({ username, password }),
