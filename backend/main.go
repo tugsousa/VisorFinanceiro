@@ -77,6 +77,7 @@ func main() {
 
 	// API routes with CSRF protection
 	apiRouter := http.NewServeMux()
+	apiRouter.HandleFunc("/api/csrf-token", handlers.GetCSRFToken)
 	apiRouter.HandleFunc("/api/login", userHandler.LoginUserHandler)
 	apiRouter.HandleFunc("/api/register", userHandler.RegisterUserHandler)
 	apiRouter.HandleFunc("/api/holdings/stocks", uploadHandler.HandleGetStockHoldings)
