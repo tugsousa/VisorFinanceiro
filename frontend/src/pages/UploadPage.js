@@ -3,7 +3,7 @@ import axios from 'axios';
 import { useAuth } from '../context/AuthContext';
 
 const UploadPage = () => {
-  const { csrfToken, fetchCsrfToken } = useAuth();
+  const { csrfToken, fetchCsrfToken, token } = useAuth();
   const [selectedFile, setSelectedFile] = useState(null);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadStatus, setUploadStatus] = useState('idle');
@@ -45,11 +45,23 @@ const UploadPage = () => {
       // Get a fresh CSRF token before upload
       const freshToken = await fetchCsrfToken();
       console.log('Using CSRF token for upload:', freshToken);
+      
+      // Debug: Log the token being used for authorization
+      console.log('Authorization token:', token);
+      
+      // Check if token is in the correct format (should be the access_token from login)
+      if (!token) {
+        console.error('No authorization token available. User may not be properly logged in.');
+        setError('Authentication error. Please log in again.');
+        setUploadStatus('error');
+        return;
+      }
 
       const response = await axios.post('http://localhost:8080/api/upload', formData, {
         headers: {
           'Content-Type': 'multipart/form-data',
           'X-CSRF-Token': freshToken,
+          'Authorization': `Bearer ${token}`, // Add Bearer prefix to the token
         },
         withCredentials: true, // This ensures cookies are sent with the request
         onUploadProgress: (progressEvent) => {

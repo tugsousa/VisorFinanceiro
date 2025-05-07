@@ -12,7 +12,12 @@ export const useAuth = () => {
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
-  const [token, setToken] = useState(null);
+  const [token, setToken] = useState(() => {
+    // Initialize token from localStorage if available
+    const savedToken = localStorage.getItem('auth_token');
+    console.log('Initializing auth token from localStorage:', savedToken ? 'Token found' : 'No token found');
+    return savedToken || null;
+  });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [csrfToken, setCsrfToken] = useState('');
@@ -117,8 +122,22 @@ export const AuthProvider = ({ children }) => {
       }
       
       const data = await response.json();
+      console.log('Login response data:', data);
+      
+      // The backend returns access_token, not token
+      const accessToken = data.access_token;
+      if (!accessToken) {
+        console.error('No access_token in login response:', data);
+        throw new Error('Login successful but no access token received');
+      }
+      
+      console.log('Setting access token:', accessToken);
       setUser(data.user);
-      setToken(data.token);
+      setToken(accessToken);
+      
+      // Store token in localStorage for persistence
+      localStorage.setItem('auth_token', accessToken);
+      
       setLoading(false);
       return data;
     } catch (err) {
@@ -134,8 +153,8 @@ const login = async (username, password) => {
         console.log('Starting login process for user:', username);
         
         // First get a fresh CSRF token
-        const token = await fetchCsrfToken();
-        console.log('Fresh CSRF token received for login:', token);
+        const csrfToken = await fetchCsrfToken();
+        console.log('Fresh CSRF token received for login:', csrfToken);
         
         // Check if we have cookies
         console.log('Cookies before login request:', document.cookie);
@@ -146,7 +165,7 @@ const login = async (username, password) => {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                'X-CSRF-Token': token,
+                'X-CSRF-Token': csrfToken,
                 'Accept': 'application/json'
             },
             credentials: 'include',
@@ -173,8 +192,22 @@ const login = async (username, password) => {
       }
 
       const data = await response.json();
+      console.log('Login response data:', data);
+      
+      // The backend returns access_token, not token
+      const accessToken = data.access_token;
+      if (!accessToken) {
+        console.error('No access_token in login response:', data);
+        throw new Error('Login successful but no access token received');
+      }
+      
+      console.log('Setting access token:', accessToken);
       setUser(data.user);
-      setToken(data.token);
+      setToken(accessToken);
+      
+      // Store token in localStorage for persistence
+      localStorage.setItem('auth_token', accessToken);
+      
       setLoading(false);
       return data;
     } catch (err) {
@@ -211,6 +244,9 @@ const login = async (username, password) => {
           .reduce((obj, [key, val]) => ({ ...obj, [key]: val }), {})
       );
       console.log('Cookies after logout response:', document.cookie);
+      
+      // Clear token from localStorage
+      localStorage.removeItem('auth_token');
       
       setUser(null);
       setToken(null);

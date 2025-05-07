@@ -103,6 +103,7 @@ func main() {
 	apiRouter.HandleFunc("/api/auth/register", userHandler.RegisterUserHandler) // Add this route to match frontend
 	apiRouter.HandleFunc("/api/holdings/stocks", uploadHandler.HandleGetStockHoldings)
 	apiRouter.HandleFunc("/api/holdings/options", uploadHandler.HandleGetOptionHoldings)
+	apiRouter.HandleFunc("/api/upload", userHandler.AuthMiddleware(uploadHandler.HandleUpload))
 
 	// Apply CSRF protection to API routes using our enhanced middleware
 	csrfMiddleware := handlers.CSRFMiddleware()

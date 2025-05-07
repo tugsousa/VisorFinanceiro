@@ -1,9 +1,12 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/username/taxfolio/backend/src/database"
@@ -82,7 +85,9 @@ func (h *UserHandler) LoginUserHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	accessToken, err := h.authService.GenerateToken(user.Username)
+	// Convert user ID to string for the token
+	userIDStr := fmt.Sprintf("%d", user.ID)
+	accessToken, err := h.authService.GenerateToken(userIDStr)
 	if err != nil {
 		http.Error(w, "Failed to generate access token", http.StatusInternalServerError)
 		return
@@ -117,23 +122,51 @@ func (h *UserHandler) LoginUserHandler(w http.ResponseWriter, r *http.Request) {
 
 func (h *UserHandler) AuthMiddleware(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		tokenString := r.Header.Get("Authorization")
-		if tokenString == "" {
+		// Log all headers for debugging
+		log.Printf("Request headers: %v", r.Header)
+
+		authHeader := r.Header.Get("Authorization")
+		if authHeader == "" {
+			log.Printf("Authorization header missing")
 			http.Error(w, "Authorization header required", http.StatusUnauthorized)
 			return
 		}
 
-		if _, err := h.authService.ValidateToken(tokenString); err != nil {
+		// Check if the token has the Bearer prefix
+		tokenString := authHeader
+		if len(authHeader) > 7 && authHeader[:7] == "Bearer " {
+			tokenString = authHeader[7:]
+		} else {
+			log.Printf("Authorization header does not have Bearer prefix: %s", authHeader)
+		}
+
+		log.Printf("Validating token: %s", tokenString)
+		userID, err := h.authService.ValidateToken(tokenString)
+		if err != nil {
+			log.Printf("Token validation failed: %v", err)
 			http.Error(w, "Invalid token", http.StatusUnauthorized)
 			return
 		}
 
+		log.Printf("Token validated for user ID: %s", userID)
 		if _, err := model.GetSessionByToken(database.DB, tokenString); err != nil {
+			log.Printf("Session validation failed: %v", err)
 			http.Error(w, "Invalid session", http.StatusUnauthorized)
 			return
 		}
 
-		next(w, r)
+		// Convert userID from string to int64
+		userIDInt, err := strconv.ParseInt(userID, 10, 64)
+		if err != nil {
+			http.Error(w, "Invalid user ID", http.StatusInternalServerError)
+			return
+		}
+
+		// Create a new context with the user ID
+		ctx := context.WithValue(r.Context(), "userID", userIDInt)
+
+		// Call the next handler with the new context
+		next(w, r.WithContext(ctx))
 	}
 }
 
