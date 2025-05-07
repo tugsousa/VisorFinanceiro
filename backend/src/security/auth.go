@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"errors"
+	"fmt"
 	"net/http"
 	"time"
 
@@ -119,17 +120,19 @@ func CSRFTokenMiddleware(next http.Handler) http.Handler {
 		// Get token from cookie and header
 		cookie, err := r.Cookie(csrfTokenName)
 		if err != nil {
-			http.Error(w, "CSRF token missing", http.StatusForbidden)
+			http.Error(w, "CSRF token missing from cookie", http.StatusForbidden)
 			return
 		}
 
 		headerToken := r.Header.Get(csrfTokenName)
 		if headerToken == "" {
-			headerToken = r.FormValue(csrfTokenName)
+			http.Error(w, "CSRF token missing from header", http.StatusForbidden)
+			return
 		}
 
 		// Validate tokens match
 		if cookie.Value != headerToken {
+			fmt.Printf("CSRF token mismatch\nCookie: %s\nHeader: %s\n", cookie.Value, headerToken)
 			http.Error(w, "Invalid CSRF token", http.StatusForbidden)
 			return
 		}

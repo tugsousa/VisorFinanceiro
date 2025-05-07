@@ -21,14 +21,13 @@ export const AuthProvider = ({ children }) => {
   useEffect(() => {
     const fetchCsrfToken = async () => {
       try {
-      const response = await fetch('/api/auth/csrf', {
+      const response = await fetch('http://localhost:8080/api/auth/csrf', {
         credentials: 'include'
       });
       if (response.ok) {
         const { csrfToken } = await response.json();
         setCsrfToken(csrfToken);
-        // Set cookie with same name as backend expects
-        document.cookie = `X-CSRF-Token=${csrfToken}; path=/; SameSite=Strict; Secure`;
+        // Cookie is automatically set by backend with correct name (_gorilla_csrf)
       }
       } catch (err) {
         console.error('Failed to fetch CSRF token:', err);
@@ -40,10 +39,7 @@ export const AuthProvider = ({ children }) => {
   const register = async (username, password) => {
     try {
       setLoading(true);
-      // Set CSRF token in cookie
-      document.cookie = `X-CSRF-Token=${csrfToken}; path=/; SameSite=Strict; Secure`;
-      
-      const response = await fetch('/api/auth/register', {
+      const response = await fetch('http://localhost:8080/api/auth/register', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -64,24 +60,28 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  const login = async (username, password) => {
+const login = async (username, password) => {
     try {
-      setLoading(true);
-      // Ensure we have latest CSRF token
-      const csrfResponse = await fetch('/api/auth/csrf', {
-        credentials: 'include'
-      });
-      const { csrfToken: freshToken } = await csrfResponse.json();
-      
-      const response = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-CSRF-Token': freshToken,
-        },
-        credentials: 'include',
-        body: JSON.stringify({ username, password }),
-      });
+        setLoading(true);
+        // First get CSRF token
+        const csrfResponse = await fetch('http://localhost:8080/api/auth/csrf', {
+            credentials: 'include'
+        });
+        if (!csrfResponse.ok) {
+            throw new Error('Failed to get CSRF token');
+        }
+        const { csrfToken } = await csrfResponse.json();
+        
+        // Then make login request
+        const response = await fetch('http://localhost:8080/api/auth/login', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-Token': csrfToken,
+            },
+            credentials: 'include',
+            body: JSON.stringify({ username, password }),
+        });
       
       if (!response.ok) {
         const errorText = await response.text();
@@ -107,7 +107,7 @@ export const AuthProvider = ({ children }) => {
 
   const logout = async () => {
     try {
-      await fetch('/api/auth/logout', {
+      await fetch('http://localhost:8080/api/auth/logout', {
         method: 'POST',
         headers: {
           'X-CSRF-Token': csrfToken,
