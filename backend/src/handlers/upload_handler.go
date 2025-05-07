@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 
+	"github.com/username/taxfolio/backend/src/database"
 	"github.com/username/taxfolio/backend/src/models"
 	"github.com/username/taxfolio/backend/src/services"
 )
@@ -255,50 +256,51 @@ func (h *UploadHandler) HandleGetRawTransactions(w http.ResponseWriter, r *http.
 	}
 }
 
-// HandleGetProcessedTransactions retrieves the list of all processed transactions from the latest upload.
+// HandleGetProcessedTransactions retrieves the list of all processed transactions for the authenticated user.
 func (h *UploadHandler) HandleGetProcessedTransactions(w http.ResponseWriter, r *http.Request) {
-	// 1. Get the processed transactions from the service
-	// Explicit type conversion to handle package visibility issues
-	transactions, err := h.uploadService.GetProcessedTransactions()
-	var processedTransactions []models.ProcessedTransaction
-	if transactions != nil {
-		processedTransactions = make([]models.ProcessedTransaction, len(transactions))
-		for i, tx := range transactions {
-			processedTransactions[i] = models.ProcessedTransaction{
-				Date:             tx.Date,
-				ProductName:      tx.ProductName,
-				ISIN:             tx.ISIN,
-				Quantity:         tx.Quantity,
-				OriginalQuantity: tx.OriginalQuantity,
-				Price:            tx.Price,
-				OrderType:        tx.OrderType,
-				TransactionType:  tx.TransactionType,
-				Description:      tx.Description,
-				Amount:           tx.Amount,
-				Currency:         tx.Currency,
-				Commission:       tx.Commission,
-				OrderID:          tx.OrderID,
-				ExchangeRate:     tx.ExchangeRate,
-				AmountEUR:        tx.AmountEUR,
-				CountryCode:      tx.CountryCode,
-			}
-		}
-	}
-
-	if err != nil {
-		// Handle potential errors, e.g., if no data is available yet
-		if err.Error() == "no upload processed yet, cannot retrieve processed transactions" {
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusOK) // OK status, but empty data
-			json.NewEncoder(w).Encode([]models.ProcessedTransaction{})
-			return
-		}
-		// For other errors, return a JSON error response
-		sendJSONError(w, fmt.Sprintf("Error retrieving processed transactions: %v", err), http.StatusInternalServerError)
+	// Get user ID from context (set by AuthMiddleware)
+	userID, ok := r.Context().Value("userID").(int64)
+	if !ok {
+		sendJSONError(w, "Authentication required", http.StatusUnauthorized)
 		return
 	}
 
-	// 2. Return the transactions as JSON
+	// Query the database directly for the user's processed transactions
+	rows, err := database.DB.Query(`
+		SELECT date, product_name, isin, quantity, original_quantity, price, order_type, 
+		transaction_type, description, amount, currency, commission, order_id, 
+		exchange_rate, amount_eur, country_code 
+		FROM processed_transactions 
+		WHERE user_id = ?
+		ORDER BY date DESC`, userID)
+
+	if err != nil {
+		sendJSONError(w, fmt.Sprintf("Error querying transactions: %v", err), http.StatusInternalServerError)
+		return
+	}
+	defer rows.Close()
+
+	var processedTransactions []models.ProcessedTransaction
+	for rows.Next() {
+		var tx models.ProcessedTransaction
+		err := rows.Scan(
+			&tx.Date, &tx.ProductName, &tx.ISIN, &tx.Quantity, &tx.OriginalQuantity, &tx.Price,
+			&tx.OrderType, &tx.TransactionType, &tx.Description, &tx.Amount, &tx.Currency,
+			&tx.Commission, &tx.OrderID, &tx.ExchangeRate, &tx.AmountEUR, &tx.CountryCode)
+		if err != nil {
+			sendJSONError(w, fmt.Sprintf("Error scanning transaction: %v", err), http.StatusInternalServerError)
+			return
+		}
+		processedTransactions = append(processedTransactions, tx)
+	}
+
+	// Check for errors from iterating over rows
+	if err = rows.Err(); err != nil {
+		sendJSONError(w, fmt.Sprintf("Error iterating over transactions: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	// Return empty array if no transactions found
 	if processedTransactions == nil {
 		processedTransactions = []models.ProcessedTransaction{} // Ensure empty array, not null
 	}

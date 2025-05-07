@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { useAuth } from '../context/AuthContext';
+import './UploadPage.css';
 
 const UploadPage = () => {
   const { csrfToken, fetchCsrfToken, token } = useAuth();
@@ -8,6 +9,7 @@ const UploadPage = () => {
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadStatus, setUploadStatus] = useState('idle');
   const [error, setError] = useState(null);
+  const [processedTransactions, setProcessedTransactions] = useState([]);
 
   const allowedFileTypes = ['text/csv', 'application/vnd.ms-excel', 'application/vnd.openxmlformats-officecs.spreadsheetml.sheet'];
 
@@ -72,12 +74,38 @@ const UploadPage = () => {
 
       setUploadStatus('success');
       console.log('Upload successful:', response.data);
+      
+      // Fetch processed transactions after successful upload
+      fetchProcessedTransactions();
     } catch (err) {
       setUploadStatus('error');
       setError(err.response?.data?.message || 'Upload failed. Please try again.');
       console.error('Upload error:', err);
     }
   };
+
+  // Function to fetch processed transactions
+  const fetchProcessedTransactions = async () => {
+    try {
+      const response = await axios.get('http://localhost:8080/api/transactions/processed', {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'X-CSRF-Token': csrfToken
+        },
+        withCredentials: true
+      });
+      setProcessedTransactions(response.data);
+    } catch (err) {
+      console.error('Error fetching processed transactions:', err);
+    }
+  };
+
+  // Fetch processed transactions on component mount
+  useEffect(() => {
+    if (token) {
+      fetchProcessedTransactions();
+    }
+  }, [token]);
 
   return (
     <div className="upload-container">
@@ -115,6 +143,40 @@ const UploadPage = () => {
           {uploadStatus === 'uploading' ? 'Uploading...' : 'Upload'}
         </button>
       </div>
+
+      {/* Display processed transactions */}
+      {processedTransactions.length > 0 && (
+        <div className="processed-transactions">
+          <h3>Processed Transactions</h3>
+          <p>These transactions have been processed and stored in the database.</p>
+          <div className="transactions-table-container">
+            <table className="transactions-table">
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Product</th>
+                  <th>Type</th>
+                  <th>Quantity</th>
+                  <th>Amount</th>
+                  <th>Currency</th>
+                </tr>
+              </thead>
+              <tbody>
+                {processedTransactions.map((transaction, index) => (
+                  <tr key={index}>
+                    <td>{transaction.Date}</td>
+                    <td>{transaction.ProductName}</td>
+                    <td>{transaction.OrderType}</td>
+                    <td>{transaction.Quantity}</td>
+                    <td>{transaction.Amount}</td>
+                    <td>{transaction.Currency}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -111,14 +111,14 @@ func (p *transactionProcessorImpl) Process(rawTransactions []models.RawTransacti
 		for _, rt := range rawTransactions {
 			pt, err := convertRawToProcessed(rt)
 			if err != nil {
-				log.Printf("Error converting raw transaction: %v", err)
+				//log.Printf("Error converting raw transaction: %v", err)
 				continue
 			}
 			processedCommissions = append(processedCommissions, pt)
 		}
 		// Set default commission since we can't calculate it properly
 		commission := 0.0
-		log.Printf("Warning: Commission calculation not implemented - using default value of 0")
+		//log.Printf("Warning: Commission calculation not implemented - using default value of 0")
 		if err != nil {
 			log.Printf("Error calculating commission for transaction %s: %v", raw.OrderID, err)
 		}

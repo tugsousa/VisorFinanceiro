@@ -92,15 +92,16 @@ func (s *uploadServiceImpl) ProcessUpload(fileReader io.Reader, userID int64) (*
 	for _, tx := range processedTransactions {
 		_, err := database.DB.Exec(`
 			INSERT INTO processed_transactions 
-			(user_id, date, product_name, isin, quantity, price, order_type, 
-			 transaction_type, amount, currency, commission, order_id, 
+			(user_id, date, product_name, isin, quantity, original_quantity, price, order_type, 
+			 transaction_type, description, amount, currency, commission, order_id, 
 			 exchange_rate, amount_eur, country_code)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-			userID, tx.Date, tx.ProductName, tx.ISIN, tx.Quantity, tx.Price,
-			tx.OrderType, tx.TransactionType, tx.Amount, tx.Currency,
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			userID, tx.Date, tx.ProductName, tx.ISIN, tx.Quantity, tx.OriginalQuantity, tx.Price,
+			tx.OrderType, tx.TransactionType, tx.Description, tx.Amount, tx.Currency,
 			tx.Commission, tx.OrderID, tx.ExchangeRate, tx.AmountEUR, tx.CountryCode)
 		if err != nil {
-			log.Printf("Error storing transaction: %v", err)
+			log.Printf("Error storing transaction in database: %v", err)
+			return nil, fmt.Errorf("error storing processed transactions in database: %w", err)
 		}
 	}
 
@@ -111,7 +112,10 @@ func (s *uploadServiceImpl) ProcessUpload(fileReader io.Reader, userID int64) (*
 func (s *uploadServiceImpl) GetLatestUploadResult(userID int64) (*UploadResult, error) {
 	// Query database for user's latest result
 	rows, err := database.DB.Query(`
-		SELECT * FROM processed_transactions 
+		SELECT date, product_name, isin, quantity, original_quantity, price, order_type, 
+		transaction_type, description, amount, currency, commission, order_id, 
+		exchange_rate, amount_eur, country_code 
+		FROM processed_transactions 
 		WHERE user_id = ?
 		ORDER BY date DESC
 		LIMIT 100`, userID)
@@ -124,8 +128,8 @@ func (s *uploadServiceImpl) GetLatestUploadResult(userID int64) (*UploadResult, 
 	for rows.Next() {
 		var tx models.ProcessedTransaction
 		err := rows.Scan(
-			&tx.Date, &tx.ProductName, &tx.ISIN, &tx.Quantity, &tx.Price,
-			&tx.OrderType, &tx.TransactionType, &tx.Amount, &tx.Currency,
+			&tx.Date, &tx.ProductName, &tx.ISIN, &tx.Quantity, &tx.OriginalQuantity, &tx.Price,
+			&tx.OrderType, &tx.TransactionType, &tx.Description, &tx.Amount, &tx.Currency,
 			&tx.Commission, &tx.OrderID, &tx.ExchangeRate, &tx.AmountEUR, &tx.CountryCode)
 		if err != nil {
 			return nil, fmt.Errorf("error scanning transaction: %w", err)

@@ -104,6 +104,7 @@ func main() {
 	apiRouter.HandleFunc("/api/holdings/stocks", uploadHandler.HandleGetStockHoldings)
 	apiRouter.HandleFunc("/api/holdings/options", uploadHandler.HandleGetOptionHoldings)
 	apiRouter.HandleFunc("/api/upload", userHandler.AuthMiddleware(uploadHandler.HandleUpload))
+	apiRouter.HandleFunc("/api/transactions/processed", userHandler.AuthMiddleware(uploadHandler.HandleGetProcessedTransactions))
 
 	// Apply CSRF protection to API routes using our enhanced middleware
 	csrfMiddleware := handlers.CSRFMiddleware()
