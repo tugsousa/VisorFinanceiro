@@ -22,7 +22,9 @@ func NewUserHandler(authService *security.AuthService) *UserHandler {
 }
 
 func (h *UserHandler) LoginUserHandler(w http.ResponseWriter, r *http.Request) {
-	log.Printf("Login request received. Headers: %v", r.Header)
+	log.Printf("Login request received from %s", r.RemoteAddr)
+	log.Printf("Login request headers: %v", r.Header)
+
 	// Log CSRF token from header
 	csrfToken := r.Header.Get("X-CSRF-Token")
 	log.Printf("CSRF Token from header: %v", csrfToken)
@@ -30,8 +32,22 @@ func (h *UserHandler) LoginUserHandler(w http.ResponseWriter, r *http.Request) {
 	// Log CSRF token from cookie
 	if cookie, err := r.Cookie("_gorilla_csrf"); err == nil {
 		log.Printf("CSRF Token from cookie: %v", cookie.Value)
+		log.Printf("CSRF tokens match: %v", cookie.Value == csrfToken)
 	} else {
 		log.Printf("Error getting CSRF cookie: %v", err)
+	}
+
+	// Log all cookies for debugging
+	log.Printf("All cookies in login handler: %v", r.Cookies())
+
+	// Set CORS headers for the response
+	origin := r.Header.Get("Origin")
+	if origin == "http://localhost:3000" {
+		w.Header().Set("Access-Control-Allow-Origin", origin)
+		w.Header().Set("Access-Control-Allow-Credentials", "true")
+		w.Header().Set("Access-Control-Allow-Headers", "Accept, Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization, X-Requested-With, Cookie")
+		w.Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS, PUT, DELETE")
+		w.Header().Set("Access-Control-Expose-Headers", "X-CSRF-Token")
 	}
 
 	var credentials struct {
@@ -46,6 +62,8 @@ func (h *UserHandler) LoginUserHandler(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(map[string]string{"error": "Invalid request body"})
 		return
 	}
+
+	log.Printf("Login attempt for user: %s", credentials.Username)
 
 	user, err := model.GetUserByUsername(database.DB, credentials.Username)
 	if err != nil {
