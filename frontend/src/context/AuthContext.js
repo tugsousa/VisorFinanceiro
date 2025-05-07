@@ -17,23 +17,21 @@ export const AuthProvider = ({ children }) => {
   const [error, setError] = useState(null);
   const [csrfToken, setCsrfToken] = useState('');
 
-  // Fetch CSRF token on initial load
+  // Get CSRF token from cookie
+  const getCsrfTokenFromCookie = () => {
+    const cookieValue = document.cookie
+      .split('; ')
+      .find(row => row.startsWith('_gorilla_csrf='))
+      ?.split('=')[1];
+    return cookieValue || '';
+  };
+
+  // Set CSRF token from cookie on initial load
   useEffect(() => {
-    const fetchCsrfToken = async () => {
-      try {
-      const response = await fetch('http://localhost:8080/api/auth/csrf', {
-        credentials: 'include'
-      });
-      if (response.ok) {
-        const { csrfToken } = await response.json();
-        setCsrfToken(csrfToken);
-        // Cookie is automatically set by backend with correct name (_gorilla_csrf)
-      }
-      } catch (err) {
-        console.error('Failed to fetch CSRF token:', err);
-      }
-    };
-    fetchCsrfToken();
+    const token = getCsrfTokenFromCookie();
+    if (token) {
+      setCsrfToken(token);
+    }
   }, []);
 
   const register = async (username, password) => {

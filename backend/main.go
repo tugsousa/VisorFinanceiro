@@ -17,7 +17,7 @@ import (
 )
 
 var (
-	csrfAuthKey = []byte("32-byte-long-auth-key") // TODO: Replace with actual secure key
+	csrfAuthKey = []byte("a-very-secure-32-byte-long-key-1234") // 32-byte key
 	// Rate limiter allowing 10 requests per second with burst of 30
 	limiter = rate.NewLimiter(rate.Every(time.Second), 30)
 )
@@ -97,6 +97,12 @@ func main() {
 		csrf.CookieName("_gorilla_csrf"),   // Match frontend cookie name
 		csrf.SameSite(csrf.SameSiteLaxMode),
 		csrf.ErrorHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			log.Printf("CSRF validation failed. Headers: %v", r.Header)
+			if cookie, err := r.Cookie("_gorilla_csrf"); err == nil {
+				log.Printf("CSRF cookie value: %v", cookie.Value)
+			} else {
+				log.Printf("Error getting CSRF cookie: %v", err)
+			}
 			http.Error(w, "CSRF token invalid", http.StatusForbidden)
 		})),
 	)

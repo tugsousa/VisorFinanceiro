@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"encoding/json"
+	"log"
 	"net/http"
 	"time"
 
@@ -21,12 +22,25 @@ func NewUserHandler(authService *security.AuthService) *UserHandler {
 }
 
 func (h *UserHandler) LoginUserHandler(w http.ResponseWriter, r *http.Request) {
+	log.Printf("Login request received. Headers: %v", r.Header)
+	// Log CSRF token from header
+	csrfToken := r.Header.Get("X-CSRF-Token")
+	log.Printf("CSRF Token from header: %v", csrfToken)
+
+	// Log CSRF token from cookie
+	if cookie, err := r.Cookie("_gorilla_csrf"); err == nil {
+		log.Printf("CSRF Token from cookie: %v", cookie.Value)
+	} else {
+		log.Printf("Error getting CSRF cookie: %v", err)
+	}
+
 	var credentials struct {
 		Username string `json:"username"`
 		Password string `json:"password"`
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&credentials); err != nil {
+		log.Printf("Invalid request body: %v", err)
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]string{"error": "Invalid request body"})
@@ -35,6 +49,7 @@ func (h *UserHandler) LoginUserHandler(w http.ResponseWriter, r *http.Request) {
 
 	user, err := model.GetUserByUsername(database.DB, credentials.Username)
 	if err != nil {
+		log.Printf("User lookup failed for %s: %v", credentials.Username, err)
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusUnauthorized)
 		json.NewEncoder(w).Encode(map[string]string{"error": "Invalid username or password"})
@@ -42,6 +57,7 @@ func (h *UserHandler) LoginUserHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := user.CheckPassword(credentials.Password); err != nil {
+		log.Printf("Password check failed for user %s: %v", credentials.Username, err)
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusUnauthorized)
 		json.NewEncoder(w).Encode(map[string]string{"error": "Invalid username or password"})
