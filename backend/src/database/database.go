@@ -84,12 +84,7 @@ func migrateDatabase() {
 	}
 
 	// Check if original_quantity column exists
-	var columnName string
-	err = DB.QueryRow("PRAGMA table_info(processed_transactions)").Scan(&columnName)
-	if err != nil {
-		log.Printf("Error checking table schema: %v", err)
-		return
-	}
+	// We need to query all columns and check if original_quantity is among them
 
 	// Get all column names
 	rows, err := DB.Query("PRAGMA table_info(processed_transactions)")
@@ -119,6 +114,12 @@ func migrateDatabase() {
 		if name == "description" {
 			hasDescription = true
 		}
+	}
+
+	// Check for errors from iterating over rows
+	if err = rows.Err(); err != nil {
+		log.Printf("Error iterating over column info: %v", err)
+		return
 	}
 
 	// Add missing columns if needed
