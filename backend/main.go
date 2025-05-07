@@ -5,7 +5,6 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/gorilla/csrf"
 	"github.com/username/taxfolio/backend/src/database"
 	"github.com/username/taxfolio/backend/src/handlers"
 	_ "github.com/username/taxfolio/backend/src/model" // Ensure model package is initialized
@@ -84,28 +83,14 @@ func main() {
 	apiRouter.HandleFunc("/api/csrf-token", handlers.GetCSRFToken)
 	apiRouter.HandleFunc("/api/auth/csrf", handlers.GetCSRFToken)
 	apiRouter.HandleFunc("/api/login", userHandler.LoginUserHandler)
+	apiRouter.HandleFunc("/api/auth/login", userHandler.LoginUserHandler) // Add this route to match frontend
 	apiRouter.HandleFunc("/api/register", userHandler.RegisterUserHandler)
+	apiRouter.HandleFunc("/api/auth/register", userHandler.RegisterUserHandler) // Add this route to match frontend
 	apiRouter.HandleFunc("/api/holdings/stocks", uploadHandler.HandleGetStockHoldings)
 	apiRouter.HandleFunc("/api/holdings/options", uploadHandler.HandleGetOptionHoldings)
 
-	// Apply CSRF protection to API routes
-	csrfMiddleware := csrf.Protect(
-		csrfAuthKey,
-		csrf.Secure(false),                 // Set to true in production with HTTPS
-		csrf.Path("/"),                     // Match root path
-		csrf.RequestHeader("X-CSRF-Token"), // Match frontend header
-		csrf.CookieName("_gorilla_csrf"),   // Match frontend cookie name
-		csrf.SameSite(csrf.SameSiteLaxMode),
-		csrf.ErrorHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			log.Printf("CSRF validation failed. Headers: %v", r.Header)
-			if cookie, err := r.Cookie("_gorilla_csrf"); err == nil {
-				log.Printf("CSRF cookie value: %v", cookie.Value)
-			} else {
-				log.Printf("Error getting CSRF cookie: %v", err)
-			}
-			http.Error(w, "CSRF token invalid", http.StatusForbidden)
-		})),
-	)
+	// Apply CSRF protection to API routes using our enhanced middleware
+	csrfMiddleware := handlers.CSRFMiddleware()
 
 	protectedRouter := csrfMiddleware(apiRouter)
 	rateLimitedRouter := rateLimitMiddleware(protectedRouter)
