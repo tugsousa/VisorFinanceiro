@@ -44,53 +44,37 @@ func (u *User) CheckPassword(password string) error {
 
 func (u *User) CreateUser(db *sql.DB) error {
 	query := `
-	INSERT INTO users (username, email, password, created_at, updated_at)
-	VALUES (?, ?, ?, ?, ?)
+	INSERT INTO users (username, password)
+	VALUES (?, ?)
 	`
-	u.CreatedAt = time.Now()
-	u.UpdatedAt = time.Now()
-
-	_, err := db.Exec(query, u.Username, u.Email, u.Password, u.CreatedAt, u.UpdatedAt)
+	_, err := db.Exec(query, u.Username, u.Password)
 	return err
 }
 
 func GetUserByUsername(db *sql.DB, username string) (*User, error) {
 	query := `
-	SELECT id, username, email, password, created_at, updated_at
+	SELECT id, username, password
 	FROM users
 	WHERE username = ?
 	`
 	row := db.QueryRow(query, username)
 
 	var user User
-	err := row.Scan(&user.ID, &user.Username, &user.Email, &user.Password, &user.CreatedAt, &user.UpdatedAt)
+	err := row.Scan(&user.ID, &user.Username, &user.Password)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, errors.New("user not found")
 		}
 		return nil, err
 	}
+	// Set default values for fields not in the database
+	user.Email = ""
+	user.CreatedAt = time.Now()
+	user.UpdatedAt = time.Now()
 	return &user, nil
 }
 
-func GetUserByEmail(db *sql.DB, email string) (*User, error) {
-	query := `
-	SELECT id, username, email, password, created_at, updated_at
-	FROM users
-	WHERE email = ?
-	`
-	row := db.QueryRow(query, email)
-
-	var user User
-	err := row.Scan(&user.ID, &user.Username, &user.Email, &user.Password, &user.CreatedAt, &user.UpdatedAt)
-	if err != nil {
-		if err == sql.ErrNoRows {
-			return nil, errors.New("user not found")
-		}
-		return nil, err
-	}
-	return &user, nil
-}
+// GetUserByEmail function removed as the users table doesn't have an email column
 
 func CreateSession(db *sql.DB, session *Session) error {
 	query := `

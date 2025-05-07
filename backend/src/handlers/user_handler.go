@@ -186,18 +186,26 @@ func (h *UserHandler) RefreshTokenHandler(w http.ResponseWriter, r *http.Request
 }
 
 func (h *UserHandler) RegisterUserHandler(w http.ResponseWriter, r *http.Request) {
-	var user model.User
-	if err := json.NewDecoder(r.Body).Decode(&user); err != nil {
+	var credentials struct {
+		Username string `json:"username"`
+		Password string `json:"password"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&credentials); err != nil {
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
 		return
 	}
 
-	hashedPassword, err := h.authService.HashPassword(user.Password)
+	hashedPassword, err := h.authService.HashPassword(credentials.Password)
 	if err != nil {
 		http.Error(w, "Failed to hash password", http.StatusInternalServerError)
 		return
 	}
-	user.Password = hashedPassword
+
+	user := &model.User{
+		Username: credentials.Username,
+		Password: hashedPassword,
+	}
 
 	if err := user.CreateUser(database.DB); err != nil {
 		http.Error(w, "Failed to create user", http.StatusInternalServerError)
