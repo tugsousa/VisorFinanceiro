@@ -231,6 +231,8 @@ const login = async (username, password) => {
         register,
         login,
         logout,
+        csrfToken,
+        fetchCsrfToken,
       }}
     >
       {children}

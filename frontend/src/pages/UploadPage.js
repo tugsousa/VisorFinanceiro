@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
 import axios from 'axios';
+import { useAuth } from '../context/AuthContext';
 
 const UploadPage = () => {
+  const { csrfToken, fetchCsrfToken } = useAuth();
   const [selectedFile, setSelectedFile] = useState(null);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadStatus, setUploadStatus] = useState('idle');
@@ -40,10 +42,16 @@ const UploadPage = () => {
       setUploadStatus('uploading');
       setUploadProgress(0);
 
+      // Get a fresh CSRF token before upload
+      const freshToken = await fetchCsrfToken();
+      console.log('Using CSRF token for upload:', freshToken);
+
       const response = await axios.post('http://localhost:8080/api/upload', formData, {
         headers: {
           'Content-Type': 'multipart/form-data',
+          'X-CSRF-Token': freshToken,
         },
+        withCredentials: true, // This ensures cookies are sent with the request
         onUploadProgress: (progressEvent) => {
           const progress = Math.round((progressEvent.loaded * 100) / progressEvent.total);
           setUploadProgress(progress);

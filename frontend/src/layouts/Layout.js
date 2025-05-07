@@ -1,4 +1,4 @@
-import { Box, AppBar, Toolbar, Typography, Drawer, IconButton, Tooltip, Button } from '@mui/material';
+import { Box, AppBar, Toolbar, Typography, Drawer, IconButton, Tooltip, Button, Avatar } from '@mui/material';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import {
@@ -7,7 +7,8 @@ import {
   AttachMoney as DividendsIcon,
   ReceiptLong as TaxIcon, // Changed from CashIcon
   ShowChart as OptionsIcon, // Added icon for Options
-  Analytics as StockIcon // Added icon for Stocks
+  Analytics as StockIcon, // Added icon for Stocks
+  Person as PersonIcon
 } from '@mui/icons-material';
 
 export default function Layout({ children }) {
@@ -145,22 +146,36 @@ export default function Layout({ children }) {
                 TAXFOLIO
               </Typography>
               {user ? (
-                <Button 
-                  color="inherit"
-                  onClick={() => {
-                    logout();
-                    navigate('/signin');
-                  }}
-                  sx={{
-                    color: 'white',
-                    textTransform: 'none',
-                    '&:hover': {
-                      textDecoration: 'underline'
-                    }
-                  }}
-                >
-                  Logout
-                </Button>
+                <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                  <Tooltip title={user.username || "User"} placement="bottom">
+                    <Avatar 
+                      sx={{ 
+                        width: 32, 
+                        height: 32, 
+                        bgcolor: 'secondary.main',
+                        mr: 1
+                      }}
+                    >
+                      <PersonIcon fontSize="small" />
+                    </Avatar>
+                  </Tooltip>
+                  <Button 
+                    color="inherit"
+                    onClick={() => {
+                      logout();
+                      navigate('/signin');
+                    }}
+                    sx={{
+                      color: 'white',
+                      textTransform: 'none',
+                      '&:hover': {
+                        textDecoration: 'underline'
+                      }
+                    }}
+                  >
+                    Logout
+                  </Button>
+                </Box>
               ) : (
                 <Typography 
                   variant="body1" 
