@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"log"
 	"net/http"
 	"time"
@@ -50,8 +51,8 @@ func enableCORS(next http.Handler) http.Handler {
 
 		// Handle preflight requests
 		if r.Method == "OPTIONS" {
-			log.Printf("Handling OPTIONS preflight request")
-			w.WriteHeader(http.StatusOK)
+			log.Printf("Handling OPTIONS preflight request for %s", r.URL.Path)
+			w.WriteHeader(http.StatusOK) // For OPTIONS, always return 200 OK
 			return
 		}
 
@@ -62,10 +63,13 @@ func enableCORS(next http.Handler) http.Handler {
 	})
 }
 
-// OPTIONS requests are now handled directly in the CSRFMiddleware
-
 func main() {
-	authService := security.NewAuthService("your-secret-key-here") // TODO: Replace with actual JWT secret
+	// Initialize JWT secret (replace with a strong, environment-variable-loaded secret)
+	jwtSecret := "your-very-secure-and-long-jwt-secret-key-for-hs256"
+	if len(jwtSecret) < 32 {
+		log.Fatal("JWT_SECRET must be at least 32 characters long for HS256")
+	}
+	authService := security.NewAuthService(jwtSecret)
 	userHandler := handlers.NewUserHandler(authService)
 
 	// Initialize parsers and processors
@@ -86,37 +90,55 @@ func main() {
 	)
 	uploadHandler := handlers.NewUploadHandler(uploadService)
 
-	router := http.NewServeMux()
+	// Main router for the application
+	mainMux := http.NewServeMux()
 
-	// Public routes (no CSRF protection)
-	router.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte("TAXFOLIO Backend is running"))
+	// Public routes (like base path or health check) - no CSRF, no Auth
+	mainMux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]string{"message": "TAXFOLIO Backend is running"})
 	})
+	mainMux.HandleFunc("/api/auth/csrf", handlers.GetCSRFToken) // CSRF token endpoint
 
-	// API routes with CSRF protection
-	apiRouter := http.NewServeMux()
-	apiRouter.HandleFunc("/api/csrf-token", handlers.GetCSRFToken)
-	apiRouter.HandleFunc("/api/auth/csrf", handlers.GetCSRFToken)
-	apiRouter.HandleFunc("/api/login", userHandler.LoginUserHandler)
-	apiRouter.HandleFunc("/api/auth/login", userHandler.LoginUserHandler) // Add this route to match frontend
-	apiRouter.HandleFunc("/api/register", userHandler.RegisterUserHandler)
-	apiRouter.HandleFunc("/api/auth/register", userHandler.RegisterUserHandler) // Add this route to match frontend
-	apiRouter.HandleFunc("/api/holdings/stocks", uploadHandler.HandleGetStockHoldings)
-	apiRouter.HandleFunc("/api/holdings/options", uploadHandler.HandleGetOptionHoldings)
-	apiRouter.HandleFunc("/api/upload", userHandler.AuthMiddleware(uploadHandler.HandleUpload))
-	apiRouter.HandleFunc("/api/transactions/processed", userHandler.AuthMiddleware(uploadHandler.HandleGetProcessedTransactions))
+	// Authentication routes (Login, Register) - These require CSRF but not AuthMiddleware yet
+	authRouter := http.NewServeMux()
+	authRouter.HandleFunc("/api/auth/login", userHandler.LoginUserHandler)
+	authRouter.HandleFunc("/api/auth/register", userHandler.RegisterUserHandler)
+	// The refresh token route might need special handling if CSRF is problematic here.
+	// For now, let's keep it under CSRF.
+	authRouter.HandleFunc("/api/auth/refresh", userHandler.RefreshTokenHandler)
 
-	// Apply CSRF protection to API routes using our enhanced middleware
-	csrfMiddleware := handlers.CSRFMiddleware()
+	// Authenticated routes - These require AuthMiddleware and CSRF
+	authenticatedRouter := http.NewServeMux()
+	authenticatedRouter.HandleFunc("/api/upload", userHandler.AuthMiddleware(uploadHandler.HandleUpload))
+	authenticatedRouter.HandleFunc("/api/transactions/processed", userHandler.AuthMiddleware(uploadHandler.HandleGetProcessedTransactions))
+	authenticatedRouter.HandleFunc("/api/holdings/stocks", userHandler.AuthMiddleware(uploadHandler.HandleGetStockHoldings))   // Protected
+	authenticatedRouter.HandleFunc("/api/holdings/options", userHandler.AuthMiddleware(uploadHandler.HandleGetOptionHoldings)) // Protected
+	// Add the new logout route here, protected by AuthMiddleware
+	authenticatedRouter.HandleFunc("/api/auth/logout", userHandler.AuthMiddleware(userHandler.LogoutUserHandler))
 
-	// Apply middlewares in the correct order
-	protectedRouter := csrfMiddleware(apiRouter)
-	rateLimitedRouter := rateLimitMiddleware(protectedRouter)
-	corsRouter := enableCORS(rateLimitedRouter)
+	// Apply CSRF middleware to authRouter and authenticatedRouter
+	csrfProtectedAuthRouter := handlers.CSRFMiddleware()(authRouter)
+	csrfProtectedAuthenticatedRouter := handlers.CSRFMiddleware()(authenticatedRouter)
+
+	// Mount the CSRF-protected routers onto the main mux
+	mainMux.Handle("/api/auth/login", csrfProtectedAuthRouter)
+	mainMux.Handle("/api/auth/register", csrfProtectedAuthRouter)
+	mainMux.Handle("/api/auth/refresh", csrfProtectedAuthRouter)
+
+	mainMux.Handle("/api/upload", csrfProtectedAuthenticatedRouter)
+	mainMux.Handle("/api/transactions/processed", csrfProtectedAuthenticatedRouter)
+	mainMux.Handle("/api/holdings/stocks", csrfProtectedAuthenticatedRouter)
+	mainMux.Handle("/api/holdings/options", csrfProtectedAuthenticatedRouter)
+	mainMux.Handle("/api/auth/logout", csrfProtectedAuthenticatedRouter)
+
+	// Apply global middlewares (CORS, Rate Limiting) to the mainMux
+	finalHandler := enableCORS(rateLimitMiddleware(mainMux))
+
 	database.InitDB()
 
 	log.Println("Server running at http://localhost:8080")
-	if err := http.ListenAndServe(":8080", corsRouter); err != nil {
+	if err := http.ListenAndServe(":8080", finalHandler); err != nil {
 		log.Fatalf("Failed to start server: %v", err)
 	}
 }
