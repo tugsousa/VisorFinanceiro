@@ -113,10 +113,19 @@ func (h *UserHandler) LoginUserHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Prepare user data for the response
+	userData := map[string]interface{}{
+		"id":       user.ID,
+		"username": user.Username,
+		// Add other fields like email if you select them in GetUserByUsername and want to send them
+	}
+
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{
+	// MODIFIED: Return user object along with tokens
+	json.NewEncoder(w).Encode(map[string]interface{}{
 		"access_token":  accessToken,
 		"refresh_token": refreshToken,
+		"user":          userData, // Include user details
 	})
 }
 
@@ -206,15 +215,29 @@ func (h *UserHandler) RefreshTokenHandler(w http.ResponseWriter, r *http.Request
 		IsBlocked:    false,
 		ExpiresAt:    time.Now().Add(7 * 24 * time.Hour),
 	}
+	// Assuming UserID needs to be parsed from userID string
+	userIDInt, convErr := strconv.Atoi(userID)
+	if convErr != nil {
+		http.Error(w, "Failed to parse user ID for session", http.StatusInternalServerError)
+		return
+	}
+	session.UserID = userIDInt
+
 	if err := model.CreateSession(database.DB, session); err != nil {
 		http.Error(w, "Failed to update session", http.StatusInternalServerError)
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
+	// MODIFIED: Also return user info on refresh if desired, or ensure frontend re-fetches it.
+	// For simplicity, here we'll just return tokens. Frontend user state persists.
+	// If you want to update user info on refresh, fetch user by ID and include it.
+	// user, _ := model.GetUserByID(database.DB, userIDInt) // Hypothetical GetUserByID
+	// userData := map[string]interface{}{ "id": user.ID, "username": user.Username }
 	json.NewEncoder(w).Encode(map[string]string{
 		"access_token":  accessToken,
 		"refresh_token": refreshToken,
+		// "user": userData, // Optionally include updated user data
 	})
 }
 
