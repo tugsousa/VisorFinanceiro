@@ -1,17 +1,44 @@
-package parsers
+// backend/src/services/interfaces.go
+package services
 
 import (
 	"io"
 
 	"github.com/username/taxfolio/backend/src/models"
+	// No direct import of "processors" needed here if DividendTaxResult is from "models"
 )
 
-// CSVParser defines the interface for parsing CSV data into raw transactions.
-type CSVParser interface {
-	Parse(reader io.Reader) ([]models.RawTransaction, error)
+// UploadResult is primarily for the result of a single ProcessUpload call.
+// It contains data derived *only* from the newly uploaded file.
+type UploadResult struct {
+	// These fields reflect the processing of the *current* upload batch.
+	// For example, DividendTaxResult here would be the summary *from this upload only*.
+	DividendTaxResult models.DividendTaxResult  // Summary from the current upload
+	StockSaleDetails  []models.SaleDetail       // Sales from the current upload
+	StockHoldings     []models.PurchaseLot      // Holdings *after* this upload, based on this upload's impact
+	OptionSaleDetails []models.OptionSaleDetail // Options sales from this upload
+	OptionHoldings    []models.OptionHolding    // Option holdings *after* this upload
+	CashMovements     []models.CashMovement     // Cash movements in this upload
 }
 
-// TransactionProcessor defines the interface for processing raw transactions into processed transactions.
-type TransactionProcessor interface {
-	Process(raw []models.RawTransaction) ([]models.ProcessedTransaction, error)
+// UploadService defines the interface for the core upload processing logic.
+type UploadService interface {
+	// ProcessUpload handles a new file upload, stores its transactions,
+	// and returns an UploadResult based *only* on the processed file.
+	ProcessUpload(fileReader io.Reader, userID int64) (*UploadResult, error)
+
+	// GetLatestUploadResult provides a comprehensive result based on *all*
+	// historical transactions for the given user.
+	// This is what pages like Holdings, TaxPage, etc., will typically use
+	// to get a complete picture.
+	GetLatestUploadResult(userID int64) (*UploadResult, error)
+
+	// Specific getters that operate on a user's historical data from the DB.
+	// These are alternatives to GetLatestUploadResult if only a subset of data is needed.
+	GetDividendTaxSummary(userID int64) (models.DividendTaxResult, error)
+	GetDividendTransactions(userID int64) ([]models.ProcessedTransaction, error) // Gets 'dividend' and 'dividendtax' types
+	GetStockHoldings(userID int64) ([]models.PurchaseLot, error)
+	GetOptionHoldings(userID int64) ([]models.OptionHolding, error)
+	GetStockSaleDetails(userID int64) ([]models.SaleDetail, error)
+	GetOptionSaleDetails(userID int64) ([]models.OptionSaleDetail, error)
 }

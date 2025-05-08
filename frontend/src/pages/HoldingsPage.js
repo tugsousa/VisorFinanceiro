@@ -1,19 +1,22 @@
-import { useState, useEffect } from 'react';
-import { 
-  Typography, 
-  Box, 
-  Paper, 
-  Table, 
-  TableBody, 
-  TableCell, 
-  TableContainer, 
-  TableHead, 
+// frontend/src/pages/HoldingsPage.js
+import { useState, useEffect, useContext } from 'react';
+import {
+  Typography,
+  Box,
+  Paper,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
   TableRow,
   CircularProgress,
-  Grid
 } from '@mui/material';
+import axios from 'axios';
+import { AuthContext } from '../context/AuthContext';
 
 export default function HoldingsPage() {
+  const { token, csrfToken, fetchCsrfToken } = useContext(AuthContext);
   const [stockHoldings, setStockHoldings] = useState([]);
   const [optionHoldings, setOptionHoldings] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -21,93 +24,86 @@ export default function HoldingsPage() {
 
   useEffect(() => {
     const fetchHoldings = async () => {
+      if (!token) {
+        setLoading(false);
+        setError("User not authenticated. Please sign in.");
+        setStockHoldings([]); // Clear data if not authenticated
+        setOptionHoldings([]);
+        return;
+      }
       setLoading(true);
       setError(null);
       try {
+        const currentCsrfToken = csrfToken || await fetchCsrfToken();
+
         const [stocksResponse, optionsResponse] = await Promise.all([
-          fetch('http://localhost:8080/api/holdings/stocks'),
-          fetch('http://localhost:8080/api/holdings/options')
+          axios.get('http://localhost:8080/api/holdings/stocks', {
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'X-CSRF-Token': currentCsrfToken,
+            },
+            withCredentials: true,
+          }),
+          axios.get('http://localhost:8080/api/holdings/options', {
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'X-CSRF-Token': currentCsrfToken,
+            },
+            withCredentials: true,
+          })
         ]);
 
-        if (!stocksResponse.ok || !optionsResponse.ok) {
-          const errorText = await stocksResponse.text();
-          throw new Error(`HTTP error! status: ${stocksResponse.status} - ${errorText || 'Failed to fetch holdings data'}`);
-        }
+        const stocksData = stocksResponse.data || [];
+        const optionsData = optionsResponse.data || [];
 
-        const [stocks, options] = await Promise.all([
-          stocksResponse.json(),
-          optionsResponse.json()
-        ]);
-        
-        // Transform and group stock holdings data by product_name
-        const stockGroups = (stocks || []).reduce((acc, stock) => {
-          if (!acc[stock.product_name]) {
-            acc[stock.product_name] = {
-              product_name: stock.product_name,
-              quantity: 0,
-              totalCost: 0,
-              totalValue: 0
-            };
-          }
-          acc[stock.product_name].quantity += stock.quantity;
-          acc[stock.product_name].totalCost += stock.buyPrice * stock.quantity;
-          acc[stock.product_name].totalValue += stock.buyPrice * stock.quantity;
-          return acc;
-        }, {});
-
-        const transformedStocks = Object.values(stockGroups).map(group => ({
-          product_name: group.product_name,
-          quantity: group.quantity,
-          averageCost: (group.totalCost / group.quantity).toFixed(2),
-          currentValue: group.totalValue.toFixed(2)
+        // Transform stock holdings (PurchaseLot model)
+        const transformedStocks = stocksData.map(stock => ({
+          product_name: stock.product_name,
+          isin: stock.isin,
+          quantity: stock.quantity,
+          averageCostEUR: stock.quantity > 0 && stock.buy_amount_eur !== undefined ? (stock.buy_amount_eur / stock.quantity).toFixed(2) : '0.00',
+          totalCostEUR: stock.buy_amount_eur !== undefined ? stock.buy_amount_eur.toFixed(2) : '0.00',
+          buyDate: stock.buy_date,
+          buyCurrency: stock.buy_currency,
         }));
 
-        // Transform option holdings data
-        const transformedOptions = (options || []).map(option => {
+        // Transform option holdings (OptionHolding model)
+        const transformedOptions = optionsData.map(option => {
           let daysRemaining = 'N/A';
-          
           try {
-            // Parse expiration date from product_name (format: "COL P35.00 19DEC25")
             const parts = option.product_name.split(' ');
             if (parts.length >= 3) {
-              // Find the part that matches the date format (DDMMMYY)
               const datePart = parts.find(part => /^\d{2}[A-Z]{3}\d{2}$/.test(part));
               if (datePart) {
-                // Convert expiration date to Date object (format: DDMMMYY)
                 const day = datePart.substring(0, 2);
                 const month = datePart.substring(2, 5);
                 const year = '20' + datePart.substring(5);
-                const expirationDate = new Date(`${day} ${month} ${year}`);
-                
-                // Calculate days remaining
+                const expirationDate = new Date(`${day} ${month} ${year} UTC`); // Ensure UTC
                 const today = new Date();
-                const timeDiff = expirationDate.getTime() - today.getTime();
+                const todayUTC = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()));
+                const timeDiff = expirationDate.getTime() - todayUTC.getTime();
                 daysRemaining = Math.ceil(timeDiff / (1000 * 60 * 60 * 24));
-              } else {
-                console.warn(`No valid date found in product_name: ${option.product_name}`);
               }
-            } else {
-              console.warn(`Unexpected product_name format: ${option.product_name}`);
             }
-          } catch (e) {
-            console.warn(`Failed to parse expiration date from: ${option.product_name}`, e);
-          }
-          
+          } catch (e) { console.warn(`Failed to parse expiration date from: ${option.product_name}`, e); }
+
           return {
             product_name: option.product_name,
-            expiration: typeof daysRemaining === 'number' 
+            expiration: typeof daysRemaining === 'number'
               ? (daysRemaining > 0 ? `${daysRemaining} days` : 'Expired')
               : 'N/A',
-            quantity: option.quantity,
-            open_amount_eur: option.open_amount_eur
+            quantity: option.quantity, // Positive for long, negative for short
+            open_amount_eur: option.open_amount_eur !== undefined ? option.open_amount_eur.toFixed(2) : '0.00',
+            openDate: option.open_date,
           };
         });
-        
+
         setStockHoldings(transformedStocks);
         setOptionHoldings(transformedOptions);
+
       } catch (e) {
         console.error("Failed to fetch holdings:", e);
-        setError(`Failed to load holdings data: ${e.message}`);
+        setError(`Failed to load holdings data: ${e.response?.data?.error || e.message}`);
         setStockHoldings([]);
         setOptionHoldings([]);
       } finally {
@@ -116,71 +112,84 @@ export default function HoldingsPage() {
     };
 
     fetchHoldings();
-  }, []);
+  }, [token, csrfToken, fetchCsrfToken]);
 
-  if (loading) return <Typography>Loading...</Typography>;
-  if (error) return <Typography color="error">Error: {error}</Typography>;
+  if (loading) return <CircularProgress />;
+  if (error) return <Typography color="error" sx={{ textAlign: 'center', mt: 2 }}>Error: {error}</Typography>;
 
   return (
     <Box sx={{ p: 3 }}>
       <Typography variant="h4" component="h1" gutterBottom>
-        Holdings
+        Current Holdings
       </Typography>
 
       <Typography variant="h5" gutterBottom sx={{ mt: 3 }}>
         Stock Holdings
       </Typography>
       <TableContainer component={Paper}>
-        <Table>
+        <Table size="small">
           <TableHead>
             <TableRow>
               <TableCell>Product Name</TableCell>
-              <TableCell>Quantity</TableCell>
-              <TableCell>Average Cost</TableCell>
-              <TableCell>Current Value</TableCell>
+              <TableCell>ISIN</TableCell>
+              <TableCell>Buy Date</TableCell>
+              <TableCell align="right">Quantity</TableCell>
+              <TableCell align="right">Avg. Cost (EUR)</TableCell>
+              <TableCell align="right">Total Cost (EUR)</TableCell>
+              <TableCell>Currency</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
-            {stockHoldings.map((holding) => (
-              <TableRow key={`${holding.symbol}-${holding.purchaseDate}`}>
+            {stockHoldings.length > 0 ? stockHoldings.map((holding, index) => (
+              <TableRow hover key={holding.isin || `${holding.product_name}-${index}`}>
                 <TableCell>{holding.product_name}</TableCell>
-                <TableCell>{holding.quantity}</TableCell>
-                <TableCell>{holding.averageCost}</TableCell>
-                <TableCell>{holding.currentValue}</TableCell>
+                <TableCell>{holding.isin}</TableCell>
+                <TableCell>{holding.buyDate}</TableCell>
+                <TableCell align="right">{holding.quantity}</TableCell>
+                <TableCell align="right">{holding.averageCostEUR}</TableCell>
+                <TableCell align="right">{holding.totalCostEUR}</TableCell>
+                <TableCell>{holding.buyCurrency}</TableCell>
               </TableRow>
-            ))}
+            )) : (
+              <TableRow>
+                <TableCell colSpan={7} align="center">No stock holdings found.</TableCell>
+              </TableRow>
+            )}
           </TableBody>
         </Table>
       </TableContainer>
-      {optionHoldings.length > 0 && (
-        <>
-          <Typography variant="h5" gutterBottom sx={{ mt: 3 }}>
-            Option Holdings
-          </Typography>
-          <TableContainer component={Paper}>
-            <Table>
-              <TableHead>
-                <TableRow>
-                  <TableCell>Product</TableCell>
-                  <TableCell>Expiration</TableCell>
-                  <TableCell>Quantity</TableCell>
-                  <TableCell>Amount (EUR)</TableCell>
+
+      <Typography variant="h5" gutterBottom sx={{ mt: 3 }}>
+        Option Holdings
+      </Typography>
+      <TableContainer component={Paper}>
+          <Table size="small">
+            <TableHead>
+              <TableRow>
+                <TableCell>Product</TableCell>
+                <TableCell>Open Date</TableCell>
+                <TableCell>Expiration</TableCell>
+                <TableCell align="right">Quantity</TableCell>
+                <TableCell align="right">Open Value (EUR)</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {optionHoldings.length > 0 ? optionHoldings.map((holding, index) => (
+                <TableRow hover key={`${holding.product_name}-${holding.openDate}-${index}`}>
+                  <TableCell>{holding.product_name}</TableCell>
+                  <TableCell>{holding.openDate}</TableCell>
+                  <TableCell>{holding.expiration}</TableCell>
+                  <TableCell align="right">{holding.quantity}</TableCell>
+                  <TableCell align="right">{holding.open_amount_eur}</TableCell>
                 </TableRow>
-              </TableHead>
-              <TableBody>
-                {optionHoldings.map((holding) => (
-                  <TableRow key={`${holding.symbol}-${holding.expiration}-${holding.strike}`}>
-                    <TableCell>{holding.product_name}</TableCell>
-                    <TableCell>{holding.expiration}</TableCell>
-                    <TableCell>{holding.quantity}</TableCell>
-                    <TableCell>{holding.open_amount_eur}</TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </TableContainer>
-        </>
-      )}
+              )) : (
+                 <TableRow>
+                    <TableCell colSpan={5} align="center">No option holdings found.</TableCell>
+                 </TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </TableContainer>
     </Box>
   );
 }
