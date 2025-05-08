@@ -9,7 +9,8 @@ import {
   ReceiptLong as TaxIcon,
   ShowChart as OptionsIcon,
   Analytics as StockIcon,
-  Person as PersonIcon
+  Person as PersonIcon,
+  Dashboard as DashboardIcon // Add DashboardIcon
 } from '@mui/icons-material';
 
 export default function Layout({ children }) {
@@ -36,6 +37,7 @@ export default function Layout({ children }) {
 
   // Sidebar items definition for easier mapping
   const sidebarItems = [
+    { title: "Dashboard", to: "/dashboard", icon: <DashboardIcon /> }, 
     { title: "Upload", to: "/", icon: <UploadIcon /> },
     { title: "Holdings", to: "/holdings", icon: <HoldingsIcon /> },
     { title: "Stock Sales", to: "/stocks", icon: <StockIcon /> },

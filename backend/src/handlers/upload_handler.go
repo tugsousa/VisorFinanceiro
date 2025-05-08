@@ -69,6 +69,48 @@ func (h *UploadHandler) HandleUpload(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// HandleGetDashboardData retrieves all relevant summary data for the dashboard.
+func (h *UploadHandler) HandleGetDashboardData(w http.ResponseWriter, r *http.Request) {
+	userID, ok := GetUserIDFromContext(r.Context())
+	if !ok {
+		sendJSONError(w, "authentication required or user ID not found in context", http.StatusUnauthorized)
+		return
+	}
+	log.Printf("Handling GetDashboardData for userID: %d", userID)
+
+	dashboardData, err := h.uploadService.GetLatestUploadResult(userID) // Reuse existing service method
+	if err != nil {
+		sendJSONError(w, fmt.Sprintf("Error retrieving dashboard data for userID %d: %v", userID, err), http.StatusInternalServerError)
+		return
+	}
+
+	// Ensure nil slices/maps are returned as empty ones for JSON consistency
+	if dashboardData.DividendTaxResult == nil {
+		dashboardData.DividendTaxResult = make(models.DividendTaxResult)
+	}
+	if dashboardData.StockSaleDetails == nil {
+		dashboardData.StockSaleDetails = []models.SaleDetail{}
+	}
+	if dashboardData.StockHoldings == nil {
+		dashboardData.StockHoldings = []models.PurchaseLot{}
+	}
+	if dashboardData.OptionSaleDetails == nil {
+		dashboardData.OptionSaleDetails = []models.OptionSaleDetail{}
+	}
+	if dashboardData.OptionHoldings == nil {
+		dashboardData.OptionHoldings = []models.OptionHolding{}
+	}
+	// if dashboardData.CashMovements == nil { // If you decide to include it
+	//     dashboardData.CashMovements = []models.CashMovement{}
+	// }
+
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(dashboardData); err != nil {
+		log.Printf("Error generating JSON response for dashboard data userID %d: %v", userID, err)
+		http.Error(w, "Error generating JSON response", http.StatusInternalServerError)
+	}
+}
+
 // HandleGetStockSales retrieves ALL historical stock sale details for the authenticated user.
 func (h *UploadHandler) HandleGetStockSales(w http.ResponseWriter, r *http.Request) {
 	// Use the GetUserIDFromContext helper function

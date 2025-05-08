@@ -10,6 +10,7 @@ import OptionPage from './pages/OptionPage';
 import StockPage from './pages/StockPage'; // Import the Stock page
 import SignInPage from './pages/SignInPage';
 import SignUpPage from './pages/SignUpPage'; // Import the Stock page
+import DashboardPage from './pages/DashboardPage'; // Import DashboardPage
 import { AuthProvider } from './context/AuthContext';
 
 
@@ -19,6 +20,7 @@ function App() {
       <Router>
         <Layout>
         <Routes>
+        <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/" element={<UploadPage />} />
           <Route path="/detailed" element={<DetailedView />} />
           <Route path="/holdings" element={<Holdings />} />

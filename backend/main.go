@@ -142,7 +142,7 @@ func main() {
 	apiRouter.Handle("GET /dividend-tax-summary", handlers.CSRFMiddleware()(http.HandlerFunc(userHandler.AuthMiddleware(uploadHandler.HandleGetDividendTaxSummary))))
 	apiRouter.Handle("GET /dividend-transactions", handlers.CSRFMiddleware()(http.HandlerFunc(userHandler.AuthMiddleware(uploadHandler.HandleGetDividendTransactions))))
 	apiRouter.Handle("POST /logout", handlers.CSRFMiddleware()(http.HandlerFunc(userHandler.AuthMiddleware(userHandler.LogoutUserHandler))))
-
+	apiRouter.Handle("GET /dashboard-data", handlers.CSRFMiddleware()(http.HandlerFunc(userHandler.AuthMiddleware(uploadHandler.HandleGetDashboardData))))
 	// Mount the apiRouter under /api/ prefix on the rootMux
 	rootMux.Handle("/api/", http.StripPrefix("/api", apiRouter))
 
