@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
-	"os" // Import os package for environment variables
+	"os"
 	"time"
 
 	"github.com/username/taxfolio/backend/src/database"
@@ -15,7 +15,7 @@ import (
 	"github.com/username/taxfolio/backend/src/processors"
 	"github.com/username/taxfolio/backend/src/security"
 	"github.com/username/taxfolio/backend/src/services"
-	"golang.org/x/time/rate"
+	"golang.org/x/time/rate" // For rate limiting
 )
 
 var (
@@ -64,7 +64,6 @@ func main() {
 	log.Println("Starting Taxfolio backend server...")
 
 	// --- Configuration ---
-	// Best practice: Load sensitive keys from environment variables.
 	jwtSecret := os.Getenv("JWT_SECRET")
 	if jwtSecret == "" {
 		log.Println("WARNING: JWT_SECRET environment variable not set. Using default insecure key.")
@@ -103,73 +102,51 @@ func main() {
 
 	// --- Router Setup ---
 	log.Println("Configuring routes...")
-	mainMux := http.NewServeMux()
 
-	// --- Public Routes ---
-	// No CSRF or Auth required
-	mainMux.HandleFunc("GET /", func(w http.ResponseWriter, r *http.Request) { // Explicitly GET
+	// Root mux - handles non-API and the /api/ prefix
+	rootMux := http.NewServeMux()
+
+	// Handle the root path separately
+	rootMux.HandleFunc("GET /", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]string{"message": "TAXFOLIO Backend is running"})
 	})
-	mainMux.HandleFunc("GET /api/auth/csrf", handlers.GetCSRFToken) // Endpoint to get CSRF token
 
-	// --- Authentication Routes ---
-	// Require CSRF but not user authentication (AuthMiddleware) yet
-	authRouter := http.NewServeMux()
-	authRouter.HandleFunc("POST /api/auth/login", userHandler.LoginUserHandler)
-	authRouter.HandleFunc("POST /api/auth/register", userHandler.RegisterUserHandler)
-	authRouter.HandleFunc("POST /api/auth/refresh", userHandler.RefreshTokenHandler) // Typically POST
+	// --- API Sub-Router (handles everything under /api/) ---
+	// This apiRouter will handle paths *after* /api has been stripped.
+	// e.g., if request is /api/auth/login, apiRouter gets /auth/login.
+	apiRouter := http.NewServeMux()
+
+	// --- Auth Sub-Router (for /api/auth/*) ---
+	// Handles /csrf, /login, /register, /refresh. These paths are relative to "/auth"
+	authSubRouter := http.NewServeMux()
+	authSubRouter.HandleFunc("GET /csrf", handlers.GetCSRFToken) // Path becomes /api/auth/csrf
+	authSubRouter.HandleFunc("POST /login", userHandler.LoginUserHandler)
+	authSubRouter.HandleFunc("POST /register", userHandler.RegisterUserHandler)
+	authSubRouter.HandleFunc("POST /refresh", userHandler.RefreshTokenHandler)
+	// Apply CSRF to all routes in authSubRouter, then mount it on apiRouter at "/auth/"
+	apiRouter.Handle("/auth/", http.StripPrefix("/auth", handlers.CSRFMiddleware()(authSubRouter)))
 
 	// --- Authenticated API Routes ---
-	// Require both CSRF and user authentication (AuthMiddleware)
-	authenticatedRouter := http.NewServeMux()
-	// Upload
-	authenticatedRouter.HandleFunc("POST /api/upload", userHandler.AuthMiddleware(uploadHandler.HandleUpload))
+	// These are directly under /api (e.g., /api/upload). Paths are relative to /api.
+	// We apply CSRF and Auth middleware to each of these individually.
+	// Using method-specific patterns for Handle (e.g., "POST /upload")
+	apiRouter.Handle("POST /upload", handlers.CSRFMiddleware()(http.HandlerFunc(userHandler.AuthMiddleware(uploadHandler.HandleUpload))))
+	apiRouter.Handle("GET /transactions/processed", handlers.CSRFMiddleware()(http.HandlerFunc(userHandler.AuthMiddleware(uploadHandler.HandleGetProcessedTransactions))))
+	apiRouter.Handle("GET /holdings/stocks", handlers.CSRFMiddleware()(http.HandlerFunc(userHandler.AuthMiddleware(uploadHandler.HandleGetStockHoldings))))
+	apiRouter.Handle("GET /holdings/options", handlers.CSRFMiddleware()(http.HandlerFunc(userHandler.AuthMiddleware(uploadHandler.HandleGetOptionHoldings))))
+	apiRouter.Handle("GET /stock-sales", handlers.CSRFMiddleware()(http.HandlerFunc(userHandler.AuthMiddleware(uploadHandler.HandleGetStockSales))))
+	apiRouter.Handle("GET /option-sales", handlers.CSRFMiddleware()(http.HandlerFunc(userHandler.AuthMiddleware(uploadHandler.HandleGetOptionSales))))
+	apiRouter.Handle("GET /dividend-tax-summary", handlers.CSRFMiddleware()(http.HandlerFunc(userHandler.AuthMiddleware(uploadHandler.HandleGetDividendTaxSummary))))
+	apiRouter.Handle("GET /dividend-transactions", handlers.CSRFMiddleware()(http.HandlerFunc(userHandler.AuthMiddleware(uploadHandler.HandleGetDividendTransactions))))
+	apiRouter.Handle("POST /logout", handlers.CSRFMiddleware()(http.HandlerFunc(userHandler.AuthMiddleware(userHandler.LogoutUserHandler))))
 
-	// Data Retrieval (typically GET)
-	authenticatedRouter.HandleFunc("GET /api/transactions/processed", userHandler.AuthMiddleware(uploadHandler.HandleGetProcessedTransactions))
-	authenticatedRouter.HandleFunc("GET /api/holdings/stocks", userHandler.AuthMiddleware(uploadHandler.HandleGetStockHoldings))
-	authenticatedRouter.HandleFunc("GET /api/holdings/options", userHandler.AuthMiddleware(uploadHandler.HandleGetOptionHoldings))
-	authenticatedRouter.HandleFunc("GET /api/stock-sales", userHandler.AuthMiddleware(uploadHandler.HandleGetStockSales))
-	authenticatedRouter.HandleFunc("GET /api/option-sales", userHandler.AuthMiddleware(uploadHandler.HandleGetOptionSales))
-	authenticatedRouter.HandleFunc("GET /api/dividend-tax-summary", userHandler.AuthMiddleware(uploadHandler.HandleGetDividendTaxSummary))
-	authenticatedRouter.HandleFunc("GET /api/dividend-transactions", userHandler.AuthMiddleware(uploadHandler.HandleGetDividendTransactions))
-
-	// Auth actions for logged-in users
-	authenticatedRouter.HandleFunc("POST /api/auth/logout", userHandler.AuthMiddleware(userHandler.LogoutUserHandler))
-
-	// --- Apply Middleware ---
-	log.Println("Applying middleware...")
-	// Apply CSRF protection specifically to routes that need it
-	csrfProtectedAuthRouter := handlers.CSRFMiddleware()(authRouter)
-	csrfProtectedAuthenticatedRouter := handlers.CSRFMiddleware()(authenticatedRouter)
-
-	// --- Mount Routers ---
-	// Mount CSRF-protected authentication routes
-	mainMux.Handle("/api/auth/login", csrfProtectedAuthRouter)
-	mainMux.Handle("/api/auth/register", csrfProtectedAuthRouter)
-	mainMux.Handle("/api/auth/refresh", csrfProtectedAuthRouter)
-
-	// Mount CSRF-protected and Auth-Middleware-protected authenticated routes
-	// Use prefixes to catch all relevant paths handled by the authenticatedRouter
-	// NOTE: Using specific paths is generally safer than a broad prefix if routes overlap.
-	// If all your authenticated API routes start with "/api/" and are handled by authenticatedRouter,
-	// this prefix approach *could* work, but explicit mounting is less error-prone.
-	// Let's stick to explicit mounting for clarity and safety.
-
-	mainMux.Handle("/api/upload", csrfProtectedAuthenticatedRouter)
-	mainMux.Handle("/api/transactions/processed", csrfProtectedAuthenticatedRouter)
-	mainMux.Handle("/api/holdings/stocks", csrfProtectedAuthenticatedRouter)
-	mainMux.Handle("/api/holdings/options", csrfProtectedAuthenticatedRouter)
-	mainMux.Handle("/api/stock-sales", csrfProtectedAuthenticatedRouter)
-	mainMux.Handle("/api/option-sales", csrfProtectedAuthenticatedRouter)
-	mainMux.Handle("/api/dividend-tax-summary", csrfProtectedAuthenticatedRouter)
-	mainMux.Handle("/api/dividend-transactions", csrfProtectedAuthenticatedRouter)
-	mainMux.Handle("/api/auth/logout", csrfProtectedAuthenticatedRouter)
+	// Mount the apiRouter under /api/ prefix on the rootMux
+	rootMux.Handle("/api/", http.StripPrefix("/api", apiRouter))
 
 	// --- Apply Global Middleware ---
-	// Apply CORS first, then rate limiting to the main router
-	finalHandler := enableCORS(rateLimitMiddleware(mainMux))
+	log.Println("Applying global middleware...")
+	finalHandler := enableCORS(rateLimitMiddleware(rootMux))
 
 	// --- Start Server ---
 	port := os.Getenv("PORT")
