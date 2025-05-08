@@ -7,8 +7,7 @@ import (
 	"log"
 	"net/http"
 
-	// "github.com/username/taxfolio/backend/src/database" // No longer needed directly here for most handlers
-	"github.com/username/taxfolio/backend/src/database"
+	"github.com/username/taxfolio/backend/src/database" // Still needed for HandleGetProcessedTransactions
 	"github.com/username/taxfolio/backend/src/models"
 	"github.com/username/taxfolio/backend/src/services"
 )
@@ -27,9 +26,10 @@ func NewUploadHandler(service services.UploadService) *UploadHandler {
 // HandleUpload receives the file, passes it to the service, and returns the result
 // of processing *that specific file*.
 func (h *UploadHandler) HandleUpload(w http.ResponseWriter, r *http.Request) {
-	userID, ok := r.Context().Value("userID").(int64)
+	// Use the GetUserIDFromContext helper function
+	userID, ok := GetUserIDFromContext(r.Context())
 	if !ok {
-		sendJSONError(w, "authentication required", http.StatusUnauthorized)
+		sendJSONError(w, "authentication required or user ID not found in context", http.StatusUnauthorized)
 		return
 	}
 
@@ -65,16 +65,16 @@ func (h *UploadHandler) HandleUpload(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(result); err != nil { // Result is from the current upload
 		log.Printf("Error generating JSON response for upload result userID %d: %v", userID, err)
-		// Don't use sendJSONError here as we might have already written headers
 		http.Error(w, "Error generating JSON response", http.StatusInternalServerError)
 	}
 }
 
 // HandleGetStockSales retrieves ALL historical stock sale details for the authenticated user.
 func (h *UploadHandler) HandleGetStockSales(w http.ResponseWriter, r *http.Request) {
-	userID, ok := r.Context().Value("userID").(int64)
+	// Use the GetUserIDFromContext helper function
+	userID, ok := GetUserIDFromContext(r.Context())
 	if !ok {
-		sendJSONError(w, "authentication required", http.StatusUnauthorized)
+		sendJSONError(w, "authentication required or user ID not found in context", http.StatusUnauthorized)
 		return
 	}
 	log.Printf("Handling GetStockSales for userID: %d", userID)
@@ -83,18 +83,19 @@ func (h *UploadHandler) HandleGetStockSales(w http.ResponseWriter, r *http.Reque
 		sendJSONError(w, fmt.Sprintf("Error retrieving stock sales for userID %d: %v", userID, err), http.StatusInternalServerError)
 		return
 	}
-	if stockSales == nil { // Ensure empty array, not null, if no sales
+	if stockSales == nil {
 		stockSales = []models.SaleDetail{}
 	}
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(stockSales) // Frontend expects a direct array
+	json.NewEncoder(w).Encode(stockSales)
 }
 
 // HandleGetOptionSales retrieves ALL historical option sale details for the authenticated user.
 func (h *UploadHandler) HandleGetOptionSales(w http.ResponseWriter, r *http.Request) {
-	userID, ok := r.Context().Value("userID").(int64)
+	// Use the GetUserIDFromContext helper function
+	userID, ok := GetUserIDFromContext(r.Context())
 	if !ok {
-		sendJSONError(w, "authentication required", http.StatusUnauthorized)
+		sendJSONError(w, "authentication required or user ID not found in context", http.StatusUnauthorized)
 		return
 	}
 	log.Printf("Handling GetOptionSales for userID: %d", userID)
@@ -103,9 +104,8 @@ func (h *UploadHandler) HandleGetOptionSales(w http.ResponseWriter, r *http.Requ
 		sendJSONError(w, fmt.Sprintf("Error retrieving option sales for userID %d: %v", userID, err), http.StatusInternalServerError)
 		return
 	}
-	// Frontend OptionPage.js and TaxPage.js expect { OptionSaleDetails: [...] }
 	response := map[string]interface{}{"OptionSaleDetails": optionSales}
-	if optionSales == nil { // Ensure empty array if optionSales is nil
+	if optionSales == nil {
 		response["OptionSaleDetails"] = []models.OptionSaleDetail{}
 	}
 	w.Header().Set("Content-Type", "application/json")
@@ -114,9 +114,10 @@ func (h *UploadHandler) HandleGetOptionSales(w http.ResponseWriter, r *http.Requ
 
 // HandleGetDividendTaxSummary retrieves the dividend tax summary based on ALL historical data for the user.
 func (h *UploadHandler) HandleGetDividendTaxSummary(w http.ResponseWriter, r *http.Request) {
-	userID, ok := r.Context().Value("userID").(int64)
+	// Use the GetUserIDFromContext helper function
+	userID, ok := GetUserIDFromContext(r.Context())
 	if !ok {
-		sendJSONError(w, "authentication required", http.StatusUnauthorized)
+		sendJSONError(w, "authentication required or user ID not found in context", http.StatusUnauthorized)
 		return
 	}
 	log.Printf("Handling GetDividendTaxSummary for userID: %d", userID)
@@ -125,7 +126,7 @@ func (h *UploadHandler) HandleGetDividendTaxSummary(w http.ResponseWriter, r *ht
 		sendJSONError(w, fmt.Sprintf("Error retrieving dividend tax summary for userID %d: %v", userID, err), http.StatusInternalServerError)
 		return
 	}
-	if taxSummary == nil { // Ensure empty map, not null
+	if taxSummary == nil {
 		taxSummary = make(models.DividendTaxResult)
 	}
 	w.Header().Set("Content-Type", "application/json")
@@ -136,16 +137,16 @@ func (h *UploadHandler) HandleGetDividendTaxSummary(w http.ResponseWriter, r *ht
 func sendJSONError(w http.ResponseWriter, message string, statusCode int) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(statusCode)
-	// It's good practice to log the error server-side as well
 	log.Printf("Sending JSON error to client: %s (status: %d)", message, statusCode)
 	json.NewEncoder(w).Encode(map[string]string{"error": message})
 }
 
 // HandleGetDividendTransactions retrieves the list of ALL historical individual dividend transactions for the user.
 func (h *UploadHandler) HandleGetDividendTransactions(w http.ResponseWriter, r *http.Request) {
-	userID, ok := r.Context().Value("userID").(int64)
+	// Use the GetUserIDFromContext helper function
+	userID, ok := GetUserIDFromContext(r.Context())
 	if !ok {
-		sendJSONError(w, "authentication required", http.StatusUnauthorized)
+		sendJSONError(w, "authentication required or user ID not found in context", http.StatusUnauthorized)
 		return
 	}
 	log.Printf("Handling GetDividendTransactions for userID: %d", userID)
@@ -154,43 +155,30 @@ func (h *UploadHandler) HandleGetDividendTransactions(w http.ResponseWriter, r *
 		sendJSONError(w, fmt.Sprintf("Error retrieving dividend transactions for userID %d: %v", userID, err), http.StatusInternalServerError)
 		return
 	}
-	if dividendTransactions == nil { // Ensure empty array, not null
+	if dividendTransactions == nil {
 		dividendTransactions = []models.ProcessedTransaction{}
 	}
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(dividendTransactions)
 }
 
-// HandleGetRawTransactions is deprecated/problematic for user-specific data without storing raw CSVs.
-// This handler will now likely not be used or needs to be re-thought if raw data per user is a requirement.
-// For now, it's removed as the service layer doesn't support user-specific raw transactions.
-/*
-func (h *UploadHandler) HandleGetRawTransactions(w http.ResponseWriter, r *http.Request) {
-	// This would require fetching raw data associated with a user, which is not currently implemented.
-	sendJSONError(w, "Fetching raw transactions per user is not supported.", http.StatusNotImplemented)
-}
-*/
-
 // HandleGetProcessedTransactions retrieves ALL historical processed transactions for the authenticated user
-// This function queries the DB directly. It's kept as is because its logic is already user-specific.
 func (h *UploadHandler) HandleGetProcessedTransactions(w http.ResponseWriter, r *http.Request) {
-	userID, ok := r.Context().Value("userID").(int64)
+	// Use the GetUserIDFromContext helper function
+	userID, ok := GetUserIDFromContext(r.Context())
 	if !ok {
-		sendJSONError(w, "authentication required", http.StatusUnauthorized)
+		sendJSONError(w, "authentication required or user ID not found in context", http.StatusUnauthorized)
 		return
 	}
 	log.Printf("Handling GetProcessedTransactions for userID: %d", userID)
 
-	// Query the database directly for the user's processed transactions
-	// Note: The service layer also has fetchUserProcessedTransactions, consider unifying if needed.
-	// However, this handler is fine as is for its purpose.
 	rows, err := database.DB.Query(`
 		SELECT date, product_name, isin, quantity, original_quantity, price, order_type, 
 		transaction_type, description, amount, currency, commission, order_id, 
 		exchange_rate, amount_eur, country_code 
 		FROM processed_transactions 
 		WHERE user_id = ?
-		ORDER BY date DESC`, userID) // Frontend UploadPage might expect DESC for recent first
+		ORDER BY date DESC`, userID)
 
 	if err != nil {
 		sendJSONError(w, fmt.Sprintf("Error querying transactions for userID %d: %v", userID, err), http.StatusInternalServerError)
@@ -227,9 +215,10 @@ func (h *UploadHandler) HandleGetProcessedTransactions(w http.ResponseWriter, r 
 
 // HandleGetStockHoldings retrieves current stock holdings based on ALL historical data for the user.
 func (h *UploadHandler) HandleGetStockHoldings(w http.ResponseWriter, r *http.Request) {
-	userID, ok := r.Context().Value("userID").(int64)
+	// Use the GetUserIDFromContext helper function
+	userID, ok := GetUserIDFromContext(r.Context())
 	if !ok {
-		sendJSONError(w, "authentication required", http.StatusUnauthorized)
+		sendJSONError(w, "authentication required or user ID not found in context", http.StatusUnauthorized)
 		return
 	}
 	log.Printf("Handling GetStockHoldings for userID: %d", userID)
@@ -247,9 +236,10 @@ func (h *UploadHandler) HandleGetStockHoldings(w http.ResponseWriter, r *http.Re
 
 // HandleGetOptionHoldings retrieves current option holdings based on ALL historical data for the user.
 func (h *UploadHandler) HandleGetOptionHoldings(w http.ResponseWriter, r *http.Request) {
-	userID, ok := r.Context().Value("userID").(int64)
+	// Use the GetUserIDFromContext helper function
+	userID, ok := GetUserIDFromContext(r.Context())
 	if !ok {
-		sendJSONError(w, "authentication required", http.StatusUnauthorized)
+		sendJSONError(w, "authentication required or user ID not found in context", http.StatusUnauthorized)
 		return
 	}
 	log.Printf("Handling GetOptionHoldings for userID: %d", userID)

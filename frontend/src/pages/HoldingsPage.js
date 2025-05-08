@@ -27,7 +27,7 @@ export default function HoldingsPage() {
       if (!token) {
         setLoading(false);
         setError("User not authenticated. Please sign in.");
-        setStockHoldings([]); // Clear data if not authenticated
+        setStockHoldings([]);
         setOptionHoldings([]);
         return;
       }
@@ -57,7 +57,8 @@ export default function HoldingsPage() {
         const optionsData = optionsResponse.data || [];
 
         // Transform stock holdings (PurchaseLot model)
-        const transformedStocks = stocksData.map(stock => ({
+        const transformedStocks = stocksData.map((stock, index) => ({ // Added index for a fallback unique key part
+          id: `${stock.isin}-${stock.buy_date}-${index}`, // Create a more unique ID
           product_name: stock.product_name,
           isin: stock.isin,
           quantity: stock.quantity,
@@ -68,7 +69,7 @@ export default function HoldingsPage() {
         }));
 
         // Transform option holdings (OptionHolding model)
-        const transformedOptions = optionsData.map(option => {
+        const transformedOptions = optionsData.map((option, index) => { // Added index
           let daysRemaining = 'N/A';
           try {
             const parts = option.product_name.split(' ');
@@ -78,7 +79,7 @@ export default function HoldingsPage() {
                 const day = datePart.substring(0, 2);
                 const month = datePart.substring(2, 5);
                 const year = '20' + datePart.substring(5);
-                const expirationDate = new Date(`${day} ${month} ${year} UTC`); // Ensure UTC
+                const expirationDate = new Date(`${day} ${month} ${year} UTC`);
                 const today = new Date();
                 const todayUTC = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()));
                 const timeDiff = expirationDate.getTime() - todayUTC.getTime();
@@ -88,11 +89,12 @@ export default function HoldingsPage() {
           } catch (e) { console.warn(`Failed to parse expiration date from: ${option.product_name}`, e); }
 
           return {
+            id: `${option.product_name}-${option.open_date}-${index}`, // Create a more unique ID for options
             product_name: option.product_name,
             expiration: typeof daysRemaining === 'number'
-              ? (daysRemaining > 0 ? `${daysRemaining} days` : 'Expired')
+              ? (daysRemaining >= 0 ? `${daysRemaining} days` : 'Expired') // Corrected: check daysRemaining >=0 for non-expired
               : 'N/A',
-            quantity: option.quantity, // Positive for long, negative for short
+            quantity: option.quantity,
             open_amount_eur: option.open_amount_eur !== undefined ? option.open_amount_eur.toFixed(2) : '0.00',
             openDate: option.open_date,
           };
@@ -140,8 +142,9 @@ export default function HoldingsPage() {
             </TableRow>
           </TableHead>
           <TableBody>
-            {stockHoldings.length > 0 ? stockHoldings.map((holding, index) => (
-              <TableRow hover key={holding.isin || `${holding.product_name}-${index}`}>
+            {stockHoldings.length > 0 ? stockHoldings.map((holding) => ( // Removed index from map if using holding.id
+              // Use the newly created 'id' field for the key
+              <TableRow hover key={holding.id}> 
                 <TableCell>{holding.product_name}</TableCell>
                 <TableCell>{holding.isin}</TableCell>
                 <TableCell>{holding.buyDate}</TableCell>
@@ -174,8 +177,9 @@ export default function HoldingsPage() {
               </TableRow>
             </TableHead>
             <TableBody>
-              {optionHoldings.length > 0 ? optionHoldings.map((holding, index) => (
-                <TableRow hover key={`${holding.product_name}-${holding.openDate}-${index}`}>
+              {optionHoldings.length > 0 ? optionHoldings.map((holding) => ( // Removed index from map
+                 // Use the newly created 'id' field for the key
+                <TableRow hover key={holding.id}>
                   <TableCell>{holding.product_name}</TableCell>
                   <TableCell>{holding.openDate}</TableCell>
                   <TableCell>{holding.expiration}</TableCell>

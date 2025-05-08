@@ -15,6 +15,15 @@ import (
 	"github.com/username/taxfolio/backend/src/security"
 )
 
+// Define a custom type for context keys to avoid collisions.
+// This type is unexported, making it unique to this package.
+type contextKey string
+
+// Define the specific key we will use.
+// This constant is unexported because GetUserIDFromContext is in the same package
+// and provides a controlled way to access the userID.
+const userIDContextKey contextKey = "userID"
+
 type UserHandler struct {
 	authService *security.AuthService
 }
@@ -142,30 +151,24 @@ func (h *UserHandler) AuthMiddleware(next http.HandlerFunc) http.HandlerFunc {
 			tokenString = strings.TrimPrefix(authHeader, "Bearer ")
 		} else {
 			log.Printf("Authorization header does not have Bearer prefix: %s for %s %s", authHeader, r.Method, r.URL.Path)
-			// For flexibility, allow token without Bearer prefix if that's how it's sent
-			// However, it's better to be strict. For now, let's assume it might be sent without.
-			// If you want to enforce "Bearer ", uncomment the error below.
-			// http.Error(w, "Malformed token", http.StatusUnauthorized)
-			// return
-			tokenString = authHeader // Or, treat the whole header as the token if no Bearer prefix
+			tokenString = authHeader
 		}
-		
+
 		if tokenString == "" {
 			log.Printf("Token string is empty after processing Authorization header for %s %s", r.Method, r.URL.Path)
 			http.Error(w, "Malformed token", http.StatusUnauthorized)
 			return
 		}
 
-
 		log.Printf("AuthMiddleware: Validating token: %s for %s %s", tokenString, r.Method, r.URL.Path)
-		userID, err := h.authService.ValidateToken(tokenString)
+		userIDStr, err := h.authService.ValidateToken(tokenString)
 		if err != nil {
 			log.Printf("AuthMiddleware: Token validation failed: %v for %s %s", err, r.Method, r.URL.Path)
 			http.Error(w, "Invalid token", http.StatusUnauthorized)
 			return
 		}
 
-		log.Printf("AuthMiddleware: Token validated for user ID: %s for %s %s", userID, r.Method, r.URL.Path)
+		log.Printf("AuthMiddleware: Token validated for user ID: %s for %s %s", userIDStr, r.Method, r.URL.Path)
 		_, err = model.GetSessionByToken(database.DB, tokenString)
 		if err != nil {
 			log.Printf("AuthMiddleware: Session validation failed: %v for %s %s. Token used: %s", err, r.Method, r.URL.Path, tokenString)
@@ -173,14 +176,15 @@ func (h *UserHandler) AuthMiddleware(next http.HandlerFunc) http.HandlerFunc {
 			return
 		}
 
-		userIDInt, err := strconv.ParseInt(userID, 10, 64)
+		userIDInt, err := strconv.ParseInt(userIDStr, 10, 64)
 		if err != nil {
-			log.Printf("AuthMiddleware: Invalid user ID format: %s for %s %s", userID, r.Method, r.URL.Path)
+			log.Printf("AuthMiddleware: Invalid user ID format: %s for %s %s", userIDStr, r.Method, r.URL.Path)
 			http.Error(w, "Invalid user ID in token", http.StatusInternalServerError)
 			return
 		}
 
-		ctx := context.WithValue(r.Context(), "userID", userIDInt)
+		// Use the custom context key type
+		ctx := context.WithValue(r.Context(), userIDContextKey, userIDInt)
 		next(w, r.WithContext(ctx))
 	}
 }
@@ -200,77 +204,47 @@ func (h *UserHandler) RefreshTokenHandler(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	// Validate the refresh token. For simplicity, we're using the same JWT validation logic.
-	// In a more complex system, refresh tokens might have their own validation or be stored differently.
-	userID, err := h.authService.ValidateToken(requestBody.RefreshToken)
+	userIDStr, err := h.authService.ValidateToken(requestBody.RefreshToken)
 	if err != nil {
 		log.Printf("Refresh token validation failed: %v", err)
 		http.Error(w, "Invalid refresh token", http.StatusUnauthorized)
 		return
 	}
 
-	// Check if this refresh token is part of an active session
-	// This step depends on how you uniquely identify sessions by refresh token.
-	// If sessions table's `refresh_token` column stores this, query by it.
-	// For now, we'll assume the refresh token itself is sufficient for validation
-	// and the old session with this refresh token needs to be invalidated/deleted.
-
-	// Delete old session associated with this refresh token (if any)
-	// This step is crucial to prevent refresh token reuse if you issue a new one.
-	// If you re-use refresh tokens, this step might differ.
-	// Let's assume you want to delete the old session by the refresh token.
-	// You'll need a `DeleteSessionByRefreshToken` function in your model.
-	/*
-		err = model.DeleteSessionByRefreshToken(database.DB, requestBody.RefreshToken)
-		if err != nil && err.Error() != "no session found to delete for the given refresh token" {
-			log.Printf("Failed to delete old session by refresh token: %v", err)
-			// Decide if this is a critical error. Usually, you'd still issue a new token.
-		}
-	*/
-
-
-	newAccessToken, err := h.authService.GenerateToken(userID)
+	newAccessToken, err := h.authService.GenerateToken(userIDStr)
 	if err != nil {
 		http.Error(w, "Failed to generate new access token", http.StatusInternalServerError)
 		return
 	}
 
-	// Optionally, generate a new refresh token (recommended for security - token rotation)
 	newRefreshToken, err := h.authService.GenerateRefreshToken()
 	if err != nil {
 		http.Error(w, "Failed to generate new refresh token", http.StatusInternalServerError)
 		return
 	}
 
-	userIDInt, _ := strconv.ParseInt(userID, 10, 64) // Already validated
+	userIDInt, _ := strconv.ParseInt(userIDStr, 10, 64) // Already validated
 	newSession := &model.Session{
-		UserID:       int(userIDInt), // Ensure UserID is correctly populated
+		UserID:       int(userIDInt),
 		Token:        newAccessToken,
-		RefreshToken: newRefreshToken, // Store the new refresh token
+		RefreshToken: newRefreshToken,
 		UserAgent:    r.UserAgent(),
 		ClientIP:     r.RemoteAddr,
 		IsBlocked:    false,
-		ExpiresAt:    time.Now().Add(security.RefreshTokenExpiry), // Expiry for the new refresh token
+		ExpiresAt:    time.Now().Add(security.RefreshTokenExpiry),
 	}
 
 	if err := model.CreateSession(database.DB, newSession); err != nil {
 		http.Error(w, "Failed to create new session on refresh", http.StatusInternalServerError)
 		return
 	}
-	
-	// It's good practice to also invalidate the old session that used the `requestBody.RefreshToken`
-	// This prevents the old refresh token from being used again if compromised.
-	// We'll assume the main token for session deletion is the access token, but if you store
-	// refresh tokens uniquely, you'd delete by that. For now, the new session creation
-	// means the old one will naturally expire or be superseded.
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{
 		"access_token":  newAccessToken,
-		"refresh_token": newRefreshToken, // Send the new refresh token back
+		"refresh_token": newRefreshToken,
 	})
 }
-
 
 func (h *UserHandler) RegisterUserHandler(w http.ResponseWriter, r *http.Request) {
 	var credentials struct {
@@ -295,7 +269,6 @@ func (h *UserHandler) RegisterUserHandler(w http.ResponseWriter, r *http.Request
 	}
 
 	if err := user.CreateUser(database.DB); err != nil {
-		// Check for unique constraint violation (username already exists)
 		if strings.Contains(err.Error(), "UNIQUE constraint failed: users.username") {
 			http.Error(w, "Username already exists", http.StatusConflict)
 			return
@@ -304,27 +277,24 @@ func (h *UserHandler) RegisterUserHandler(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json") // Ensure content type is set
+	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(map[string]string{
 		"message": "User registered successfully",
 	})
 }
 
-// LogoutUserHandler handles user logout by invalidating the session.
 func (h *UserHandler) LogoutUserHandler(w http.ResponseWriter, r *http.Request) {
 	log.Println("Logout request received")
 
-	// Set CORS headers for the response
 	origin := r.Header.Get("Origin")
 	if origin == "http://localhost:3000" {
 		w.Header().Set("Access-Control-Allow-Origin", origin)
 		w.Header().Set("Access-Control-Allow-Credentials", "true")
 		w.Header().Set("Access-Control-Allow-Headers", "Accept, Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization, X-Requested-With, Cookie")
-		w.Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS, PUT, DELETE") // Ensure POST is allowed
+		w.Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS, PUT, DELETE")
 		w.Header().Set("Access-Control-Expose-Headers", "X-CSRF-Token")
 	}
-
 
 	authHeader := r.Header.Get("Authorization")
 	if authHeader == "" {
@@ -338,46 +308,29 @@ func (h *UserHandler) LogoutUserHandler(w http.ResponseWriter, r *http.Request) 
 		tokenString = strings.TrimPrefix(authHeader, "Bearer ")
 	} else {
 		log.Printf("Logout: Authorization header does not have Bearer prefix: %s", authHeader)
-		// You might want to be strict here and return an error,
-		// or allow the token if it's sent without "Bearer ".
-		// For consistency with AuthMiddleware, let's try to proceed if a token is there.
 		tokenString = authHeader
 	}
-	
+
 	if tokenString == "" {
 		log.Println("Logout: Token string is empty after processing Authorization header")
 		http.Error(w, "Malformed token", http.StatusUnauthorized)
 		return
 	}
 
-	// The AuthMiddleware (if applied to this route) would have already validated the token.
-	// Here, we just need to use the token to delete the session.
 	err := model.DeleteSessionByToken(database.DB, tokenString)
 	if err != nil {
 		log.Printf("Logout: Failed to delete session for token %s: %v", tokenString, err)
-		// Even if deleting fails (e.g., session already gone), client should still be logged out.
-		// You might return a different status if the session wasn't found, but 204 is fine.
-		// http.Error(w, "Failed to invalidate session", http.StatusInternalServerError)
-		// return
 	} else {
 		log.Printf("Logout: Session for token %s invalidated successfully", tokenString)
 	}
 
-	// Regardless of DB operation success, clear any auth-related cookies if you were setting them server-side.
-	// For JWTs in headers, this step is mostly for the client to clear its storage.
-	// If you had an HttpOnly cookie for the access token (not common for SPA Bearer tokens):
-	/*
-	http.SetCookie(w, &http.Cookie{
-		Name:     "access_token_cookie_name", // if you used one
-		Value:    "",
-		Path:     "/",
-		Expires:  time.Unix(0, 0), // Expire immediately
-		HttpOnly: true,
-		Secure:   r.TLS != nil, // true if HTTPS
-		SameSite: http.SameSiteLaxMode,
-	})
-	*/
-	
-	w.WriteHeader(http.StatusNoContent) // 204 No Content is standard for successful logout
+	w.WriteHeader(http.StatusNoContent)
 	log.Println("Logout: Responded with 204 No Content")
+}
+
+// GetUserIDFromContext retrieves the userID from the context.
+// It's defined in this package and can be called by other handlers within the same package.
+func GetUserIDFromContext(ctx context.Context) (int64, bool) {
+	userID, ok := ctx.Value(userIDContextKey).(int64)
+	return userID, ok
 }
