@@ -107,30 +107,32 @@ func main() {
 	rootMux := http.NewServeMux()
 
 	// Handle the root path separately
-	rootMux.HandleFunc("GET /", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]string{"message": "TAXFOLIO Backend is running"})
+	rootMux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/" {
+			if r.Method == http.MethodGet {
+				w.Header().Set("Content-Type", "application/json")
+				json.NewEncoder(w).Encode(map[string]string{"message": "TAXFOLIO Backend is running"})
+			} else {
+				// Corrected: Use http.StatusMethodNotAllowed for the status code
+				http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
+			}
+		} else {
+			http.NotFound(w, r)
+		}
 	})
 
 	// --- API Sub-Router (handles everything under /api/) ---
-	// This apiRouter will handle paths *after* /api has been stripped.
-	// e.g., if request is /api/auth/login, apiRouter gets /auth/login.
 	apiRouter := http.NewServeMux()
 
 	// --- Auth Sub-Router (for /api/auth/*) ---
-	// Handles /csrf, /login, /register, /refresh. These paths are relative to "/auth"
 	authSubRouter := http.NewServeMux()
-	authSubRouter.HandleFunc("GET /csrf", handlers.GetCSRFToken) // Path becomes /api/auth/csrf
+	authSubRouter.HandleFunc("GET /csrf", handlers.GetCSRFToken)
 	authSubRouter.HandleFunc("POST /login", userHandler.LoginUserHandler)
 	authSubRouter.HandleFunc("POST /register", userHandler.RegisterUserHandler)
 	authSubRouter.HandleFunc("POST /refresh", userHandler.RefreshTokenHandler)
-	// Apply CSRF to all routes in authSubRouter, then mount it on apiRouter at "/auth/"
 	apiRouter.Handle("/auth/", http.StripPrefix("/auth", handlers.CSRFMiddleware()(authSubRouter)))
 
 	// --- Authenticated API Routes ---
-	// These are directly under /api (e.g., /api/upload). Paths are relative to /api.
-	// We apply CSRF and Auth middleware to each of these individually.
-	// Using method-specific patterns for Handle (e.g., "POST /upload")
 	apiRouter.Handle("POST /upload", handlers.CSRFMiddleware()(http.HandlerFunc(userHandler.AuthMiddleware(uploadHandler.HandleUpload))))
 	apiRouter.Handle("GET /transactions/processed", handlers.CSRFMiddleware()(http.HandlerFunc(userHandler.AuthMiddleware(uploadHandler.HandleGetProcessedTransactions))))
 	apiRouter.Handle("GET /holdings/stocks", handlers.CSRFMiddleware()(http.HandlerFunc(userHandler.AuthMiddleware(uploadHandler.HandleGetStockHoldings))))

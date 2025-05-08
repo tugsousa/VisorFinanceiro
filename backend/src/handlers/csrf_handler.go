@@ -96,8 +96,8 @@ func CSRFMiddleware() func(http.Handler) http.Handler {
 			}
 
 			// Skip CSRF check for GET requests to /api/auth/csrf endpoint
-			if r.Method == "GET" && (r.URL.Path == "/api/auth/csrf" || r.URL.Path == "/api/csrf-token") {
-				log.Printf("Skipping CSRF validation for CSRF token endpoint: %s", r.URL.Path)
+			if r.Method == "GET" && r.URL.Path == "/csrf" { // Adjusted to match the path seen by the middleware
+				log.Printf("Skipping CSRF validation for CSRF token endpoint: %s (Path seen by middleware)", r.URL.Path)
 				next.ServeHTTP(w, r)
 				return
 			}
