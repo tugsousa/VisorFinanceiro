@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useMemo, useContext } from 'react';
 import {
   Typography, Box, FormControl, InputLabel, Select, MenuItem,
-  /* Paper, */ CircularProgress, Grid, Divider, Alert // <--- REMOVE Paper or use it
+  Paper, CircularProgress, Grid, Divider, Alert 
 } from '@mui/material';
 import axios from 'axios';
 import { AuthContext } from '../context/AuthContext';
@@ -18,6 +18,10 @@ const getYearFromDate = (dateString) => {
   if (!dateString || typeof dateString !== 'string') return null;
   const parts = dateString.split('-'); // Assumes "DD-MM-YYYY"
   return parts.length === 3 ? parseInt(parts[2], 10) : null;
+};
+
+const formatCurrency = (value) => {
+    return new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(value || 0);
 };
 
 export default function DashboardPage() {
@@ -63,6 +67,11 @@ export default function DashboardPage() {
         
         const sortedYears = Array.from(yearsSet).sort((a, b) => b - a);
         setAvailableYears(['all', ...sortedYears]);
+        if (sortedYears.length > 0) {
+            setSelectedYear(String(sortedYears[0])); // Default to the latest year if available
+        } else {
+            setSelectedYear('all');
+        }
 
       } catch (e) {
         console.error("Failed to fetch dashboard data:", e);
@@ -98,13 +107,29 @@ export default function DashboardPage() {
 
     const numSelectedYear = Number(selectedYear);
     return {
-      StockHoldings: allDashboardData.StockHoldings || [],
-      OptionHoldings: allDashboardData.OptionHoldings || [],
+      StockHoldings: allDashboardData.StockHoldings || [], // Holdings are usually current, not year-filtered here unless logic changes
+      OptionHoldings: allDashboardData.OptionHoldings || [], // Same for option holdings
       StockSaleDetails: (allDashboardData.StockSaleDetails || []).filter(s => getYearFromDate(s.SaleDate) === numSelectedYear),
       OptionSaleDetails: (allDashboardData.OptionSaleDetails || []).filter(o => getYearFromDate(o.close_date) === numSelectedYear),
       DividendTaxResult: allDashboardData.DividendTaxResult?.[selectedYear] ? { [selectedYear]: allDashboardData.DividendTaxResult[selectedYear] } : {},
     };
   }, [allDashboardData, selectedYear]);
+
+  const summaryPLs = useMemo(() => {
+    const stockPL = (filteredData.StockSaleDetails || []).reduce((sum, sale) => sum + (sale.Delta || 0), 0);
+    const optionPL = (filteredData.OptionSaleDetails || []).reduce((sum, sale) => sum + (sale.delta || 0), 0);
+    
+    let dividendPL = 0;
+    const dividendDataToProcess = filteredData.DividendTaxResult || {};
+    for (const yearData of Object.values(dividendDataToProcess)) {
+        for (const countryData of Object.values(yearData)) {
+            dividendPL += (countryData.gross_amt || 0) + (countryData.taxed_amt || 0); // tax_amt is often negative
+        }
+    }
+    const totalPL = stockPL + optionPL + dividendPL;
+    return { stockPL, optionPL, dividendPL, totalPL };
+  }, [filteredData]);
+
 
   if (loading) return <CircularProgress sx={{ display: 'block', margin: 'auto', mt: 4 }} />;
   if (error) return <Alert severity="error" sx={{ m: 2 }}>{error}</Alert>;
@@ -137,6 +162,48 @@ export default function DashboardPage() {
         </Grid>
       </Grid>
 
+      {/* Profit/Loss Summary Section */}
+      <Paper elevation={3} sx={{ p: 2, mb: 3 }}>
+        <Typography variant="h6" gutterBottom>
+          Profit/Loss Summary ({selectedYear === 'all' ? 'All Years' : selectedYear})
+        </Typography>
+        <Grid container spacing={1}>
+            <Grid item xs={12} sm={6} md={3}>
+                <Typography variant="body1">
+                    Stocks P/L:
+                    <Typography component="span" sx={{ fontWeight: 'bold', ml: 1, color: summaryPLs.stockPL >= 0 ? 'success.main' : 'error.main' }}>
+                        {formatCurrency(summaryPLs.stockPL)}
+                    </Typography>
+                </Typography>
+            </Grid>
+            <Grid item xs={12} sm={6} md={3}>
+                <Typography variant="body1">
+                    Options P/L:
+                    <Typography component="span" sx={{ fontWeight: 'bold', ml: 1, color: summaryPLs.optionPL >= 0 ? 'success.main' : 'error.main' }}>
+                        {formatCurrency(summaryPLs.optionPL)}
+                    </Typography>
+                </Typography>
+            </Grid>
+            <Grid item xs={12} sm={6} md={3}>
+                <Typography variant="body1">
+                    Dividends Net:
+                    <Typography component="span" sx={{ fontWeight: 'bold', ml: 1, color: summaryPLs.dividendPL >= 0 ? 'success.main' : 'error.main' }}>
+                        {formatCurrency(summaryPLs.dividendPL)}
+                    </Typography>
+                </Typography>
+            </Grid>
+            <Grid item xs={12} sm={6} md={3}>
+                <Typography variant="body1" sx={{ fontWeight: 'bold' }}>
+                    Total P/L:
+                    <Typography component="span" sx={{ fontWeight: 'bold', ml: 1, color: summaryPLs.totalPL >= 0 ? 'success.main' : 'error.main' }}>
+                        {formatCurrency(summaryPLs.totalPL)}
+                    </Typography>
+                </Typography>
+            </Grid>
+        </Grid>
+      </Paper>
+
+
       <Typography variant="h5" sx={{mt: 2, mb: 1, borderBottom: 1, borderColor: 'divider', pb:1 }}>Current Holdings</Typography>
       <Grid container spacing={3}>
           <Grid item xs={12} md={6}>
@@ -149,9 +216,9 @@ export default function DashboardPage() {
       
       <Divider sx={{ my: 3 }} />
       <Typography variant="h5" sx={{mt: 2, mb: 1, borderBottom: 1, borderColor: 'divider', pb:1}}>Activity Summary {selectedYear !== 'all' ? `(${selectedYear})` : '(All Years)'}</Typography>
-      <StockSalesSection stockSalesData={filteredData.StockSaleDetails} selectedYear={selectedYear} />
-      <OptionSalesSection optionSalesData={filteredData.OptionSaleDetails} selectedYear={selectedYear} />
-      <DividendsSection dividendSummaryData={filteredData.DividendTaxResult} selectedYear={selectedYear} />
+      <StockSalesSection stockSalesData={filteredData.StockSaleDetails} selectedYear={selectedYear} hideIndividualTotalPL={true} />
+      <OptionSalesSection optionSalesData={filteredData.OptionSaleDetails} selectedYear={selectedYear} hideIndividualTotalPL={true} />
+      <DividendsSection dividendSummaryData={filteredData.DividendTaxResult} selectedYear={selectedYear} hideIndividualTotalPL={true} />
     </Box>
   );
 }

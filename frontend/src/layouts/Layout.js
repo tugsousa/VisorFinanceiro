@@ -31,8 +31,8 @@ export default function Layout({ children }) {
   };
 
   const sidebarItems = [
-    { title: "Dashboard", to: "/dashboard", icon: <DashboardIcon /> },
     { title: "Upload", to: "/", icon: <UploadIcon /> },
+    { title: "Dashboard", to: "/dashboard", icon: <DashboardIcon /> },
     { title: "Tax Report", to: "/tax", icon: <TaxIcon /> }, // Example: Keeping Tax separate
   ];
 
