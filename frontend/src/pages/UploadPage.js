@@ -1,8 +1,9 @@
-import React, { useState, useEffect, useContext } from 'react';
+import React, { useState, useEffect } from 'react'; // Removed unused useContext
 import axios from 'axios';
 import { useAuth } from '../context/AuthContext';
 import './UploadPage.css';
-import { API_ENDPOINTS, ALLOWED_FILE_TYPES, MAX_FILE_SIZE_BYTES, UI_TEXT } from '../constants';
+import { API_ENDPOINTS, ALLOWED_FILE_TYPES, MAX_FILE_SIZE_BYTES, MAX_FILE_SIZE_MB, UI_TEXT } from '../constants'; // Added MAX_FILE_SIZE_MB
+import { Typography } from '@mui/material'; // Added Typography import
 
 const UploadPage = () => {
   const { csrfToken, fetchCsrfToken, token } = useAuth();
@@ -23,7 +24,7 @@ const UploadPage = () => {
     }
 
     if (!ALLOWED_FILE_TYPES.includes(file.type)) {
-      setError(`Invalid file type. Please upload a CSV or Excel file. Allowed: ${ALLOWED_FILE_TYPES.join(', ')}`);
+      setError(`Invalid file type. Please upload a CSV file. Allowed: ${ALLOWED_FILE_TYPES.join(', ')}`); // Updated message to reflect current constant
       setSelectedFile(null);
       return;
     }

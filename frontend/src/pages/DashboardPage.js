@@ -10,7 +10,7 @@ import OptionHoldingsSection from '../components/dashboardSections/OptionHolding
 import StockSalesSection from '../components/dashboardSections/StockSalesSection';
 import OptionSalesSection from '../components/dashboardSections/OptionSalesSection';
 import DividendsSection from '../components/dashboardSections/DividendsSection';
-import { API_ENDPOINTS, ALL_YEARS_OPTION, UI_TEXT, NO_YEAR_SELECTED } from '../constants';
+import { API_ENDPOINTS, ALL_YEARS_OPTION, UI_TEXT } from '../constants'; // Removed NO_YEAR_SELECTED
 
 const getYearFromDate = (dateString) => {
   if (!dateString || typeof dateString !== 'string') return null;
@@ -164,7 +164,7 @@ export default function DashboardPage() {
               value={selectedYear}
               label="Year"
               onChange={handleYearChange}
-              disabled={availableYears.length <= 1 && availableYears[0] === ALL_YEARS_OPTION || loading}
+              disabled={(availableYears.length <= 1 && availableYears[0] === ALL_YEARS_OPTION) || loading}
             >
               {availableYears.map(year => (
                 <MenuItem key={year} value={String(year)}>

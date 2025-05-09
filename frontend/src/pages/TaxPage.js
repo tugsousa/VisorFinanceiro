@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useContext } from 'react';
+import React, { useState, useEffect, useMemo, useContext, useCallback } from 'react';
 import {
   Typography, Box, FormControl, InputLabel, Select, MenuItem, Table,
   TableBody, TableCell, TableContainer, TableHead, TableRow, Paper,
@@ -36,10 +36,8 @@ const StyledTableBodyCell = styled(TableCell)(({ theme, align = 'center' }) => (
   padding: '4px 6px', fontSize: '0.8rem', verticalAlign: 'middle',
 }));
 
-// Improved Date Parsing (Handles DD-MM-YYYY and YYYY-MM-DD)
 const parseDateRobust = (dateString) => {
   if (!dateString || typeof dateString !== 'string') return null;
-  // Try DD-MM-YYYY
   let parts = dateString.match(/^(\d{2})-(\d{2})-(\d{4})$/);
   if (parts) {
     const day = parseInt(parts[1], 10);
@@ -50,7 +48,6 @@ const parseDateRobust = (dateString) => {
       if (d.getUTCFullYear() === year && d.getUTCMonth() === month && d.getUTCDate() === day) return d;
     }
   }
-  // Try YYYY-MM-DD
   parts = dateString.match(/^(\d{4})-(\d{2})-(\d{2})$/);
   if (parts) {
     const year = parseInt(parts[1], 10);
@@ -61,7 +58,7 @@ const parseDateRobust = (dateString) => {
       if (d.getUTCFullYear() === year && d.getUTCMonth() === month && d.getUTCDate() === day) return d;
     }
   }
-  console.warn(`TaxPage: Failed to parse date string: ${dateString}`);
+  // console.warn(`TaxPage: Failed to parse date string: ${dateString}`); // Keep console logs minimal or conditional
   return null;
 };
 
@@ -73,12 +70,15 @@ const getDay = (dateString) => { const d = parseDateRobust(dateString); return d
 export default function TaxPage() {
   const { token, csrfToken, fetchCsrfToken } = useContext(AuthContext);
   const [selectedYear, setSelectedYear] = useState(NO_YEAR_SELECTED);
-  const [stockSaleDetails, setStockSaleDetails] = useState([]);
+
   const [allStockSaleDetails, setAllStockSaleDetails] = useState([]);
-  const [optionSaleDetails, setOptionSaleDetails] = useState([]);
   const [allOptionSaleDetails, setAllOptionSaleDetails] = useState([]);
-  const [dividendTaxData, setDividendTaxData] = useState([]); // This will be the transformed array for the table
-  const [allDividendTaxData, setAllDividendTaxData] = useState({}); // This stores the raw {year: {country: {}}} structure
+  const [allDividendTaxData, setAllDividendTaxData] = useState({});
+
+  const [stockSaleDetails, setStockSaleDetails] = useState([]);
+  const [optionSaleDetails, setOptionSaleDetails] = useState([]);
+  const [dividendTaxData, setDividendTaxData] = useState([]);
+
   const [availableYears, setAvailableYears] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -88,6 +88,14 @@ export default function TaxPage() {
       if (!token) {
         setLoading(false);
         setError(UI_TEXT.userNotAuthenticated);
+        setAllStockSaleDetails([]);
+        setAllOptionSaleDetails([]);
+        setAllDividendTaxData({});
+        setStockSaleDetails([]);
+        setOptionSaleDetails([]);
+        setDividendTaxData([]);
+        setAvailableYears([]);
+        setSelectedYear(NO_YEAR_SELECTED);
         return;
       }
       setLoading(true);
@@ -119,30 +127,37 @@ export default function TaxPage() {
             fetchedStockSales = results[0].value.data || [];
             setAllStockSaleDetails(fetchedStockSales);
             fetchedStockSales.forEach(item => { const y = getYear(item.SaleDate); if (y) allYearsSet.add(y); });
+        } else {
+          setAllStockSaleDetails([]); // Clear if fetch failed
         }
         if (results[1].status === 'fulfilled') {
             fetchedOptionSales = results[1].value.data?.OptionSaleDetails || [];
             setAllOptionSaleDetails(fetchedOptionSales);
             fetchedOptionSales.forEach(item => { const y = getYear(item.close_date); if (y) allYearsSet.add(y); });
+        } else {
+          setAllOptionSaleDetails([]); // Clear if fetch failed
         }
         if (results[2].status === 'fulfilled') {
             fetchedDividendSummary = results[2].value.data || {};
             setAllDividendTaxData(fetchedDividendSummary);
             Object.keys(fetchedDividendSummary).forEach(yearStr => { const yN = parseInt(yearStr, 10); if (!isNaN(yN)) allYearsSet.add(yN); });
+        } else {
+          setAllDividendTaxData({}); // Clear if fetch failed
         }
         
         if (errors.length > 0) setError(errors.join('; '));
 
-        const sortedYears = [...allYearsSet].map(Number).sort((a, b) => b - a); // Ensure numbers and sort desc
+        const sortedYears = [...allYearsSet].map(Number).sort((a, b) => b - a);
         setAvailableYears(sortedYears);
         
-        const latestYear = sortedYears.length > 0 ? String(sortedYears[0]) : NO_YEAR_SELECTED;
-        setSelectedYear(latestYear);
-        filterDataForYear(latestYear, fetchedStockSales, fetchedOptionSales, fetchedDividendSummary);
+        setSelectedYear(sortedYears.length > 0 ? String(sortedYears[0]) : NO_YEAR_SELECTED);
 
       } catch (e) {
         console.error("Failed to fetch tax page data:", e);
         setError(`Failed to load page data: ${e.message}`);
+        setAllStockSaleDetails([]);
+        setAllOptionSaleDetails([]);
+        setAllDividendTaxData({});
       } finally {
         setLoading(false);
       }
@@ -150,7 +165,8 @@ export default function TaxPage() {
     fetchData();
   }, [token, csrfToken, fetchCsrfToken]);
 
-  const filterDataForYear = (yearToFilter, currentAllStock, currentAllOptions, currentAllDividends) => {
+
+  const filterDataForYear = useCallback((yearToFilter) => {
     if (yearToFilter === NO_YEAR_SELECTED || yearToFilter === '') {
         setStockSaleDetails([]);
         setOptionSaleDetails([]);
@@ -158,43 +174,48 @@ export default function TaxPage() {
         return;
     }
     const numYear = Number(yearToFilter);
-    setStockSaleDetails((currentAllStock || allStockSaleDetails).filter(item => getYear(item.SaleDate) === numYear));
-    setOptionSaleDetails((currentAllOptions || allOptionSaleDetails).filter(item => getYear(item.close_date) === numYear));
+
+    setStockSaleDetails(allStockSaleDetails.filter(item => getYear(item.SaleDate) === numYear));
+    setOptionSaleDetails(allOptionSaleDetails.filter(item => getYear(item.close_date) === numYear));
     
-    const dividendYearData = (currentAllDividends || allDividendTaxData)[String(yearToFilter)] || {};
+    const dividendYearData = allDividendTaxData[String(yearToFilter)] || {};
     const transformedDividends = Object.entries(dividendYearData).map(([country, details], index) => ({
       id: `${yearToFilter}-${country}-${index}`, linha: 801 + index, codigo: 'E11', paisFonte: country,
-      rendimentoBruto: details.gross_amt || 0, impostoFonte: Math.abs(details.taxed_amt || 0), // Tax is often negative
-      impostoRetido: 0, nifEntidade: '', retencaoFonte: 0, // Placeholder values for these fields
+      rendimentoBruto: details.gross_amt || 0, impostoFonte: Math.abs(details.taxed_amt || 0),
+      impostoRetido: 0, nifEntidade: '', retencaoFonte: 0,
     }));
     setDividendTaxData(transformedDividends);
-  };
+  }, [allStockSaleDetails, allOptionSaleDetails, allDividendTaxData]);
+
+  useEffect(() => {
+    if (!loading) { // Only run if initial loading is complete
+        filterDataForYear(selectedYear);
+    }
+  }, [selectedYear, allStockSaleDetails, allOptionSaleDetails, allDividendTaxData, filterDataForYear, loading]);
+
 
   const handleYearChange = (event) => {
     const yearValue = event.target.value;
     setSelectedYear(yearValue);
-    filterDataForYear(yearValue, allStockSaleDetails, allOptionSaleDetails, allDividendTaxData);
+    // filterDataForYear will be called by the useEffect hook above when selectedYear changes
   };
 
   const stockTotals = useMemo(() => stockSaleDetails.reduce(
     (acc, row) => {
       acc.realizacao += row.SaleAmountEUR || 0;
-      acc.aquisicao += Math.abs(row.BuyAmountEUR || 0); // Cost is positive
+      acc.aquisicao += Math.abs(row.BuyAmountEUR || 0);
       acc.despesas += row.Commission || 0;
-      // Imposto pago no estrangeiro for stocks usually isn't directly here, it's part of capital gains tax calc
       return acc;
-    }, { realizacao: 0, aquisicao: 0, despesas: 0, imposto: 0 } // imposto field for consistency if needed later
+    }, { realizacao: 0, aquisicao: 0, despesas: 0, imposto: 0 }
   ), [stockSaleDetails]);
 
   const groupedOptionData = useMemo(() => {
     const grouped = optionSaleDetails.reduce((acc, row) => {
-      const country = row.country_code || 'Unknown'; // Ensure country_code exists
+      const country = row.country_code || 'Unknown';
       if (!acc[country]) {
         acc[country] = { country_code: country, rendimentoLiquido: 0, impostoPago: 0 };
       }
-      // Delta is usually Net P/L for options. Commission is part of delta usually.
       acc[country].rendimentoLiquido += (row.delta || 0); 
-      // Imposto pago no estrangeiro for options is not typically itemized this way from brokers.
       return acc;
     }, {});
     return Object.values(grouped);
@@ -203,7 +224,7 @@ export default function TaxPage() {
   const optionTotals = useMemo(() => groupedOptionData.reduce(
     (acc, group) => {
       acc.rendimentoLiquido += group.rendimentoLiquido || 0;
-      acc.imposto += group.impostoPago || 0; // Assuming impostoPago is 0 for now from options
+      acc.imposto += group.impostoPago || 0;
       return acc;
     }, { rendimentoLiquido: 0, imposto: 0 }
   ), [groupedOptionData]);
@@ -212,18 +233,19 @@ export default function TaxPage() {
     (acc, row) => {
       acc.rendimentoBruto += row.rendimentoBruto || 0;
       acc.impostoFonte += row.impostoFonte || 0;
-      acc.impostoRetido += row.impostoRetido || 0; // This is usually 0 for foreign dividends unless specific agreement
-      acc.retencaoFonte += row.retencaoFonte || 0; // NIF Entidade Retentora PT related
+      acc.impostoRetido += row.impostoRetido || 0;
+      acc.retencaoFonte += row.retencaoFonte || 0;
       return acc;
     }, { rendimentoBruto: 0, impostoFonte: 0, impostoRetido: 0, retencaoFonte: 0 }
   ), [dividendTaxData]);
 
   if (loading) return <CircularProgress sx={{ display: 'block', margin: '20px auto' }} />;
-  if (error && !selectedYear) return <Alert severity="error" sx={{ m: 2 }}>{error}</Alert>;
+  // Display error only if it's not just a "no year selected" scenario after loading
+  if (error && (selectedYear !== NO_YEAR_SELECTED || availableYears.length === 0)) return <Alert severity="error" sx={{ m: 2 }}>{error}</Alert>;
 
 
   return (
-    <Box sx={{ p: { xs: 1, sm: 2 } }}> {/* Responsive padding */}
+    <Box sx={{ p: { xs: 1, sm: 2 } }}>
       <style dangerouslySetInnerHTML={{ __html: summaryTableStyles }} />
       <Typography variant="h4" component="h1" gutterBottom sx={{ mb: 2 }}>
         Tax Report Information
@@ -238,7 +260,7 @@ export default function TaxPage() {
             value={selectedYear}
             label="Year"
             onChange={handleYearChange}
-            disabled={availableYears.length === 0}
+            disabled={availableYears.length === 0 && selectedYear === NO_YEAR_SELECTED}
           >
             {availableYears.length === 0 && <MenuItem value={NO_YEAR_SELECTED} disabled>No Data</MenuItem>}
             {availableYears.map(year => (
@@ -249,9 +271,15 @@ export default function TaxPage() {
       </Box>
       
       {error && <Alert severity="warning" sx={{ mb: 2 }}>{error}</Alert>}
-      {!selectedYear && !loading && <Typography sx={{textAlign: 'center', my:2}}>Please select a year to view data.</Typography>}
+      {selectedYear === NO_YEAR_SELECTED && !loading && availableYears.length > 0 && (
+        <Typography sx={{textAlign: 'center', my:2}}>Please select a year to view data.</Typography>
+      )}
+       {selectedYear === NO_YEAR_SELECTED && !loading && availableYears.length === 0 && !error && (
+        <Typography sx={{textAlign: 'center', my:2}}>No data available. Please upload transactions.</Typography>
+      )}
 
-      {selectedYear && (
+
+      {selectedYear && selectedYear !== NO_YEAR_SELECTED && (
         <>
           <Typography variant="h5" component="h2" gutterBottom sx={{ mt: 2, color: '#0183cb', borderBottom: '1px solid #0183cb', pb: 1, fontSize: '1.1rem' }}>
             Anexo J - Quadro 8: Rendimentos de Capitais (Categoria E) - Obtidos no Estrangeiro
