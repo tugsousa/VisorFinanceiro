@@ -6,82 +6,77 @@ import (
 	"os"
 	"strings"
 	"sync"
+
+	"github.com/username/taxfolio/backend/src/logger" // Use new logger
 )
 
-// CountryInfo defines the structure for country data loaded from JSON.
 type CountryInfo struct {
 	Country string `json:"country"`
 	Alpha2  string `json:"alpha2"`
 	Alpha3  string `json:"alpha3"`
-	Numeric string `json:"numeric"` // Kept as string as it appears in JSON
+	Numeric string `json:"numeric"`
 }
 
 var (
 	countryMap map[string]CountryInfo
 	loadOnce   sync.Once
 	loadError  error
+	dataLoaded bool = false
 )
 
-// loadCountryData reads the country JSON file and populates the countryMap.
-// It ensures this operation happens only once using sync.Once.
-func loadCountryData() {
+// InitCountryData loads country data from the given file path.
+// This should be called once from main.go after config is loaded.
+func InitCountryData(filePath string) error {
+	logger.L.Info("Initializing country data", "path", filePath)
 	loadOnce.Do(func() {
-		// Reverting path based on runtime behavior suspicion (relative to backend/ dir)
-		filePath := "data/country.json"
-
-		data, err := os.ReadFile(filePath)
+		fileData, err := os.ReadFile(filePath)
 		if err != nil {
 			loadError = fmt.Errorf("failed to read country data file '%s': %w", filePath, err)
+			logger.L.Error("Failed to read country data file", "path", filePath, "error", err)
 			return
 		}
 
 		var countries []CountryInfo
-		err = json.Unmarshal(data, &countries)
+		err = json.Unmarshal(fileData, &countries)
 		if err != nil {
 			loadError = fmt.Errorf("failed to unmarshal country data from '%s': %w", filePath, err)
+			logger.L.Error("Failed to unmarshal country data", "path", filePath, "error", err)
 			return
 		}
 
 		countryMap = make(map[string]CountryInfo)
 		for _, country := range countries {
-			// Use uppercase alpha2 code as the key for case-insensitive matching.
 			countryMap[strings.ToUpper(country.Alpha2)] = country
 		}
+		dataLoaded = true
+		logger.L.Info("Country data loaded successfully.", "path", filePath, "countryCount", len(countryMap))
 	})
+	return loadError
 }
 
-// GetCountryCodeString extracts the country code from an ISIN and returns a formatted string.
-// The format is "numeric - country". Handles errors and unknown codes.
 func GetCountryCodeString(isin string) string {
-	loadCountryData() // Ensure the country data is loaded.
-
-	if loadError != nil {
-		fmt.Printf("Error loading country data: %v\n", loadError) // Consider proper logging
-		return "Error Loading Country Data"
-	}
-	if countryMap == nil {
-		// This case should ideally not be reached if loadError is nil, but added for safety.
+	if !dataLoaded {
+		logger.L.Error("Attempted to GetCountryCodeString before country data was loaded.")
 		return "Country Data Not Initialized"
+	}
+	if loadError != nil {
+		logger.L.Warn("Cannot get country code string due to earlier data load error", "error", loadError)
+		return "Error Loading Country Data"
 	}
 
 	if len(isin) < 2 {
 		return "Invalid ISIN (Too Short)"
 	}
 
-	// Extract the first two characters and convert to uppercase for lookup.
 	alpha2Code := strings.ToUpper(isin[:2])
-
 	countryInfo, found := countryMap[alpha2Code]
 	if !found {
-		// Handle potentially unknown or special codes (e.g., XS, EU).
-		// For now, return a specific string indicating the code wasn't found.
 		return "Unknown Code: " + alpha2Code
 	}
 
-	// Format the output string: "numeric - country".
 	numericCode := strings.TrimSpace(countryInfo.Numeric)
 	if numericCode == "" {
-		numericCode = "N/A" // Use "N/A" if numeric code is missing.
+		numericCode = "N/A"
 	}
 	return fmt.Sprintf("%s - %s", numericCode, countryInfo.Country)
 }

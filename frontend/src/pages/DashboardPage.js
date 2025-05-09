@@ -1,4 +1,3 @@
-// frontend/src/pages/DashboardPage.js
 import React, { useState, useEffect, useMemo, useContext } from 'react';
 import {
   Typography, Box, FormControl, InputLabel, Select, MenuItem,
@@ -6,18 +5,24 @@ import {
 } from '@mui/material';
 import axios from 'axios';
 import { AuthContext } from '../context/AuthContext';
-
-// Import your new section components
 import StockHoldingsSection from '../components/dashboardSections/StockHoldingsSection';
 import OptionHoldingsSection from '../components/dashboardSections/OptionHoldingsSection';
 import StockSalesSection from '../components/dashboardSections/StockSalesSection';
 import OptionSalesSection from '../components/dashboardSections/OptionSalesSection';
 import DividendsSection from '../components/dashboardSections/DividendsSection';
+import { API_ENDPOINTS, ALL_YEARS_OPTION, UI_TEXT, NO_YEAR_SELECTED } from '../constants';
 
 const getYearFromDate = (dateString) => {
   if (!dateString || typeof dateString !== 'string') return null;
-  const parts = dateString.split('-'); // Assumes "DD-MM-YYYY"
-  return parts.length === 3 ? parseInt(parts[2], 10) : null;
+  // Try parsing DD-MM-YYYY first
+  let parts = dateString.match(/^(\d{2})-(\d{2})-(\d{4})$/);
+  if (parts) return parseInt(parts[3], 10);
+  // Try parsing YYYY-MM-DD (ISO-like, common from JS Date.toISOString().split('T')[0])
+  parts = dateString.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (parts) return parseInt(parts[1], 10);
+  // Fallback for simple year string if it's just a number
+  if (/^\d{4}$/.test(dateString)) return parseInt(dateString, 10);
+  return null;
 };
 
 const formatCurrency = (value) => {
@@ -29,21 +34,23 @@ export default function DashboardPage() {
   const [allDashboardData, setAllDashboardData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [selectedYear, setSelectedYear] = useState('all');
-  const [availableYears, setAvailableYears] = useState([]);
+  const [selectedYear, setSelectedYear] = useState(ALL_YEARS_OPTION);
+  const [availableYears, setAvailableYears] = useState([ALL_YEARS_OPTION]);
 
   useEffect(() => {
     const fetchData = async () => {
       if (!token) {
         setLoading(false);
-        setError("User not authenticated. Please sign in.");
+        setError(UI_TEXT.userNotAuthenticated);
         return;
       }
       setLoading(true);
       setError(null);
       try {
         const currentCsrfToken = csrfToken || await fetchCsrfToken();
-        const response = await axios.get('http://localhost:8080/api/dashboard-data', {
+        if (!currentCsrfToken) throw new Error("CSRF token not available for dashboard data.");
+
+        const response = await axios.get(API_ENDPOINTS.DASHBOARD_DATA, {
           headers: {
             'Authorization': `Bearer ${token}`,
             'X-CSRF-Token': currentCsrfToken,
@@ -55,23 +62,22 @@ export default function DashboardPage() {
         setAllDashboardData(data);
 
         const yearsSet = new Set();
-        data.StockHoldings?.forEach(h => { const y = getYearFromDate(h.buy_date); if (y) yearsSet.add(y); });
-        data.StockSaleDetails?.forEach(s => { const y = getYearFromDate(s.SaleDate); if (y) yearsSet.add(y); });
-        data.OptionHoldings?.forEach(o => { const y = getYearFromDate(o.open_date); if (y) yearsSet.add(y); });
-        data.OptionSaleDetails?.forEach(o => { const y = getYearFromDate(o.close_date); if (y) yearsSet.add(y); });
-        if (data.DividendTaxResult) {
+        data?.StockHoldings?.forEach(h => { const y = getYearFromDate(h.buy_date); if (y) yearsSet.add(y); });
+        data?.StockSaleDetails?.forEach(s => { const y = getYearFromDate(s.SaleDate); if (y) yearsSet.add(y); });
+        data?.OptionHoldings?.forEach(o => { const y = getYearFromDate(o.open_date); if (y) yearsSet.add(y); });
+        data?.OptionSaleDetails?.forEach(o => { const y = getYearFromDate(o.close_date); if (y) yearsSet.add(y); });
+        if (data?.DividendTaxResult) {
           Object.keys(data.DividendTaxResult).forEach(yearStr => {
-            if(yearStr && !isNaN(parseInt(yearStr, 10))) yearsSet.add(parseInt(yearStr, 10))
+            const yearNum = parseInt(yearStr, 10);
+            if(!isNaN(yearNum)) yearsSet.add(yearNum);
           });
         }
         
-        const sortedYears = Array.from(yearsSet).sort((a, b) => b - a);
-        setAvailableYears(['all', ...sortedYears]);
-        if (sortedYears.length > 0) {
-            setSelectedYear(String(sortedYears[0])); // Default to the latest year if available
-        } else {
-            setSelectedYear('all');
-        }
+        const sortedYears = Array.from(yearsSet).sort((a, b) => b - a); // Descending
+        setAvailableYears([ALL_YEARS_OPTION, ...sortedYears]);
+        
+        // Set selectedYear to the latest available year, or 'all' if no specific years
+        setSelectedYear(sortedYears.length > 0 ? String(sortedYears[0]) : ALL_YEARS_OPTION);
 
       } catch (e) {
         console.error("Failed to fetch dashboard data:", e);
@@ -95,7 +101,7 @@ export default function DashboardPage() {
         OptionSaleDetails: [], DividendTaxResult: {},
       };
     }
-    if (selectedYear === 'all') {
+    if (selectedYear === ALL_YEARS_OPTION) {
       return {
         StockHoldings: allDashboardData.StockHoldings || [],
         OptionHoldings: allDashboardData.OptionHoldings || [],
@@ -107,11 +113,15 @@ export default function DashboardPage() {
 
     const numSelectedYear = Number(selectedYear);
     return {
-      StockHoldings: allDashboardData.StockHoldings || [], // Holdings are usually current, not year-filtered here unless logic changes
-      OptionHoldings: allDashboardData.OptionHoldings || [], // Same for option holdings
+      // Holdings are generally current, but if your backend filters them by year for this endpoint, adjust accordingly.
+      // For this example, assuming holdings are always "current" irrespective of year filter.
+      StockHoldings: allDashboardData.StockHoldings || [], 
+      OptionHoldings: allDashboardData.OptionHoldings || [], 
       StockSaleDetails: (allDashboardData.StockSaleDetails || []).filter(s => getYearFromDate(s.SaleDate) === numSelectedYear),
       OptionSaleDetails: (allDashboardData.OptionSaleDetails || []).filter(o => getYearFromDate(o.close_date) === numSelectedYear),
-      DividendTaxResult: allDashboardData.DividendTaxResult?.[selectedYear] ? { [selectedYear]: allDashboardData.DividendTaxResult[selectedYear] } : {},
+      DividendTaxResult: allDashboardData.DividendTaxResult?.[selectedYear] 
+        ? { [selectedYear]: allDashboardData.DividendTaxResult[selectedYear] } 
+        : {},
     };
   }, [allDashboardData, selectedYear]);
 
@@ -120,15 +130,19 @@ export default function DashboardPage() {
     const optionPL = (filteredData.OptionSaleDetails || []).reduce((sum, sale) => sum + (sale.delta || 0), 0);
     
     let dividendPL = 0;
-    const dividendDataToProcess = filteredData.DividendTaxResult || {};
-    for (const yearData of Object.values(dividendDataToProcess)) {
-        for (const countryData of Object.values(yearData)) {
-            dividendPL += (countryData.gross_amt || 0) + (countryData.taxed_amt || 0); // tax_amt is often negative
+    // DividendTaxResult is { "year": { "country": { gross_amt, taxed_amt } } }
+    const dividendDataToProcess = selectedYear === ALL_YEARS_OPTION 
+        ? filteredData.DividendTaxResult // Process all years
+        : (filteredData.DividendTaxResult[selectedYear] ? { [selectedYear]: filteredData.DividendTaxResult[selectedYear] } : {}); // Process only selected year
+
+    for (const yearData of Object.values(dividendDataToProcess)) { // Iterates over year objects
+        for (const countryData of Object.values(yearData)) { // Iterates over country objects within a year
+            dividendPL += (countryData.gross_amt || 0) + (countryData.taxed_amt || 0);
         }
     }
     const totalPL = stockPL + optionPL + dividendPL;
     return { stockPL, optionPL, dividendPL, totalPL };
-  }, [filteredData]);
+  }, [filteredData, selectedYear]);
 
 
   if (loading) return <CircularProgress sx={{ display: 'block', margin: 'auto', mt: 4 }} />;
@@ -136,7 +150,7 @@ export default function DashboardPage() {
   if (!allDashboardData && !loading) return <Typography sx={{ textAlign: 'center', mt: 4 }}>No data loaded. Please upload a file first.</Typography>;
 
   return (
-    <Box sx={{ p: 3 }}>
+    <Box sx={{ p: { xs: 1, sm: 2, md: 3 } }}> {/* Responsive padding */}
       <Typography variant="h4" component="h1" gutterBottom>
         Financial Dashboard
       </Typography>
@@ -150,11 +164,11 @@ export default function DashboardPage() {
               value={selectedYear}
               label="Year"
               onChange={handleYearChange}
-              disabled={availableYears.length === 0 || loading}
+              disabled={availableYears.length <= 1 && availableYears[0] === ALL_YEARS_OPTION || loading}
             >
               {availableYears.map(year => (
                 <MenuItem key={year} value={String(year)}>
-                  {year === 'all' ? 'All Years' : year}
+                  {year === ALL_YEARS_OPTION ? 'All Years' : year}
                 </MenuItem>
               ))}
             </Select>
@@ -162,60 +176,30 @@ export default function DashboardPage() {
         </Grid>
       </Grid>
 
-      {/* Profit/Loss Summary Section */}
       <Paper elevation={3} sx={{ p: 2, mb: 3 }}>
         <Typography variant="h6" gutterBottom>
-          Profit/Loss Summary ({selectedYear === 'all' ? 'All Years' : selectedYear})
+          Profit/Loss Summary ({selectedYear === ALL_YEARS_OPTION ? 'All Years' : selectedYear})
         </Typography>
         <Grid container spacing={1}>
-            <Grid item xs={12} sm={6} md={3}>
-                <Typography variant="body1">
-                    Stocks P/L:
-                    <Typography component="span" sx={{ fontWeight: 'bold', ml: 1, color: summaryPLs.stockPL >= 0 ? 'success.main' : 'error.main' }}>
-                        {formatCurrency(summaryPLs.stockPL)}
-                    </Typography>
-                </Typography>
-            </Grid>
-            <Grid item xs={12} sm={6} md={3}>
-                <Typography variant="body1">
-                    Options P/L:
-                    <Typography component="span" sx={{ fontWeight: 'bold', ml: 1, color: summaryPLs.optionPL >= 0 ? 'success.main' : 'error.main' }}>
-                        {formatCurrency(summaryPLs.optionPL)}
-                    </Typography>
-                </Typography>
-            </Grid>
-            <Grid item xs={12} sm={6} md={3}>
-                <Typography variant="body1">
-                    Dividends Net:
-                    <Typography component="span" sx={{ fontWeight: 'bold', ml: 1, color: summaryPLs.dividendPL >= 0 ? 'success.main' : 'error.main' }}>
-                        {formatCurrency(summaryPLs.dividendPL)}
-                    </Typography>
-                </Typography>
-            </Grid>
-            <Grid item xs={12} sm={6} md={3}>
-                <Typography variant="body1" sx={{ fontWeight: 'bold' }}>
-                    Total P/L:
-                    <Typography component="span" sx={{ fontWeight: 'bold', ml: 1, color: summaryPLs.totalPL >= 0 ? 'success.main' : 'error.main' }}>
-                        {formatCurrency(summaryPLs.totalPL)}
-                    </Typography>
-                </Typography>
-            </Grid>
+            <Grid item xs={12} sm={6} md={3}><Typography>Stocks P/L: <Typography component="span" sx={{ fontWeight: 'bold', color: summaryPLs.stockPL >= 0 ? 'success.main' : 'error.main' }}>{formatCurrency(summaryPLs.stockPL)}</Typography></Typography></Grid>
+            <Grid item xs={12} sm={6} md={3}><Typography>Options P/L: <Typography component="span" sx={{ fontWeight: 'bold', color: summaryPLs.optionPL >= 0 ? 'success.main' : 'error.main' }}>{formatCurrency(summaryPLs.optionPL)}</Typography></Typography></Grid>
+            <Grid item xs={12} sm={6} md={3}><Typography>Dividends Net: <Typography component="span" sx={{ fontWeight: 'bold', color: summaryPLs.dividendPL >= 0 ? 'success.main' : 'error.main' }}>{formatCurrency(summaryPLs.dividendPL)}</Typography></Typography></Grid>
+            <Grid item xs={12} sm={6} md={3}><Typography sx={{ fontWeight: 'bold' }}>Total P/L: <Typography component="span" sx={{ fontWeight: 'bold', color: summaryPLs.totalPL >= 0 ? 'success.main' : 'error.main' }}>{formatCurrency(summaryPLs.totalPL)}</Typography></Typography></Grid>
         </Grid>
       </Paper>
 
-
       <Typography variant="h5" sx={{mt: 2, mb: 1, borderBottom: 1, borderColor: 'divider', pb:1 }}>Current Holdings</Typography>
       <Grid container spacing={3}>
-          <Grid item xs={12} md={6}>
+          <Grid item xs={12} lg={6}>
             <StockHoldingsSection holdingsData={filteredData.StockHoldings} selectedYear={selectedYear} />
           </Grid>
-          <Grid item xs={12} md={6}>
+          <Grid item xs={12} lg={6}>
             <OptionHoldingsSection holdingsData={filteredData.OptionHoldings} selectedYear={selectedYear} />
           </Grid>
       </Grid>
       
       <Divider sx={{ my: 3 }} />
-      <Typography variant="h5" sx={{mt: 2, mb: 1, borderBottom: 1, borderColor: 'divider', pb:1}}>Activity Summary {selectedYear !== 'all' ? `(${selectedYear})` : '(All Years)'}</Typography>
+      <Typography variant="h5" sx={{mt: 2, mb: 1, borderBottom: 1, borderColor: 'divider', pb:1}}>Activity Summary {selectedYear !== ALL_YEARS_OPTION ? `(${selectedYear})` : '(All Years)'}</Typography>
       <StockSalesSection stockSalesData={filteredData.StockSaleDetails} selectedYear={selectedYear} hideIndividualTotalPL={true} />
       <OptionSalesSection optionSalesData={filteredData.OptionSaleDetails} selectedYear={selectedYear} hideIndividualTotalPL={true} />
       <DividendsSection dividendSummaryData={filteredData.DividendTaxResult} selectedYear={selectedYear} hideIndividualTotalPL={true} />

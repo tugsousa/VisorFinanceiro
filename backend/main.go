@@ -1,81 +1,107 @@
-// backend/main.go
 package main
 
 import (
 	"encoding/json"
-	"log"
+	stdlog "log" // Standard log for fatal errors before logger is fully up
 	"net/http"
-	"os"
+
+	// "os" // No longer needed for PORT, JWT_SECRET directly
 	"time"
 
+	"github.com/username/taxfolio/backend/src/config" // Import config
 	"github.com/username/taxfolio/backend/src/database"
 	"github.com/username/taxfolio/backend/src/handlers"
-	_ "github.com/username/taxfolio/backend/src/model"
+	"github.com/username/taxfolio/backend/src/logger"  // Import logger
+	_ "github.com/username/taxfolio/backend/src/model" // model is used by handlers etc.
 	"github.com/username/taxfolio/backend/src/parsers"
 	"github.com/username/taxfolio/backend/src/processors"
 	"github.com/username/taxfolio/backend/src/security"
 	"github.com/username/taxfolio/backend/src/services"
-	"golang.org/x/time/rate" // For rate limiting
+	"github.com/username/taxfolio/backend/src/utils"
+	"golang.org/x/time/rate"
 )
 
-var (
-	// Rate limiter allowing 10 requests per second with burst of 30 (adjust as needed)
-	limiter = rate.NewLimiter(rate.Every(100*time.Millisecond), 30)
-)
+var limiter = rate.NewLimiter(rate.Every(100*time.Millisecond), 30)
 
-// rateLimitMiddleware applies rate limiting to incoming requests.
 func rateLimitMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !limiter.Allow() {
 			http.Error(w, http.StatusText(http.StatusTooManyRequests), http.StatusTooManyRequests)
-			log.Printf("Rate limit exceeded for %s %s from %s", r.Method, r.URL.Path, r.RemoteAddr)
+			logger.L.Warn("Rate limit exceeded",
+				"method", r.Method,
+				"path", r.URL.Path,
+				"remoteAddr", r.RemoteAddr)
 			return
 		}
 		next.ServeHTTP(w, r)
 	})
 }
 
-// enableCORS configures Cross-Origin Resource Sharing.
 func enableCORS(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		origin := r.Header.Get("Origin")
-		// Allow requests from the frontend development server
-		// In production, restrict this to your actual frontend domain.
-		if origin == "http://localhost:3000" {
+		// Allow requests from the frontend development server (configurable in future if needed)
+		// For production, restrict this to your actual frontend domain.
+		// Example: allowedOrigins := map[string]bool{"http://localhost:3000": true, "https://yourdomain.com": true}
+		// if allowedOrigins[origin] { ... }
+		if origin == "http://localhost:3000" { // TODO: Make this configurable for production
 			w.Header().Set("Access-Control-Allow-Origin", origin)
-			w.Header().Set("Access-Control-Allow-Credentials", "true") // Crucial for cookies (CSRF, session)
-			w.Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS, PUT, DELETE, PATCH")
+			w.Header().Set("Access-Control-Allow-Credentials", "true")
+			w.Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS, PUT, DELETE, PATCH") // Added PATCH
 			w.Header().Set("Access-Control-Allow-Headers", "Accept, Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization, X-Requested-With, Cookie")
-			w.Header().Set("Access-Control-Expose-Headers", "X-CSRF-Token") // Allow frontend to read this header
+			w.Header().Set("Access-Control-Expose-Headers", "X-CSRF-Token")
 		}
 
-		// Handle preflight requests (OPTIONS method)
 		if r.Method == "OPTIONS" {
-			log.Printf("Handling OPTIONS preflight request for %s from %s", r.URL.Path, origin)
-			w.WriteHeader(http.StatusOK) // Always respond OK to OPTIONS preflight for allowed origins
+			logger.L.Debug("Handling OPTIONS preflight request", "path", r.URL.Path, "origin", origin)
+			w.WriteHeader(http.StatusOK)
 			return
 		}
-
 		next.ServeHTTP(w, r)
 	})
 }
 
 func main() {
-	log.Println("Starting Taxfolio backend server...")
+	// 1. Load Configuration
+	config.LoadConfig()
 
-	// --- Configuration ---
-	jwtSecret := os.Getenv("JWT_SECRET")
-	if jwtSecret == "" {
-		log.Println("WARNING: JWT_SECRET environment variable not set. Using default insecure key.")
-		jwtSecret = "your-very-secure-and-long-jwt-secret-key-for-hs256-minimum-32-bytes" // Default for dev only
+	// 2. Initialize Logger (depends on config)
+	logger.InitLogger(config.Cfg.LogLevel)
+	logger.L.Info("Taxfolio backend server starting...")
+
+	// 3. Validate critical configurations
+	if config.Cfg.JWTSecret == "" {
+		logger.L.Error("FATAL: JWT_SECRET environment variable not set and no default provided in config.")
+		stdlog.Fatal("JWT_SECRET is not configured.") // Use stdlog for fatal before server starts
 	}
-	if len(jwtSecret) < 32 {
-		log.Fatal("JWT_SECRET must be at least 32 characters long for HS256")
+	if len(config.Cfg.JWTSecret) < 32 {
+		logger.L.Error("FATAL: JWT_SECRET must be at least 32 characters long for HS256.", "currentLength", len(config.Cfg.JWTSecret))
+		stdlog.Fatal("JWT_SECRET is too short.")
+	}
+	if len(config.Cfg.CSRFAuthKey) < 32 { // Already checked in config.Load, but double check
+		logger.L.Error("FATAL: CSRF_AUTH_KEY must be at least 32 bytes long.", "currentLength", len(config.Cfg.CSRFAuthKey))
+		stdlog.Fatal("CSRF_AUTH_KEY is too short.")
 	}
 
-	// --- Dependency Injection ---
-	log.Println("Initializing services and handlers...")
-	authService := security.NewAuthService(jwtSecret)
+	// 4. Initialize Data Loaders (depend on config)
+	logger.L.Info("Initializing data loaders...")
+	if err := processors.LoadHistoricalRates(config.Cfg.HistoricalDataPath); err != nil {
+		logger.L.Error("Failed to load historical rates", "error", err)
+		stdlog.Fatalf("Failed to load historical rates: %v", err)
+	}
+	if err := utils.InitCountryData(config.Cfg.CountryDataPath); err != nil {
+		logger.L.Error("Failed to load country data", "error", err)
+		stdlog.Fatalf("Failed to load country data: %v", err)
+	}
+
+	// 5. Initialize Database (depends on config)
+	logger.L.Info("Initializing database...")
+	database.InitDB(config.Cfg.DatabasePath)
+	logger.L.Info("Database initialized successfully.")
+
+	// 6. Dependency Injection for Services and Handlers
+	logger.L.Info("Initializing services and handlers...")
+	authService := security.NewAuthService(config.Cfg.JWTSecret)
 	userHandler := handlers.NewUserHandler(authService)
 
 	csvParser := parsers.NewCSVParser()
@@ -86,34 +112,20 @@ func main() {
 	cashMovementProcessor := processors.NewCashMovementProcessor()
 
 	uploadService := services.NewUploadService(
-		csvParser,
-		transactionProcessor,
-		dividendProcessor,
-		stockProcessor,
-		optionProcessor,
-		cashMovementProcessor,
+		csvParser, transactionProcessor, dividendProcessor,
+		stockProcessor, optionProcessor, cashMovementProcessor,
 	)
 	uploadHandler := handlers.NewUploadHandler(uploadService)
 
-	// --- Database Initialization ---
-	log.Println("Initializing database...")
-	database.InitDB()
-	log.Println("Database initialized.")
-
-	// --- Router Setup ---
-	log.Println("Configuring routes...")
-
-	// Root mux - handles non-API and the /api/ prefix
+	// 7. Router Setup
+	logger.L.Info("Configuring routes...")
 	rootMux := http.NewServeMux()
-
-	// Handle the root path separately
 	rootMux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/" {
 			if r.Method == http.MethodGet {
 				w.Header().Set("Content-Type", "application/json")
 				json.NewEncoder(w).Encode(map[string]string{"message": "TAXFOLIO Backend is running"})
 			} else {
-				// Corrected: Use http.StatusMethodNotAllowed for the status code
 				http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
 			}
 		} else {
@@ -121,42 +133,41 @@ func main() {
 		}
 	})
 
-	// --- API Sub-Router (handles everything under /api/) ---
 	apiRouter := http.NewServeMux()
-
-	// --- Auth Sub-Router (for /api/auth/*) ---
 	authSubRouter := http.NewServeMux()
 	authSubRouter.HandleFunc("GET /csrf", handlers.GetCSRFToken)
 	authSubRouter.HandleFunc("POST /login", userHandler.LoginUserHandler)
 	authSubRouter.HandleFunc("POST /register", userHandler.RegisterUserHandler)
-	authSubRouter.HandleFunc("POST /refresh", userHandler.RefreshTokenHandler)
-	apiRouter.Handle("/auth/", http.StripPrefix("/auth", handlers.CSRFMiddleware()(authSubRouter)))
+	authSubRouter.HandleFunc("POST /refresh", userHandler.RefreshTokenHandler) // Assuming this is meant for refresh tokens
 
-	// --- Authenticated API Routes ---
-	apiRouter.Handle("POST /upload", handlers.CSRFMiddleware()(http.HandlerFunc(userHandler.AuthMiddleware(uploadHandler.HandleUpload))))
-	apiRouter.Handle("GET /transactions/processed", handlers.CSRFMiddleware()(http.HandlerFunc(userHandler.AuthMiddleware(uploadHandler.HandleGetProcessedTransactions))))
-	apiRouter.Handle("GET /holdings/stocks", handlers.CSRFMiddleware()(http.HandlerFunc(userHandler.AuthMiddleware(uploadHandler.HandleGetStockHoldings))))
-	apiRouter.Handle("GET /holdings/options", handlers.CSRFMiddleware()(http.HandlerFunc(userHandler.AuthMiddleware(uploadHandler.HandleGetOptionHoldings))))
-	apiRouter.Handle("GET /stock-sales", handlers.CSRFMiddleware()(http.HandlerFunc(userHandler.AuthMiddleware(uploadHandler.HandleGetStockSales))))
-	apiRouter.Handle("GET /option-sales", handlers.CSRFMiddleware()(http.HandlerFunc(userHandler.AuthMiddleware(uploadHandler.HandleGetOptionSales))))
-	apiRouter.Handle("GET /dividend-tax-summary", handlers.CSRFMiddleware()(http.HandlerFunc(userHandler.AuthMiddleware(uploadHandler.HandleGetDividendTaxSummary))))
-	apiRouter.Handle("GET /dividend-transactions", handlers.CSRFMiddleware()(http.HandlerFunc(userHandler.AuthMiddleware(uploadHandler.HandleGetDividendTransactions))))
-	apiRouter.Handle("POST /logout", handlers.CSRFMiddleware()(http.HandlerFunc(userHandler.AuthMiddleware(userHandler.LogoutUserHandler))))
-	apiRouter.Handle("GET /dashboard-data", handlers.CSRFMiddleware()(http.HandlerFunc(userHandler.AuthMiddleware(uploadHandler.HandleGetDashboardData))))
-	// Mount the apiRouter under /api/ prefix on the rootMux
+	// Apply CSRF middleware to the auth sub-router
+	// Pass the CSRF key from config if the middleware needs it (e.g., for gorilla/csrf)
+	// For the current custom middleware, the key is not directly used in its validation logic.
+	apiRouter.Handle("/auth/", http.StripPrefix("/auth", handlers.CSRFMiddleware(config.Cfg.CSRFAuthKey)(authSubRouter)))
+
+	// Authenticated API Routes (apply AuthMiddleware first, then CSRFMiddleware)
+	// The CSRF token is typically validated before authentication for mutating requests.
+	csrfAuthMw := handlers.CSRFMiddleware(config.Cfg.CSRFAuthKey)
+
+	apiRouter.Handle("POST /upload", csrfAuthMw(http.HandlerFunc(userHandler.AuthMiddleware(uploadHandler.HandleUpload))))
+	apiRouter.Handle("GET /transactions/processed", csrfAuthMw(http.HandlerFunc(userHandler.AuthMiddleware(uploadHandler.HandleGetProcessedTransactions))))
+	apiRouter.Handle("GET /holdings/stocks", csrfAuthMw(http.HandlerFunc(userHandler.AuthMiddleware(uploadHandler.HandleGetStockHoldings))))
+	apiRouter.Handle("GET /holdings/options", csrfAuthMw(http.HandlerFunc(userHandler.AuthMiddleware(uploadHandler.HandleGetOptionHoldings))))
+	apiRouter.Handle("GET /stock-sales", csrfAuthMw(http.HandlerFunc(userHandler.AuthMiddleware(uploadHandler.HandleGetStockSales))))
+	apiRouter.Handle("GET /option-sales", csrfAuthMw(http.HandlerFunc(userHandler.AuthMiddleware(uploadHandler.HandleGetOptionSales))))
+	apiRouter.Handle("GET /dividend-tax-summary", csrfAuthMw(http.HandlerFunc(userHandler.AuthMiddleware(uploadHandler.HandleGetDividendTaxSummary))))
+	apiRouter.Handle("GET /dividend-transactions", csrfAuthMw(http.HandlerFunc(userHandler.AuthMiddleware(uploadHandler.HandleGetDividendTransactions))))
+	apiRouter.Handle("POST /logout", csrfAuthMw(http.HandlerFunc(userHandler.AuthMiddleware(userHandler.LogoutUserHandler))))
+	apiRouter.Handle("GET /dashboard-data", csrfAuthMw(http.HandlerFunc(userHandler.AuthMiddleware(uploadHandler.HandleGetDashboardData))))
+
 	rootMux.Handle("/api/", http.StripPrefix("/api", apiRouter))
 
-	// --- Apply Global Middleware ---
-	log.Println("Applying global middleware...")
+	// 8. Apply Global Middleware & Start Server
+	logger.L.Info("Applying global middleware...")
 	finalHandler := enableCORS(rateLimitMiddleware(rootMux))
 
-	// --- Start Server ---
-	port := os.Getenv("PORT")
-	if port == "" {
-		port = "8080" // Default port if not specified
-	}
-	serverAddr := ":" + port
-	log.Printf("Server configured successfully. Attempting to listen on %s", serverAddr)
+	serverAddr := ":" + config.Cfg.Port
+	logger.L.Info("Server configured successfully.", "address", serverAddr)
 
 	server := &http.Server{
 		Addr:         serverAddr,
@@ -166,10 +177,13 @@ func main() {
 		IdleTimeout:  60 * time.Second,
 	}
 
-	log.Printf("Server starting on %s", serverAddr)
+	logger.L.Info("Server starting", "address", serverAddr)
 	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-		log.Fatalf("Failed to start server: %v", err)
+		logger.L.Error("Failed to start server", "error", err)
+		stdlog.Fatalf("Failed to start server: %v", err) // Use stdlog for fatal error at this stage
+	} else if err == http.ErrServerClosed {
+		logger.L.Info("Server stopped gracefully.")
 	} else {
-		log.Println("Server stopped gracefully.")
+		logger.L.Info("Server stopped.")
 	}
 }

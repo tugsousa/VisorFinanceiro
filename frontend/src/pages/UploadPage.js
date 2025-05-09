@@ -1,29 +1,36 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useContext } from 'react';
 import axios from 'axios';
 import { useAuth } from '../context/AuthContext';
 import './UploadPage.css';
+import { API_ENDPOINTS, ALLOWED_FILE_TYPES, MAX_FILE_SIZE_BYTES, UI_TEXT } from '../constants';
 
 const UploadPage = () => {
   const { csrfToken, fetchCsrfToken, token } = useAuth();
   const [selectedFile, setSelectedFile] = useState(null);
   const [uploadProgress, setUploadProgress] = useState(0);
-  const [uploadStatus, setUploadStatus] = useState('idle');
+  const [uploadStatus, setUploadStatus] = useState('idle'); // 'idle', 'uploading', 'success', 'error'
   const [error, setError] = useState(null);
   const [processedTransactions, setProcessedTransactions] = useState([]);
+  const [isFetchingTransactions, setIsFetchingTransactions] = useState(false);
 
-  const allowedFileTypes = ['text/csv', 'application/vnd.ms-excel', 'application/vnd.openxmlformats-officecs.spreadsheetml.sheet'];
 
   const handleFileChange = (e) => {
     const file = e.target.files[0];
-    if (!file) return;
+    if (!file) {
+        setSelectedFile(null);
+        setError(null);
+        return;
+    }
 
-    if (!allowedFileTypes.includes(file.type)) {
-      setError('Invalid file type. Please upload a CSV or Excel file.');
+    if (!ALLOWED_FILE_TYPES.includes(file.type)) {
+      setError(`Invalid file type. Please upload a CSV or Excel file. Allowed: ${ALLOWED_FILE_TYPES.join(', ')}`);
+      setSelectedFile(null);
       return;
     }
 
-    if (file.size > 5 * 1024 * 1024) {
-      setError('File size too large. Maximum size is 5MB.');
+    if (file.size > MAX_FILE_SIZE_BYTES) {
+      setError(`File size too large. Maximum size is ${MAX_FILE_SIZE_MB}MB.`);
+      setSelectedFile(null);
       return;
     }
 
@@ -36,6 +43,10 @@ const UploadPage = () => {
       setError('Please select a file first');
       return;
     }
+    if (!token) {
+      setError(UI_TEXT.userNotAuthenticated);
+      return;
+    }
 
     const formData = new FormData();
     formData.append('file', selectedFile);
@@ -43,69 +54,77 @@ const UploadPage = () => {
     try {
       setUploadStatus('uploading');
       setUploadProgress(0);
+      setError(null);
 
-      // Get a fresh CSRF token before upload
-      const freshToken = await fetchCsrfToken();
-      console.log('Using CSRF token for upload:', freshToken);
-      
-      // Debug: Log the token being used for authorization
-      console.log('Authorization token:', token);
-      
-      // Check if token is in the correct format (should be the access_token from login)
-      if (!token) {
-        console.error('No authorization token available. User may not be properly logged in.');
-        setError('Authentication error. Please log in again.');
-        setUploadStatus('error');
-        return;
+      const freshCsrfToken = csrfToken || await fetchCsrfToken();
+      if (!freshCsrfToken) {
+        throw new Error("CSRF token not available for upload.");
       }
-
-      const response = await axios.post('http://localhost:8080/api/upload', formData, {
+      
+      console.log('Authorization token for upload:', token);
+      
+      const response = await axios.post(API_ENDPOINTS.UPLOAD, formData, {
         headers: {
           'Content-Type': 'multipart/form-data',
-          'X-CSRF-Token': freshToken,
-          'Authorization': `Bearer ${token}`, // Add Bearer prefix to the token
+          'X-CSRF-Token': freshCsrfToken,
+          'Authorization': `Bearer ${token}`,
         },
-        withCredentials: true, // This ensures cookies are sent with the request
+        withCredentials: true,
         onUploadProgress: (progressEvent) => {
-          const progress = Math.round((progressEvent.loaded * 100) / progressEvent.total);
-          setUploadProgress(progress);
+          if (progressEvent.total) {
+            const progress = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+            setUploadProgress(progress);
+          }
         },
       });
 
       setUploadStatus('success');
       console.log('Upload successful:', response.data);
-      
-      // Fetch processed transactions after successful upload
-      fetchProcessedTransactions();
+      fetchProcessedTransactions(); // Refresh transactions list
+      setSelectedFile(null); // Clear file input after successful upload
+      // e.target.value = null; // This won't work as e is not available here directly
+      // To reset file input visually, you might need to manage its key or use a ref
     } catch (err) {
       setUploadStatus('error');
-      setError(err.response?.data?.message || 'Upload failed. Please try again.');
+      setError(err.response?.data?.error || err.message || 'Upload failed. Please try again.');
       console.error('Upload error:', err);
     }
   };
 
-  // Function to fetch processed transactions
   const fetchProcessedTransactions = async () => {
+    if (!token) return;
+    setIsFetchingTransactions(true);
+    setError(null);
     try {
-      const response = await axios.get('http://localhost:8080/api/transactions/processed', {
+      const currentCsrf = csrfToken || await fetchCsrfToken();
+      if (!currentCsrf) {
+        throw new Error("CSRF token not available for fetching transactions.");
+      }
+      const response = await axios.get(API_ENDPOINTS.PROCESSED_TRANSACTIONS, {
         headers: {
           'Authorization': `Bearer ${token}`,
-          'X-CSRF-Token': csrfToken
+          'X-CSRF-Token': currentCsrf
         },
         withCredentials: true
       });
-      setProcessedTransactions(response.data);
+      setProcessedTransactions(response.data || []);
     } catch (err) {
       console.error('Error fetching processed transactions:', err);
+      setError(err.response?.data?.error || 'Failed to fetch transactions.');
+      setProcessedTransactions([]); // Clear on error
+    } finally {
+      setIsFetchingTransactions(false);
     }
   };
-
-  // Fetch processed transactions on component mount
+ 
   useEffect(() => {
     if (token) {
       fetchProcessedTransactions();
+    } else {
+      setProcessedTransactions([]); // Clear transactions if not logged in
     }
-  }, [token]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token]); // Re-fetch when token changes (login/logout)
 
   return (
     <div className="upload-container">
@@ -114,9 +133,9 @@ const UploadPage = () => {
         <input
           type="file"
           onChange={handleFileChange}
-          accept=".csv, .xls, .xlsx"
+          accept={ALLOWED_FILE_TYPES.map(type => `.${type.split('/')[1]}`).join(',')} // More specific accept
+          key={selectedFile ? 'file-selected' : 'no-file'} // Trick to reset input if needed
         />
-        {error && <div className="error-message">{error}</div>}
         
         {selectedFile && (
           <div className="file-info">
@@ -131,21 +150,22 @@ const UploadPage = () => {
             <span>{uploadProgress}%</span>
           </div>
         )}
+        
+        {/* Consolidate error and success messages */}
+        {error && <div className="error-message">{error}</div>}
+        {uploadStatus === 'success' && <div className="success-message">Upload completed successfully! Transactions updated.</div>}
 
-        {uploadStatus === 'success' && (
-          <div className="success-message">Upload completed successfully!</div>
-        )}
 
         <button
           onClick={handleUpload}
-          disabled={uploadStatus === 'uploading' || !selectedFile}
+          disabled={uploadStatus === 'uploading' || !selectedFile || !token}
         >
           {uploadStatus === 'uploading' ? 'Uploading...' : 'Upload'}
         </button>
       </div>
 
-      {/* Display processed transactions */}
-      {processedTransactions.length > 0 && (
+      {isFetchingTransactions && <p>Loading transactions...</p>}
+      {!isFetchingTransactions && processedTransactions.length > 0 && (
         <div className="processed-transactions">
           <h3>Processed Transactions</h3>
           <p>These transactions have been processed and stored in the database.</p>
@@ -155,21 +175,31 @@ const UploadPage = () => {
                 <tr>
                   <th>Date</th>
                   <th>Product</th>
+                  <th>ISIN</th>
                   <th>Type</th>
-                  <th>Quantity</th>
+                  <th>Qty</th>
+                  <th>Price</th>
                   <th>Amount</th>
                   <th>Currency</th>
+                  <th>Commission</th>
+                  <th>Amount EUR</th>
+                  <th>Order ID</th>
                 </tr>
               </thead>
               <tbody>
                 {processedTransactions.map((transaction, index) => (
-                  <tr key={index}>
+                  <tr key={transaction.OrderID || index}>
                     <td>{transaction.Date}</td>
                     <td>{transaction.ProductName}</td>
+                    <td>{transaction.ISIN}</td>
                     <td>{transaction.OrderType}</td>
                     <td>{transaction.Quantity}</td>
-                    <td>{transaction.Amount}</td>
+                    <td>{transaction.Price?.toFixed(4)}</td>
+                    <td>{transaction.Amount?.toFixed(2)}</td>
                     <td>{transaction.Currency}</td>
+                    <td>{transaction.Commission?.toFixed(2)}</td>
+                    <td>{transaction.AmountEUR?.toFixed(2)}</td>
+                    <td>{transaction.OrderID}</td>
                   </tr>
                 ))}
               </tbody>
@@ -177,6 +207,9 @@ const UploadPage = () => {
           </div>
         </div>
       )}
+       {!isFetchingTransactions && processedTransactions.length === 0 && token && !error && (
+         <Typography sx={{ textAlign: 'center', mt: 2 }}>No processed transactions found.</Typography>
+       )}
     </div>
   );
 };

@@ -2,23 +2,34 @@ package database
 
 import (
 	"database/sql"
-	"log"
+	// Standard log for bootstrap messages if logger isn't ready
+	stdlog "log" // Renamed to avoid conflict with global logger variable
 
+	"github.com/username/taxfolio/backend/src/logger" // Import your slog wrapper
 	_ "modernc.org/sqlite"
 )
 
 var DB *sql.DB
 
-func InitDB() {
-	db, err := sql.Open("sqlite", "./taxfolio.db")
+// InitDB initializes the database connection.
+// It now takes the databasePath as an argument.
+func InitDB(databasePath string) {
+	db, err := sql.Open("sqlite", databasePath)
 	if err != nil {
-		log.Fatalf("failed to open database: %v", err)
+		// Use standard log here as logger.L might not be initialized yet if InitDB is called before InitLogger
+		stdlog.Fatalf("failed to open database at %s: %v", databasePath, err)
 	}
 
 	DB = db
 
 	// Check if we need to migrate the database
-	migrateDatabase()
+	// It's better to call migrateDatabase after logger is initialized if it logs
+	if logger.L != nil {
+		logger.L.Info("Checking database migrations", "databasePath", databasePath)
+	} else {
+		stdlog.Println("Checking database migrations for:", databasePath)
+	}
+	migrateDatabase() // migrateDatabase itself uses logger.L if available
 
 	createTableStatement := `
 	CREATE TABLE IF NOT EXISTS users (
@@ -65,36 +76,50 @@ func InitDB() {
 
 	_, err = DB.Exec(createTableStatement)
 	if err != nil {
-		log.Fatalf("failed to create table: %v", err)
+		if logger.L != nil {
+			logger.L.Error("failed to create tables", "error", err)
+		}
+		stdlog.Fatalf("failed to create tables: %v", err) // Fatal if basic tables can't be made
+	}
+	if logger.L != nil {
+		logger.L.Info("Database tables ensured/created.")
+	} else {
+		stdlog.Println("Database tables ensured/created.")
 	}
 }
 
 // migrateDatabase handles database schema migrations
 func migrateDatabase() {
-	// Check if the processed_transactions table exists
 	var tableName string
 	err := DB.QueryRow("SELECT name FROM sqlite_master WHERE type='table' AND name='processed_transactions'").Scan(&tableName)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			// Table doesn't exist yet, no migration needed
+			if logger.L != nil {
+				logger.L.Info("processed_transactions table does not exist, no migration needed yet.")
+			} else {
+				stdlog.Println("processed_transactions table does not exist, no migration needed yet.")
+			}
 			return
 		}
-		log.Printf("Error checking for processed_transactions table: %v", err)
+		if logger.L != nil {
+			logger.L.Error("Error checking for processed_transactions table", "error", err)
+		} else {
+			stdlog.Printf("Error checking for processed_transactions table: %v", err)
+		}
 		return
 	}
 
-	// Check if original_quantity column exists
-	// We need to query all columns and check if original_quantity is among them
-
-	// Get all column names
 	rows, err := DB.Query("PRAGMA table_info(processed_transactions)")
 	if err != nil {
-		log.Printf("Error querying table schema: %v", err)
+		if logger.L != nil {
+			logger.L.Error("Error querying table schema for processed_transactions", "error", err)
+		} else {
+			stdlog.Printf("Error querying table schema: %v", err)
+		}
 		return
 	}
 	defer rows.Close()
 
-	// Check if our new columns exist
 	hasOriginalQuantity := false
 	hasDescription := false
 
@@ -103,8 +128,13 @@ func migrateDatabase() {
 		var name, dataType string
 		var dfltValue interface{}
 
-		if err := rows.Scan(&cid, &name, &dataType, &notnull, &dfltValue, &pk); err != nil {
-			log.Printf("Error scanning column info: %v", err)
+		// Corrected line:
+		if err := rows.Scan(&cid, &name, &dataType, notnull, &dfltValue, &pk); err != nil {
+			if logger.L != nil {
+				logger.L.Error("Error scanning column info", "error", err)
+			} else {
+				stdlog.Printf("Error scanning column info: %v", err)
+			}
 			continue
 		}
 
@@ -116,24 +146,36 @@ func migrateDatabase() {
 		}
 	}
 
-	// Check for errors from iterating over rows
 	if err = rows.Err(); err != nil {
-		log.Printf("Error iterating over column info: %v", err)
+		if logger.L != nil {
+			logger.L.Error("Error iterating over column info", "error", err)
+		} else {
+			stdlog.Printf("Error iterating over column info: %v", err)
+		}
 		return
 	}
 
-	// Add missing columns if needed
 	if !hasOriginalQuantity {
 		_, err := DB.Exec("ALTER TABLE processed_transactions ADD COLUMN original_quantity INTEGER")
 		if err != nil {
-			log.Printf("Error adding original_quantity column: %v", err)
+			if logger.L != nil {
+				logger.L.Error("Error adding original_quantity column", "error", err)
+			} else {
+				stdlog.Printf("Error adding original_quantity column: %v", err)
+			}
 		} else {
-			log.Println("Added original_quantity column to processed_transactions table")
-
-			// Update existing rows to set original_quantity equal to quantity
+			if logger.L != nil {
+				logger.L.Info("Added original_quantity column to processed_transactions table")
+			} else {
+				stdlog.Println("Added original_quantity column to processed_transactions table")
+			}
 			_, err = DB.Exec("UPDATE processed_transactions SET original_quantity = quantity")
 			if err != nil {
-				log.Printf("Error updating original_quantity values: %v", err)
+				if logger.L != nil {
+					logger.L.Error("Error updating original_quantity values", "error", err)
+				} else {
+					stdlog.Printf("Error updating original_quantity values: %v", err)
+				}
 			}
 		}
 	}
@@ -141,9 +183,17 @@ func migrateDatabase() {
 	if !hasDescription {
 		_, err := DB.Exec("ALTER TABLE processed_transactions ADD COLUMN description TEXT")
 		if err != nil {
-			log.Printf("Error adding description column: %v", err)
+			if logger.L != nil {
+				logger.L.Error("Error adding description column", "error", err)
+			} else {
+				stdlog.Printf("Error adding description column: %v", err)
+			}
 		} else {
-			log.Println("Added description column to processed_transactions table")
+			if logger.L != nil {
+				logger.L.Info("Added description column to processed_transactions table")
+			} else {
+				stdlog.Println("Added description column to processed_transactions table")
+			}
 		}
 	}
 }

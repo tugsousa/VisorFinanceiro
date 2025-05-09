@@ -1,4 +1,5 @@
 import React, { createContext, useState, useEffect, useContext } from 'react';
+import { API_ENDPOINTS } from '../constants'; // Import constants
 
 export const AuthContext = createContext();
 
@@ -13,133 +14,89 @@ export const useAuth = () => {
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [token, setToken] = useState(() => {
-    // Initialize token from localStorage if available
     const savedToken = localStorage.getItem('auth_token');
     console.log('Initializing auth token from localStorage:', savedToken ? 'Token found' : 'No token found');
     return savedToken || null;
   });
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true); // Start true to handle initial CSRF fetch
   const [error, setError] = useState(null);
   const [csrfToken, setCsrfToken] = useState('');
 
-  // Fetch CSRF token from the server
   const fetchCsrfToken = async () => {
     try {
-      console.log('Fetching fresh CSRF token...');
-      
-      // Log cookies before fetch
-      console.log('Cookies before CSRF fetch:', document.cookie);
-      
-      const csrfResponse = await fetch('http://localhost:8080/api/auth/csrf', {
+      // console.log('Fetching fresh CSRF token...');
+      const csrfResponse = await fetch(API_ENDPOINTS.AUTH_CSRF, { // Use constant
         method: 'GET',
         credentials: 'include',
-        cache: 'no-cache', // Prevent caching
-        headers: {
-          'Accept': 'application/json'
-        }
+        cache: 'no-cache',
+        headers: { 'Accept': 'application/json' }
       });
       
       if (!csrfResponse.ok) {
         throw new Error(`Failed to get CSRF token: ${csrfResponse.status}`);
       }
       
-      // Get CSRF token from header first (more reliable)
       const headerToken = csrfResponse.headers.get('X-CSRF-Token');
-      console.log('CSRF token from header:', headerToken);
-      
-      // Log all response headers
-      console.log('CSRF response headers:', 
-        Array.from(csrfResponse.headers.entries())
-          .reduce((obj, [key, val]) => ({ ...obj, [key]: val }), {})
-      );
-      
       const data = await csrfResponse.json();
       const bodyToken = data.csrfToken;
-      console.log('CSRF token from response body:', bodyToken);
+      const receivedCsrfToken = headerToken || bodyToken;
       
-      // Use header token if available, otherwise fall back to body token
-      const csrfToken = headerToken || bodyToken;
-      
-      // Log cookies after fetch
-      console.log('Cookies after CSRF fetch:', document.cookie);
-      
-      setCsrfToken(csrfToken);
-      return csrfToken;
+      // console.log('Fetched CSRF token:', receivedCsrfToken);
+      setCsrfToken(receivedCsrfToken);
+      return receivedCsrfToken;
     } catch (err) {
       console.error('Error fetching CSRF token:', err);
-      throw err;
+      // Don't throw here to allow app to load, but log the error
+      setError(prev => prev ? `${prev}; CSRF fetch failed` : 'CSRF fetch failed');
+      return ''; // Return empty or handle error appropriately
     }
   };
 
-  // Fetch CSRF token on initial load
   useEffect(() => {
-    fetchCsrfToken().catch(err => {
-      console.error('Initial CSRF token fetch failed:', err);
-    });
-  }, []);
+    fetchCsrfToken().finally(() => setLoading(false)); // Set loading to false after initial fetch
+    // If there's a token in localStorage, you might want to validate it here
+    // or fetch user profile to confirm validity. For now, just loading.
+    if (token) {
+        // Potentially add a call here to validate token or fetch user data
+        // For simplicity, we assume the stored token is valid if present.
+        // A better approach would be to verify it against a /me endpoint.
+        // For now, if a token exists, we might try to fetch user data or set a placeholder user
+        // This part depends on how you want to handle session persistence on refresh.
+        // For now, AuthWrapper will handle navigation if token is invalid on protected routes.
+    } else {
+        setLoading(false); // If no token, no need to validate, just finish loading
+    }
+  }, []); // Removed 'token' from dependency array to avoid re-fetching CSRF on token change by login/logout
+
 
   const register = async (username, password) => {
+    setLoading(true);
+    setError(null);
     try {
-      setLoading(true);
-      console.log('Starting registration process for user:', username);
-      
-      // Get a fresh CSRF token
-      const token = await fetchCsrfToken();
-      console.log('Fresh CSRF token received for registration:', token);
-      
-      // Check if we have cookies
-      console.log('Cookies before registration request:', document.cookie);
-      
-      const response = await fetch('http://localhost:8080/api/auth/register', {
+      const currentCsrf = csrfToken || await fetchCsrfToken();
+      if (!currentCsrf) throw new Error("CSRF token not available for registration.");
+
+      const response = await fetch(API_ENDPOINTS.AUTH_REGISTER, { // Use constant
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'X-CSRF-Token': token,
+          'X-CSRF-Token': currentCsrf,
           'Accept': 'application/json'
         },
         credentials: 'include',
         body: JSON.stringify({ username, password }),
       });
       
-      console.log('Registration response status:', response.status);
-      console.log('Registration response headers:', 
-        Array.from(response.headers.entries())
-          .reduce((obj, [key, val]) => ({ ...obj, [key]: val }), {})
-      );
-      console.log('Cookies after registration response:', document.cookie);
-      
       if (!response.ok) {
-        const errorText = await response.text();
-        console.error('Registration failed with status:', response.status, 'Response:', errorText);
-        try {
-          const errorData = JSON.parse(errorText);
-          console.error('Parsed error data:', errorData);
-          throw new Error(errorData.message || 'Registration failed');
-        } catch {
-          console.error('Raw error response:', errorText);
-          throw new Error(errorText || 'Registration failed');
-        }
+        const errorData = await response.json().catch(() => ({ message: 'Registration failed: Non-JSON response' }));
+        throw new Error(errorData.error || errorData.message || 'Registration failed');
       }
       
-      const data = await response.json();
-      console.log('Login response data:', data);
-      
-      // The backend returns access_token, not token
-      const accessToken = data.access_token;
-      if (!accessToken) {
-        console.error('No access_token in login response:', data);
-        throw new Error('Login successful but no access token received');
-      }
-      
-      console.log('Setting access token:', accessToken);
-      setUser(data.user);
-      setToken(accessToken);
-      
-      // Store token in localStorage for persistence
-      localStorage.setItem('auth_token', accessToken);
-      
+      // Registration successful, but typically doesn't log the user in automatically
+      // Depending on backend: it might return user data and tokens if it also logs in
+      // For now, assume registration is separate from login.
       setLoading(false);
-      return data;
+      return { success: true, message: "Registration successful. Please sign in." }; // Adjust based on backend response
     } catch (err) {
       setError(err.message);
       setLoading(false);
@@ -147,69 +104,41 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-const login = async (username, password) => {
+  const login = async (username, password) => {
+    setLoading(true);
+    setError(null);
     try {
-        setLoading(true);
-        console.log('Starting login process for user:', username);
+      const currentCsrf = csrfToken || await fetchCsrfToken();
+      if (!currentCsrf) throw new Error("CSRF token not available for login.");
         
-        // First get a fresh CSRF token
-        const csrfToken = await fetchCsrfToken();
-        console.log('Fresh CSRF token received for login:', csrfToken);
-        
-        // Check if we have cookies
-        console.log('Cookies before login request:', document.cookie);
-        
-        // Then make login request with the fresh token
-        console.log('Making login request with CSRF token...');
-        const response = await fetch('http://localhost:8080/api/auth/login', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRF-Token': csrfToken,
-                'Accept': 'application/json'
-            },
-            credentials: 'include',
-            body: JSON.stringify({ username, password }),
-        });
-        console.log('Login response status:', response.status);
-        console.log('Login response headers:', 
-            Array.from(response.headers.entries())
-                .reduce((obj, [key, val]) => ({ ...obj, [key]: val }), {})
-        );
-        console.log('Cookies after login response:', document.cookie);
+      const response = await fetch(API_ENDPOINTS.AUTH_LOGIN, { // Use constant
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRF-Token': currentCsrf,
+          'Accept': 'application/json'
+        },
+        credentials: 'include',
+        body: JSON.stringify({ username, password }),
+      });
       
       if (!response.ok) {
-        const errorText = await response.text();
-        console.error('Login failed with status:', response.status, 'Response:', errorText);
-        try {
-          const errorData = JSON.parse(errorText);
-          console.error('Parsed error data:', errorData);
-          throw new Error(errorData.message || 'Login failed');
-        } catch {
-          console.error('Raw error response:', errorText);
-          throw new Error(errorText || 'Login failed');
-        }
+        const errorData = await response.json().catch(() => ({ message: 'Login failed: Non-JSON response' }));
+        throw new Error(errorData.error || errorData.message || 'Login failed');
       }
 
       const data = await response.json();
-      console.log('Login response data:', data);
-      
-      // The backend returns access_token, not token
       const accessToken = data.access_token;
       if (!accessToken) {
-        console.error('No access_token in login response:', data);
         throw new Error('Login successful but no access token received');
       }
       
-      console.log('Setting access token:', accessToken);
       setUser(data.user);
       setToken(accessToken);
-      
-      // Store token in localStorage for persistence
       localStorage.setItem('auth_token', accessToken);
       
       setLoading(false);
-      return data;
+      return data; // contains user and tokens
     } catch (err) {
       setError(err.message);
       setLoading(false);
@@ -218,57 +147,48 @@ const login = async (username, password) => {
   };
 
   const logout = async () => {
+    setLoading(true); // Indicate activity
+    setError(null);
     try {
-      console.log('Starting logout process');
+      const currentCsrf = csrfToken || await fetchCsrfToken();
+      // Even if CSRF fails, proceed with local logout
       
-      // Get a fresh CSRF token
-      const token = await fetchCsrfToken();
-      console.log('Fresh CSRF token received for logout:', token);
-      
-      // Check if we have cookies
-      console.log('Cookies before logout request:', document.cookie);
-      
-      const response = await fetch('http://localhost:8080/api/auth/logout', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-CSRF-Token': token,
-          'Accept': 'application/json'
-        },
-        credentials: 'include'
-      });
-      
-      console.log('Logout response status:', response.status);
-      console.log('Logout response headers:', 
-        Array.from(response.headers.entries())
-          .reduce((obj, [key, val]) => ({ ...obj, [key]: val }), {})
-      );
-      console.log('Cookies after logout response:', document.cookie);
-      
-      // Clear token from localStorage
+      // Optimistically clear local state first
       localStorage.removeItem('auth_token');
-      
       setUser(null);
       setToken(null);
+
+      if (currentCsrf) { // Only attempt server logout if we have a CSRF token
+        await fetch(API_ENDPOINTS.AUTH_LOGOUT, { // Use constant
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json', // Though body is empty, good practice
+            'X-CSRF-Token': currentCsrf,
+            'Authorization': `Bearer ${token}`, // Send existing auth token for server to invalidate session
+            'Accept': 'application/json'
+          },
+          credentials: 'include'
+        });
+        // We don't strictly need to wait for the response or check its status for client-side logout to proceed.
+        // console.log('Server logout response status:', logoutResponse.status);
+      } else {
+        console.warn("CSRF token not available for server logout, proceeding with local logout only.");
+      }
+
     } catch (err) {
-      console.error('Logout error:', err);
-      setError(err.message);
-      throw err;
+      console.error('Logout error (server call might have failed):', err);
+      // Error during server call, but local logout has already happened.
+      // setError(err.message); // Optionally set an error for display
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
     <AuthContext.Provider
       value={{
-        user,
-        token,
-        loading,
-        error,
-        register,
-        login,
-        logout,
-        csrfToken,
-        fetchCsrfToken,
+        user, token, loading, error, csrfToken,
+        register, login, logout, fetchCsrfToken,
       }}
     >
       {children}
