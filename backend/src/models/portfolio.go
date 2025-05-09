@@ -1,38 +1,6 @@
 package models
 
-// Transaction represents a single transaction from the CSV file.
-type RawTransaction struct {
-	OrderDate    string `json:"order_date"`    // Date of the order
-	OrderTime    string `json:"order_time"`    // Time of the order
-	ValueDate    string `json:"value_date"`    // Date the transaction is effective
-	Name         string `json:"name"`          // Description of the transaction
-	ISIN         string `json:"isin"`          // ISIN code of the product
-	Description  string `json:"Description"`   // Type of transaction (e.g., "buy", "sell", "fee")
-	ExchangeRate string `json:"exchange_rate"` // Exchange rate (if applicable)
-	Currency     string `json:"currency"`      // Currency of the transaction
-	Amount       string `json:"amount"`        // Transaction amount in the original currency
-	OrderID      string `json:"order_id"`      // Unique ID for the order
-}
-
-type ProcessedTransaction struct {
-	Date             string // Use time.Time for dates
-	ProductName      string
-	ISIN             string
-	Quantity         int
-	OriginalQuantity int // Original quantity of the purchase lot before any sales
-	Price            float64
-	OrderType        string  // e.g., "compra", "venda", "dividendo"
-	TransactionType  string  // e.g., "stock", "option", "comission", "cashCredit"
-	Description      string  // Original description from RawTransaction
-	Amount           float64 // Transaction amount in original currency
-	Currency         string  // Original currency (e.g., "USD", "EUR")
-	Commission       float64 // Commission/fees
-	OrderID          string
-	ExchangeRate     float64 // Exchange rate to EUR (if applicable)
-	AmountEUR        float64 // Transaction amount in EUR (calculated)
-	CountryCode      string  `json:"country_code,omitempty"` // Country code derived from ISIN
-}
-
+// SaleDetail represents the details of a completed stock sale, matching a purchase.
 type SaleDetail struct {
 	SaleDate         string
 	BuyDate          string
@@ -54,7 +22,7 @@ type SaleDetail struct {
 	CountryCode      string  `json:"country_code"` // Country code derived from ISIN (e.g., "840 - United States of America (the)")
 }
 
-// PurchaseLot represents remaining unsold purchase lots
+// PurchaseLot represents remaining unsold purchase lots for stocks.
 type PurchaseLot struct {
 	BuyDate      string  `json:"buy_date"`
 	ProductName  string  `json:"product_name"`
@@ -66,7 +34,7 @@ type PurchaseLot struct {
 	BuyAmountEUR float64 `json:"buy_amount_eur"` // Purchase amount in EUR
 }
 
-// OptionSaleDetail represents the details of a closed option position (buy/sell pair)
+// OptionSaleDetail represents the details of a closed option position (buy/sell pair).
 type OptionSaleDetail struct {
 	OpenDate       string  `json:"open_date"`
 	CloseDate      string  `json:"close_date"`
@@ -87,7 +55,7 @@ type OptionSaleDetail struct {
 	CountryCode    string  `json:"country_code"`     // Country code derived from ISIN (e.g., "840 - United States of America (the)")
 }
 
-// OptionHolding represents an open option position (either long or short)
+// OptionHolding represents an open option position (either long or short).
 type OptionHolding struct {
 	OpenDate      string  `json:"open_date"`
 	ProductName   string  `json:"product_name"`
@@ -98,32 +66,3 @@ type OptionHolding struct {
 	OpenAmountEUR float64 `json:"open_amount_eur"` // Open amount in EUR
 	OpenOrderID   string  `json:"open_order_id"`   // Optional: Order ID of the opening transaction
 }
-
-// CashMovement represents a cash deposit or withdrawal
-type CashMovement struct {
-	Date     string  `json:"date"`     // Date of the movement
-	Type     string  `json:"type"`     // "deposit" or "withdrawal"
-	Amount   float64 `json:"amount"`   // Amount in original currency
-	Currency string  `json:"currency"` // Original currency
-}
-
-// ExchangeRate represents the structure of the exchange rate JSON file.
-type ExchangeRate struct {
-	Root struct {
-		Obs []struct {
-			TimePeriod string `json:"_TIME_PERIOD"`
-			ObsValue   string `json:"_OBS_VALUE"`
-			Ccy        string `json:"_CCY"`
-		} `json:"Obs"`
-	} `json:"root"`
-}
-
-// DividendCountrySummary holds the aggregated dividend amounts for a specific country in a year.
-type DividendCountrySummary struct {
-	GrossAmt float64 `json:"gross_amt"`
-	TaxedAmt float64 `json:"taxed_amt"`
-}
-
-// DividendTaxResult represents the final structure for the dividend tax summary endpoint.
-// map[Year]map[Country]DividendCountrySummary
-type DividendTaxResult map[string]map[string]DividendCountrySummary
