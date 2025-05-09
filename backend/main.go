@@ -10,7 +10,7 @@ import (
 
 	"github.com/username/taxfolio/backend/src/database"
 	"github.com/username/taxfolio/backend/src/handlers"
-	_ "github.com/username/taxfolio/backend/src/model" // Ensure model package is initialized (for DB interactions potentially)
+	_ "github.com/username/taxfolio/backend/src/model"
 	"github.com/username/taxfolio/backend/src/parsers"
 	"github.com/username/taxfolio/backend/src/processors"
 	"github.com/username/taxfolio/backend/src/security"
