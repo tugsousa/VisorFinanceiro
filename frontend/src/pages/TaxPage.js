@@ -179,7 +179,7 @@ export default function TaxPage() {
       )}
        {selectedYear === NO_YEAR_SELECTED && !loading && availableYears.length === 0 && !apiError && (
         <Typography sx={{textAlign: 'center', my:2}}>No data available. Please upload transactions.</Typography>
-      )}
+       )}
 
 
       {selectedYear && selectedYear !== NO_YEAR_SELECTED && (
@@ -228,7 +228,8 @@ export default function TaxPage() {
               </Table>
             </TableContainer>
             <div className="summary-container">
-              <table className="summary-table"> {/* This table uses TaxPage.css */}
+              {/* This table uses TaxPage.css */}
+              <table className="summary-table">
                 <thead><tr><th className="summary-header"></th><th className="summary-header"><span className="header-line">Rendimento Bruto</span></th><th className="summary-header"><span className="header-line">Imposto Pago no Estrangeiro</span><span className="header-separator">-</span><span className="header-line">No país da fonte</span></th><th className="summary-header"><span className="header-line">Imposto Pago no Estrangeiro</span><span className="header-separator">-</span><span className="header-line">Imposto Retido</span></th><th className="summary-header"><span className="header-line">Imposto Retido em Portugal</span><span className="header-separator">-</span><span className="header-line">Retenção na Fonte</span></th></tr></thead>
                 <tbody><tr><td className="control-sum">Soma de Controlo</td><td className="summary-value">{dividendTotals.rendimentoBruto.toFixed(2)} €</td><td className="summary-value">{dividendTotals.impostoFonte.toFixed(2)} €</td><td className="summary-value">{dividendTotals.impostoRetido.toFixed(2)} €</td><td className="summary-value">{dividendTotals.retencaoFonte.toFixed(2)} €</td></tr></tbody>
               </table>
@@ -280,7 +281,8 @@ export default function TaxPage() {
                 </Table>
               </TableContainer>
               <div className="summary-container">
-                <table className="summary-table"> {/* This table uses TaxPage.css */}
+                {/* This table uses TaxPage.css */}
+                <table className="summary-table">
                   <thead><tr><th className="summary-header"></th><th className="summary-header"><span className="header-line">Valor Realização</span></th><th className="summary-header"><span className="header-line">Valor Aquisição</span></th><th className="summary-header"><span className="header-line">Despesas e Encargos</span></th><th className="summary-header"><span className="header-line">Imposto pago no Estrangeiro</span></th></tr></thead>
                   <tbody><tr><td className="control-sum">Soma de Controlo</td><td className="summary-value">{stockTotals.realizacao.toFixed(2)} €</td><td className="summary-value">{stockTotals.aquisicao.toFixed(2)} €</td><td className="summary-value">{stockTotals.despesas.toFixed(2)} €</td><td className="summary-value">{stockTotals.imposto.toFixed(2)} €</td></tr></tbody>
                 </table>
@@ -315,7 +317,8 @@ export default function TaxPage() {
                 </Table>
               </TableContainer>
               <div className="summary-container">
-                <table className="summary-table"> {/* This table uses TaxPage.css */}
+                {/* This table uses TaxPage.css */}
+                <table className="summary-table">
                   <thead><tr><th className="summary-header"></th><th className="summary-header"><span className="header-line">Rendimento Líquido</span></th><th className="summary-header"><span className="header-line">Imposto pago no Estrangeiro</span></th></tr></thead>
                   <tbody><tr><td className="control-sum">Soma de Controlo</td><td className="summary-value">{optionTotals.rendimentoLiquido.toFixed(2)} €</td><td className="summary-value">{optionTotals.imposto.toFixed(2)} €</td></tr></tbody>
                 </table>

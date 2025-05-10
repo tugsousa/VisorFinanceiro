@@ -10,6 +10,7 @@ import OptionHoldingsSection from '../components/dashboardSections/OptionHolding
 import StockSalesSection from '../components/dashboardSections/StockSalesSection';
 import OptionSalesSection from '../components/dashboardSections/OptionSalesSection';
 import DividendsSection from '../components/dashboardSections/DividendsSection';
+import OverallPLChart from '../components/dashboardSections/OverallPLChart';
 import { ALL_YEARS_OPTION } from '../constants';
 import { getYearString, extractYearsFromData } from '../utils/dateUtils'; // Use new date utils
 import { formatCurrency } from '../utils/formatUtils'; // Use new format utils
@@ -134,7 +135,12 @@ export default function DashboardPage() {
             <Grid item xs={12} sm={6} md={3}><Typography sx={{ fontWeight: 'bold' }}>Total P/L: <Typography component="span" sx={{ fontWeight: 'bold', color: summaryPLs.totalPL >= 0 ? 'success.main' : 'error.main' }}>{formatCurrency(summaryPLs.totalPL)}</Typography></Typography></Grid>
         </Grid>
       </Paper>
-
+ {allDashboardData && (
+    <OverallPLChart 
+        allDashboardData={allDashboardData} 
+        selectedYear={selectedYear} 
+    />
+  )}
       <Typography variant="h5" sx={{mt: 2, mb: 1, borderBottom: 1, borderColor: 'divider', pb:1 }}>Current Holdings</Typography>
       <Grid container spacing={3}>
           <Grid item xs={12} lg={6}>
