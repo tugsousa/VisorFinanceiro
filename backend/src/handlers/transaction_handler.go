@@ -29,12 +29,12 @@ func (h *TransactionHandler) HandleGetProcessedTransactions(w http.ResponseWrite
 	log.Printf("Handling GetProcessedTransactions for userID: %d", userID)
 
 	rows, err := database.DB.Query(`
-		SELECT date, product_name, isin, quantity, original_quantity, price, order_type, 
+		SELECT id, date, product_name, isin, quantity, original_quantity, price, order_type, 
 		transaction_type, description, amount, currency, commission, order_id, 
 		exchange_rate, amount_eur, country_code 
 		FROM processed_transactions 
 		WHERE user_id = ?
-		ORDER BY date DESC`, userID)
+		ORDER BY date DESC, id DESC`, userID) // Added id to ORDER BY for more stability
 
 	if err != nil {
 		sendJSONError(w, fmt.Sprintf("Error querying transactions for userID %d: %v", userID, err), http.StatusInternalServerError)
@@ -46,6 +46,7 @@ func (h *TransactionHandler) HandleGetProcessedTransactions(w http.ResponseWrite
 	for rows.Next() {
 		var tx models.ProcessedTransaction
 		scanErr := rows.Scan(
+			&tx.ID, // Scan the new ID field
 			&tx.Date, &tx.ProductName, &tx.ISIN, &tx.Quantity, &tx.OriginalQuantity, &tx.Price,
 			&tx.OrderType, &tx.TransactionType, &tx.Description, &tx.Amount, &tx.Currency,
 			&tx.Commission, &tx.OrderID, &tx.ExchangeRate, &tx.AmountEUR, &tx.CountryCode)
@@ -65,6 +66,6 @@ func (h *TransactionHandler) HandleGetProcessedTransactions(w http.ResponseWrite
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(processedTransactions); err != nil {
 		log.Printf("Error generating JSON response for processed transactions userID %d: %v", userID, err)
-		http.Error(w, "Error generating JSON response", http.StatusInternalServerError)
+		// Avoid http.Error after header has been written by NewEncoder on success of some items
 	}
 }

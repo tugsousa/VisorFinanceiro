@@ -16,6 +16,7 @@ type RawTransaction struct {
 
 // ProcessedTransaction represents a transaction after initial processing and enrichment.
 type ProcessedTransaction struct {
+	ID               int64  `json:"id,omitempty"` // Add this field for the database primary key
 	Date             string // Use time.Time for dates
 	ProductName      string
 	ISIN             string

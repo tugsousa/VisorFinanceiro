@@ -1,24 +1,16 @@
-import React, { useState, useEffect, useMemo, useContext, useCallback } from 'react';
+// frontend/src/pages/TaxPage.js
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   Typography, Box, FormControl, InputLabel, Select, MenuItem, Table,
   TableBody, TableCell, TableContainer, TableHead, TableRow, Paper,
   styled, CircularProgress, Alert
 } from '@mui/material';
-import axios from 'axios';
-import { AuthContext } from '../context/AuthContext';
-import { API_ENDPOINTS, UI_TEXT, NO_YEAR_SELECTED } from '../constants';
+import { useTaxReportData } from '../hooks/useTaxReportData'; // Custom hook
+import { UI_TEXT, NO_YEAR_SELECTED } from '../constants';
+import { getYear, getMonth, getDay, extractYearsFromData } from '../utils/dateUtils';
+import './TaxPage.css'; // Import the external CSS file
 
-const summaryTableStyles = `
-  .summary-container { margin: 10px auto 20px auto; width: 60%; }
-  .summary-table { width: 100%; border-collapse: collapse; background-color:rgb(255, 255, 255); color: #50809b; font-family: Arial, sans-serif; }
-  .summary-table td { border: none; padding: 4px; font-size: 12px; line-height: 1.2; vertical-align: middle; }
-  .summary-header { border-bottom: 1px solid #ccc !important; text-align: center; padding-bottom: 3px; font-weight: bold; border-bottom: 1px solid #50809b !important; }
-  .summary-header .header-line { display: block; }
-  .summary-header .header-separator { display: block; content: " - "; white-space: pre; font-weight: normal; line-height: 0.5; }
-  .summary-value { text-align: right; }
-  .control-sum { text-align: left; font-weight: bold; }
-`;
-
+// Styled components remain the same
 const StyledTableCell = styled(TableCell)(({ theme }) => ({
   backgroundColor: '#e5f5ff', color: '#50809b', fontWeight: 'normal',
   border: '1px solid #0084cc', textAlign: 'center', padding: '1px 2px',
@@ -36,39 +28,9 @@ const StyledTableBodyCell = styled(TableCell)(({ theme, align = 'center' }) => (
   padding: '4px 6px', fontSize: '0.8rem', verticalAlign: 'middle',
 }));
 
-const parseDateRobust = (dateString) => {
-  if (!dateString || typeof dateString !== 'string') return null;
-  let parts = dateString.match(/^(\d{2})-(\d{2})-(\d{4})$/);
-  if (parts) {
-    const day = parseInt(parts[1], 10);
-    const month = parseInt(parts[2], 10) - 1;
-    const year = parseInt(parts[3], 10);
-    if (year > 1900 && year < 2100 && month >= 0 && month <= 11 && day >= 1 && day <= 31) {
-      const d = new Date(Date.UTC(year, month, day));
-      if (d.getUTCFullYear() === year && d.getUTCMonth() === month && d.getUTCDate() === day) return d;
-    }
-  }
-  parts = dateString.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-  if (parts) {
-    const year = parseInt(parts[1], 10);
-    const month = parseInt(parts[2], 10) - 1;
-    const day = parseInt(parts[3], 10);
-    if (year > 1900 && year < 2100 && month >= 0 && month <= 11 && day >= 1 && day <= 31) {
-      const d = new Date(Date.UTC(year, month, day));
-      if (d.getUTCFullYear() === year && d.getUTCMonth() === month && d.getUTCDate() === day) return d;
-    }
-  }
-  // console.warn(`TaxPage: Failed to parse date string: ${dateString}`); // Keep console logs minimal or conditional
-  return null;
-};
-
-const getYear = (dateString) => { const d = parseDateRobust(dateString); return d ? d.getUTCFullYear() : null; };
-const getMonth = (dateString) => { const d = parseDateRobust(dateString); return d ? String(d.getUTCMonth() + 1).padStart(2, '0') : ''; };
-const getDay = (dateString) => { const d = parseDateRobust(dateString); return d ? String(d.getUTCDate()).padStart(2, '0') : ''; };
-
 
 export default function TaxPage() {
-  const { token, csrfToken, fetchCsrfToken } = useContext(AuthContext);
+  const { data: taxApiData, loading, error: apiError } = useTaxReportData();
   const [selectedYear, setSelectedYear] = useState(NO_YEAR_SELECTED);
 
   const [allStockSaleDetails, setAllStockSaleDetails] = useState([]);
@@ -77,100 +39,42 @@ export default function TaxPage() {
 
   const [stockSaleDetails, setStockSaleDetails] = useState([]);
   const [optionSaleDetails, setOptionSaleDetails] = useState([]);
-  const [dividendTaxData, setDividendTaxData] = useState([]);
+  const [dividendTaxReportRows, setDividendTaxReportRows] = useState([]); // Renamed for clarity
 
   const [availableYears, setAvailableYears] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-
+  
   useEffect(() => {
-    const fetchData = async () => {
-      if (!token) {
-        setLoading(false);
-        setError(UI_TEXT.userNotAuthenticated);
+    if (taxApiData) {
+        setAllStockSaleDetails(taxApiData.stockSales || []);
+        setAllOptionSaleDetails(taxApiData.optionSales || []);
+        setAllDividendTaxData(taxApiData.dividendSummary || {});
+
+        const dateAccessors = { // Used by extractYearsFromData
+            stockSales: 'SaleDate',
+            optionSales: 'close_date',
+            dividendSummary: null, // Special handling in extractYearsFromData
+        };
+        const years = extractYearsFromData(taxApiData, dateAccessors);
+        // extractYearsFromData already returns NO_YEAR_SELECTED as the first element if needed
+        // but here we want actual years for the dropdown, then prepend NO_YEAR_SELECTED
+        const actualYears = years.filter(y => y !== NO_YEAR_SELECTED);
+        setAvailableYears(actualYears);
+        setSelectedYear(actualYears.length > 0 ? String(actualYears[0]) : NO_YEAR_SELECTED);
+    } else {
         setAllStockSaleDetails([]);
         setAllOptionSaleDetails([]);
         setAllDividendTaxData({});
-        setStockSaleDetails([]);
-        setOptionSaleDetails([]);
-        setDividendTaxData([]);
         setAvailableYears([]);
         setSelectedYear(NO_YEAR_SELECTED);
-        return;
-      }
-      setLoading(true);
-      setError(null);
-      let allYearsSet = new Set();
-      let fetchedStockSales = [];
-      let fetchedOptionSales = [];
-      let fetchedDividendSummary = {};
-
-      try {
-        const currentCsrfToken = csrfToken || await fetchCsrfToken();
-        if (!currentCsrfToken) throw new Error("CSRF token not available for tax data.");
-
-        const results = await Promise.allSettled([
-          axios.get(API_ENDPOINTS.STOCK_SALES, { headers: { 'Authorization': `Bearer ${token}`, 'X-CSRF-Token': currentCsrfToken }, withCredentials: true }),
-          axios.get(API_ENDPOINTS.OPTION_SALES, { headers: { 'Authorization': `Bearer ${token}`, 'X-CSRF-Token': currentCsrfToken }, withCredentials: true }),
-          axios.get(API_ENDPOINTS.DIVIDEND_TAX_SUMMARY, { headers: { 'Authorization': `Bearer ${token}`, 'X-CSRF-Token': currentCsrfToken }, withCredentials: true })
-        ]);
-        
-        const errors = [];
-        results.forEach((result, index) => {
-            if (result.status === 'rejected') {
-                const source = ['Stock Sales', 'Option Sales', 'Dividend Summary'][index];
-                errors.push(`${source}: ${result.reason?.response?.data?.error || result.reason?.message || 'Failed to fetch'}`);
-            }
-        });
-
-        if (results[0].status === 'fulfilled') {
-            fetchedStockSales = results[0].value.data || [];
-            setAllStockSaleDetails(fetchedStockSales);
-            fetchedStockSales.forEach(item => { const y = getYear(item.SaleDate); if (y) allYearsSet.add(y); });
-        } else {
-          setAllStockSaleDetails([]); // Clear if fetch failed
-        }
-        if (results[1].status === 'fulfilled') {
-            fetchedOptionSales = results[1].value.data?.OptionSaleDetails || [];
-            setAllOptionSaleDetails(fetchedOptionSales);
-            fetchedOptionSales.forEach(item => { const y = getYear(item.close_date); if (y) allYearsSet.add(y); });
-        } else {
-          setAllOptionSaleDetails([]); // Clear if fetch failed
-        }
-        if (results[2].status === 'fulfilled') {
-            fetchedDividendSummary = results[2].value.data || {};
-            setAllDividendTaxData(fetchedDividendSummary);
-            Object.keys(fetchedDividendSummary).forEach(yearStr => { const yN = parseInt(yearStr, 10); if (!isNaN(yN)) allYearsSet.add(yN); });
-        } else {
-          setAllDividendTaxData({}); // Clear if fetch failed
-        }
-        
-        if (errors.length > 0) setError(errors.join('; '));
-
-        const sortedYears = [...allYearsSet].map(Number).sort((a, b) => b - a);
-        setAvailableYears(sortedYears);
-        
-        setSelectedYear(sortedYears.length > 0 ? String(sortedYears[0]) : NO_YEAR_SELECTED);
-
-      } catch (e) {
-        console.error("Failed to fetch tax page data:", e);
-        setError(`Failed to load page data: ${e.message}`);
-        setAllStockSaleDetails([]);
-        setAllOptionSaleDetails([]);
-        setAllDividendTaxData({});
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchData();
-  }, [token, csrfToken, fetchCsrfToken]);
+    }
+  }, [taxApiData]);
 
 
   const filterDataForYear = useCallback((yearToFilter) => {
     if (yearToFilter === NO_YEAR_SELECTED || yearToFilter === '') {
         setStockSaleDetails([]);
         setOptionSaleDetails([]);
-        setDividendTaxData([]);
+        setDividendTaxReportRows([]);
         return;
     }
     const numYear = Number(yearToFilter);
@@ -184,11 +88,11 @@ export default function TaxPage() {
       rendimentoBruto: details.gross_amt || 0, impostoFonte: Math.abs(details.taxed_amt || 0),
       impostoRetido: 0, nifEntidade: '', retencaoFonte: 0,
     }));
-    setDividendTaxData(transformedDividends);
+    setDividendTaxReportRows(transformedDividends);
   }, [allStockSaleDetails, allOptionSaleDetails, allDividendTaxData]);
 
   useEffect(() => {
-    if (!loading) { // Only run if initial loading is complete
+    if (!loading) { 
         filterDataForYear(selectedYear);
     }
   }, [selectedYear, allStockSaleDetails, allOptionSaleDetails, allDividendTaxData, filterDataForYear, loading]);
@@ -197,7 +101,6 @@ export default function TaxPage() {
   const handleYearChange = (event) => {
     const yearValue = event.target.value;
     setSelectedYear(yearValue);
-    // filterDataForYear will be called by the useEffect hook above when selectedYear changes
   };
 
   const stockTotals = useMemo(() => stockSaleDetails.reduce(
@@ -229,7 +132,7 @@ export default function TaxPage() {
     }, { rendimentoLiquido: 0, imposto: 0 }
   ), [groupedOptionData]);
 
-  const dividendTotals = useMemo(() => dividendTaxData.reduce(
+  const dividendTotals = useMemo(() => dividendTaxReportRows.reduce(
     (acc, row) => {
       acc.rendimentoBruto += row.rendimentoBruto || 0;
       acc.impostoFonte += row.impostoFonte || 0;
@@ -237,16 +140,14 @@ export default function TaxPage() {
       acc.retencaoFonte += row.retencaoFonte || 0;
       return acc;
     }, { rendimentoBruto: 0, impostoFonte: 0, impostoRetido: 0, retencaoFonte: 0 }
-  ), [dividendTaxData]);
+  ), [dividendTaxReportRows]);
 
   if (loading) return <CircularProgress sx={{ display: 'block', margin: '20px auto' }} />;
-  // Display error only if it's not just a "no year selected" scenario after loading
-  if (error && (selectedYear !== NO_YEAR_SELECTED || availableYears.length === 0)) return <Alert severity="error" sx={{ m: 2 }}>{error}</Alert>;
-
+  if (apiError && (selectedYear !== NO_YEAR_SELECTED || availableYears.length === 0)) return <Alert severity="error" sx={{ m: 2 }}>{apiError}</Alert>;
 
   return (
     <Box sx={{ p: { xs: 1, sm: 2 } }}>
-      <style dangerouslySetInnerHTML={{ __html: summaryTableStyles }} />
+      {/* <style dangerouslySetInnerHTML={{ __html: summaryTableStyles }} /> REMOVED - CSS is now in TaxPage.css */}
       <Typography variant="h4" component="h1" gutterBottom sx={{ mb: 2 }}>
         Tax Report Information
       </Typography>
@@ -262,7 +163,9 @@ export default function TaxPage() {
             onChange={handleYearChange}
             disabled={availableYears.length === 0 && selectedYear === NO_YEAR_SELECTED}
           >
-            {availableYears.length === 0 && <MenuItem value={NO_YEAR_SELECTED} disabled>No Data</MenuItem>}
+            <MenuItem value={NO_YEAR_SELECTED} disabled={availableYears.length > 0}>
+                {availableYears.length === 0 ? "No Data" : "Select Year"}
+            </MenuItem>
             {availableYears.map(year => (
               <MenuItem key={year} value={String(year)}>{year}</MenuItem>
             ))}
@@ -270,11 +173,11 @@ export default function TaxPage() {
         </FormControl>
       </Box>
       
-      {error && <Alert severity="warning" sx={{ mb: 2 }}>{error}</Alert>}
+      {apiError && <Alert severity="warning" sx={{ mb: 2 }}>{apiError}</Alert>}
       {selectedYear === NO_YEAR_SELECTED && !loading && availableYears.length > 0 && (
         <Typography sx={{textAlign: 'center', my:2}}>Please select a year to view data.</Typography>
       )}
-       {selectedYear === NO_YEAR_SELECTED && !loading && availableYears.length === 0 && !error && (
+       {selectedYear === NO_YEAR_SELECTED && !loading && availableYears.length === 0 && !apiError && (
         <Typography sx={{textAlign: 'center', my:2}}>No data available. Please upload transactions.</Typography>
       )}
 
@@ -306,8 +209,8 @@ export default function TaxPage() {
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {dividendTaxData.length > 0 ? (
-                    dividendTaxData.map((row) => (
+                  {dividendTaxReportRows.length > 0 ? (
+                    dividendTaxReportRows.map((row) => (
                       <TableRow key={row.id}>
                         <StyledTableBodyCell>{row.linha}</StyledTableBodyCell>
                         <StyledTableBodyCell align="left">{row.codigo}</StyledTableBodyCell>
@@ -325,8 +228,8 @@ export default function TaxPage() {
               </Table>
             </TableContainer>
             <div className="summary-container">
-              <table className="summary-table">
-                <thead><tr><td className="summary-header"></td><td className="summary-header"><span className="header-line">Rendimento Bruto</span></td><td className="summary-header"><span className="header-line">Imposto Pago no Estrangeiro</span><span className="header-separator">-</span><span className="header-line">No país da fonte</span></td><td className="summary-header"><span className="header-line">Imposto Pago no Estrangeiro</span><span className="header-separator">-</span><span className="header-line">Imposto Retido</span></td><td className="summary-header"><span className="header-line">Imposto Retido em Portugal</span><span className="header-separator">-</span><span className="header-line">Retenção na Fonte</span></td></tr></thead>
+              <table className="summary-table"> {/* This table uses TaxPage.css */}
+                <thead><tr><th className="summary-header"></th><th className="summary-header"><span className="header-line">Rendimento Bruto</span></th><th className="summary-header"><span className="header-line">Imposto Pago no Estrangeiro</span><span className="header-separator">-</span><span className="header-line">No país da fonte</span></th><th className="summary-header"><span className="header-line">Imposto Pago no Estrangeiro</span><span className="header-separator">-</span><span className="header-line">Imposto Retido</span></th><th className="summary-header"><span className="header-line">Imposto Retido em Portugal</span><span className="header-separator">-</span><span className="header-line">Retenção na Fonte</span></th></tr></thead>
                 <tbody><tr><td className="control-sum">Soma de Controlo</td><td className="summary-value">{dividendTotals.rendimentoBruto.toFixed(2)} €</td><td className="summary-value">{dividendTotals.impostoFonte.toFixed(2)} €</td><td className="summary-value">{dividendTotals.impostoRetido.toFixed(2)} €</td><td className="summary-value">{dividendTotals.retencaoFonte.toFixed(2)} €</td></tr></tbody>
               </table>
             </div>
@@ -377,8 +280,8 @@ export default function TaxPage() {
                 </Table>
               </TableContainer>
               <div className="summary-container">
-                <table className="summary-table">
-                  <thead><tr><td className="summary-header"></td><td className="summary-header"><span className="header-line">Valor Realização</span></td><td className="summary-header"><span className="header-line">Valor Aquisição</span></td><td className="summary-header"><span className="header-line">Despesas e Encargos</span></td><td className="summary-header"><span className="header-line">Imposto pago no Estrangeiro</span></td></tr></thead>
+                <table className="summary-table"> {/* This table uses TaxPage.css */}
+                  <thead><tr><th className="summary-header"></th><th className="summary-header"><span className="header-line">Valor Realização</span></th><th className="summary-header"><span className="header-line">Valor Aquisição</span></th><th className="summary-header"><span className="header-line">Despesas e Encargos</span></th><th className="summary-header"><span className="header-line">Imposto pago no Estrangeiro</span></th></tr></thead>
                   <tbody><tr><td className="control-sum">Soma de Controlo</td><td className="summary-value">{stockTotals.realizacao.toFixed(2)} €</td><td className="summary-value">{stockTotals.aquisicao.toFixed(2)} €</td><td className="summary-value">{stockTotals.despesas.toFixed(2)} €</td><td className="summary-value">{stockTotals.imposto.toFixed(2)} €</td></tr></tbody>
                 </table>
               </div>
@@ -412,8 +315,8 @@ export default function TaxPage() {
                 </Table>
               </TableContainer>
               <div className="summary-container">
-                <table className="summary-table">
-                  <thead><tr><td className="summary-header"></td><td className="summary-header"><span className="header-line">Rendimento Líquido</span></td><td className="summary-header"><span className="header-line">Imposto pago no Estrangeiro</span></td></tr></thead>
+                <table className="summary-table"> {/* This table uses TaxPage.css */}
+                  <thead><tr><th className="summary-header"></th><th className="summary-header"><span className="header-line">Rendimento Líquido</span></th><th className="summary-header"><span className="header-line">Imposto pago no Estrangeiro</span></th></tr></thead>
                   <tbody><tr><td className="control-sum">Soma de Controlo</td><td className="summary-value">{optionTotals.rendimentoLiquido.toFixed(2)} €</td><td className="summary-value">{optionTotals.imposto.toFixed(2)} €</td></tr></tbody>
                 </table>
               </div>

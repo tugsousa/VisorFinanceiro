@@ -1,0 +1,53 @@
+/* frontend/src/pages/TaxPage.css */
+.summary-container {
+  margin: 10px auto 20px auto;
+  width: 80%; /* Increased width for better readability on wider screens */
+  max-width: 900px; /* Added max-width */
+}
+
+.summary-table {
+  width: 100%;
+  border-collapse: collapse;
+  background-color: rgb(255, 255, 255);
+  color: #50809b;
+  font-family: Arial, sans-serif;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.24); /* Added subtle shadow */
+}
+
+.summary-table th, /* Applied styles to th as well for consistency */
+.summary-table td {
+  border: 1px solid #ddd; /* Added subtle border for clarity */
+  padding: 6px 8px; /* Adjusted padding */
+  font-size: 12px;
+  line-height: 1.3; /* Adjusted line-height */
+  vertical-align: middle;
+}
+
+.summary-header { /* This class is for the <th> elements in the summary table */
+  border-bottom: 2px solid #50809b !important; /* Made border more prominent */
+  text-align: center;
+  padding-bottom: 5px; /* Adjusted padding */
+  font-weight: bold;
+  background-color: #f0f8ff; /* Light background for header */
+}
+
+/* Styles for the multi-line headers in the summary table, if needed */
+.summary-header .header-line {
+  display: block;
+}
+.summary-header .header-separator { /* If you use a separator span */
+  display: block;
+  white-space: pre;
+  font-weight: normal;
+  line-height: 0.5;
+}
+
+.summary-value {
+  text-align: right;
+}
+
+.control-sum { /* This class is for the first <td> in the summary totals row */
+  text-align: left;
+  font-weight: bold;
+  background-color: #f0f8ff; /* Light background for control sum label */
+}

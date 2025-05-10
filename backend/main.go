@@ -2,7 +2,7 @@ package main
 
 import (
 	"encoding/json"
-	stdlog "log" // Standard log for fatal errors before logger is fully up
+	stdlog "log"
 	"net/http"
 	"time"
 
@@ -10,7 +10,7 @@ import (
 	"github.com/username/taxfolio/backend/src/database"
 	"github.com/username/taxfolio/backend/src/handlers"
 	"github.com/username/taxfolio/backend/src/logger"
-	_ "github.com/username/taxfolio/backend/src/model" // Ensure model package (now split into files) is implicitly used
+	_ "github.com/username/taxfolio/backend/src/model"
 	"github.com/username/taxfolio/backend/src/parsers"
 	"github.com/username/taxfolio/backend/src/processors"
 	"github.com/username/taxfolio/backend/src/security"
@@ -38,7 +38,7 @@ func rateLimitMiddleware(next http.Handler) http.Handler {
 func enableCORS(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		origin := r.Header.Get("Origin")
-		if origin == "http://localhost:3000" {
+		if origin == "http://localhost:3000" || origin == "" {
 			w.Header().Set("Access-Control-Allow-Origin", origin)
 			w.Header().Set("Access-Control-Allow-Credentials", "true")
 			w.Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS, PUT, DELETE, PATCH")
@@ -97,54 +97,60 @@ func main() {
 		stockProcessor, optionProcessor, cashMovementProcessor,
 	)
 	uploadHandler := handlers.NewUploadHandler(uploadService)
-	portfolioHandler := handlers.NewPortfolioHandler(uploadService) // New handler
-	dividendHandler := handlers.NewDividendHandler(uploadService)   // New handler
-	txHandler := handlers.NewTransactionHandler()                   // New handler
+	portfolioHandler := handlers.NewPortfolioHandler(uploadService)
+	dividendHandler := handlers.NewDividendHandler(uploadService)
+	txHandler := handlers.NewTransactionHandler()
 
 	logger.L.Info("Configuring routes...")
 	rootMux := http.NewServeMux()
-	rootMux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/" && r.Method == http.MethodGet {
-			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode(map[string]string{"message": "TAXFOLIO Backend is running"})
-		} else if r.URL.Path == "/" && r.Method != http.MethodGet {
-			http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
-		} else {
-			http.NotFound(w, r)
-		}
-	})
 
+	// API Router for /api paths
 	apiRouter := http.NewServeMux()
+
 	authSubRouter := http.NewServeMux()
 	authSubRouter.HandleFunc("GET /csrf", handlers.GetCSRFToken)
 	authSubRouter.HandleFunc("POST /login", userHandler.LoginUserHandler)
 	authSubRouter.HandleFunc("POST /register", userHandler.RegisterUserHandler)
 	authSubRouter.HandleFunc("POST /refresh", userHandler.RefreshTokenHandler)
+	authSubRouter.HandleFunc("POST /logout", userHandler.AuthMiddleware(userHandler.LogoutUserHandler))
+	// Apply CSRF middleware to the entire authSubRouter
 	apiRouter.Handle("/auth/", http.StripPrefix("/auth", handlers.CSRFMiddleware(config.Cfg.CSRFAuthKey)(authSubRouter)))
 
+	// Other API routes requiring CSRF and Auth
 	csrfAuthMw := handlers.CSRFMiddleware(config.Cfg.CSRFAuthKey)
-
-	// Upload routes
 	apiRouter.Handle("POST /upload", csrfAuthMw(http.HandlerFunc(userHandler.AuthMiddleware(uploadHandler.HandleUpload))))
 	apiRouter.Handle("GET /dashboard-data", csrfAuthMw(http.HandlerFunc(userHandler.AuthMiddleware(uploadHandler.HandleGetDashboardData))))
-
-	// Transaction routes
 	apiRouter.Handle("GET /transactions/processed", csrfAuthMw(http.HandlerFunc(userHandler.AuthMiddleware(txHandler.HandleGetProcessedTransactions))))
-
-	// Portfolio routes
 	apiRouter.Handle("GET /holdings/stocks", csrfAuthMw(http.HandlerFunc(userHandler.AuthMiddleware(portfolioHandler.HandleGetStockHoldings))))
 	apiRouter.Handle("GET /holdings/options", csrfAuthMw(http.HandlerFunc(userHandler.AuthMiddleware(portfolioHandler.HandleGetOptionHoldings))))
 	apiRouter.Handle("GET /stock-sales", csrfAuthMw(http.HandlerFunc(userHandler.AuthMiddleware(portfolioHandler.HandleGetStockSales))))
 	apiRouter.Handle("GET /option-sales", csrfAuthMw(http.HandlerFunc(userHandler.AuthMiddleware(portfolioHandler.HandleGetOptionSales))))
-
-	// Dividend routes
 	apiRouter.Handle("GET /dividend-tax-summary", csrfAuthMw(http.HandlerFunc(userHandler.AuthMiddleware(dividendHandler.HandleGetDividendTaxSummary))))
 	apiRouter.Handle("GET /dividend-transactions", csrfAuthMw(http.HandlerFunc(userHandler.AuthMiddleware(dividendHandler.HandleGetDividendTransactions))))
 
-	// Auth related (logout is authenticated)
-	apiRouter.Handle("POST /logout", csrfAuthMw(http.HandlerFunc(userHandler.AuthMiddleware(userHandler.LogoutUserHandler))))
+	// Catch-all for /api/ paths NOT matched above (should be last on apiRouter)
+	apiRouter.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		logger.L.Warn("API route not found", "method", r.Method, "path", r.URL.Path)
+		http.NotFound(w, r)
+	})
 
+	// Mount the /api router under the rootMux.
+	// Requests to /api/... will be routed to apiRouter.
 	rootMux.Handle("/api/", http.StripPrefix("/api", apiRouter))
+
+	// Specific handler for GET / (root path)
+	// This should be registered AFTER /api/ so /api/ takes precedence for its subtree.
+	// Or, ensure its pattern is distinct. If /api/ is handled, this / will only match exact "/" or other non-/api/ paths.
+	rootMux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/" && r.Method == http.MethodGet {
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(map[string]string{"message": "TAXFOLIO Backend is running"})
+		} else {
+			// Any other path not /api/ and not GET / will be a 404.
+			logger.L.Warn("Root level path not found", "method", r.Method, "path", r.URL.Path)
+			http.NotFound(w, r)
+		}
+	})
 
 	logger.L.Info("Applying global middleware...")
 	finalHandler := enableCORS(rateLimitMiddleware(rootMux))

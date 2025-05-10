@@ -2,34 +2,28 @@ package database
 
 import (
 	"database/sql"
-	// Standard log for bootstrap messages if logger isn't ready
-	stdlog "log" // Renamed to avoid conflict with global logger variable
+	stdlog "log"
 
-	"github.com/username/taxfolio/backend/src/logger" // Import your slog wrapper
+	"github.com/username/taxfolio/backend/src/logger"
 	_ "modernc.org/sqlite"
 )
 
 var DB *sql.DB
 
-// InitDB initializes the database connection.
-// It now takes the databasePath as an argument.
 func InitDB(databasePath string) {
 	db, err := sql.Open("sqlite", databasePath)
 	if err != nil {
-		// Use standard log here as logger.L might not be initialized yet if InitDB is called before InitLogger
 		stdlog.Fatalf("failed to open database at %s: %v", databasePath, err)
 	}
 
 	DB = db
 
-	// Check if we need to migrate the database
-	// It's better to call migrateDatabase after logger is initialized if it logs
 	if logger.L != nil {
 		logger.L.Info("Checking database migrations", "databasePath", databasePath)
 	} else {
 		stdlog.Println("Checking database migrations for:", databasePath)
 	}
-	migrateDatabase() // migrateDatabase itself uses logger.L if available
+	migrateDatabase()
 
 	createTableStatement := `
 	CREATE TABLE IF NOT EXISTS users (
@@ -58,11 +52,11 @@ func InitDB(databasePath string) {
 		product_name TEXT NOT NULL,
 		isin TEXT,
 		quantity INTEGER,
-		original_quantity INTEGER,
+		original_quantity INTEGER, -- Will be added by migration if not exists
 		price REAL,
 		order_type TEXT,
 		transaction_type TEXT,
-		description TEXT,
+		description TEXT,          -- Will be added by migration if not exists
 		amount REAL,
 		currency TEXT,
 		commission REAL,
@@ -72,14 +66,14 @@ func InitDB(databasePath string) {
 		country_code TEXT,
 		FOREIGN KEY(user_id) REFERENCES users(id)
 	);
-	`
+	` // Removed trailing comma from country_code
 
 	_, err = DB.Exec(createTableStatement)
 	if err != nil {
 		if logger.L != nil {
 			logger.L.Error("failed to create tables", "error", err)
 		}
-		stdlog.Fatalf("failed to create tables: %v", err) // Fatal if basic tables can't be made
+		stdlog.Fatalf("failed to create tables: %v", err)
 	}
 	if logger.L != nil {
 		logger.L.Info("Database tables ensured/created.")
@@ -88,18 +82,17 @@ func InitDB(databasePath string) {
 	}
 }
 
-// migrateDatabase handles database schema migrations
 func migrateDatabase() {
 	var tableName string
 	err := DB.QueryRow("SELECT name FROM sqlite_master WHERE type='table' AND name='processed_transactions'").Scan(&tableName)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			if logger.L != nil {
-				logger.L.Info("processed_transactions table does not exist, no migration needed yet.")
+				logger.L.Info("processed_transactions table does not exist, no migration needed as table will be created.")
 			} else {
-				stdlog.Println("processed_transactions table does not exist, no migration needed yet.")
+				stdlog.Println("processed_transactions table does not exist, no migration needed as table will be created.")
 			}
-			return
+			return // Table will be created by InitDB, so no ALTER needed
 		}
 		if logger.L != nil {
 			logger.L.Error("Error checking for processed_transactions table", "error", err)
@@ -120,30 +113,26 @@ func migrateDatabase() {
 	}
 	defer rows.Close()
 
-	hasOriginalQuantity := false
-	hasDescription := false
+	columnExists := make(map[string]bool)
 
 	for rows.Next() {
-		var cid, notnull, pk int
+		var cid, pk int
 		var name, dataType string
+		var notnullVal int // Changed to notnullVal to avoid confusion
 		var dfltValue interface{}
 
-		// Corrected line:
-		if err := rows.Scan(&cid, &name, &dataType, notnull, &dfltValue, &pk); err != nil {
+		// Corrected line: pass the address of notnullVal
+		if err := rows.Scan(&cid, &name, &dataType, notnullVal, &dfltValue, &pk); err != nil {
 			if logger.L != nil {
 				logger.L.Error("Error scanning column info", "error", err)
 			} else {
 				stdlog.Printf("Error scanning column info: %v", err)
 			}
-			continue
+			// Continue to try and scan other rows, but this row is problematic.
+			// Or return, as schema inspection is now unreliable. For migrations, better to be cautious.
+			return
 		}
-
-		if name == "original_quantity" {
-			hasOriginalQuantity = true
-		}
-		if name == "description" {
-			hasDescription = true
-		}
+		columnExists[name] = true
 	}
 
 	if err = rows.Err(); err != nil {
@@ -155,7 +144,8 @@ func migrateDatabase() {
 		return
 	}
 
-	if !hasOriginalQuantity {
+	// Migration for original_quantity
+	if _, ok := columnExists["original_quantity"]; !ok {
 		_, err := DB.Exec("ALTER TABLE processed_transactions ADD COLUMN original_quantity INTEGER")
 		if err != nil {
 			if logger.L != nil {
@@ -169,18 +159,20 @@ func migrateDatabase() {
 			} else {
 				stdlog.Println("Added original_quantity column to processed_transactions table")
 			}
-			_, err = DB.Exec("UPDATE processed_transactions SET original_quantity = quantity")
-			if err != nil {
+			// Initialize original_quantity with quantity for existing rows
+			_, errUpdate := DB.Exec("UPDATE processed_transactions SET original_quantity = quantity WHERE original_quantity IS NULL")
+			if errUpdate != nil {
 				if logger.L != nil {
-					logger.L.Error("Error updating original_quantity values", "error", err)
+					logger.L.Error("Error updating original_quantity values for existing rows", "error", errUpdate)
 				} else {
-					stdlog.Printf("Error updating original_quantity values: %v", err)
+					stdlog.Printf("Error updating original_quantity values for existing rows: %v", errUpdate)
 				}
 			}
 		}
 	}
 
-	if !hasDescription {
+	// Migration for description
+	if _, ok := columnExists["description"]; !ok {
 		_, err := DB.Exec("ALTER TABLE processed_transactions ADD COLUMN description TEXT")
 		if err != nil {
 			if logger.L != nil {

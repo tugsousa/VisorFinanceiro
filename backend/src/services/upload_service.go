@@ -53,15 +53,12 @@ func fetchUserProcessedTransactions(userID int64) ([]models.ProcessedTransaction
 	startTime := time.Now()
 
 	rows, err := database.DB.Query(`
-		SELECT date, product_name, isin, quantity, original_quantity, price, order_type, 
+		SELECT id, date, product_name, isin, quantity, original_quantity, price, order_type, 
 		transaction_type, description, amount, currency, commission, order_id, 
 		exchange_rate, amount_eur, country_code 
 		FROM processed_transactions 
 		WHERE user_id = ?
-		ORDER BY date ASC, SUBSTR(order_id, -6) ASC`, userID) // Order by date, then by a stable part of order_id
-	// Using SUBSTR(order_id, -6) or similar if OrderID has a timestamp/sequence at the end can help ensure
-	// transactions on the same day are processed in a consistent order. Adjust if your OrderID has a different structure.
-	// If OrderID is purely random or not sortable for intra-day sequence, `date ASC` is the primary sort.
+		ORDER BY date ASC, id ASC`, userID) // Order by date, then by id for stability
 
 	if err != nil {
 		return nil, fmt.Errorf("error querying transactions for userID %d: %w", userID, err)
@@ -72,13 +69,12 @@ func fetchUserProcessedTransactions(userID int64) ([]models.ProcessedTransaction
 	for rows.Next() {
 		var tx models.ProcessedTransaction
 		scanErr := rows.Scan(
+			&tx.ID, // Scan the new ID field
 			&tx.Date, &tx.ProductName, &tx.ISIN, &tx.Quantity, &tx.OriginalQuantity, &tx.Price,
 			&tx.OrderType, &tx.TransactionType, &tx.Description, &tx.Amount, &tx.Currency,
 			&tx.Commission, &tx.OrderID, &tx.ExchangeRate, &tx.AmountEUR, &tx.CountryCode)
 		if scanErr != nil {
 			log.Printf("Error scanning transaction for userID %d: %v", userID, scanErr)
-			// Decide: return error immediately, or collect valid ones and log errors?
-			// For now, returning error to ensure data integrity for calculations.
 			return nil, fmt.Errorf("error scanning transaction row for userID %d: %w", userID, scanErr)
 		}
 		transactions = append(transactions, tx)

@@ -1,94 +1,44 @@
-import React, { useState, useEffect, useMemo, useContext } from 'react';
+// frontend/src/pages/DashboardPage.js
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   Typography, Box, FormControl, InputLabel, Select, MenuItem,
   Paper, CircularProgress, Grid, Divider, Alert 
 } from '@mui/material';
-import axios from 'axios';
-import { AuthContext } from '../context/AuthContext';
+import { useDashboardData } from '../hooks/useDashboardData'; // Custom hook
 import StockHoldingsSection from '../components/dashboardSections/StockHoldingsSection';
 import OptionHoldingsSection from '../components/dashboardSections/OptionHoldingsSection';
 import StockSalesSection from '../components/dashboardSections/StockSalesSection';
 import OptionSalesSection from '../components/dashboardSections/OptionSalesSection';
 import DividendsSection from '../components/dashboardSections/DividendsSection';
-import { API_ENDPOINTS, ALL_YEARS_OPTION, UI_TEXT } from '../constants'; // Removed NO_YEAR_SELECTED
-
-const getYearFromDate = (dateString) => {
-  if (!dateString || typeof dateString !== 'string') return null;
-  // Try parsing DD-MM-YYYY first
-  let parts = dateString.match(/^(\d{2})-(\d{2})-(\d{4})$/);
-  if (parts) return parseInt(parts[3], 10);
-  // Try parsing YYYY-MM-DD (ISO-like, common from JS Date.toISOString().split('T')[0])
-  parts = dateString.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-  if (parts) return parseInt(parts[1], 10);
-  // Fallback for simple year string if it's just a number
-  if (/^\d{4}$/.test(dateString)) return parseInt(dateString, 10);
-  return null;
-};
-
-const formatCurrency = (value) => {
-    return new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(value || 0);
-};
+import { ALL_YEARS_OPTION } from '../constants';
+import { getYearString, extractYearsFromData } from '../utils/dateUtils'; // Use new date utils
+import { formatCurrency } from '../utils/formatUtils'; // Use new format utils
 
 export default function DashboardPage() {
-  const { token, csrfToken, fetchCsrfToken } = useContext(AuthContext);
-  const [allDashboardData, setAllDashboardData] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const { data: allDashboardData, loading, error } = useDashboardData();
   const [selectedYear, setSelectedYear] = useState(ALL_YEARS_OPTION);
   const [availableYears, setAvailableYears] = useState([ALL_YEARS_OPTION]);
 
   useEffect(() => {
-    const fetchData = async () => {
-      if (!token) {
-        setLoading(false);
-        setError(UI_TEXT.userNotAuthenticated);
-        return;
-      }
-      setLoading(true);
-      setError(null);
-      try {
-        const currentCsrfToken = csrfToken || await fetchCsrfToken();
-        if (!currentCsrfToken) throw new Error("CSRF token not available for dashboard data.");
+    if (allDashboardData) {
+      const dateAccessors = {
+        StockHoldings: 'buy_date',
+        StockSaleDetails: 'SaleDate',
+        OptionHoldings: 'open_date',
+        OptionSaleDetails: 'close_date',
+        DividendTaxResult: null, // Special handling in extractYearsFromData
+      };
+      const years = extractYearsFromData(allDashboardData, dateAccessors);
+      const actualYears = years.filter(y => y !== ALL_YEARS_OPTION); // NO_YEAR_SELECTED changed to ALL_YEARS_OPTION
+      
+      setAvailableYears([ALL_YEARS_OPTION, ...actualYears]); // Ensure ALL_YEARS_OPTION is first
+      setSelectedYear(actualYears.length > 0 ? String(actualYears[0]) : ALL_YEARS_OPTION);
+    } else {
+      setAvailableYears([ALL_YEARS_OPTION]);
+      setSelectedYear(ALL_YEARS_OPTION);
+    }
+  }, [allDashboardData]);
 
-        const response = await axios.get(API_ENDPOINTS.DASHBOARD_DATA, {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'X-CSRF-Token': currentCsrfToken,
-          },
-          withCredentials: true,
-        });
-
-        const data = response.data;
-        setAllDashboardData(data);
-
-        const yearsSet = new Set();
-        data?.StockHoldings?.forEach(h => { const y = getYearFromDate(h.buy_date); if (y) yearsSet.add(y); });
-        data?.StockSaleDetails?.forEach(s => { const y = getYearFromDate(s.SaleDate); if (y) yearsSet.add(y); });
-        data?.OptionHoldings?.forEach(o => { const y = getYearFromDate(o.open_date); if (y) yearsSet.add(y); });
-        data?.OptionSaleDetails?.forEach(o => { const y = getYearFromDate(o.close_date); if (y) yearsSet.add(y); });
-        if (data?.DividendTaxResult) {
-          Object.keys(data.DividendTaxResult).forEach(yearStr => {
-            const yearNum = parseInt(yearStr, 10);
-            if(!isNaN(yearNum)) yearsSet.add(yearNum);
-          });
-        }
-        
-        const sortedYears = Array.from(yearsSet).sort((a, b) => b - a); // Descending
-        setAvailableYears([ALL_YEARS_OPTION, ...sortedYears]);
-        
-        // Set selectedYear to the latest available year, or 'all' if no specific years
-        setSelectedYear(sortedYears.length > 0 ? String(sortedYears[0]) : ALL_YEARS_OPTION);
-
-      } catch (e) {
-        console.error("Failed to fetch dashboard data:", e);
-        setError(`Failed to load dashboard data: ${e.response?.data?.error || e.message}`);
-        setAllDashboardData(null);
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchData();
-  }, [token, csrfToken, fetchCsrfToken]);
 
   const handleYearChange = (event) => {
     setSelectedYear(event.target.value);
@@ -113,12 +63,10 @@ export default function DashboardPage() {
 
     const numSelectedYear = Number(selectedYear);
     return {
-      // Holdings are generally current, but if your backend filters them by year for this endpoint, adjust accordingly.
-      // For this example, assuming holdings are always "current" irrespective of year filter.
       StockHoldings: allDashboardData.StockHoldings || [], 
       OptionHoldings: allDashboardData.OptionHoldings || [], 
-      StockSaleDetails: (allDashboardData.StockSaleDetails || []).filter(s => getYearFromDate(s.SaleDate) === numSelectedYear),
-      OptionSaleDetails: (allDashboardData.OptionSaleDetails || []).filter(o => getYearFromDate(o.close_date) === numSelectedYear),
+      StockSaleDetails: (allDashboardData.StockSaleDetails || []).filter(s => getYearString(s.SaleDate) === selectedYear),
+      OptionSaleDetails: (allDashboardData.OptionSaleDetails || []).filter(o => getYearString(o.close_date) === selectedYear),
       DividendTaxResult: allDashboardData.DividendTaxResult?.[selectedYear] 
         ? { [selectedYear]: allDashboardData.DividendTaxResult[selectedYear] } 
         : {},
@@ -130,13 +78,12 @@ export default function DashboardPage() {
     const optionPL = (filteredData.OptionSaleDetails || []).reduce((sum, sale) => sum + (sale.delta || 0), 0);
     
     let dividendPL = 0;
-    // DividendTaxResult is { "year": { "country": { gross_amt, taxed_amt } } }
     const dividendDataToProcess = selectedYear === ALL_YEARS_OPTION 
-        ? filteredData.DividendTaxResult // Process all years
-        : (filteredData.DividendTaxResult[selectedYear] ? { [selectedYear]: filteredData.DividendTaxResult[selectedYear] } : {}); // Process only selected year
+        ? filteredData.DividendTaxResult
+        : (filteredData.DividendTaxResult[selectedYear] ? { [selectedYear]: filteredData.DividendTaxResult[selectedYear] } : {});
 
-    for (const yearData of Object.values(dividendDataToProcess)) { // Iterates over year objects
-        for (const countryData of Object.values(yearData)) { // Iterates over country objects within a year
+    for (const yearData of Object.values(dividendDataToProcess)) {
+        for (const countryData of Object.values(yearData)) {
             dividendPL += (countryData.gross_amt || 0) + (countryData.taxed_amt || 0);
         }
     }
@@ -150,7 +97,7 @@ export default function DashboardPage() {
   if (!allDashboardData && !loading) return <Typography sx={{ textAlign: 'center', mt: 4 }}>No data loaded. Please upload a file first.</Typography>;
 
   return (
-    <Box sx={{ p: { xs: 1, sm: 2, md: 3 } }}> {/* Responsive padding */}
+    <Box sx={{ p: { xs: 1, sm: 2, md: 3 } }}>
       <Typography variant="h4" component="h1" gutterBottom>
         Financial Dashboard
       </Typography>
@@ -194,6 +141,7 @@ export default function DashboardPage() {
             <StockHoldingsSection holdingsData={filteredData.StockHoldings} selectedYear={selectedYear} />
           </Grid>
           <Grid item xs={12} lg={6}>
+            {/* Assuming OptionHoldingsSection exists and is similar to StockHoldingsSection */}
             <OptionHoldingsSection holdingsData={filteredData.OptionHoldings} selectedYear={selectedYear} />
           </Grid>
       </Grid>

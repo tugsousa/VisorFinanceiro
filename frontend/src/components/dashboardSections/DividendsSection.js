@@ -1,112 +1,36 @@
-import React, { useMemo, useState, useEffect, useContext } from 'react';
+// frontend/src/components/dashboardSections/DividendsSection.js
+import React, { useMemo } from 'react';
 import {
   Typography, Paper, Table, TableBody, TableCell,
   TableContainer, TableHead, TableRow, Box, CircularProgress, Alert
 } from '@mui/material';
 import { Bar } from 'react-chartjs-2';
 import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend } from 'chart.js';
-import axios from 'axios';
-import { AuthContext } from '../../context/AuthContext';
-import { API_ENDPOINTS, ALL_YEARS_OPTION, MONTH_NAMES_CHART, UI_TEXT } from '../../constants'; // Import constants
+import { useDividendTransactions } from '../../hooks/useDividendTransactions'; // Custom hook
+import { ALL_YEARS_OPTION, MONTH_NAMES_CHART, UI_TEXT } from '../../constants';
+import { getYearString, getMonthIndex } from '../../utils/dateUtils'; // Use new date utils
+import { generateDistinctColor, getBaseProductName } from '../../utils/chartUtils'; // Use new chart utils
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend);
 
-const parseDateDDMMYYYY = (dateString) => {
-    if (!dateString || typeof dateString !== 'string') return null;
-    const parts = dateString.match(/^(\d{1,2})-(\d{1,2})-(\d{4})/);
-    if (parts) {
-        const day = parseInt(parts[1], 10);
-        const month = parseInt(parts[2], 10) - 1;
-        const year = parseInt(parts[3], 10);
-        if (!isNaN(day) && !isNaN(month) && !isNaN(year) && month >= 0 && month <= 11 && day >= 1 && day <= 31) {
-            const date = new Date(Date.UTC(year, month, day));
-            if (!isNaN(date.getTime()) && date.getUTCFullYear() === year && date.getUTCMonth() === month && date.getUTCDate() === day) {
-                return date;
-            }
-        }
-    }
-    return null;
-};
-
-const getChartYear = (dateString) => {
-    const date = parseDateDDMMYYYY(dateString);
-    return date ? date.getUTCFullYear() : null;
-};
-
-const getChartMonth = (dateString) => {
-    const date = parseDateDDMMYYYY(dateString);
-    return date ? date.getUTCMonth() + 1 : null;
-};
-// const MONTH_NAMES_CHART is now in constants.js
-
-const GOLDEN_ANGLE_PROD_COLOR = 137.5;
-const getColorForProduct = (index, total) => {
-  if (total <= 0) return 'rgba(200, 200, 200, 0.7)';
-  const hue = (index * GOLDEN_ANGLE_PROD_COLOR + 120) % 360;
-  const saturation = 65 + (index * 6) % 26;
-  const lightness = 60 + (index * 5) % 21;
-  return `hsla(${hue.toFixed(0)}, ${saturation}%, ${lightness}%, 0.75)`;
-};
-const getBorderColorForProduct = (index, total) => {
-   if (total <= 0) return 'rgba(150, 150, 150, 1)';
-   const hue = (index * GOLDEN_ANGLE_PROD_COLOR + 120) % 360;
-   const saturation = 75 + (index * 6) % 21;
-   const lightness = 45 + (index * 5) % 16;
-   return `hsl(${hue.toFixed(0)}, ${saturation}%, ${lightness}%)`;
-};
-
 export default function DividendsSection({ dividendSummaryData, selectedYear, hideIndividualTotalPL = false }) {
-  const { token, csrfToken, fetchCsrfToken } = useContext(AuthContext);
-  const [rawDividendTransactions, setRawDividendTransactions] = useState([]);
-  const [chartLoading, setChartLoading] = useState(true);
-  const [chartError, setChartError] = useState(null);
-
-  useEffect(() => {
-    const fetchDividendTransactions = async () => {
-      if (!token) {
-        setChartLoading(false);
-        setChartError(UI_TEXT.userNotAuthenticated); // Use constant
-        setRawDividendTransactions([]);
-        return;
-      }
-      setChartLoading(true);
-      setChartError(null);
-      try {
-        const currentCsrfToken = csrfToken || await fetchCsrfToken();
-        if(!currentCsrfToken) throw new Error("CSRF token not available for dividend transactions.");
-
-        const response = await axios.get(API_ENDPOINTS.DIVIDEND_TRANSACTIONS, { // Use constant
-            headers: { 'Authorization': `Bearer ${token}`, 'X-CSRF-Token': currentCsrfToken, },
-            withCredentials: true,
-        });
-        setRawDividendTransactions(response.data || []);
-      } catch (e) {
-        console.error("Failed to fetch raw dividend transactions for chart:", e);
-        setChartError(`Chart data error: ${e.response?.data?.error || e.message}`);
-        setRawDividendTransactions([]);
-      } finally {
-        setChartLoading(false);
-      }
-    };
-    fetchDividendTransactions();
-  }, [token, csrfToken, fetchCsrfToken]);
-
+  const { 
+    dividendTransactions: rawDividendTransactions, 
+    loading: chartLoading, 
+    error: chartError 
+  } = useDividendTransactions();
 
   const processedDividendData = useMemo(() => {
     const rows = [];
     let totalGross = 0;
     let totalTax = 0;
-    // dividendSummaryData is expected in format: { "year": { "country": { gross_amt, taxed_amt } } }
-    // If selectedYear is 'all', we need to aggregate across all years.
-    // If selectedYear is specific, dividendSummaryData should ideally already be filtered for that year.
     
     const dataToProcess = (selectedYear === ALL_YEARS_OPTION || !selectedYear)
-        ? dividendSummaryData // If 'all' or no year, process everything passed
-        : (dividendSummaryData?.[selectedYear] ? { [selectedYear]: dividendSummaryData[selectedYear] } : {}); // Process only selected year
-
+        ? dividendSummaryData
+        : (dividendSummaryData?.[selectedYear] ? { [selectedYear]: dividendSummaryData[selectedYear] } : {});
 
     for (const [year, countries] of Object.entries(dataToProcess)) {
-      if (selectedYear !== ALL_YEARS_OPTION && year !== selectedYear && selectedYear !== '') continue; // Ensure correct filtering if not already done
+      if (selectedYear !== ALL_YEARS_OPTION && year !== selectedYear && selectedYear !== '') continue; 
 
       for (const [country, amounts] of Object.entries(countries)) {
         const gross = amounts.gross_amt || 0;
@@ -125,27 +49,27 @@ export default function DividendsSection({ dividendSummaryData, selectedYear, hi
   const productChartData = useMemo(() => {
     const filteredForChart = rawDividendTransactions.filter(tx => {
         const orderTypeLower = tx.OrderType?.toLowerCase();
-        const isDividendType = orderTypeLower === 'dividend';
+        const isDividendType = orderTypeLower === 'dividend'; // Only show gross dividends in this chart
         if (!isDividendType) return false;
-        if (selectedYear === ALL_YEARS_OPTION || !selectedYear) return true; // Use constant
-        const transactionYear = getChartYear(tx.Date);
-        return transactionYear === Number(selectedYear);
+        if (selectedYear === ALL_YEARS_OPTION || !selectedYear) return true;
+        const transactionYear = getYearString(tx.Date);
+        return transactionYear === selectedYear;
     });
 
     if (filteredForChart.length === 0) return { labels: [], datasets: [] };
 
-    const uniqueProductNames = [...new Set(filteredForChart.map(tx => tx.ProductName || 'Unknown Product'))].sort();
+    const uniqueProductNames = [...new Set(filteredForChart.map(tx => getBaseProductName(tx.ProductName)))].sort();
     const datasets = [];
     let labels = [];
 
-    if (selectedYear === ALL_YEARS_OPTION || !selectedYear) { // Use constant
+    if (selectedYear === ALL_YEARS_OPTION || !selectedYear) {
       const yearlyTotalsByProduct = {};
       const allYearsInData = new Set();
       filteredForChart.forEach(tx => {
-        const year = getChartYear(tx.Date);
-        const productName = tx.ProductName || 'Unknown Product';
-        if (year && tx.AmountEUR != null) { // Check for null or undefined AmountEUR
-          allYearsInData.add(String(year));
+        const year = getYearString(tx.Date);
+        const productName = getBaseProductName(tx.ProductName);
+        if (year && tx.AmountEUR != null) {
+          allYearsInData.add(year);
           if (!yearlyTotalsByProduct[year]) yearlyTotalsByProduct[year] = {};
           yearlyTotalsByProduct[year][productName] = (yearlyTotalsByProduct[year][productName] || 0) + tx.AmountEUR;
         }
@@ -156,28 +80,28 @@ export default function DividendsSection({ dividendSummaryData, selectedYear, hi
         const data = labels.map(year => yearlyTotalsByProduct[year]?.[productName] || 0);
         datasets.push({
           label: productName, data,
-          backgroundColor: getColorForProduct(index, totalProducts),
-          borderColor: getBorderColorForProduct(index, totalProducts),
+          backgroundColor: generateDistinctColor(index, totalProducts, 'background'),
+          borderColor: generateDistinctColor(index, totalProducts, 'border'),
           borderWidth: 1,
         });
       });
     } else {
-      labels = MONTH_NAMES_CHART; // Use constant
+      labels = MONTH_NAMES_CHART;
       const monthlyTotalsByProduct = {};
       uniqueProductNames.forEach(productName => { monthlyTotalsByProduct[productName] = Array(12).fill(0); });
       filteredForChart.forEach(tx => {
-        const month = getChartMonth(tx.Date); // 1-12
-        const productName = tx.ProductName || 'Unknown Product';
-        if (month && tx.AmountEUR != null) {
-          monthlyTotalsByProduct[productName][month - 1] += tx.AmountEUR;
+        const monthIdx = getMonthIndex(tx.Date); // 0-11
+        const productName = getBaseProductName(tx.ProductName);
+        if (monthIdx !== null && tx.AmountEUR != null) {
+          monthlyTotalsByProduct[productName][monthIdx] += tx.AmountEUR;
         }
       });
       const totalProducts = uniqueProductNames.length;
       uniqueProductNames.forEach((productName, index) => {
         datasets.push({
           label: productName, data: monthlyTotalsByProduct[productName],
-          backgroundColor: getColorForProduct(index, totalProducts),
-          borderColor: getBorderColorForProduct(index, totalProducts),
+          backgroundColor: generateDistinctColor(index, totalProducts, 'background'),
+          borderColor: generateDistinctColor(index, totalProducts, 'border'),
           borderWidth: 1,
         });
       });
