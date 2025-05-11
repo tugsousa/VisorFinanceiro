@@ -6,18 +6,15 @@ import {
 } from '@mui/material';
 import { Bar } from 'react-chartjs-2';
 import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend } from 'chart.js';
-import { ALL_YEARS_OPTION, MONTH_NAMES_CHART } from '../../constants';
-import { getYearString, getMonthIndex, calculateDaysHeld } from '../../utils/dateUtils';
-import { generateDistinctColor, getBaseProductName } from '../../utils/chartUtils';
-import { calculateAnnualizedReturn as calculateOptionAnnualizedReturn } from '../../utils/formatUtils'; // Renamed for clarity
+import { ALL_YEARS_OPTION } from '../../constants';
+import { getYearString, calculateDaysHeld } from '../../utils/dateUtils';
+import { getBaseProductName } from '../../utils/chartUtils';
+import { calculateAnnualizedReturn as calculateOptionAnnualizedReturn } from '../../utils/formatUtils';
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend);
 
 const calculateAnnualizedReturnForOptionsLocal = (sale) => {
     const daysHeld = calculateDaysHeld(sale.open_date, sale.close_date);
-    // For options, cost basis is often the open_amount_eur. If it's a credit spread, delta itself is the P/L.
-    // Here, we assume delta is P/L and open_amount_eur is the "cost" or margin if applicable for percentage.
-    // If open_amount_eur is negative (credit received), use its absolute value.
     const costBasis = Math.abs(sale.open_amount_eur);
     return calculateOptionAnnualizedReturn(sale.delta, costBasis, daysHeld);
 };
@@ -29,67 +26,120 @@ export default function OptionSalesSection({ optionSalesData, selectedYear, hide
 
   const chartData = useMemo(() => {
     if (!optionSalesData || optionSalesData.length === 0) return { labels: [], datasets: [] };
-    const uniqueCompanies = [...new Set(optionSalesData.map(sale => getBaseProductName(sale.product_name)))].sort();
-    const datasets = [];
-    let labels = [];
 
-    if (selectedYear === ALL_YEARS_OPTION || !selectedYear) {
-        const yearlyTotalsByCompany = {}; 
-        const allYearsInData = new Set();
-        optionSalesData.forEach(sale => {
-            const year = getYearString(sale.close_date);
-            const company = getBaseProductName(sale.product_name);
-            if (year && sale.delta != null) {
-                allYearsInData.add(year);
-                if (!yearlyTotalsByCompany[year]) yearlyTotalsByCompany[year] = {};
-                yearlyTotalsByCompany[year][company] = (yearlyTotalsByCompany[year][company] || 0) + sale.delta;
-            }
-        });
-        labels = Array.from(allYearsInData).sort((a, b) => Number(a) - Number(b));
-        const totalCompanies = uniqueCompanies.length;
-        uniqueCompanies.forEach((company, index) => {
-            const data = labels.map(year => yearlyTotalsByCompany[year]?.[company] || 0);
-            datasets.push({ 
-              label: company, data, 
-              backgroundColor: generateDistinctColor(index, totalCompanies, 'background'), 
-              borderColor: generateDistinctColor(index, totalCompanies, 'border'), 
-              borderWidth: 1, 
-            });
-        });
-    } else {
-        labels = MONTH_NAMES_CHART;
-        const monthlyTotalsByCompany = {};
-        uniqueCompanies.forEach(company => { monthlyTotalsByCompany[company] = Array(12).fill(0); });
-        optionSalesData.forEach(sale => {
-            const monthIdx = getMonthIndex(sale.close_date); // 0-11
-            const company = getBaseProductName(sale.product_name);
-            if (monthIdx !== null && sale.delta != null) {
-                monthlyTotalsByCompany[company][monthIdx] += sale.delta;
-            }
-        });
-        const totalCompanies = uniqueCompanies.length;
-        uniqueCompanies.forEach((company, index) => {
-            datasets.push({ 
-              label: company, data: monthlyTotalsByCompany[company], 
-              backgroundColor: generateDistinctColor(index, totalCompanies, 'background'), 
-              borderColor: generateDistinctColor(index, totalCompanies, 'border'), 
-              borderWidth: 1, 
-            });
-        });
+    const dataForChart = (selectedYear === ALL_YEARS_OPTION || !selectedYear)
+        ? optionSalesData
+        : optionSalesData.filter(sale => getYearString(sale.close_date) === selectedYear);
+
+    if (dataForChart.length === 0) return { labels: [], datasets: [] };
+        
+    const productPLMap = {};
+    dataForChart.forEach(sale => {
+        if (sale.delta != null) {
+            const baseProduct = getBaseProductName(sale.product_name);
+            productPLMap[baseProduct] = (productPLMap[baseProduct] || 0) + sale.delta;
+        }
+    });
+
+    const productsWithPL = Object.entries(productPLMap).map(([name, pl]) => ({ name, pl }));
+
+    const sortedByAbsolutePL = [...productsWithPL].sort((a, b) => Math.abs(b.pl) - Math.abs(a.pl));
+    
+    const topN = 15; 
+    let itemsForChart = [];
+    let othersPL = 0;
+    let hasOthers = false;
+
+    if (sortedByAbsolutePL.length > topN) {
+        itemsForChart = sortedByAbsolutePL.slice(0, topN);
+        const otherProducts = sortedByAbsolutePL.slice(topN);
+        othersPL = otherProducts.reduce((sum, p) => sum + p.pl, 0);
+        hasOthers = true;
+    } else { 
+        itemsForChart = sortedByAbsolutePL;
     }
-    return { labels, datasets };
+
+    if (hasOthers && othersPL !== 0) {
+        itemsForChart.push({ name: 'Others', pl: othersPL });
+    }
+    
+    // Sort for vertical bar chart: P/L ascending (lowest on left, highest on right)
+    itemsForChart.sort((a, b) => {
+      if (a.pl !== b.pl) {
+        return a.pl - b.pl; // Ascending P/L
+      }
+      // If P/L is the same, handle 'Others' to be last among them
+      if (a.name === 'Others') return 1; 
+      if (b.name === 'Others') return -1;
+      
+      return a.name.localeCompare(b.name); // Alphabetical for same P/L non-'Others' items
+    });
+    
+    const finalLabels = itemsForChart.map(p => p.name);
+    const finalPLData = itemsForChart.map(p => p.pl);
+    
+    const finalBackgroundColors = finalPLData.map((pl, index) => {
+        if (itemsForChart[index].name === 'Others') {
+            return pl >= 0 ? 'rgba(150, 150, 150, 0.6)' : 'rgba(180, 180, 180, 0.6)'; // Grey for Others
+        }
+        // Green for positive, Red for negative
+        return pl >= 0 ? 'rgba(75, 192, 192, 0.6)' : 'rgba(255, 99, 132, 0.6)'; 
+    });
+    const finalBorderColors = finalPLData.map((pl, index) => {
+      if (itemsForChart[index].name === 'Others') {
+            return pl >= 0 ? 'rgba(150, 150, 150, 1)' : 'rgba(180, 180, 180, 1)';
+        }
+        return pl >= 0 ? 'rgba(75, 192, 192, 1)' : 'rgba(255, 99, 132, 1)';
+    });
+    
+    if (finalLabels.length === 0) return { labels: [], datasets: [] };
+
+    return {
+      labels: finalLabels,
+      datasets: [{
+        label: `P/L by Product`,
+        data: finalPLData,
+        backgroundColor: finalBackgroundColors,
+        borderColor: finalBorderColors,
+        borderWidth: 1,
+      }]
+    };
   }, [optionSalesData, selectedYear]);
 
   const chartOptions = useMemo(() => ({
-    responsive: true, maintainAspectRatio: false,
+    responsive: true,
+    maintainAspectRatio: false,
     plugins: {
-        legend: { display: true, position: 'top' },
-        title: { display: true, text: (selectedYear === ALL_YEARS_OPTION || !selectedYear) ? 'Total Option Delta per Year by Company' : `Monthly Option Delta by Company - ${selectedYear}`},
-        tooltip: { callbacks: { label: (context) => `${context.dataset.label || ''}: ${new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(context.raw || 0)}` } }
+        legend: { display: false }, 
+        title: {
+            display: true,
+            text: `Option Sales P/L by Product (${(selectedYear === ALL_YEARS_OPTION || !selectedYear) ? 'All Years' : selectedYear})`
+        },
+        tooltip: {
+            callbacks: {
+                label: (context) => `P/L: ${new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(context.parsed.y || 0)}`
+            }
+        }
     },
     scales: {
-        y: { beginAtZero: false, stacked: true, title: { display: true, text: 'Total Delta (€)'}},
-        x: { stacked: true, title: { display: true, text: (selectedYear === ALL_YEARS_OPTION || !selectedYear) ? 'Year' : 'Month'}}
+        x: { 
+            title: {
+                display: true,
+                text: 'Product'
+            },
+            ticks: { 
+              autoSkip: false, 
+              maxRotation: 45, 
+              minRotation: 30, 
+            }
+        },
+        y: { 
+            beginAtZero: false, 
+            title: {
+                display: true,
+                text: 'Profit/Loss (€)'
+            }
+        }
     }
   }), [selectedYear]);
 
@@ -111,8 +161,10 @@ export default function OptionSalesSection({ optionSalesData, selectedYear, hide
         <Typography variant="body2" component="div" sx={{ mb: 2 }}>Total P/L: <Typography component="span" sx={{ fontWeight: 'bold', ml: 1, color: totalDelta >= 0 ? 'success.main' : 'error.main' }}>{new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(totalDelta)}</Typography></Typography>
       )}
 
-      {chartData.datasets && chartData.datasets.length > 0 && chartData.datasets.some(ds => ds.data.some(d => d !== 0)) && (
-        <Box sx={{ height: 300, mb: 2 }}> <Bar options={chartOptions} data={chartData} /> </Box>
+      {chartData.datasets && chartData.datasets.length > 0 && chartData.datasets.some(ds => ds.data.some(d => d !== 0 && d !== undefined)) && (
+        <Box sx={{ height: 350, mb: 2 }}> 
+          <Bar options={chartOptions} data={chartData} />
+        </Box>
       )}
 
       <TableContainer sx={{ maxHeight: 400 }}>

@@ -6,12 +6,17 @@ import {
 } from '@mui/material';
 import { Bar } from 'react-chartjs-2';
 import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend } from 'chart.js';
-import { useDividendTransactions } from '../../hooks/useDividendTransactions'; // Custom hook
-import { ALL_YEARS_OPTION, MONTH_NAMES_CHART, UI_TEXT } from '../../constants';
-import { getYearString, getMonthIndex } from '../../utils/dateUtils'; // Use new date utils
-import { generateDistinctColor, getBaseProductName } from '../../utils/chartUtils'; // Use new chart utils
+import { useDividendTransactions } from '../../hooks/useDividendTransactions';
+import { ALL_YEARS_OPTION, UI_TEXT } from '../../constants';
+import { getYearString } from '../../utils/dateUtils';
+import { getBaseProductName } // generateDistinctColor is no longer needed here
+from '../../utils/chartUtils';
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend);
+
+// Define green colors
+const GREEN_COLOR_BG = 'rgba(75, 192, 192, 0.6)'; // Greenish background
+const GREEN_COLOR_BORDER = 'rgba(75, 192, 192, 1)'; // Greenish border
 
 export default function DividendsSection({ dividendSummaryData, selectedYear, hideIndividualTotalPL = false }) {
   const { 
@@ -49,7 +54,7 @@ export default function DividendsSection({ dividendSummaryData, selectedYear, hi
   const productChartData = useMemo(() => {
     const filteredForChart = rawDividendTransactions.filter(tx => {
         const orderTypeLower = tx.OrderType?.toLowerCase();
-        const isDividendType = orderTypeLower === 'dividend'; // Only show gross dividends in this chart
+        const isDividendType = orderTypeLower === 'dividend';
         if (!isDividendType) return false;
         if (selectedYear === ALL_YEARS_OPTION || !selectedYear) return true;
         const transactionYear = getYearString(tx.Date);
@@ -58,72 +63,97 @@ export default function DividendsSection({ dividendSummaryData, selectedYear, hi
 
     if (filteredForChart.length === 0) return { labels: [], datasets: [] };
 
-    const uniqueProductNames = [...new Set(filteredForChart.map(tx => getBaseProductName(tx.ProductName)))].sort();
-    const datasets = [];
-    let labels = [];
+    const productDividendMap = {};
+    filteredForChart.forEach(tx => {
+        if (tx.AmountEUR != null) {
+            const baseProduct = getBaseProductName(tx.ProductName);
+            productDividendMap[baseProduct] = (productDividendMap[baseProduct] || 0) + tx.AmountEUR;
+        }
+    });
 
-    if (selectedYear === ALL_YEARS_OPTION || !selectedYear) {
-      const yearlyTotalsByProduct = {};
-      const allYearsInData = new Set();
-      filteredForChart.forEach(tx => {
-        const year = getYearString(tx.Date);
-        const productName = getBaseProductName(tx.ProductName);
-        if (year && tx.AmountEUR != null) {
-          allYearsInData.add(year);
-          if (!yearlyTotalsByProduct[year]) yearlyTotalsByProduct[year] = {};
-          yearlyTotalsByProduct[year][productName] = (yearlyTotalsByProduct[year][productName] || 0) + tx.AmountEUR;
-        }
-      });
-      labels = Array.from(allYearsInData).sort((a, b) => Number(a) - Number(b));
-      const totalProducts = uniqueProductNames.length;
-      uniqueProductNames.forEach((productName, index) => {
-        const data = labels.map(year => yearlyTotalsByProduct[year]?.[productName] || 0);
-        datasets.push({
-          label: productName, data,
-          backgroundColor: generateDistinctColor(index, totalProducts, 'background'),
-          borderColor: generateDistinctColor(index, totalProducts, 'border'),
-          borderWidth: 1,
-        });
-      });
-    } else {
-      labels = MONTH_NAMES_CHART;
-      const monthlyTotalsByProduct = {};
-      uniqueProductNames.forEach(productName => { monthlyTotalsByProduct[productName] = Array(12).fill(0); });
-      filteredForChart.forEach(tx => {
-        const monthIdx = getMonthIndex(tx.Date); // 0-11
-        const productName = getBaseProductName(tx.ProductName);
-        if (monthIdx !== null && tx.AmountEUR != null) {
-          monthlyTotalsByProduct[productName][monthIdx] += tx.AmountEUR;
-        }
-      });
-      const totalProducts = uniqueProductNames.length;
-      uniqueProductNames.forEach((productName, index) => {
-        datasets.push({
-          label: productName, data: monthlyTotalsByProduct[productName],
-          backgroundColor: generateDistinctColor(index, totalProducts, 'background'),
-          borderColor: generateDistinctColor(index, totalProducts, 'border'),
-          borderWidth: 1,
-        });
-      });
+    const productsWithDividends = Object.entries(productDividendMap).map(([name, amount]) => ({ name, amount }));
+
+    // Sort by dividend amount descending to identify the most significant items for "Others" aggregation
+    const sortedByAmountForOthers = [...productsWithDividends].sort((a, b) => b.amount - a.amount);
+    
+    const topN = 15; 
+    let itemsForChart = [];
+    let othersAmount = 0;
+    let hasOthers = false;
+
+    if (sortedByAmountForOthers.length > topN) {
+        itemsForChart = sortedByAmountForOthers.slice(0, topN);
+        const otherProducts = sortedByAmountForOthers.slice(topN);
+        othersAmount = otherProducts.reduce((sum, p) => sum + p.amount, 0);
+        hasOthers = true;
+    } else { 
+        itemsForChart = sortedByAmountForOthers;
     }
-    return { labels, datasets };
+
+    if (hasOthers && othersAmount > 0) {
+        itemsForChart.push({ name: 'Others', amount: othersAmount });
+    }
+    
+    // Sort the final list by amount ASCENDING (lowest on left, highest on right)
+    itemsForChart.sort((a, b) => {
+      if (a.amount !== b.amount) {
+        return a.amount - b.amount; // Ascending amount
+      }
+      // If amounts are the same, handle 'Others' to be last among them
+      if (a.name === 'Others') return 1; 
+      if (b.name === 'Others') return -1;
+      return a.name.localeCompare(b.name); // Alphabetical for same amount non-'Others'
+    });
+    
+    const finalLabels = itemsForChart.map(p => p.name);
+    const finalAmounts = itemsForChart.map(p => p.amount);
+    
+    // Use consistent green color for all bars
+    const finalBackgroundColors = finalAmounts.map(() => GREEN_COLOR_BG);
+    const finalBorderColors = finalAmounts.map(() => GREEN_COLOR_BORDER);
+    
+    if (finalLabels.length === 0) return { labels: [], datasets: [] };
+
+    return {
+      labels: finalLabels,
+      datasets: [{
+        label: `Gross Dividends`, // This label appears in tooltips
+        data: finalAmounts,
+        backgroundColor: finalBackgroundColors,
+        borderColor: finalBorderColors,
+        borderWidth: 1,
+      }]
+    };
   }, [rawDividendTransactions, selectedYear]);
 
   const productChartOptions = useMemo(() => ({
       responsive: true,
       maintainAspectRatio: false,
       plugins: {
-          legend: { position: 'top' },
-          title: { display: true, text: (selectedYear === ALL_YEARS_OPTION || !selectedYear) ? 'Gross Dividends Received per Year by Product' : `Monthly Gross Dividends by Product - ${selectedYear}`},
+          legend: { display: false }, 
+          title: { 
+            display: true, 
+            text: `Gross Dividends by Product (${(selectedYear === ALL_YEARS_OPTION || !selectedYear) ? 'All Years' : selectedYear})`
+          },
           tooltip: {
             callbacks: {
-              label: (context) => `${context.dataset.label || ''}: ${new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(context.raw || 0)}`
+              label: (context) => `${context.dataset.label || 'Gross Amount'}: ${new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(context.raw || 0)}`
             }
           }
       },
       scales: {
-          y: { beginAtZero: true, stacked: true, title: { display: true, text: 'Gross Amount (€)'}},
-          x: { stacked: true, title: { display: true, text: (selectedYear === ALL_YEARS_OPTION || !selectedYear) ? 'Year' : 'Month'}}
+          y: { 
+            beginAtZero: true, 
+            title: { display: true, text: 'Gross Amount (€)'}
+          },
+          x: { 
+            title: { display: true, text: 'Product'},
+            ticks: {
+              autoSkip: false, 
+              maxRotation: 45, 
+              minRotation: 30, 
+            }
+          }
       }
   }), [selectedYear]);
 
@@ -152,8 +182,11 @@ export default function DividendsSection({ dividendSummaryData, selectedYear, hi
 
       {chartLoading && <CircularProgress size={24} sx={{display: 'block', margin: '10px auto'}} />}
       {chartError && <Alert severity="error" sx={{fontSize: '0.8rem', textAlign: 'center', mb:1}}>{chartError}</Alert>}
-      {!chartLoading && !chartError && productChartData.datasets && productChartData.datasets.length > 0 && productChartData.datasets.some(ds => ds.data.some(d => d !== 0)) && (
-         <Box sx={{ height: 300, mb: 2 }}> <Bar options={productChartOptions} data={productChartData} /> </Box>
+      
+      {!chartLoading && !chartError && productChartData.datasets && productChartData.datasets.length > 0 && productChartData.datasets.some(ds => ds.data.some(d => d > 0)) && (
+         <Box sx={{ height: 350, mb: 2 }}>
+            <Bar options={productChartOptions} data={productChartData} /> 
+         </Box>
       )}
 
       <TableContainer sx={{ maxHeight: 400 }}>

@@ -9,14 +9,18 @@ import { formatCurrency } from '../../utils/formatUtils';
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend);
 
+const POSITIVE_COLOR_BG = 'rgba(75, 192, 192, 0.6)'; // Greenish
+const NEGATIVE_COLOR_BG = 'rgba(255, 99, 132, 0.6)'; // Reddish
+const POSITIVE_COLOR_BORDER = 'rgba(75, 192, 192, 1)';
+const NEGATIVE_COLOR_BORDER = 'rgba(255, 99, 132, 1)';
+
 const OverallPLChart = ({ allDashboardData, selectedYear }) => {
   const chartData = useMemo(() => {
     if (!allDashboardData) return { labels: [], datasets: [] };
 
-    const yearlyPL = {}; // { "2023": { stocks: 100, options: 50, dividends: 20, total: 170 }, ... }
+    const yearlyPL = {}; 
     const allYearsInData = new Set();
 
-    // Process Stock Sales
     (allDashboardData.StockSaleDetails || []).forEach(sale => {
       const year = getYearString(sale.SaleDate);
       if (year && sale.Delta != null) {
@@ -27,7 +31,6 @@ const OverallPLChart = ({ allDashboardData, selectedYear }) => {
       }
     });
 
-    // Process Option Sales
     (allDashboardData.OptionSaleDetails || []).forEach(sale => {
       const year = getYearString(sale.close_date);
       if (year && sale.delta != null) {
@@ -38,7 +41,6 @@ const OverallPLChart = ({ allDashboardData, selectedYear }) => {
       }
     });
 
-    // Process Dividends
     const dividendData = allDashboardData.DividendTaxResult || {};
     Object.entries(dividendData).forEach(([year, countries]) => {
       if (year) {
@@ -57,7 +59,6 @@ const OverallPLChart = ({ allDashboardData, selectedYear }) => {
 
     if (sortedYears.length === 0) return { labels: [], datasets: []};
 
-    // If a specific year is selected, filter down to that year
     if (selectedYear !== ALL_YEARS_OPTION && selectedYear !== '') {
         const singleYearData = yearlyPL[selectedYear];
         if (!singleYearData) return { labels: [], datasets: []};
@@ -68,24 +69,23 @@ const OverallPLChart = ({ allDashboardData, selectedYear }) => {
                 label: `P/L for ${selectedYear}`,
                 data: [singleYearData.stocks, singleYearData.options, singleYearData.dividends],
                 backgroundColor: [
-                    singleYearData.stocks >= 0 ? 'rgba(75, 192, 192, 0.6)' : 'rgba(255, 99, 132, 0.6)',
-                    singleYearData.options >= 0 ? 'rgba(54, 162, 235, 0.6)' : 'rgba(255, 159, 64, 0.6)',
-                    singleYearData.dividends >= 0 ? 'rgba(153, 102, 255, 0.6)' : 'rgba(255, 205, 86, 0.6)',
+                    singleYearData.stocks >= 0 ? POSITIVE_COLOR_BG : NEGATIVE_COLOR_BG,
+                    singleYearData.options >= 0 ? POSITIVE_COLOR_BG : NEGATIVE_COLOR_BG,
+                    singleYearData.dividends >= 0 ? POSITIVE_COLOR_BG : NEGATIVE_COLOR_BG,
                 ],
                 borderColor: [
-                    singleYearData.stocks >= 0 ? 'rgba(75, 192, 192, 1)' : 'rgba(255, 99, 132, 1)',
-                    singleYearData.options >= 0 ? 'rgba(54, 162, 235, 1)' : 'rgba(255, 159, 64, 1)',
-                    singleYearData.dividends >= 0 ? 'rgba(153, 102, 255, 1)' : 'rgba(255, 205, 86, 1)',
+                    singleYearData.stocks >= 0 ? POSITIVE_COLOR_BORDER : NEGATIVE_COLOR_BORDER,
+                    singleYearData.options >= 0 ? POSITIVE_COLOR_BORDER : NEGATIVE_COLOR_BORDER,
+                    singleYearData.dividends >= 0 ? POSITIVE_COLOR_BORDER : NEGATIVE_COLOR_BORDER,
                 ],
                 borderWidth: 1,
             }]
         };
     }
     
-    // "All Years" selected - show total P/L per year, colored by total >= 0
     const totalNetPLPerYear = sortedYears.map(year => yearlyPL[year]?.total || 0);
-    const backgroundColors = totalNetPLPerYear.map(pl => pl >= 0 ? 'rgba(75, 192, 192, 0.6)' : 'rgba(255, 99, 132, 0.6)');
-    const borderColors = totalNetPLPerYear.map(pl => pl >= 0 ? 'rgba(75, 192, 192, 1)' : 'rgba(255, 99, 132, 1)');
+    const backgroundColors = totalNetPLPerYear.map(pl => pl >= 0 ? POSITIVE_COLOR_BG : NEGATIVE_COLOR_BG);
+    const borderColors = totalNetPLPerYear.map(pl => pl >= 0 ? POSITIVE_COLOR_BORDER : NEGATIVE_COLOR_BORDER);
 
     return {
       labels: sortedYears,
@@ -104,7 +104,7 @@ const OverallPLChart = ({ allDashboardData, selectedYear }) => {
     maintainAspectRatio: false,
     plugins: {
       legend: { 
-        display: selectedYear !== ALL_YEARS_OPTION && selectedYear !== '' ? false : true, // Show legend for "All Years" view
+        display: selectedYear !== ALL_YEARS_OPTION && selectedYear !== '' ? false : true, 
         position: 'top' 
       },
       title: {
@@ -141,7 +141,7 @@ const OverallPLChart = ({ allDashboardData, selectedYear }) => {
   }), [selectedYear]);
 
   if (!chartData || chartData.datasets.length === 0 || !chartData.datasets.some(ds => ds.data.some(d => d !== 0 && d !== undefined))) {
-    return null; // Don't render if no data for the chart
+    return null; 
   }
 
   return (
@@ -149,7 +149,7 @@ const OverallPLChart = ({ allDashboardData, selectedYear }) => {
       <Typography variant="h6" gutterBottom>
         Overall Profit/Loss Overview
       </Typography>
-      <Box sx={{ height: 350 }}> {/* Increased height slightly */}
+      <Box sx={{ height: 350 }}> 
         <Bar data={chartData} options={chartOptions} />
       </Box>
     </Paper>
