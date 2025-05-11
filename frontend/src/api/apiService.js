@@ -114,5 +114,6 @@ export const apiFetchStockSales = () => apiClient.get(API_ENDPOINTS.STOCK_SALES)
 export const apiFetchOptionSales = () => apiClient.get(API_ENDPOINTS.OPTION_SALES);
 export const apiFetchDividendTaxSummary = () => apiClient.get(API_ENDPOINTS.DIVIDEND_TAX_SUMMARY);
 export const apiFetchDividendTransactions = () => apiClient.get(API_ENDPOINTS.DIVIDEND_TRANSACTIONS);
+export const apiCheckUserHasData = () => apiClient.get(API_ENDPOINTS.USER_HAS_DATA);
 
 export default apiClient;

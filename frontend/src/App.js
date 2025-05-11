@@ -6,16 +6,15 @@ import TaxPage from './pages/TaxPage';
 import SignInPage from './pages/SignInPage';
 import SignUpPage from './pages/SignUpPage';
 import DashboardPage from './pages/DashboardPage';
-import ProcessedTransactionsPage from './pages/ProcessedTransactionsPage'; // Import the new page
+import ProcessedTransactionsPage from './pages/ProcessedTransactionsPage';
 import NotFoundPage from './pages/NotFoundPage'; 
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { CircularProgress, Box } from '@mui/material';
 
-// Wrapper for protected routes
 const ProtectedRoute = ({ children }) => {
-  const { user, loading } = useAuth();
+  const { user, loading: authLoading } = useAuth(); // Renamed loading to authLoading for clarity
 
-  if (loading) {
+  if (authLoading) { // Use combined loading state from AuthContext
     return (
       <Box display="flex" justifyContent="center" alignItems="center" minHeight="80vh">
         <CircularProgress />
@@ -29,11 +28,10 @@ const ProtectedRoute = ({ children }) => {
   return children;
 };
 
-// Wrapper for public routes (redirect if logged in)
 const PublicRoute = ({ children }) => {
-  const { user, loading } = useAuth();
+  const { user, loading: authLoading, hasInitialData } = useAuth(); // Get hasInitialData
 
-  if (loading) {
+  if (authLoading) { // Use combined loading state
     return (
       <Box display="flex" justifyContent="center" alignItems="center" minHeight="80vh">
         <CircularProgress />
@@ -42,7 +40,18 @@ const PublicRoute = ({ children }) => {
   }
 
   if (user) {
-    return <Navigate to="/dashboard" replace />; // Or "/" for UploadPage as default
+    // If hasInitialData is null, it means we are still checking (should be covered by authLoading)
+    // If hasInitialData is true, go to dashboard
+    // If hasInitialData is false, go to upload page (root)
+    if (hasInitialData === null) { // Still waiting for the data check
+        return (
+          <Box display="flex" justifyContent="center" alignItems="center" minHeight="80vh">
+            <CircularProgress />
+            <span style={{marginLeft: 8}}>Checking user data...</span>
+          </Box>
+        );
+    }
+    return <Navigate to={hasInitialData ? "/dashboard" : "/"} replace />;
   }
   return children;
 };
@@ -54,29 +63,14 @@ function App() {
       <Router>
         <Layout> 
           <Routes>
-            {/* Public Routes */}
             <Route path="/signin" element={<PublicRoute><SignInPage /></PublicRoute>} />
             <Route path="/signup" element={<PublicRoute><SignUpPage /></PublicRoute>} />
-
-            {/* Protected Routes */}
-            <Route 
-              path="/dashboard" 
-              element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} 
-            />
-            <Route 
-              path="/" 
-              element={<ProtectedRoute><UploadPage /></ProtectedRoute>} 
-            />
-            <Route 
-              path="/tax" 
-              element={<ProtectedRoute><TaxPage /></ProtectedRoute>} 
-            />
-            <Route 
-              path="/transactions" // Add new route for the transactions page
-              element={<ProtectedRoute><ProcessedTransactionsPage /></ProtectedRoute>} 
-            />
             
-            {/* Not Found Route - must be last */}
+            <Route path="/dashboard" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
+            <Route path="/" element={<ProtectedRoute><UploadPage /></ProtectedRoute>} />
+            <Route path="/tax" element={<ProtectedRoute><TaxPage /></ProtectedRoute>} />
+            <Route path="/transactions" element={<ProtectedRoute><ProcessedTransactionsPage /></ProtectedRoute>} />
+            
             <Route path="*" element={<NotFoundPage />} />
           </Routes>
         </Layout>

@@ -1,8 +1,9 @@
 // frontend/src/context/AuthContext.js
 import React, { createContext, useState, useEffect, useContext, useCallback } from 'react';
 import {
-  apiLogin, apiRegister, apiLogout,
-  fetchAndSetCsrfToken as apiServiceFetchCsrf // Use the correctly named import
+  apiLogin, apiRegister, apiLogout, // Ensure apiRegister is imported
+  fetchAndSetCsrfToken as apiServiceFetchCsrf,
+  apiCheckUserHasData
 } from '../api/apiService';
 import { UI_TEXT } from '../constants';
 
@@ -21,15 +22,15 @@ export const AuthProvider = ({ children }) => {
   const [token, setToken] = useState(() => localStorage.getItem('auth_token'));
   const [loading, setLoading] = useState(true);
   const [authError, setAuthError] = useState(null);
-  const [csrfTokenState, setCsrfTokenState] = useState(''); // This state reflects the token AuthContext knows
+  const [csrfTokenState, setCsrfTokenState] = useState('');
+  const [hasInitialData, setHasInitialData] = useState(null);
+  const [checkingData, setCheckingData] = useState(false);
 
   const fetchCsrfTokenAndUpdateService = useCallback(async (isSilent = false) => {
-    // if (!isSilent) console.log('AuthContext: Fetching CSRF token...');
     try {
       const newCsrfToken = await apiServiceFetchCsrf();
       if (newCsrfToken) {
         setCsrfTokenState(newCsrfToken);
-        // console.log('AuthContext: CSRF token fetched and set:', newCsrfToken.substring(0,10) + '...');
         return newCsrfToken;
       } else {
         if (!isSilent) console.warn('AuthContext: Failed to fetch CSRF token via apiService.');
@@ -43,10 +44,33 @@ export const AuthProvider = ({ children }) => {
     }
   }, []);
 
+  const checkUserData = useCallback(async () => {
+    if (!localStorage.getItem('auth_token')) {
+      setHasInitialData(false);
+      return false;
+    }
+    setCheckingData(true);
+    try {
+      const response = await apiCheckUserHasData();
+      const userHasData = response.data.hasData;
+      setHasInitialData(userHasData);
+      localStorage.setItem('has_initial_data', JSON.stringify(userHasData));
+      return userHasData;
+    } catch (err) {
+      console.error('AuthContext: Error checking user data:', err);
+      setHasInitialData(false);
+      localStorage.setItem('has_initial_data', 'false');
+      return false;
+    } finally {
+      setCheckingData(false);
+    }
+  }, []);
+
   useEffect(() => {
     const initializeAuth = async () => {
       setLoading(true);
-      await fetchCsrfTokenAndUpdateService(true); // Initial fetch can be silent on error console
+      setCheckingData(true);
+      await fetchCsrfTokenAndUpdateService(true);
       const storedToken = localStorage.getItem('auth_token');
       if (storedToken) {
         setToken(storedToken);
@@ -59,52 +83,62 @@ export const AuthProvider = ({ children }) => {
             localStorage.removeItem('user');
           }
         }
+        const storedHasData = localStorage.getItem('has_initial_data');
+        if (storedHasData !== null) {
+          setHasInitialData(JSON.parse(storedHasData));
+          setCheckingData(false);
+        } else {
+          await checkUserData();
+        }
+      } else {
+        setHasInitialData(false);
+        setCheckingData(false);
       }
       setLoading(false);
     };
     initializeAuth();
-  }, [fetchCsrfTokenAndUpdateService]);
+  }, [fetchCsrfTokenAndUpdateService, checkUserData]);
 
+  // Define the register function
   const register = async (username, password) => {
     setLoading(true);
     setAuthError(null);
     try {
-      // Ensure CSRF is available. Interceptor will also try, but good to have it ready.
       if (!csrfTokenState) await fetchCsrfTokenAndUpdateService();
       
-      const response = await apiRegister(username, password);
+      const response = await apiRegister(username, password); // Use the imported apiRegister
       setLoading(false);
+      // On successful registration, you might want to:
+      // - Show a success message.
+      // - Optionally log the user in automatically or redirect to login page.
+      // For now, just returning success from API.
       return { success: true, message: response.data.message || "Registration successful. Please sign in." };
     } catch (err) {
       const errMsg = err.response?.data?.error || err.message || UI_TEXT.errorLoadingData;
       setAuthError(errMsg);
       setLoading(false);
-      throw new Error(errMsg);
+      throw new Error(errMsg); // Re-throw for SignUpPage to catch
     }
   };
 
   const login = async (username, password) => {
     setLoading(true);
+    setCheckingData(true);
     setAuthError(null);
     try {
-      // Ensure CSRF is available. Interceptor will also try.
       if (!csrfTokenState) await fetchCsrfTokenAndUpdateService();
-
       const response = await apiLogin(username, password);
       const data = response.data;
 
-      if (!data.access_token) {
-        throw new Error('Login successful but no access token received');
-      }
+      if (!data.access_token) throw new Error('Login successful but no access token received');
       
       setUser(data.user);
       setToken(data.access_token);
       localStorage.setItem('auth_token', data.access_token);
       if (data.user) localStorage.setItem('user', JSON.stringify(data.user));
       
-      // Crucial: Re-fetch CSRF token after successful login
-      // as the session has changed and backend might issue a new CSRF token.
       await fetchCsrfTokenAndUpdateService();
+      await checkUserData();
       
       setLoading(false);
       return data;
@@ -112,6 +146,9 @@ export const AuthProvider = ({ children }) => {
       const errMsg = err.response?.data?.error || err.message || 'Login failed';
       setAuthError(errMsg);
       setLoading(false);
+      setCheckingData(false);
+      setHasInitialData(false);
+      localStorage.removeItem('has_initial_data');
       throw new Error(errMsg);
     }
   };
@@ -123,18 +160,17 @@ export const AuthProvider = ({ children }) => {
 
     localStorage.removeItem('auth_token');
     localStorage.removeItem('user');
+    localStorage.removeItem('has_initial_data');
     setUser(null);
     setToken(null);
-    // setApiServiceCsrfToken(null); // apiService's currentCsrfToken will be refreshed by fetch below
+    setHasInitialData(null);
 
     try {
-      if (oldToken) {
-         await apiLogout(); 
-      }
-      await fetchCsrfTokenAndUpdateService(); // Fetch a new CSRF for the unauthenticated state
+      if (oldToken) await apiLogout(); 
+      await fetchCsrfTokenAndUpdateService(); 
     } catch (err) {
-      console.error('Logout error (server call might have failed):', err);
-      await fetchCsrfTokenAndUpdateService(); // Still try to get a fresh CSRF
+      console.error('Logout error:', err);
+      await fetchCsrfTokenAndUpdateService(); 
     } finally {
       setLoading(false);
     }
@@ -143,10 +179,15 @@ export const AuthProvider = ({ children }) => {
   return (
     <AuthContext.Provider
       value={{
-        user, token, loading, authError,
+        user, token, 
+        loading: loading || checkingData,
+        authError,
         csrfToken: csrfTokenState,
-        register, login, logout,
+        hasInitialData,
+        register, // Make sure register is included in the context value
+        login, logout,
         fetchCsrfToken: fetchCsrfTokenAndUpdateService,
+        refreshUserDataCheck: checkUserData,
       }}
     >
       {children}

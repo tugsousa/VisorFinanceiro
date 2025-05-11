@@ -127,7 +127,7 @@ func main() {
 	apiRouter.Handle("GET /option-sales", csrfAuthMw(http.HandlerFunc(userHandler.AuthMiddleware(portfolioHandler.HandleGetOptionSales))))
 	apiRouter.Handle("GET /dividend-tax-summary", csrfAuthMw(http.HandlerFunc(userHandler.AuthMiddleware(dividendHandler.HandleGetDividendTaxSummary))))
 	apiRouter.Handle("GET /dividend-transactions", csrfAuthMw(http.HandlerFunc(userHandler.AuthMiddleware(dividendHandler.HandleGetDividendTransactions))))
-
+	apiRouter.Handle("GET /user/has-data", csrfAuthMw(http.HandlerFunc(userHandler.AuthMiddleware(userHandler.HandleCheckUserData))))
 	// Catch-all for /api/ paths NOT matched above (should be last on apiRouter)
 	apiRouter.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		logger.L.Warn("API route not found", "method", r.Method, "path", r.URL.Path)

@@ -17,6 +17,7 @@ export const API_ENDPOINTS = {
   OPTION_SALES: `${API_BASE_PATH}/option-sales`,
   DIVIDEND_TAX_SUMMARY: `${API_BASE_PATH}/dividend-tax-summary`,
   DIVIDEND_TRANSACTIONS: `${API_BASE_PATH}/dividend-transactions`,
+  USER_HAS_DATA: `${API_BASE_PATH}/user/has-data`,
 };
 
 // Filter/Selection Constants

@@ -328,6 +328,29 @@ func (h *UserHandler) LogoutUserHandler(w http.ResponseWriter, r *http.Request) 
 	log.Println("Logout: Responded with 204 No Content")
 }
 
+// HandleCheckUserData checks if the authenticated user has any processed transactions.
+func (h *UserHandler) HandleCheckUserData(w http.ResponseWriter, r *http.Request) {
+	userID, ok := GetUserIDFromContext(r.Context())
+	if !ok {
+		sendJSONError(w, "authentication required", http.StatusUnauthorized) // Assuming sendJSONError is accessible
+		return
+	}
+
+	var count int
+	err := database.DB.QueryRow("SELECT COUNT(*) FROM processed_transactions WHERE user_id = ?", userID).Scan(&count)
+	if err != nil {
+		log.Printf("Error checking user data for userID %d: %v", userID, err)
+		sendJSONError(w, "failed to check user data", http.StatusInternalServerError)
+		return
+	}
+
+	hasData := count > 0
+	log.Printf("User data check for userID %d: hasData = %v (count = %d)", userID, hasData, count)
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]bool{"hasData": hasData})
+}
+
 // GetUserIDFromContext retrieves the userID from the context.
 // It's defined in this package and can be called by other handlers within the same package.
 func GetUserIDFromContext(ctx context.Context) (int64, bool) {
