@@ -11,9 +11,9 @@ import StockSalesSection from '../components/dashboardSections/StockSalesSection
 import OptionSalesSection from '../components/dashboardSections/OptionSalesSection';
 import DividendsSection from '../components/dashboardSections/DividendsSection';
 import OverallPLChart from '../components/dashboardSections/OverallPLChart';
-import { ALL_YEARS_OPTION } from '../constants';
-import { getYearString, extractYearsFromData } from '../utils/dateUtils'; // Use new date utils
-import { formatCurrency } from '../utils/formatUtils'; // Use new format utils
+import { ALL_YEARS_OPTION, NO_YEAR_SELECTED } from '../constants'; // Import NO_YEAR_SELECTED
+import { getYearString, extractYearsFromData } from '../utils/dateUtils'; 
+import { formatCurrency } from '../utils/formatUtils'; 
 
 export default function DashboardPage() {
   const { data: allDashboardData, loading, error } = useDashboardData();
@@ -27,17 +27,29 @@ export default function DashboardPage() {
         StockSaleDetails: 'SaleDate',
         OptionHoldings: 'open_date',
         OptionSaleDetails: 'close_date',
-        DividendTaxResult: null, // Special handling in extractYearsFromData
+        DividendTaxResult: null, 
       };
-      const years = extractYearsFromData(allDashboardData, dateAccessors);
-      const actualYears = years.filter(y => y !== ALL_YEARS_OPTION); // NO_YEAR_SELECTED changed to ALL_YEARS_OPTION
+      // 1. Get years from utility function (may include NO_YEAR_SELECTED which is '')
+      const extractedYearsWithPossibleEmpty = extractYearsFromData(allDashboardData, dateAccessors);
       
-      setAvailableYears([ALL_YEARS_OPTION, ...actualYears]); // Ensure ALL_YEARS_OPTION is first
-      setSelectedYear(actualYears.length > 0 ? String(actualYears[0]) : ALL_YEARS_OPTION);
+      // 2. Filter out NO_YEAR_SELECTED ('') and also ALL_YEARS_OPTION ('all') to avoid duplicates,
+      //    as we will prepend 'all' manually.
+      const actualNumericYears = extractedYearsWithPossibleEmpty.filter(
+        year => year !== NO_YEAR_SELECTED && year !== ALL_YEARS_OPTION
+      );
+      
+      // 3. Construct the final list for the dropdown, ensuring "All Years" is first.
+      setAvailableYears([ALL_YEARS_OPTION, ...actualNumericYears]);
+      
+      // 4. Set default selection to "All Years"
+      setSelectedYear(ALL_YEARS_OPTION);
     } else {
+      // Fallback if no data
       setAvailableYears([ALL_YEARS_OPTION]);
       setSelectedYear(ALL_YEARS_OPTION);
     }
+  // Add NO_YEAR_SELECTED to dependency array as it's used in the effect.
+  // ALL_YEARS_OPTION is also a constant and technically used.
   }, [allDashboardData]);
 
 
@@ -62,7 +74,6 @@ export default function DashboardPage() {
       };
     }
 
-    const numSelectedYear = Number(selectedYear);
     return {
       StockHoldings: allDashboardData.StockHoldings || [], 
       OptionHoldings: allDashboardData.OptionHoldings || [], 
@@ -147,7 +158,6 @@ export default function DashboardPage() {
             <StockHoldingsSection holdingsData={filteredData.StockHoldings} selectedYear={selectedYear} />
           </Grid>
           <Grid item xs={12} lg={6}>
-            {/* Assuming OptionHoldingsSection exists and is similar to StockHoldingsSection */}
             <OptionHoldingsSection holdingsData={filteredData.OptionHoldings} selectedYear={selectedYear} />
           </Grid>
       </Grid>

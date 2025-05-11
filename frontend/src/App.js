@@ -6,7 +6,8 @@ import TaxPage from './pages/TaxPage';
 import SignInPage from './pages/SignInPage';
 import SignUpPage from './pages/SignUpPage';
 import DashboardPage from './pages/DashboardPage';
-import NotFoundPage from './pages/NotFoundPage'; // Import NotFoundPage
+import ProcessedTransactionsPage from './pages/ProcessedTransactionsPage'; // Import the new page
+import NotFoundPage from './pages/NotFoundPage'; 
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { CircularProgress, Box } from '@mui/material';
 
@@ -69,6 +70,10 @@ function App() {
             <Route 
               path="/tax" 
               element={<ProtectedRoute><TaxPage /></ProtectedRoute>} 
+            />
+            <Route 
+              path="/transactions" // Add new route for the transactions page
+              element={<ProtectedRoute><ProcessedTransactionsPage /></ProtectedRoute>} 
             />
             
             {/* Not Found Route - must be last */}

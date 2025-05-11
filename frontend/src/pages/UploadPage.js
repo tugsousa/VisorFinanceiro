@@ -1,11 +1,11 @@
 // frontend/src/pages/UploadPage.js
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { useProcessedTransactions } from '../hooks/useProcessedTransactions';
+import { useProcessedTransactions } from '../hooks/useProcessedTransactions'; // Kept for refetch function
 import { apiUploadFile } from '../api/apiService';
 import './UploadPage.css';
 import { ALLOWED_FILE_TYPES, MAX_FILE_SIZE_BYTES, MAX_FILE_SIZE_MB, UI_TEXT } from '../constants';
-import { Typography, Box, Button, LinearProgress, Paper, Alert, TableContainer, Table, TableHead, TableRow, TableCell, TableBody } from '@mui/material';
+import { Typography, Box, Button, LinearProgress, Paper, Alert } from '@mui/material'; // Removed Table specific imports
 
 const UploadPage = () => {
   const { token } = useAuth();
@@ -14,12 +14,8 @@ const UploadPage = () => {
   const [uploadStatus, setUploadStatus] = useState('idle');
   const [fileError, setFileError] = useState(null);
   
-  const { 
-    transactions: processedTransactions, 
-    loading: transactionsLoading, 
-    error: transactionsError,
-    refetch: refetchProcessedTransactions 
-  } = useProcessedTransactions();
+  // We still need the refetch function from the hook
+  const { refetch: refetchProcessedTransactions } = useProcessedTransactions();
 
   const handleFileChange = (e) => {
     const file = e.target.files[0];
@@ -68,7 +64,7 @@ const UploadPage = () => {
 
       setUploadStatus('success');
       console.log('Upload successful:', response.data);
-      refetchProcessedTransactions();
+      refetchProcessedTransactions(); // Refetch transactions so the new page will have up-to-date data
       setSelectedFile(null); 
       const fileInput = document.getElementById('file-input-upload-page');
       if (fileInput) fileInput.value = '';
@@ -107,7 +103,7 @@ const UploadPage = () => {
           )}
           
           {fileError && <Alert severity="error" sx={{my:2}}>{fileError}</Alert>}
-          {uploadStatus === 'success' && <Alert severity="success" sx={{my:2}}>Upload completed successfully! Transactions updated.</Alert>}
+          {uploadStatus === 'success' && <Alert severity="success" sx={{my:2}}>Upload completed successfully! Processed transactions can be viewed on the Transactions page.</Alert>}
 
           <Button
             variant="contained"
@@ -119,54 +115,8 @@ const UploadPage = () => {
         </Box>
       </Paper>
 
-      {transactionsLoading && <Typography sx={{my:2, textAlign: 'center'}}>Loading transactions...</Typography>}
-      {transactionsError && <Alert severity="error" sx={{my:2}}>{transactionsError}</Alert>}
+      {/* The section displaying processed transactions has been removed from this page. */}
       
-      {!transactionsLoading && !transactionsError && processedTransactions.length > 0 && (
-        <Paper elevation={3} sx={{p:{xs:1, sm:2}}} className="processed-transactions">
-          <Typography variant="h5" component="h3" gutterBottom>Processed Transactions</Typography>
-          <Typography variant="body2" sx={{mb:1}}>These transactions have been processed and stored in the database.</Typography>
-          <TableContainer component={Paper} className="transactions-table-container">
-            <Table stickyHeader size="small" aria-label="processed transactions table">
-              <TableHead>
-                <TableRow>
-                  <TableCell>Date</TableCell>
-                  <TableCell>Product</TableCell>
-                  <TableCell>ISIN</TableCell>
-                  <TableCell>Type</TableCell>
-                  <TableCell align="right">Qty</TableCell>
-                  <TableCell align="right">Price</TableCell>
-                  <TableCell align="right">Amount</TableCell>
-                  <TableCell>Currency</TableCell>
-                  <TableCell align="right">Commission</TableCell>
-                  <TableCell align="right">Amount EUR</TableCell>
-                  <TableCell>Order ID</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {processedTransactions.map((transaction) => (
-                  <TableRow hover key={transaction.id || transaction.OrderID}>
-                    <TableCell>{transaction.Date || ''}</TableCell>
-                    <TableCell>{transaction.ProductName || ''}</TableCell>
-                    <TableCell>{transaction.ISIN || ''}</TableCell>
-                    <TableCell>{transaction.OrderType || ''}</TableCell>
-                    <TableCell align="right">{transaction.Quantity}</TableCell>
-                    <TableCell align="right">{transaction.Price?.toFixed(4) || '0.0000'}</TableCell>
-                    <TableCell align="right">{transaction.Amount?.toFixed(2) || '0.00'}</TableCell>
-                    <TableCell>{transaction.Currency || ''}</TableCell>
-                    <TableCell align="right">{transaction.Commission?.toFixed(2) || '0.00'}</TableCell>
-                    <TableCell align="right">{transaction.AmountEUR?.toFixed(2) || '0.00'}</TableCell>
-                    <TableCell>{transaction.OrderID || ''}</TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </TableContainer>
-        </Paper>
-      )}
-       {!transactionsLoading && !transactionsError && processedTransactions.length === 0 && token && (
-         <Typography sx={{ textAlign: 'center', mt: 2 }}>No processed transactions found.</Typography>
-       )}
     </Box>
   );
 };

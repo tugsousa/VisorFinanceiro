@@ -6,7 +6,8 @@ import { useAuth } from '../context/AuthContext';
 import {
   Upload as UploadIcon,
   Dashboard as DashboardIcon,
-  ReceiptLong as TaxIcon, // Kept Tax as an example, remove if not needed
+  ReceiptLong as TaxIcon, 
+  TableView as TableViewIcon, // Import an icon for transactions
   Person as PersonIcon
 } from '@mui/icons-material';
 
@@ -33,7 +34,8 @@ export default function Layout({ children }) {
   const sidebarItems = [
     { title: "Upload", to: "/", icon: <UploadIcon /> },
     { title: "Dashboard", to: "/dashboard", icon: <DashboardIcon /> },
-    { title: "Tax Report", to: "/tax", icon: <TaxIcon /> }, // Example: Keeping Tax separate
+    { title: "Tax Report", to: "/tax", icon: <TaxIcon /> },
+    { title: "Transactions", to: "/transactions", icon: <TableViewIcon /> }, // Added new sidebar item
   ];
 
   return (

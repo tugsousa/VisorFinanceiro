@@ -8,8 +8,7 @@ import { Bar } from 'react-chartjs-2';
 import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend } from 'chart.js';
 import { ALL_YEARS_OPTION } from '../../constants';
 import { getYearString, calculateDaysHeld } from '../../utils/dateUtils';
-// import { generateColorPalette, getBaseProductName } from '../../utils/chartUtils'; // generateColorPalette not used for this chart
-import { getBaseProductName } from '../../utils/chartUtils'; // Only need getBaseProductName
+import { getBaseProductName } from '../../utils/chartUtils'; 
 import { calculateAnnualizedReturn as calculateStockAnnualizedReturn } from '../../utils/formatUtils';
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend);
@@ -19,14 +18,11 @@ const calculateAnnualizedReturnForStocksLocal = (sale) => {
     return calculateStockAnnualizedReturn(sale.Delta, sale.BuyAmountEUR, daysHeld);
 };
 
-// Removed the unused getTopNAndOthersData function
-
 export default function StockSalesSection({ stockSalesData, selectedYear, hideIndividualTotalPL = false }) {
   const totalDelta = useMemo(() => {
     return (stockSalesData || []).reduce((sum, sale) => sum + (sale.Delta || 0), 0);
   }, [stockSalesData]);
 
-  // Common data preparation logic
   const preparedChartInput = useMemo(() => {
     if (!stockSalesData || stockSalesData.length === 0) return null;
 
@@ -36,29 +32,17 @@ export default function StockSalesSection({ stockSalesData, selectedYear, hideIn
 
     if (dataForChart.length === 0) return null;
         
-    const allProductNames = [...new Set(dataForChart.map(sale => getBaseProductName(sale.ProductName)))].sort();
-    
-    const yearlyProductPL = {}; // For 'All Years' view, this will store totals per product across all years
-    const allYearsInChart = new Set(); // Only relevant if we were to show yearly breakdown
+    const productPLMap = {}; 
 
-    if (selectedYear === ALL_YEARS_OPTION || !selectedYear) {
-        dataForChart.forEach(sale => {
-            if (sale.Delta != null) {
-                const baseProduct = getBaseProductName(sale.ProductName);
-                // Accumulate total P/L for each product across all relevant sales
-                yearlyProductPL[baseProduct] = (yearlyProductPL[baseProduct] || 0) + sale.Delta;
-            }
-        });
-    } else { // Specific year selected
-        dataForChart.forEach(sale => {
-          if (sale.Delta != null) {
+    dataForChart.forEach(sale => {
+        if (sale.Delta != null) {
             const baseProduct = getBaseProductName(sale.ProductName);
-            yearlyProductPL[baseProduct] = (yearlyProductPL[baseProduct] || 0) + sale.Delta;
-          }
-        });
-    }
-    // For the chart, we just need the product names and their aggregated P/L for the selected period
-    return { productPLMap: yearlyProductPL, allProductNames, dataForChart };
+            productPLMap[baseProduct] = (productPLMap[baseProduct] || 0) + sale.Delta;
+        }
+    });
+    
+    // No need for allProductNames here if not used for chart labels directly
+    return { productPLMap, dataForChart };
   }, [stockSalesData, selectedYear]);
 
 
@@ -68,46 +52,58 @@ export default function StockSalesSection({ stockSalesData, selectedYear, hideIn
 
     const productsWithPL = Object.entries(productPLMap).map(([name, pl]) => ({ name, pl }));
 
-    // Sort by absolute P/L descending to find the most impactful items
-    productsWithPL.sort((a, b) => Math.abs(b.pl) - Math.abs(a.pl));
+    // 1. Sort by absolute P/L descending to identify the most significant items
+    const sortedByAbsolutePL = [...productsWithPL].sort((a, b) => Math.abs(b.pl) - Math.abs(a.pl));
     
-    const topN = 15; // Display top N products individually
-    let finalLabels = [];
-    let finalPLData = [];
-    let finalBackgroundColors = [];
-    let finalBorderColors = [];
+    const topN = 15; 
+    let itemsForChart = [];
+    let othersPL = 0;
+    let hasOthers = false;
 
-    if (productsWithPL.length > topN) {
-        const topNProducts = productsWithPL.slice(0, topN);
-        const otherProducts = productsWithPL.slice(topN);
-
-        finalLabels = topNProducts.map(p => p.name);
-        finalPLData = topNProducts.map(p => p.pl);
-        
-        const othersPL = otherProducts.reduce((sum, p) => sum + p.pl, 0);
-        finalLabels.push('Others'); // Add "Others" category
-        finalPLData.push(othersPL);
-
-        // Colors for Top N products
-        finalBackgroundColors = topNProducts.map(p => p.pl >= 0 ? 'rgba(75, 192, 192, 0.6)' : 'rgba(255, 99, 132, 0.6)');
-        finalBorderColors = topNProducts.map(p => p.pl >= 0 ? 'rgba(75, 192, 192, 1)' : 'rgba(255, 99, 132, 1)');
-        
-        // Colors for "Others"
-        finalBackgroundColors.push(othersPL >= 0 ? 'rgba(150, 150, 150, 0.6)' : 'rgba(180, 180, 180, 0.6)'); // Grey for Others
-        finalBorderColors.push(othersPL >= 0 ? 'rgba(150, 150, 150, 1)' : 'rgba(180, 180, 180, 1)');
-
-    } else { // If less than or equal to topN products, show all
-        finalLabels = productsWithPL.map(p => p.name);
-        finalPLData = productsWithPL.map(p => p.pl);
-        
-        finalBackgroundColors = finalPLData.map(pl => pl >= 0 ? 'rgba(75, 192, 192, 0.6)' : 'rgba(255, 99, 132, 0.6)');
-        finalBorderColors = finalPLData.map(pl => pl >= 0 ? 'rgba(75, 192, 192, 1)' : 'rgba(255, 99, 132, 1)');
+    if (sortedByAbsolutePL.length > topN) {
+        itemsForChart = sortedByAbsolutePL.slice(0, topN);
+        const otherProducts = sortedByAbsolutePL.slice(topN);
+        othersPL = otherProducts.reduce((sum, p) => sum + p.pl, 0);
+        hasOthers = true;
+    } else { 
+        itemsForChart = sortedByAbsolutePL;
     }
+
+    if (hasOthers) {
+        itemsForChart.push({ name: 'Others', pl: othersPL });
+    }
+    
+    // 2. Now sort the itemsForChart (Top N + Others) by P/L ascending for display
+    itemsForChart.sort((a, b) => {
+      if (a.pl === b.pl) {
+        // Ensure "Others" comes last if P/L is the same as another item, or sort alphabetically
+        if (a.name === 'Others') return 1;
+        if (b.name === 'Others') return -1;
+        return a.name.localeCompare(b.name);
+      }
+      return a.pl - b.pl;
+    });
+    
+    const finalLabels = itemsForChart.map(p => p.name);
+    const finalPLData = itemsForChart.map(p => p.pl);
+    
+    const finalBackgroundColors = finalPLData.map((pl, index) => {
+        if (itemsForChart[index].name === 'Others') {
+            return pl >= 0 ? 'rgba(150, 150, 150, 0.6)' : 'rgba(180, 180, 180, 0.6)'; // Grey for Others
+        }
+        return pl >= 0 ? 'rgba(75, 192, 192, 0.6)' : 'rgba(255, 99, 132, 0.6)';
+    });
+    const finalBorderColors = finalPLData.map((pl, index) => {
+      if (itemsForChart[index].name === 'Others') {
+            return pl >= 0 ? 'rgba(150, 150, 150, 1)' : 'rgba(180, 180, 180, 1)';
+        }
+        return pl >= 0 ? 'rgba(75, 192, 192, 1)' : 'rgba(255, 99, 132, 1)';
+    });
     
     if (finalLabels.length === 0) return { labels: [], datasets: [] };
 
     const datasets = [{
-        label: `P/L by Product`, // This label might not be shown if legend is false
+        label: `P/L by Product`,
         data: finalPLData,
         backgroundColor: finalBackgroundColors,
         borderColor: finalBorderColors,
@@ -115,12 +111,12 @@ export default function StockSalesSection({ stockSalesData, selectedYear, hideIn
     }];
     
     return { labels: finalLabels, datasets };
-  }, [preparedChartInput, selectedYear]); 
+  }, [preparedChartInput]); 
 
   const salesChartOptions = useMemo(() => ({
     responsive: true, maintainAspectRatio: false,
     plugins: {
-      legend: { display: false }, // Only one dataset, legend might be redundant
+      legend: { display: false }, 
       title: { display: true, text: `Stock Sales by Product: ${(selectedYear === ALL_YEARS_OPTION || !selectedYear) ? 'Total P/L (All Years)' : `P/L in ${selectedYear}`}` },
       tooltip: {
         callbacks: { 
@@ -132,9 +128,9 @@ export default function StockSalesSection({ stockSalesData, selectedYear, hideIn
       x: { 
           title: { display: true, text: 'Product' },
           ticks: {
-            autoSkip: false, // Important for rotated labels
-            maxRotation: 45, // Rotate labels if they overlap
-            minRotation: 30, // Minimum rotation
+            autoSkip: false, 
+            maxRotation: 45, 
+            minRotation: 30, 
           }
       },
       y: { beginAtZero: false, title: { display: true, text: 'Profit/Loss (€)' } },
@@ -162,7 +158,7 @@ export default function StockSalesSection({ stockSalesData, selectedYear, hideIn
       )}
 
       {salesChartData && salesChartData.datasets && salesChartData.datasets.length > 0 && salesChartData.datasets.some(ds => ds.data.some(d => d !== 0)) && (
-         <Box sx={{ height: 350, mb: 2 }}> {/* Increased height slightly for better label visibility */}
+         <Box sx={{ height: 350, mb: 2 }}>
             <ChartComponent data={salesChartData} options={salesChartOptions} />
          </Box>
       )}
