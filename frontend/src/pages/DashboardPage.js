@@ -29,27 +29,16 @@ export default function DashboardPage() {
         OptionSaleDetails: 'close_date',
         DividendTaxResult: null, 
       };
-      // 1. Get years from utility function (may include NO_YEAR_SELECTED which is '')
       const extractedYearsWithPossibleEmpty = extractYearsFromData(allDashboardData, dateAccessors);
-      
-      // 2. Filter out NO_YEAR_SELECTED ('') and also ALL_YEARS_OPTION ('all') to avoid duplicates,
-      //    as we will prepend 'all' manually.
       const actualNumericYears = extractedYearsWithPossibleEmpty.filter(
         year => year !== NO_YEAR_SELECTED && year !== ALL_YEARS_OPTION
       );
-      
-      // 3. Construct the final list for the dropdown, ensuring "All Years" is first.
       setAvailableYears([ALL_YEARS_OPTION, ...actualNumericYears]);
-      
-      // 4. Set default selection to "All Years"
       setSelectedYear(ALL_YEARS_OPTION);
     } else {
-      // Fallback if no data
       setAvailableYears([ALL_YEARS_OPTION]);
       setSelectedYear(ALL_YEARS_OPTION);
     }
-  // Add NO_YEAR_SELECTED to dependency array as it's used in the effect.
-  // ALL_YEARS_OPTION is also a constant and technically used.
   }, [allDashboardData]);
 
 
@@ -135,23 +124,55 @@ export default function DashboardPage() {
         </Grid>
       </Grid>
 
-      <Paper elevation={3} sx={{ p: 2, mb: 3 }}>
-        <Typography variant="h6" gutterBottom>
-          Profit/Loss Summary ({selectedYear === ALL_YEARS_OPTION ? 'All Years' : selectedYear})
-        </Typography>
-        <Grid container spacing={1}>
-            <Grid item xs={12} sm={6} md={3}><Typography>Stocks P/L: <Typography component="span" sx={{ fontWeight: 'bold', color: summaryPLs.stockPL >= 0 ? 'success.main' : 'error.main' }}>{formatCurrency(summaryPLs.stockPL)}</Typography></Typography></Grid>
-            <Grid item xs={12} sm={6} md={3}><Typography>Options P/L: <Typography component="span" sx={{ fontWeight: 'bold', color: summaryPLs.optionPL >= 0 ? 'success.main' : 'error.main' }}>{formatCurrency(summaryPLs.optionPL)}</Typography></Typography></Grid>
-            <Grid item xs={12} sm={6} md={3}><Typography>Dividends Net: <Typography component="span" sx={{ fontWeight: 'bold', color: summaryPLs.dividendPL >= 0 ? 'success.main' : 'error.main' }}>{formatCurrency(summaryPLs.dividendPL)}</Typography></Typography></Grid>
-            <Grid item xs={12} sm={6} md={3}><Typography sx={{ fontWeight: 'bold' }}>Total P/L: <Typography component="span" sx={{ fontWeight: 'bold', color: summaryPLs.totalPL >= 0 ? 'success.main' : 'error.main' }}>{formatCurrency(summaryPLs.totalPL)}</Typography></Typography></Grid>
+      <Grid container spacing={3} sx={{ mb: 3 }}>
+        {/* P/L Summary Panel (Sidebar-style) */}
+        <Grid item xs={12} md={4} lg={3}>
+          <Paper elevation={3} sx={{ p: 2, height: '100%', display: 'flex', flexDirection: 'column' }}>
+            <Typography variant="h6" gutterBottom sx={{ textAlign: 'center', mb: 2 }}>
+              P/L Summary ({selectedYear === ALL_YEARS_OPTION ? 'All Years' : selectedYear})
+            </Typography>
+            {/* Changed justifyContent to 'flex-start' and reduced margins */}
+            <Box sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column', justifyContent: 'flex-start' }}>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.75 }}> {/* Reduced mb */}
+                <Typography variant="body1">Stocks P/L:</Typography>
+                <Typography variant="subtitle1" sx={{ fontWeight: 'medium', color: summaryPLs.stockPL >= 0 ? 'success.main' : 'error.main' }}>
+                  {formatCurrency(summaryPLs.stockPL)}
+                </Typography>
+              </Box>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.75 }}> {/* Reduced mb */}
+                <Typography variant="body1">Options P/L:</Typography>
+                <Typography variant="subtitle1" sx={{ fontWeight: 'medium', color: summaryPLs.optionPL >= 0 ? 'success.main' : 'error.main' }}>
+                  {formatCurrency(summaryPLs.optionPL)}
+                </Typography>
+              </Box>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.75 }}> {/* Reduced mb */}
+                <Typography variant="body1">Dividends Net:</Typography>
+                <Typography variant="subtitle1" sx={{ fontWeight: 'medium', color: summaryPLs.dividendPL >= 0 ? 'success.main' : 'error.main' }}>
+                  {formatCurrency(summaryPLs.dividendPL)}
+                </Typography>
+              </Box>
+              <Divider sx={{ my: 1 }} /> {/* Reduced my */}
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mt: 0.75 }}> {/* Reduced mt */}
+                <Typography variant="body1" sx={{ fontWeight: 'bold' }}>Total P/L:</Typography>
+                <Typography variant="h6" sx={{ fontWeight: 'bold', color: summaryPLs.totalPL >= 0 ? 'success.main' : 'error.main' }}>
+                  {formatCurrency(summaryPLs.totalPL)}
+                </Typography>
+              </Box>
+            </Box>
+          </Paper>
         </Grid>
-      </Paper>
- {allDashboardData && (
-    <OverallPLChart 
-        allDashboardData={allDashboardData} 
-        selectedYear={selectedYear} 
-    />
-  )}
+
+        {/* Overall P/L Chart */}
+        <Grid item xs={12} md={8} lg={9}>
+          {allDashboardData && (
+            <OverallPLChart 
+                allDashboardData={allDashboardData} 
+                selectedYear={selectedYear} 
+            />
+          )}
+        </Grid>
+      </Grid>
+      
       <Typography variant="h5" sx={{mt: 2, mb: 1, borderBottom: 1, borderColor: 'divider', pb:1 }}>Current Holdings</Typography>
       <Grid container spacing={3}>
           <Grid item xs={12} lg={6}>
