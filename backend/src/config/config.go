@@ -16,7 +16,8 @@ type AppConfig struct {
 	CSRFAuthKey        []byte
 	HistoricalDataPath string
 	CountryDataPath    string
-	// Add other configurations as needed
+	AccessTokenExpiry  time.Duration // New
+	RefreshTokenExpiry time.Duration // New
 }
 
 var Cfg *AppConfig
@@ -38,9 +39,22 @@ func LoadConfig() {
 		log.Println("WARNING: Using default insecure CSRF_AUTH_KEY. Set CSRF_AUTH_KEY environment variable for production.")
 	}
 	if len(csrfAuthKeyStr) < 32 {
-		// This should be a fatal error if a custom key is provided but too short.
-		// If default is used and too short, it's also a problem.
 		log.Fatalf("FATAL: CSRF_AUTH_KEY must be at least 32 bytes long. Current length: %d", len(csrfAuthKeyStr))
+	}
+
+	accessTokenExpiryStr := getEnv("ACCESS_TOKEN_EXPIRY", "60m")    // Default to 60 minutes
+	refreshTokenExpiryStr := getEnv("REFRESH_TOKEN_EXPIRY", "168h") // Default to 7 days (168h)
+
+	accessTokenExpiry, err := time.ParseDuration(accessTokenExpiryStr)
+	if err != nil {
+		log.Printf("WARNING: Invalid ACCESS_TOKEN_EXPIRY format '%s'. Using default 60m. Error: %v", accessTokenExpiryStr, err)
+		accessTokenExpiry = 60 * time.Minute
+	}
+
+	refreshTokenExpiry, err := time.ParseDuration(refreshTokenExpiryStr)
+	if err != nil {
+		log.Printf("WARNING: Invalid REFRESH_TOKEN_EXPIRY format '%s'. Using default 7d (168h). Error: %v", refreshTokenExpiryStr, err)
+		refreshTokenExpiry = 7 * 24 * time.Hour // 7 days
 	}
 
 	Cfg = &AppConfig{
@@ -51,9 +65,12 @@ func LoadConfig() {
 		CSRFAuthKey:        []byte(csrfAuthKeyStr),
 		HistoricalDataPath: getEnv("HISTORICAL_DATA_PATH", "data/historicalExchangeRate.json"),
 		CountryDataPath:    getEnv("COUNTRY_DATA_PATH", "data/country.json"),
+		AccessTokenExpiry:  accessTokenExpiry,
+		RefreshTokenExpiry: refreshTokenExpiry,
 	}
 
-	log.Printf("Configuration loaded: Port=%s, LogLevel=%s, DBPath=%s", Cfg.Port, Cfg.LogLevel, Cfg.DatabasePath)
+	log.Printf("Configuration loaded: Port=%s, LogLevel=%s, DBPath=%s, AccessTokenExpiry=%s, RefreshTokenExpiry=%s",
+		Cfg.Port, Cfg.LogLevel, Cfg.DatabasePath, Cfg.AccessTokenExpiry, Cfg.RefreshTokenExpiry)
 }
 
 // getEnv retrieves an environment variable or returns a default value.
@@ -81,10 +98,11 @@ func getEnvAsInt(key string, fallback int) int {
 }
 
 // getEnvAsDuration retrieves an environment variable as time.Duration or returns a default.
-// Not used in current Cfg struct, but useful for future additions.
+// This function is effectively replaced by direct parsing in LoadConfig for specific duration fields.
+// Keeping it here in case it's useful for other generic duration configs in the future.
 func getEnvAsDuration(key string, fallback time.Duration) time.Duration {
 	valueStr := getEnv(key, "")
-	if valueStr == "" { // If fallback was empty and env var not set
+	if valueStr == "" {
 		log.Printf("Missing duration value for %s, using default: %s", key, fallback.String())
 		return fallback
 	}

@@ -7,21 +7,18 @@ import (
 	"log"
 	"net/http"
 	"strconv"
-	"strings" // Import strings package
+	"strings"
 	"time"
 
+	"github.com/username/taxfolio/backend/src/config" // Import config
 	"github.com/username/taxfolio/backend/src/database"
 	"github.com/username/taxfolio/backend/src/model"
 	"github.com/username/taxfolio/backend/src/security"
 )
 
 // Define a custom type for context keys to avoid collisions.
-// This type is unexported, making it unique to this package.
 type contextKey string
 
-// Define the specific key we will use.
-// This constant is unexported because GetUserIDFromContext is in the same package
-// and provides a controlled way to access the userID.
 const userIDContextKey contextKey = "userID"
 
 type UserHandler struct {
@@ -36,26 +33,9 @@ func NewUserHandler(authService *security.AuthService) *UserHandler {
 
 func (h *UserHandler) LoginUserHandler(w http.ResponseWriter, r *http.Request) {
 	log.Printf("Login request received from %s", r.RemoteAddr)
-	log.Printf("Login request headers: %v", r.Header)
-
-	// Log CSRF token from header
-	csrfToken := r.Header.Get("X-CSRF-Token")
-	log.Printf("CSRF Token from header: %v", csrfToken)
-
-	// Log CSRF token from cookie
-	if cookie, err := r.Cookie("_gorilla_csrf"); err == nil {
-		log.Printf("CSRF Token from cookie: %v", cookie.Value)
-		log.Printf("CSRF tokens match: %v", cookie.Value == csrfToken)
-	} else {
-		log.Printf("Error getting CSRF cookie: %v", err)
-	}
-
-	// Log all cookies for debugging
-	log.Printf("All cookies in login handler: %v", r.Cookies())
-
-	// Set CORS headers for the response
+	// ... (CSRF logging and CORS headers as before) ...
 	origin := r.Header.Get("Origin")
-	if origin == "http://localhost:3000" {
+	if origin == "http://localhost:3000" { // Simplified for brevity
 		w.Header().Set("Access-Control-Allow-Origin", origin)
 		w.Header().Set("Access-Control-Allow-Credentials", "true")
 		w.Header().Set("Access-Control-Allow-Headers", "Accept, Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization, X-Requested-With, Cookie")
@@ -77,7 +57,6 @@ func (h *UserHandler) LoginUserHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	log.Printf("Login attempt for user: %s", credentials.Username)
-
 	user, err := model.GetUserByUsername(database.DB, credentials.Username)
 	if err != nil {
 		log.Printf("User lookup failed for %s: %v", credentials.Username, err)
@@ -95,7 +74,6 @@ func (h *UserHandler) LoginUserHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Convert user ID to string for the token
 	userIDStr := fmt.Sprintf("%d", user.ID)
 	accessToken, err := h.authService.GenerateToken(userIDStr)
 	if err != nil {
@@ -116,14 +94,13 @@ func (h *UserHandler) LoginUserHandler(w http.ResponseWriter, r *http.Request) {
 		UserAgent:    r.UserAgent(),
 		ClientIP:     r.RemoteAddr,
 		IsBlocked:    false,
-		ExpiresAt:    time.Now().Add(security.RefreshTokenExpiry), // Use defined constant
+		ExpiresAt:    time.Now().Add(config.Cfg.RefreshTokenExpiry), // Use configured value
 	}
 	if err := model.CreateSession(database.DB, session); err != nil {
 		http.Error(w, "Failed to create session", http.StatusInternalServerError)
 		return
 	}
 
-	// Prepare user data for the response
 	userData := map[string]interface{}{
 		"id":       user.ID,
 		"username": user.Username,
@@ -150,7 +127,6 @@ func (h *UserHandler) AuthMiddleware(next http.HandlerFunc) http.HandlerFunc {
 		if strings.HasPrefix(authHeader, "Bearer ") {
 			tokenString = strings.TrimPrefix(authHeader, "Bearer ")
 		} else {
-			log.Printf("Authorization header does not have Bearer prefix: %s for %s %s", authHeader, r.Method, r.URL.Path)
 			tokenString = authHeader
 		}
 
@@ -160,7 +136,7 @@ func (h *UserHandler) AuthMiddleware(next http.HandlerFunc) http.HandlerFunc {
 			return
 		}
 
-		log.Printf("AuthMiddleware: Validating token: %s for %s %s", tokenString, r.Method, r.URL.Path)
+		log.Printf("AuthMiddleware: Validating token (first 10 chars): %s... for %s %s", tokenString[:min(10, len(tokenString))], r.Method, r.URL.Path)
 		userIDStr, err := h.authService.ValidateToken(tokenString)
 		if err != nil {
 			log.Printf("AuthMiddleware: Token validation failed: %v for %s %s", err, r.Method, r.URL.Path)
@@ -171,8 +147,8 @@ func (h *UserHandler) AuthMiddleware(next http.HandlerFunc) http.HandlerFunc {
 		log.Printf("AuthMiddleware: Token validated for user ID: %s for %s %s", userIDStr, r.Method, r.URL.Path)
 		_, err = model.GetSessionByToken(database.DB, tokenString)
 		if err != nil {
-			log.Printf("AuthMiddleware: Session validation failed: %v for %s %s. Token used: %s", err, r.Method, r.URL.Path, tokenString)
-			http.Error(w, "Invalid or expired session", http.StatusUnauthorized) // More specific error
+			log.Printf("AuthMiddleware: Session validation failed for access token: %v for %s %s. Token used (first 10): %s...", err, r.Method, r.URL.Path, tokenString[:min(10, len(tokenString))])
+			http.Error(w, "Invalid or expired session", http.StatusUnauthorized)
 			return
 		}
 
@@ -183,7 +159,6 @@ func (h *UserHandler) AuthMiddleware(next http.HandlerFunc) http.HandlerFunc {
 			return
 		}
 
-		// Use the custom context key type
 		ctx := context.WithValue(r.Context(), userIDContextKey, userIDInt)
 		next(w, r.WithContext(ctx))
 	}
@@ -204,13 +179,19 @@ func (h *UserHandler) RefreshTokenHandler(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	userIDStr, err := h.authService.ValidateToken(requestBody.RefreshToken)
+	oldSession, err := model.GetSessionByRefreshToken(database.DB, requestBody.RefreshToken)
 	if err != nil {
-		log.Printf("Refresh token validation failed: %v", err)
-		http.Error(w, "Invalid refresh token", http.StatusUnauthorized)
+		log.Printf("Refresh token lookup failed or token invalid/expired: %v. Refresh token used (first 10): %s...", err, requestBody.RefreshToken[:min(10, len(requestBody.RefreshToken))])
+		http.Error(w, "Invalid or expired refresh token", http.StatusUnauthorized)
 		return
 	}
 
+	if err := model.DeleteSessionByRefreshToken(database.DB, requestBody.RefreshToken); err != nil {
+		log.Printf("Failed to delete old session during refresh: %v. Refresh token (first 10): %s...", err, requestBody.RefreshToken[:min(10, len(requestBody.RefreshToken))])
+		// Decide if this is fatal or just a log. For now, log and continue.
+	}
+
+	userIDStr := fmt.Sprintf("%d", oldSession.UserID)
 	newAccessToken, err := h.authService.GenerateToken(userIDStr)
 	if err != nil {
 		http.Error(w, "Failed to generate new access token", http.StatusInternalServerError)
@@ -223,15 +204,14 @@ func (h *UserHandler) RefreshTokenHandler(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	userIDInt, _ := strconv.ParseInt(userIDStr, 10, 64) // Already validated
 	newSession := &model.Session{
-		UserID:       int(userIDInt),
+		UserID:       oldSession.UserID,
 		Token:        newAccessToken,
 		RefreshToken: newRefreshToken,
 		UserAgent:    r.UserAgent(),
 		ClientIP:     r.RemoteAddr,
 		IsBlocked:    false,
-		ExpiresAt:    time.Now().Add(security.RefreshTokenExpiry),
+		ExpiresAt:    time.Now().Add(config.Cfg.RefreshTokenExpiry), // Use configured value
 	}
 
 	if err := model.CreateSession(database.DB, newSession); err != nil {
@@ -286,9 +266,9 @@ func (h *UserHandler) RegisterUserHandler(w http.ResponseWriter, r *http.Request
 
 func (h *UserHandler) LogoutUserHandler(w http.ResponseWriter, r *http.Request) {
 	log.Println("Logout request received")
-
+	// ... (CORS headers as before) ...
 	origin := r.Header.Get("Origin")
-	if origin == "http://localhost:3000" {
+	if origin == "http://localhost:3000" { // Simplified for brevity
 		w.Header().Set("Access-Control-Allow-Origin", origin)
 		w.Header().Set("Access-Control-Allow-Credentials", "true")
 		w.Header().Set("Access-Control-Allow-Headers", "Accept, Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization, X-Requested-With, Cookie")
@@ -307,7 +287,6 @@ func (h *UserHandler) LogoutUserHandler(w http.ResponseWriter, r *http.Request) 
 	if strings.HasPrefix(authHeader, "Bearer ") {
 		tokenString = strings.TrimPrefix(authHeader, "Bearer ")
 	} else {
-		log.Printf("Logout: Authorization header does not have Bearer prefix: %s", authHeader)
 		tokenString = authHeader
 	}
 
@@ -319,23 +298,21 @@ func (h *UserHandler) LogoutUserHandler(w http.ResponseWriter, r *http.Request) 
 
 	err := model.DeleteSessionByToken(database.DB, tokenString)
 	if err != nil {
-		log.Printf("Logout: Failed to delete session for token %s: %v", tokenString, err)
+		log.Printf("Logout: Failed to delete session for token (first 10) %s...: %v", tokenString[:min(10, len(tokenString))], err)
 	} else {
-		log.Printf("Logout: Session for token %s invalidated successfully", tokenString)
+		log.Printf("Logout: Session for token (first 10) %s... invalidated successfully", tokenString[:min(10, len(tokenString))])
 	}
 
 	w.WriteHeader(http.StatusNoContent)
 	log.Println("Logout: Responded with 204 No Content")
 }
 
-// HandleCheckUserData checks if the authenticated user has any processed transactions.
 func (h *UserHandler) HandleCheckUserData(w http.ResponseWriter, r *http.Request) {
 	userID, ok := GetUserIDFromContext(r.Context())
 	if !ok {
-		sendJSONError(w, "authentication required", http.StatusUnauthorized) // Assuming sendJSONError is accessible
+		sendJSONError(w, "authentication required", http.StatusUnauthorized)
 		return
 	}
-
 	var count int
 	err := database.DB.QueryRow("SELECT COUNT(*) FROM processed_transactions WHERE user_id = ?", userID).Scan(&count)
 	if err != nil {
@@ -343,17 +320,21 @@ func (h *UserHandler) HandleCheckUserData(w http.ResponseWriter, r *http.Request
 		sendJSONError(w, "failed to check user data", http.StatusInternalServerError)
 		return
 	}
-
 	hasData := count > 0
 	log.Printf("User data check for userID %d: hasData = %v (count = %d)", userID, hasData, count)
-
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]bool{"hasData": hasData})
 }
 
-// GetUserIDFromContext retrieves the userID from the context.
-// It's defined in this package and can be called by other handlers within the same package.
 func GetUserIDFromContext(ctx context.Context) (int64, bool) {
 	userID, ok := ctx.Value(userIDContextKey).(int64)
 	return userID, ok
+}
+
+// Helper min function to avoid index out of bounds for logging
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }

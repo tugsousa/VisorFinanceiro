@@ -1,19 +1,20 @@
 package security
 
 import (
-	"crypto/rand"     // Needed for GenerateRefreshToken
-	"encoding/base64" // Needed for GenerateRefreshToken
+	"crypto/rand"
+	"encoding/base64"
 	"errors"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/username/taxfolio/backend/src/config" // Import config
 	"golang.org/x/crypto/bcrypt"
 )
 
 const (
-	bcryptCost         = 12
-	TokenExpiry        = 15 * time.Minute
-	RefreshTokenExpiry = 7 * 24 * time.Hour
+	bcryptCost = 12
+	// TokenExpiry and RefreshTokenExpiry constants are now removed from here
+	// and will be read from config.Cfg
 )
 
 type AuthService struct {
@@ -39,9 +40,14 @@ func (a *AuthService) CompareHashAndPassword(hashedPassword, password string) er
 }
 
 func (a *AuthService) GenerateToken(userID string) (string, error) {
+	if config.Cfg == nil {
+		// This should ideally not happen if LoadConfig is called at startup
+		// But as a safeguard:
+		return "", errors.New("configuration not loaded, cannot determine token expiry")
+	}
 	claims := jwt.MapClaims{
 		"sub": userID,
-		"exp": time.Now().Add(TokenExpiry).Unix(),
+		"exp": time.Now().Add(config.Cfg.AccessTokenExpiry).Unix(), // Use configured expiry
 		"iat": time.Now().Unix(),
 	}
 
@@ -71,7 +77,12 @@ func (a *AuthService) ValidateToken(tokenString string) (string, error) {
 	}
 
 	if claims, ok := token.Claims.(jwt.MapClaims); ok && token.Valid {
-		return claims["sub"].(string), nil
+		// Ensure 'sub' claim exists and is a string
+		sub, ok := claims["sub"].(string)
+		if !ok {
+			return "", errors.New("invalid token: 'sub' claim missing or not a string")
+		}
+		return sub, nil
 	}
 
 	return "", errors.New("invalid token")
