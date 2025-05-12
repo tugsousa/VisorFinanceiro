@@ -127,32 +127,32 @@ export default function DashboardPage() {
       <Grid container spacing={3} sx={{ mb: 3 }}>
         {/* P/L Summary Panel (Sidebar-style) */}
         <Grid item xs={12} md={4} lg={3}>
-          <Paper elevation={3} sx={{ p: 2, height: '100%', display: 'flex', flexDirection: 'column' }}>
+          {/* Changed elevation to 0 */}
+          <Paper elevation={0} sx={{ p: 2, height: '100%', display: 'flex', flexDirection: 'column', border: 'none' }}> 
             <Typography variant="h6" gutterBottom sx={{ textAlign: 'center', mb: 2 }}>
               P/L Summary ({selectedYear === ALL_YEARS_OPTION ? 'All Years' : selectedYear})
             </Typography>
-            {/* Changed justifyContent to 'flex-start' and reduced margins */}
             <Box sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column', justifyContent: 'flex-start' }}>
-              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.75 }}> {/* Reduced mb */}
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.75 }}>
                 <Typography variant="body1">Stocks P/L:</Typography>
                 <Typography variant="subtitle1" sx={{ fontWeight: 'medium', color: summaryPLs.stockPL >= 0 ? 'success.main' : 'error.main' }}>
                   {formatCurrency(summaryPLs.stockPL)}
                 </Typography>
               </Box>
-              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.75 }}> {/* Reduced mb */}
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.75 }}>
                 <Typography variant="body1">Options P/L:</Typography>
                 <Typography variant="subtitle1" sx={{ fontWeight: 'medium', color: summaryPLs.optionPL >= 0 ? 'success.main' : 'error.main' }}>
                   {formatCurrency(summaryPLs.optionPL)}
                 </Typography>
               </Box>
-              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.75 }}> {/* Reduced mb */}
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.75 }}>
                 <Typography variant="body1">Dividends Net:</Typography>
                 <Typography variant="subtitle1" sx={{ fontWeight: 'medium', color: summaryPLs.dividendPL >= 0 ? 'success.main' : 'error.main' }}>
                   {formatCurrency(summaryPLs.dividendPL)}
                 </Typography>
               </Box>
-              <Divider sx={{ my: 1 }} /> {/* Reduced my */}
-              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mt: 0.75 }}> {/* Reduced mt */}
+              <Divider sx={{ my: 1 }} /> 
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mt: 0.75 }}>
                 <Typography variant="body1" sx={{ fontWeight: 'bold' }}>Total P/L:</Typography>
                 <Typography variant="h6" sx={{ fontWeight: 'bold', color: summaryPLs.totalPL >= 0 ? 'success.main' : 'error.main' }}>
                   {formatCurrency(summaryPLs.totalPL)}
