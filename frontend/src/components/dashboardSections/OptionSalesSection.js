@@ -145,7 +145,7 @@ export default function OptionSalesSection({ optionSalesData, selectedYear, hide
 
   if (!optionSalesData || optionSalesData.length === 0) {
     return (
-      <Paper elevation={2} sx={{ p: 2, mb: 3 }}>
+      <Paper elevation={0} sx={{ p: 2, mb: 3 , border: 'none'}}>
         <Typography variant="subtitle1" gutterBottom>Option Sales</Typography>
         <Typography>No option sales data {(selectedYear === ALL_YEARS_OPTION || !selectedYear) ? 'available' : `for ${selectedYear}`}.</Typography>
       </Paper>
@@ -153,7 +153,7 @@ export default function OptionSalesSection({ optionSalesData, selectedYear, hide
   }
 
   return (
-    <Paper elevation={3} sx={{ p: 2, mb: 3 }}>
+    <Paper elevation={0} sx={{ p: 2, mb: 3 , border: 'none'}}>
       <Typography variant="subtitle1" gutterBottom>
         Option Sales Summary ({(selectedYear === ALL_YEARS_OPTION || !selectedYear) ? 'All Years' : selectedYear})
       </Typography>

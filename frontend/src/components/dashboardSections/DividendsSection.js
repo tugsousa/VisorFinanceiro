@@ -160,7 +160,7 @@ export default function DividendsSection({ dividendSummaryData, selectedYear, hi
 
   if (!processedDividendData || processedDividendData.rows.length === 0) {
     return (
-      <Paper elevation={2} sx={{ p: 2, mb: 3 }}>
+      <Paper elevation={0} sx={{ p: 2, mb: 3, border: 'none' }}>
         <Typography variant="subtitle1" gutterBottom>Dividends</Typography>
         <Typography>No dividend data {(selectedYear === ALL_YEARS_OPTION || !selectedYear) ? 'available' : `for ${selectedYear}`}.</Typography>
       </Paper>
@@ -168,7 +168,7 @@ export default function DividendsSection({ dividendSummaryData, selectedYear, hi
   }
 
   return (
-    <Paper elevation={3} sx={{ p: 2, mb: 3 }}>
+    <Paper elevation={0} sx={{ p: 2, mb: 3, border: 'none' }}>
       <Typography variant="subtitle1" gutterBottom>
         Dividend Summary ({(selectedYear === ALL_YEARS_OPTION || !selectedYear) ? 'All Years' : selectedYear})
       </Typography>

@@ -139,7 +139,7 @@ export default function StockSalesSection({ stockSalesData, selectedYear, hideIn
 
   if (!stockSalesData || stockSalesData.length === 0) {
     return (
-      <Paper elevation={2} sx={{ p: 2, mb: 3 }}>
+      <Paper elevation={0} sx={{ p: 2, mb: 3 , border: 'none'}}>
         <Typography variant="subtitle1" gutterBottom>Stock Sales</Typography>
         <Typography>No stock sales data {(selectedYear === ALL_YEARS_OPTION || !selectedYear) ? 'available' : `for ${selectedYear}`}.</Typography>
       </Paper>
@@ -149,7 +149,7 @@ export default function StockSalesSection({ stockSalesData, selectedYear, hideIn
   const ChartComponent = Bar; 
 
   return (
-    <Paper elevation={3} sx={{ p: 2, mb: 3 }}>
+    <Paper elevation={0} sx={{ p: 2, mb: 3 , border: 'none'}}>
       <Typography variant="subtitle1" gutterBottom>
         Stock Sales Summary ({(selectedYear === ALL_YEARS_OPTION || !selectedYear) ? 'All Years' : selectedYear})
       </Typography>
