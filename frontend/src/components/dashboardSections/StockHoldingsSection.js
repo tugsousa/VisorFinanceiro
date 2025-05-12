@@ -2,14 +2,14 @@
 import React from 'react';
 import {
   Typography, Paper, Table, TableBody, TableCell,
-  TableContainer, TableHead, TableRow, Box
+  TableContainer, TableHead, TableRow
 } from '@mui/material';
 
 export default function StockHoldingsSection({ holdingsData, selectedYear }) {
   if (!holdingsData || holdingsData.length === 0) {
     return (
       <Paper elevation={0} sx={{ p: 2, mb: 3 , border: 'none'}}>
-        <Typography variant="subtitle1" gutterBottom>Stock Holdings</Typography>
+        {/* Title Removed */}
         <Typography>No stock holdings data to display{selectedYear !== 'all' ? ` for ${selectedYear}` : ''}.</Typography>
       </Paper>
     );
@@ -25,9 +25,7 @@ export default function StockHoldingsSection({ holdingsData, selectedYear }) {
 
   return (
     <Paper elevation={0} sx={{ p: 2, mb: 3 , border: 'none'}}>
-      <Typography variant="subtitle1" gutterBottom>
-        Stock Holdings Summary
-      </Typography>
+      {/* Title removed */}
       <TableContainer sx={{ maxHeight: 400 }}>
         <Table stickyHeader size="small">
           <TableHead>

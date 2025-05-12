@@ -2,7 +2,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import {
   Typography, Box, FormControl, InputLabel, Select, MenuItem,
-  Paper, CircularProgress, Grid, Divider, Alert 
+  Paper, CircularProgress, Grid, Divider, Alert
 } from '@mui/material';
 import { useDashboardData } from '../hooks/useDashboardData'; // Custom hook
 import StockHoldingsSection from '../components/dashboardSections/StockHoldingsSection';
@@ -12,8 +12,8 @@ import OptionSalesSection from '../components/dashboardSections/OptionSalesSecti
 import DividendsSection from '../components/dashboardSections/DividendsSection';
 import OverallPLChart from '../components/dashboardSections/OverallPLChart';
 import { ALL_YEARS_OPTION, NO_YEAR_SELECTED } from '../constants'; // Import NO_YEAR_SELECTED
-import { getYearString, extractYearsFromData } from '../utils/dateUtils'; 
-import { formatCurrency } from '../utils/formatUtils'; 
+import { getYearString, extractYearsFromData } from '../utils/dateUtils';
+import { formatCurrency } from '../utils/formatUtils';
 
 export default function DashboardPage() {
   const { data: allDashboardData, loading, error } = useDashboardData();
@@ -27,7 +27,7 @@ export default function DashboardPage() {
         StockSaleDetails: 'SaleDate',
         OptionHoldings: 'open_date',
         OptionSaleDetails: 'close_date',
-        DividendTaxResult: null, 
+        DividendTaxResult: null,
       };
       const extractedYearsWithPossibleEmpty = extractYearsFromData(allDashboardData, dateAccessors);
       const actualNumericYears = extractedYearsWithPossibleEmpty.filter(
@@ -64,12 +64,12 @@ export default function DashboardPage() {
     }
 
     return {
-      StockHoldings: allDashboardData.StockHoldings || [], 
-      OptionHoldings: allDashboardData.OptionHoldings || [], 
+      StockHoldings: allDashboardData.StockHoldings || [],
+      OptionHoldings: allDashboardData.OptionHoldings || [],
       StockSaleDetails: (allDashboardData.StockSaleDetails || []).filter(s => getYearString(s.SaleDate) === selectedYear),
       OptionSaleDetails: (allDashboardData.OptionSaleDetails || []).filter(o => getYearString(o.close_date) === selectedYear),
-      DividendTaxResult: allDashboardData.DividendTaxResult?.[selectedYear] 
-        ? { [selectedYear]: allDashboardData.DividendTaxResult[selectedYear] } 
+      DividendTaxResult: allDashboardData.DividendTaxResult?.[selectedYear]
+        ? { [selectedYear]: allDashboardData.DividendTaxResult[selectedYear] }
         : {},
     };
   }, [allDashboardData, selectedYear]);
@@ -77,9 +77,9 @@ export default function DashboardPage() {
   const summaryPLs = useMemo(() => {
     const stockPL = (filteredData.StockSaleDetails || []).reduce((sum, sale) => sum + (sale.Delta || 0), 0);
     const optionPL = (filteredData.OptionSaleDetails || []).reduce((sum, sale) => sum + (sale.delta || 0), 0);
-    
+
     let dividendPL = 0;
-    const dividendDataToProcess = selectedYear === ALL_YEARS_OPTION 
+    const dividendDataToProcess = selectedYear === ALL_YEARS_OPTION
         ? filteredData.DividendTaxResult
         : (filteredData.DividendTaxResult[selectedYear] ? { [selectedYear]: filteredData.DividendTaxResult[selectedYear] } : {});
 
@@ -128,7 +128,7 @@ export default function DashboardPage() {
         {/* P/L Summary Panel (Sidebar-style) */}
         <Grid item xs={12} md={4} lg={3}>
           {/* Changed elevation to 0 */}
-          <Paper elevation={0} sx={{ p: 2, height: '100%', display: 'flex', flexDirection: 'column', border: 'none' }}> 
+          <Paper elevation={0} sx={{ p: 2, height: '100%', display: 'flex', flexDirection: 'column', border: 'none' }}>
             <Typography variant="h6" gutterBottom sx={{ textAlign: 'center', mb: 2 }}>
               P/L Summary ({selectedYear === ALL_YEARS_OPTION ? 'All Years' : selectedYear})
             </Typography>
@@ -151,7 +151,7 @@ export default function DashboardPage() {
                   {formatCurrency(summaryPLs.dividendPL)}
                 </Typography>
               </Box>
-              <Divider sx={{ my: 1 }} /> 
+              <Divider sx={{ my: 1 }} />
               <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mt: 0.75 }}>
                 <Typography variant="body1" sx={{ fontWeight: 'bold' }}>Total P/L:</Typography>
                 <Typography variant="h6" sx={{ fontWeight: 'bold', color: summaryPLs.totalPL >= 0 ? 'success.main' : 'error.main' }}>
@@ -165,24 +165,21 @@ export default function DashboardPage() {
         {/* Overall P/L Chart */}
         <Grid item xs={12} md={8} lg={9}>
           {allDashboardData && (
-            <OverallPLChart 
-                allDashboardData={allDashboardData} 
-                selectedYear={selectedYear} 
+            <OverallPLChart
+                allDashboardData={allDashboardData}
+                selectedYear={selectedYear}
             />
           )}
         </Grid>
       </Grid>
-      
+
+      {/* Holdings Section: Stocks on top, Options below */}
       <Typography variant="h5" sx={{mt: 2, mb: 1, borderBottom: 1, borderColor: 'divider', pb:1 }}>Current Holdings</Typography>
-      <Grid container spacing={3}>
-          <Grid item xs={12} lg={6}>
-            <StockHoldingsSection holdingsData={filteredData.StockHoldings} selectedYear={selectedYear} />
-          </Grid>
-          <Grid item xs={12} lg={6}>
-            <OptionHoldingsSection holdingsData={filteredData.OptionHoldings} selectedYear={selectedYear} />
-          </Grid>
-      </Grid>
-      
+      {/* Removed wrapping Box elements */}
+      <StockHoldingsSection holdingsData={filteredData.StockHoldings} selectedYear={selectedYear} />
+      <OptionHoldingsSection holdingsData={filteredData.OptionHoldings} selectedYear={selectedYear} />
+
+
       <Divider sx={{ my: 3 }} />
       <Typography variant="h5" sx={{mt: 2, mb: 1, borderBottom: 1, borderColor: 'divider', pb:1}}>Activity Summary {selectedYear !== ALL_YEARS_OPTION ? `(${selectedYear})` : '(All Years)'}</Typography>
       <StockSalesSection stockSalesData={filteredData.StockSaleDetails} selectedYear={selectedYear} hideIndividualTotalPL={true} />
