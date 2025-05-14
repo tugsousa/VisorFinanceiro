@@ -1,4 +1,4 @@
-// frontend/src/components/dashboardSections/OverallPLChart.js
+// frontend/src/components/realizedgainsSections/OverallPLChart.js
 import React, { useMemo } from 'react';
 import { Box, Paper, Typography } from '@mui/material';
 import { Bar } from 'react-chartjs-2';
@@ -14,14 +14,14 @@ const NEGATIVE_COLOR_BG = 'rgba(255, 99, 132, 0.6)'; // Reddish
 const POSITIVE_COLOR_BORDER = 'rgba(75, 192, 192, 1)';
 const NEGATIVE_COLOR_BORDER = 'rgba(255, 99, 132, 1)';
 
-const OverallPLChart = ({ allDashboardData, selectedYear }) => {
+const OverallPLChart = ({ allRealizedGainsData, selectedYear }) => {
   const chartData = useMemo(() => {
-    if (!allDashboardData) return { labels: [], datasets: [] };
+    if (!allRealizedGainsData) return { labels: [], datasets: [] };
 
     const yearlyPL = {}; 
     const allYearsInData = new Set();
 
-    (allDashboardData.StockSaleDetails || []).forEach(sale => {
+    (allRealizedGainsData.StockSaleDetails || []).forEach(sale => {
       const year = getYearString(sale.SaleDate);
       if (year && sale.Delta != null) {
         allYearsInData.add(year);
@@ -31,7 +31,7 @@ const OverallPLChart = ({ allDashboardData, selectedYear }) => {
       }
     });
 
-    (allDashboardData.OptionSaleDetails || []).forEach(sale => {
+    (allRealizedGainsData.OptionSaleDetails || []).forEach(sale => {
       const year = getYearString(sale.close_date);
       if (year && sale.delta != null) {
         allYearsInData.add(year);
@@ -41,7 +41,7 @@ const OverallPLChart = ({ allDashboardData, selectedYear }) => {
       }
     });
 
-    const dividendData = allDashboardData.DividendTaxResult || {};
+    const dividendData = allRealizedGainsData.DividendTaxResult || {};
     Object.entries(dividendData).forEach(([year, countries]) => {
       if (year) {
         allYearsInData.add(year);
@@ -97,7 +97,7 @@ const OverallPLChart = ({ allDashboardData, selectedYear }) => {
         borderWidth: 1,
       }]
     };
-  }, [allDashboardData, selectedYear]);
+  }, [allRealizedGainsData, selectedYear]);
 
   const chartOptions = useMemo(() => ({
     responsive: true,

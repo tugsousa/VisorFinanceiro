@@ -5,7 +5,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import {
   Upload as UploadIcon,
-  Dashboard as DashboardIcon,
+  Dashboard as RealizedGainsIcon,
   ReceiptLong as TaxIcon, 
   TableView as TableViewIcon, // Import an icon for transactions
   Person as PersonIcon
@@ -33,7 +33,7 @@ export default function Layout({ children }) {
 
   const sidebarItems = [
     { title: "Upload", to: "/", icon: <UploadIcon /> },
-    { title: "Dashboard", to: "/dashboard", icon: <DashboardIcon /> },
+    { title: "RealizedGains", to: "/realizedgains", icon: <RealizedGainsIcon /> },
     { title: "Tax Report", to: "/tax", icon: <TaxIcon /> },
     { title: "Transactions", to: "/transactions", icon: <TableViewIcon /> }, // Added new sidebar item
   ];

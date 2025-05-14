@@ -9,7 +9,7 @@ export const API_ENDPOINTS = {
   AUTH_LOGOUT: `${API_BASE_PATH}/auth/logout`,
   AUTH_REFRESH: `${API_BASE_PATH}/auth/refresh`,
   UPLOAD: `${API_BASE_PATH}/upload`,
-  DASHBOARD_DATA: `${API_BASE_PATH}/dashboard-data`,
+  REALIZEDGAINS_DATA: `${API_BASE_PATH}/realizedgains-data`,
   PROCESSED_TRANSACTIONS: `${API_BASE_PATH}/transactions/processed`,
   STOCK_HOLDINGS: `${API_BASE_PATH}/holdings/stocks`,
   OPTION_HOLDINGS: `${API_BASE_PATH}/holdings/options`,

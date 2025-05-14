@@ -5,7 +5,7 @@ import UploadPage from './pages/UploadPage';
 import TaxPage from './pages/TaxPage';
 import SignInPage from './pages/SignInPage';
 import SignUpPage from './pages/SignUpPage';
-import DashboardPage from './pages/DashboardPage';
+import RealizedGainsPage from './pages/RealizedGainsPage';
 import ProcessedTransactionsPage from './pages/ProcessedTransactionsPage';
 import NotFoundPage from './pages/NotFoundPage'; 
 import { AuthProvider, useAuth } from './context/AuthContext';
@@ -41,7 +41,7 @@ const PublicRoute = ({ children }) => {
 
   if (user) {
     // If hasInitialData is null, it means we are still checking (should be covered by authLoading)
-    // If hasInitialData is true, go to dashboard
+    // If hasInitialData is true, go to realizedgains
     // If hasInitialData is false, go to upload page (root)
     if (hasInitialData === null) { // Still waiting for the data check
         return (
@@ -51,7 +51,7 @@ const PublicRoute = ({ children }) => {
           </Box>
         );
     }
-    return <Navigate to={hasInitialData ? "/dashboard" : "/"} replace />;
+    return <Navigate to={hasInitialData ? "/realizedgains" : "/"} replace />;
   }
   return children;
 };
@@ -66,7 +66,7 @@ function App() {
             <Route path="/signin" element={<PublicRoute><SignInPage /></PublicRoute>} />
             <Route path="/signup" element={<PublicRoute><SignUpPage /></PublicRoute>} />
             
-            <Route path="/dashboard" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
+            <Route path="/realizedgains" element={<ProtectedRoute><RealizedGainsPage /></ProtectedRoute>} />
             <Route path="/" element={<ProtectedRoute><UploadPage /></ProtectedRoute>} />
             <Route path="/tax" element={<ProtectedRoute><TaxPage /></ProtectedRoute>} />
             <Route path="/transactions" element={<ProtectedRoute><ProcessedTransactionsPage /></ProtectedRoute>} />

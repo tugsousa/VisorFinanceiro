@@ -1,10 +1,10 @@
-// frontend/src/hooks/useDashboardData.js
+// frontend/src/hooks/useRealizedGainsData.js
 import { useState, useEffect, useContext } from 'react';
 import { AuthContext } from '../context/AuthContext';
-import { apiFetchDashboardData } from '../api/apiService';
+import { apiFetchRealizedGainsData } from '../api/apiService';
 import { UI_TEXT } from '../constants';
 
-export const useDashboardData = () => {
+export const useRealizedGainsData = () => {
   const { token } = useContext(AuthContext); // No need for csrfToken here, apiService handles it
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -21,10 +21,10 @@ export const useDashboardData = () => {
       setLoading(true);
       setError(null);
       try {
-        const response = await apiFetchDashboardData();
+        const response = await apiFetchRealizedGainsData();
         setData(response.data);
       } catch (e) {
-        console.error("Failed to fetch dashboard data via hook:", e);
+        console.error("Failed to fetch realized gains data via hook:", e);
         setError(e.response?.data?.error || e.message || UI_TEXT.errorLoadingData);
         setData(null);
       } finally {

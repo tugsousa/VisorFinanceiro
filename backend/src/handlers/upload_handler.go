@@ -7,7 +7,7 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/username/taxfolio/backend/src/models" // Still needed for UploadResult elements in HandleGetDashboardData
+	"github.com/username/taxfolio/backend/src/models" // Still needed for UploadResult elements in HandleGetRealizedGainsData
 	"github.com/username/taxfolio/backend/src/services"
 )
 
@@ -67,44 +67,44 @@ func (h *UploadHandler) HandleUpload(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// HandleGetDashboardData retrieves all relevant summary data for the dashboard.
-func (h *UploadHandler) HandleGetDashboardData(w http.ResponseWriter, r *http.Request) {
+// HandleGetRealizedGainsData retrieves all relevant summary data for the realizedgains.
+func (h *UploadHandler) HandleGetRealizedGainsData(w http.ResponseWriter, r *http.Request) {
 	userID, ok := GetUserIDFromContext(r.Context())
 	if !ok {
 		sendJSONError(w, "authentication required or user ID not found in context", http.StatusUnauthorized)
 		return
 	}
-	log.Printf("Handling GetDashboardData for userID: %d", userID)
+	log.Printf("Handling GetRealizedGainsData for userID: %d", userID)
 
-	dashboardData, err := h.uploadService.GetLatestUploadResult(userID)
+	realizedgainsData, err := h.uploadService.GetLatestUploadResult(userID)
 	if err != nil {
-		sendJSONError(w, fmt.Sprintf("Error retrieving dashboard data for userID %d: %v", userID, err), http.StatusInternalServerError)
+		sendJSONError(w, fmt.Sprintf("Error retrieving realizedgains data for userID %d: %v", userID, err), http.StatusInternalServerError)
 		return
 	}
 
 	// Ensure nil slices/maps are returned as empty ones for JSON consistency
-	if dashboardData.DividendTaxResult == nil {
-		dashboardData.DividendTaxResult = make(models.DividendTaxResult)
+	if realizedgainsData.DividendTaxResult == nil {
+		realizedgainsData.DividendTaxResult = make(models.DividendTaxResult)
 	}
-	if dashboardData.StockSaleDetails == nil {
-		dashboardData.StockSaleDetails = []models.SaleDetail{}
+	if realizedgainsData.StockSaleDetails == nil {
+		realizedgainsData.StockSaleDetails = []models.SaleDetail{}
 	}
-	if dashboardData.StockHoldings == nil {
-		dashboardData.StockHoldings = []models.PurchaseLot{}
+	if realizedgainsData.StockHoldings == nil {
+		realizedgainsData.StockHoldings = []models.PurchaseLot{}
 	}
-	if dashboardData.OptionSaleDetails == nil {
-		dashboardData.OptionSaleDetails = []models.OptionSaleDetail{}
+	if realizedgainsData.OptionSaleDetails == nil {
+		realizedgainsData.OptionSaleDetails = []models.OptionSaleDetail{}
 	}
-	if dashboardData.OptionHoldings == nil {
-		dashboardData.OptionHoldings = []models.OptionHolding{}
+	if realizedgainsData.OptionHoldings == nil {
+		realizedgainsData.OptionHoldings = []models.OptionHolding{}
 	}
-	// if dashboardData.CashMovements == nil { // If you decide to include it
-	//     dashboardData.CashMovements = []models.CashMovement{}
+	// if realizedgainsData.CashMovements == nil { // If you decide to include it
+	//     realizedgainsData.CashMovements = []models.CashMovement{}
 	// }
 
 	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(dashboardData); err != nil {
-		log.Printf("Error generating JSON response for dashboard data userID %d: %v", userID, err)
+	if err := json.NewEncoder(w).Encode(realizedgainsData); err != nil {
+		log.Printf("Error generating JSON response for realizedgains data userID %d: %v", userID, err)
 		http.Error(w, "Error generating JSON response", http.StatusInternalServerError)
 	}
 }

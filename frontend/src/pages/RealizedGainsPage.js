@@ -1,27 +1,27 @@
-// frontend/src/pages/DashboardPage.js
+// frontend/src/pages/RealizedGainsPage.js
 import React, { useState, useMemo, useEffect } from 'react';
 import {
   Typography, Box, FormControl, InputLabel, Select, MenuItem,
   Paper, CircularProgress, Grid, Divider, Alert
 } from '@mui/material';
-import { useDashboardData } from '../hooks/useDashboardData'; // Custom hook
-import StockHoldingsSection from '../components/dashboardSections/StockHoldingsSection';
-import OptionHoldingsSection from '../components/dashboardSections/OptionHoldingsSection';
-import StockSalesSection from '../components/dashboardSections/StockSalesSection';
-import OptionSalesSection from '../components/dashboardSections/OptionSalesSection';
-import DividendsSection from '../components/dashboardSections/DividendsSection';
-import OverallPLChart from '../components/dashboardSections/OverallPLChart';
+import { useRealizedGainsData } from '../hooks/useRealizedGainsData'; // Custom hook
+import StockHoldingsSection from '../components/realizedgainsSections/StockHoldingsSection';
+import OptionHoldingsSection from '../components/realizedgainsSections/OptionHoldingsSection';
+import StockSalesSection from '../components/realizedgainsSections/StockSalesSection';
+import OptionSalesSection from '../components/realizedgainsSections/OptionSalesSection';
+import DividendsSection from '../components/realizedgainsSections/DividendsSection';
+import OverallPLChart from '../components/realizedgainsSections/OverallPLChart';
 import { ALL_YEARS_OPTION, NO_YEAR_SELECTED } from '../constants'; // Import NO_YEAR_SELECTED
 import { getYearString, extractYearsFromData } from '../utils/dateUtils';
 import { formatCurrency } from '../utils/formatUtils';
 
-export default function DashboardPage() {
-  const { data: allDashboardData, loading, error } = useDashboardData();
+export default function RealizedGainsPage() {
+  const { data: allRealizedGainsData, loading, error } = useRealizedGainsData();
   const [selectedYear, setSelectedYear] = useState(ALL_YEARS_OPTION);
   const [availableYears, setAvailableYears] = useState([ALL_YEARS_OPTION]);
 
   useEffect(() => {
-    if (allDashboardData) {
+    if (allRealizedGainsData) {
       const dateAccessors = {
         StockHoldings: 'buy_date',
         StockSaleDetails: 'SaleDate',
@@ -29,7 +29,7 @@ export default function DashboardPage() {
         OptionSaleDetails: 'close_date',
         DividendTaxResult: null,
       };
-      const extractedYearsWithPossibleEmpty = extractYearsFromData(allDashboardData, dateAccessors);
+      const extractedYearsWithPossibleEmpty = extractYearsFromData(allRealizedGainsData, dateAccessors);
       const actualNumericYears = extractedYearsWithPossibleEmpty.filter(
         year => year !== NO_YEAR_SELECTED && year !== ALL_YEARS_OPTION
       );
@@ -39,7 +39,7 @@ export default function DashboardPage() {
       setAvailableYears([ALL_YEARS_OPTION]);
       setSelectedYear(ALL_YEARS_OPTION);
     }
-  }, [allDashboardData]);
+  }, [allRealizedGainsData]);
 
 
   const handleYearChange = (event) => {
@@ -47,7 +47,7 @@ export default function DashboardPage() {
   };
 
   const filteredData = useMemo(() => {
-    if (!allDashboardData) {
+    if (!allRealizedGainsData) {
       return {
         StockHoldings: [], OptionHoldings: [], StockSaleDetails: [],
         OptionSaleDetails: [], DividendTaxResult: {},
@@ -55,24 +55,24 @@ export default function DashboardPage() {
     }
     if (selectedYear === ALL_YEARS_OPTION) {
       return {
-        StockHoldings: allDashboardData.StockHoldings || [],
-        OptionHoldings: allDashboardData.OptionHoldings || [],
-        StockSaleDetails: allDashboardData.StockSaleDetails || [],
-        OptionSaleDetails: allDashboardData.OptionSaleDetails || [],
-        DividendTaxResult: allDashboardData.DividendTaxResult || {},
+        StockHoldings: allRealizedGainsData.StockHoldings || [],
+        OptionHoldings: allRealizedGainsData.OptionHoldings || [],
+        StockSaleDetails: allRealizedGainsData.StockSaleDetails || [],
+        OptionSaleDetails: allRealizedGainsData.OptionSaleDetails || [],
+        DividendTaxResult: allRealizedGainsData.DividendTaxResult || {},
       };
     }
 
     return {
-      StockHoldings: allDashboardData.StockHoldings || [],
-      OptionHoldings: allDashboardData.OptionHoldings || [],
-      StockSaleDetails: (allDashboardData.StockSaleDetails || []).filter(s => getYearString(s.SaleDate) === selectedYear),
-      OptionSaleDetails: (allDashboardData.OptionSaleDetails || []).filter(o => getYearString(o.close_date) === selectedYear),
-      DividendTaxResult: allDashboardData.DividendTaxResult?.[selectedYear]
-        ? { [selectedYear]: allDashboardData.DividendTaxResult[selectedYear] }
+      StockHoldings: allRealizedGainsData.StockHoldings || [],
+      OptionHoldings: allRealizedGainsData.OptionHoldings || [],
+      StockSaleDetails: (allRealizedGainsData.StockSaleDetails || []).filter(s => getYearString(s.SaleDate) === selectedYear),
+      OptionSaleDetails: (allRealizedGainsData.OptionSaleDetails || []).filter(o => getYearString(o.close_date) === selectedYear),
+      DividendTaxResult: allRealizedGainsData.DividendTaxResult?.[selectedYear]
+        ? { [selectedYear]: allRealizedGainsData.DividendTaxResult[selectedYear] }
         : {},
     };
-  }, [allDashboardData, selectedYear]);
+  }, [allRealizedGainsData, selectedYear]);
 
   const summaryPLs = useMemo(() => {
     const stockPL = (filteredData.StockSaleDetails || []).reduce((sum, sale) => sum + (sale.Delta || 0), 0);
@@ -95,20 +95,20 @@ export default function DashboardPage() {
 
   if (loading) return <CircularProgress sx={{ display: 'block', margin: 'auto', mt: 4 }} />;
   if (error) return <Alert severity="error" sx={{ m: 2 }}>{error}</Alert>;
-  if (!allDashboardData && !loading) return <Typography sx={{ textAlign: 'center', mt: 4 }}>No data loaded. Please upload a file first.</Typography>;
+  if (!allRealizedGainsData && !loading) return <Typography sx={{ textAlign: 'center', mt: 4 }}>No data loaded. Please upload a file first.</Typography>;
 
   return (
     <Box sx={{ p: { xs: 1, sm: 2, md: 3 } }}>
       <Typography variant="h4" component="h1" gutterBottom>
-        Financial Dashboard
+        Realized Gains
       </Typography>
 
       <Grid container spacing={2} sx={{ mb: 3, alignItems: 'center' }}>
         <Grid item>
           <FormControl sx={{ minWidth: 150 }} size="small">
-            <InputLabel id="year-select-dashboard-label">Year</InputLabel>
+            <InputLabel id="year-select-realizedgains-label">Year</InputLabel>
             <Select
-              labelId="year-select-dashboard-label"
+              labelId="year-select-realizedgains-label"
               value={selectedYear}
               label="Year"
               onChange={handleYearChange}
@@ -164,9 +164,9 @@ export default function DashboardPage() {
 
         {/* Overall P/L Chart */}
         <Grid item xs={12} md={8} lg={9}>
-          {allDashboardData && (
+          {allRealizedGainsData && (
             <OverallPLChart
-                allDashboardData={allDashboardData}
+                allRealizedGainsData={allRealizedGainsData}
                 selectedYear={selectedYear}
             />
           )}
