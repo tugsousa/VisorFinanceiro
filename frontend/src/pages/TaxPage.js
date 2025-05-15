@@ -220,7 +220,7 @@ export default function TaxPage() {
   return (
     <Box sx={{ p: { xs: 1, sm: 2 } }}>
       <Typography variant="h4" component="h1" gutterBottom sx={{ mb: 2 }}>
-        Tax Report Information
+        Preencher Declaração IRS
       </Typography>
       
       <Grid container spacing={2} sx={{ mb: 3, alignItems: 'center' }}>
@@ -265,7 +265,10 @@ export default function TaxPage() {
             Anexo J - Quadro 8: Rendimentos de Capitais (Categoria E) - Obtidos no Estrangeiro
           </Typography>
           <Box sx={{ pl: { xs: 0, sm: 2 } }}>
-            <Typography variant="h6" component="h3" gutterBottom sx={{ mt: 2, mb: 1, color: '#8d98a8', border: '1px solid grey', padding: '2px 8px', display: 'inline-block', fontSize: '0.7rem' }}>A - Rendimentos que não respeitam a depósitos ou seguros</Typography>
+            <Box sx={{ mt: 2, display: 'flex', alignItems: 'baseline', mb: 1 }}>
+              <Typography variant="subtitle1" component="span" sx={{ border: '0.5px solid grey', padding: '2px 8px', display: 'inline-block', mr: 1, color: '#8d98a8', fontSize: '0.7rem' }}>A</Typography>
+              <Typography variant="subtitle2" component="span" sx={{ color: '#8d98a8', fontSize: '0.7rem' }}>Rendimentos que não respeitam a depósitos ou seguros</Typography>
+            </Box>
             <TableContainer component={Paper} sx={{ mb: 1, overflowX: 'auto' }}>
               <Table size="small" aria-label="dividend tax details table">
                 <TableHead>
