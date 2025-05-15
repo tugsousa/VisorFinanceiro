@@ -4,11 +4,13 @@ package handlers
 import (
 	"encoding/json"
 	"fmt"
-	"log"
 	"net/http"
+	"strings" // For If-None-Match parsing
 
-	"github.com/username/taxfolio/backend/src/models" // Still needed for UploadResult elements in HandleGetRealizedGainsData
+	"github.com/username/taxfolio/backend/src/logger" // Use new logger
+	"github.com/username/taxfolio/backend/src/models"
 	"github.com/username/taxfolio/backend/src/services"
+	"github.com/username/taxfolio/backend/src/utils" // For GenerateETag
 )
 
 // UploadHandler struct and NewUploadHandler constructor remain the same.
@@ -32,57 +34,63 @@ func (h *UploadHandler) HandleUpload(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := r.ParseMultipartForm(10 << 20); err != nil { // 10 MB max file size
+		logger.L.Warn("Failed to parse multipart form", "userID", userID, "error", err)
 		sendJSONError(w, fmt.Sprintf("failed to parse multipart form: %v", err), http.StatusBadRequest)
 		return
 	}
 
 	file, fileHeader, err := r.FormFile("file")
 	if err != nil {
+		logger.L.Warn("Failed to retrieve file from request", "userID", userID, "error", err)
 		sendJSONError(w, fmt.Sprintf("failed to retrieve file from request: %v", err), http.StatusBadRequest)
 		return
 	}
 	defer file.Close()
 
 	if fileHeader.Header.Get("Content-Type") != "text/csv" { // Basic validation
+		logger.L.Warn("Invalid file type uploaded", "userID", userID, "contentType", fileHeader.Header.Get("Content-Type"))
 		sendJSONError(w, "only CSV files are allowed", http.StatusBadRequest)
 		return
 	}
 	if fileHeader.Size > 10<<20 {
+		logger.L.Warn("Uploaded file too large", "userID", userID, "fileSize", fileHeader.Size)
 		sendJSONError(w, "file too large", http.StatusBadRequest)
 		return
 	}
 
-	log.Printf("Handling upload for userID: %d, filename: %s", userID, fileHeader.Filename)
+	logger.L.Info("Handling upload", "userID", userID, "filename", fileHeader.Filename)
 	result, err := h.uploadService.ProcessUpload(file, userID)
 	if err != nil {
-		log.Printf("Error processing upload for userID %d: %v", userID, err)
+		logger.L.Error("Error processing upload", "userID", userID, "filename", fileHeader.Filename, "error", err)
 		sendJSONError(w, fmt.Sprintf("Error processing upload: %v", err), http.StatusInternalServerError)
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(result); err != nil {
-		log.Printf("Error generating JSON response for upload result userID %d: %v", userID, err)
-		http.Error(w, "Error generating JSON response", http.StatusInternalServerError)
+		logger.L.Error("Error generating JSON response for upload result", "userID", userID, "error", err)
+		// Avoid http.Error after header has been written
 	}
 }
 
 // HandleGetRealizedGainsData retrieves all relevant summary data for the realizedgains.
+// This version includes ETag support.
 func (h *UploadHandler) HandleGetRealizedGainsData(w http.ResponseWriter, r *http.Request) {
 	userID, ok := GetUserIDFromContext(r.Context())
 	if !ok {
 		sendJSONError(w, "authentication required or user ID not found in context", http.StatusUnauthorized)
 		return
 	}
-	log.Printf("Handling GetRealizedGainsData for userID: %d", userID)
+	logger.L.Debug("Handling GetRealizedGainsData request with ETag support", "userID", userID)
 
 	realizedgainsData, err := h.uploadService.GetLatestUploadResult(userID)
 	if err != nil {
+		logger.L.Error("Error retrieving realizedgains data from service", "userID", userID, "error", err)
 		sendJSONError(w, fmt.Sprintf("Error retrieving realizedgains data for userID %d: %v", userID, err), http.StatusInternalServerError)
 		return
 	}
 
-	// Ensure nil slices/maps are returned as empty ones for JSON consistency
+	// Ensure nil slices/maps are returned as empty ones for JSON consistency and ETag stability
 	if realizedgainsData.DividendTaxResult == nil {
 		realizedgainsData.DividendTaxResult = make(models.DividendTaxResult)
 	}
@@ -98,28 +106,62 @@ func (h *UploadHandler) HandleGetRealizedGainsData(w http.ResponseWriter, r *htt
 	if realizedgainsData.OptionHoldings == nil {
 		realizedgainsData.OptionHoldings = []models.OptionHolding{}
 	}
-	// if realizedgainsData.CashMovements == nil { // If you decide to include it
-	//     realizedgainsData.CashMovements = []models.CashMovement{}
-	// }
+	if realizedgainsData.CashMovements == nil { // Assuming CashMovements is part of UploadResult
+		realizedgainsData.CashMovements = []models.CashMovement{}
+	}
 
+	// Generate ETag for the current data
+	currentETag, etagErr := utils.GenerateETag(realizedgainsData)
+	if etagErr != nil {
+		logger.L.Error("Failed to generate ETag for realizedgains data", "userID", userID, "error", etagErr)
+		// Proceed without ETag matching, just send the data
+	}
+
+	// Set Cache-Control header. "no-cache" means client must revalidate.
+	// "private" indicates it's user-specific and shouldn't be stored by shared caches.
+	w.Header().Set("Cache-Control", "no-cache, private")
+
+	if etagErr == nil && currentETag != "" {
+		// Set the ETag header for the current response. ETag value MUST be enclosed in quotes.
+		quotedETag := fmt.Sprintf("\"%s\"", currentETag)
+		w.Header().Set("ETag", quotedETag)
+
+		// Check If-None-Match request header
+		clientETag := r.Header.Get("If-None-Match")
+
+		// Handle potential multiple ETags in If-None-Match (e.g., "etag1", "etag2")
+		// For this simple case, we check if our quotedETag is among them.
+		// A more robust parser might be needed for complex scenarios.
+		clientETags := strings.Split(clientETag, ",")
+		for _, cETag := range clientETags {
+			if strings.TrimSpace(cETag) == quotedETag {
+				logger.L.Info("ETag match for realizedgains data", "userID", userID, "etag", currentETag)
+				w.WriteHeader(http.StatusNotModified)
+				return
+			}
+		}
+		if clientETag != "" { // Log if client sent an ETag but it didn't match
+			logger.L.Debug("ETag mismatch", "userID", userID, "clientETags", clientETag, "serverETag", quotedETag)
+		}
+
+	} else {
+		logger.L.Warn("Proceeding without ETag check due to ETag generation error or empty ETag", "userID", userID)
+	}
+
+	// If no ETag match or ETag couldn't be processed, send the full response
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(realizedgainsData); err != nil {
-		log.Printf("Error generating JSON response for realizedgains data userID %d: %v", userID, err)
-		http.Error(w, "Error generating JSON response", http.StatusInternalServerError)
+		logger.L.Error("Error generating JSON response for realizedgains data", "userID", userID, "error", err)
+		// Avoid http.Error if headers already written
 	}
 }
 
-// sendJSONError is already defined in upload_handler and can be used by other new handlers
-// If it's to be shared, it could be moved to a handlers/utils.go or similar.
-// For now, new handlers will define their own or we can duplicate it.
-// To keep it simple for this refactor, I'll duplicate it in new handlers where needed.
-// However, a better long-term solution is a shared helper.
-// Let's assume for now that GetUserIDFromContext is also accessible or duplicated.
-// These are in the `handlers` package, so they are accessible.
 // Helper function to send JSON errors
 func sendJSONError(w http.ResponseWriter, message string, statusCode int) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(statusCode)
-	log.Printf("Sending JSON error to client: %s (status: %d)", message, statusCode)
+	// Use the global logger here if preferred, or keep using log for consistency within this file.
+	// For consistency with the rest of the app, using logger.L
+	logger.L.Warn("Sending JSON error to client", "message", message, "statusCode", statusCode)
 	json.NewEncoder(w).Encode(map[string]string{"error": message})
 }

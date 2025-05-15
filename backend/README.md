@@ -24,19 +24,6 @@ This is the backend server for Taxfolio, a portfolio tracker and tax helper appl
     cd <your-repository-url>/backend
     ```
 
-2.  **Environment Variables:**
-    Create a `.env` file in the `backend` directory or set the following environment variables directly in your shell:
-
-    *   `JWT_SECRET` (Required): A secure secret key for signing JWTs. It must be at least 32 characters long for HS256 encryption.
-        ```
-        JWT_SECRET="your-very-secure-and-long-jwt-secret-key-for-hs256-minimum-32-bytes"
-        ```
-        **Note:** For production, use a strong, randomly generated secret. The default in `main.go` is for development convenience only and is insecure.
-    *   `PORT` (Optional): The port on which the server will listen. Defaults to `8080`.
-        ```
-        PORT=8080
-        ```
-
 3.  **Database:**
     The application uses SQLite. The database file (`taxfolio.db`) will be automatically created in the `backend` directory when the server starts for the first time, if it doesn't already exist. The schema is also initialized automatically.
 
@@ -50,8 +37,7 @@ This is the backend server for Taxfolio, a portfolio tracker and tax helper appl
 
 ## Running the Backend
 
-1.  **Ensure Environment Variables are Set:** Make sure `JWT_SECRET` is configured.
-2.  **Start the server:**
+ **Start the server:**
     From the `backend` directory, run:
     ```bash
     go run main.go
