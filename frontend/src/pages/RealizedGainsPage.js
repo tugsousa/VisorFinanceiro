@@ -4,19 +4,40 @@ import {
   Typography, Box, FormControl, InputLabel, Select, MenuItem,
   Paper, CircularProgress, Grid, Divider, Alert
 } from '@mui/material';
-import { useRealizedGainsData } from '../hooks/useRealizedGainsData'; // Custom hook
+import { useQuery } from '@tanstack/react-query'; // Import useQuery
+import { apiFetchRealizedGainsData } from '../api/apiService'; // API function
+import { useAuth } from '../context/AuthContext'; // To get token for query key
+
 import StockHoldingsSection from '../components/realizedgainsSections/StockHoldingsSection';
 import OptionHoldingsSection from '../components/realizedgainsSections/OptionHoldingsSection';
 import StockSalesSection from '../components/realizedgainsSections/StockSalesSection';
 import OptionSalesSection from '../components/realizedgainsSections/OptionSalesSection';
 import DividendsSection from '../components/realizedgainsSections/DividendsSection';
 import OverallPLChart from '../components/realizedgainsSections/OverallPLChart';
-import { ALL_YEARS_OPTION, NO_YEAR_SELECTED } from '../constants'; // Import NO_YEAR_SELECTED
+import { ALL_YEARS_OPTION, NO_YEAR_SELECTED, UI_TEXT } from '../constants';
 import { getYearString, extractYearsFromData } from '../utils/dateUtils';
 import { formatCurrency } from '../utils/formatUtils';
 
+const fetchRealizedGainsData = async () => {
+  const response = await apiFetchRealizedGainsData();
+  return response.data;
+};
+
 export default function RealizedGainsPage() {
-  const { data: allRealizedGainsData, loading, error } = useRealizedGainsData();
+  const { token } = useAuth(); // Get token, used as part of queryKey to auto-refetch on auth change
+  
+  const { 
+    data: allRealizedGainsData, 
+    isLoading: loading, // isLoading from useQuery
+    error, // error from useQuery
+    isError, // isError boolean from useQuery
+  } = useQuery({
+    queryKey: ['realizedGainsData', token], // Query key, token ensures refetch on login/logout
+    queryFn: fetchRealizedGainsData,
+    enabled: !!token, // Only run query if token exists
+    staleTime: 1000 * 60 * 5, // 5 minutes
+  });
+
   const [selectedYear, setSelectedYear] = useState(ALL_YEARS_OPTION);
   const [availableYears, setAvailableYears] = useState([ALL_YEARS_OPTION]);
 
@@ -34,19 +55,32 @@ export default function RealizedGainsPage() {
         year => year !== NO_YEAR_SELECTED && year !== ALL_YEARS_OPTION
       );
       setAvailableYears([ALL_YEARS_OPTION, ...actualNumericYears]);
-      setSelectedYear(ALL_YEARS_OPTION);
+      // Reset to ALL_YEARS_OPTION when data reloads to ensure consistency
+      // Or, try to preserve selectedYear if it's still valid within the new actualNumericYears
+      if (!actualNumericYears.includes(selectedYear) && selectedYear !== ALL_YEARS_OPTION) {
+          setSelectedYear(ALL_YEARS_OPTION);
+      } else if (actualNumericYears.length > 0 && selectedYear === ALL_YEARS_OPTION && actualNumericYears.length === 1) {
+          // If only one actual year is available, consider setting it as default,
+          // but for now, stick to ALL_YEARS_OPTION if it was selected.
+          // Or, if selectedYear wasn't ALL_YEARS and is now invalid, reset to ALL_YEARS.
+      } else if (actualNumericYears.length === 0) {
+          setSelectedYear(ALL_YEARS_OPTION);
+      }
+
+
     } else {
       setAvailableYears([ALL_YEARS_OPTION]);
       setSelectedYear(ALL_YEARS_OPTION);
     }
-  }, [allRealizedGainsData]);
-
+  }, [allRealizedGainsData, selectedYear]); // Added selectedYear to deps to re-evaluate if it's still valid
 
   const handleYearChange = (event) => {
     setSelectedYear(event.target.value);
   };
 
   const filteredData = useMemo(() => {
+    // ... (existing filtering logic based on allRealizedGainsData and selectedYear) ...
+    // This logic remains the same.
     if (!allRealizedGainsData) {
       return {
         StockHoldings: [], OptionHoldings: [], StockSaleDetails: [],
@@ -64,8 +98,8 @@ export default function RealizedGainsPage() {
     }
 
     return {
-      StockHoldings: allRealizedGainsData.StockHoldings || [],
-      OptionHoldings: allRealizedGainsData.OptionHoldings || [],
+      StockHoldings: allRealizedGainsData.StockHoldings || [], // Holdings are typically current, not year-filtered this way
+      OptionHoldings: allRealizedGainsData.OptionHoldings || [], // Same for option holdings
       StockSaleDetails: (allRealizedGainsData.StockSaleDetails || []).filter(s => getYearString(s.SaleDate) === selectedYear),
       OptionSaleDetails: (allRealizedGainsData.OptionSaleDetails || []).filter(o => getYearString(o.close_date) === selectedYear),
       DividendTaxResult: allRealizedGainsData.DividendTaxResult?.[selectedYear]
@@ -75,16 +109,19 @@ export default function RealizedGainsPage() {
   }, [allRealizedGainsData, selectedYear]);
 
   const summaryPLs = useMemo(() => {
+    // ... (existing summary P/L calculation logic) ...
+    // This logic also remains the same.
     const stockPL = (filteredData.StockSaleDetails || []).reduce((sum, sale) => sum + (sale.Delta || 0), 0);
     const optionPL = (filteredData.OptionSaleDetails || []).reduce((sum, sale) => sum + (sale.delta || 0), 0);
 
     let dividendPL = 0;
     const dividendDataToProcess = selectedYear === ALL_YEARS_OPTION
         ? filteredData.DividendTaxResult
-        : (filteredData.DividendTaxResult[selectedYear] ? { [selectedYear]: filteredData.DividendTaxResult[selectedYear] } : {});
+        : (filteredData.DividendTaxResult && filteredData.DividendTaxResult[selectedYear] ? { [selectedYear]: filteredData.DividendTaxResult[selectedYear] } : {});
 
-    for (const yearData of Object.values(dividendDataToProcess)) {
-        for (const countryData of Object.values(yearData)) {
+
+    for (const yearData of Object.values(dividendDataToProcess || {})) { // Add guard for dividendDataToProcess
+        for (const countryData of Object.values(yearData || {})) { // Add guard for yearData
             dividendPL += (countryData.gross_amt || 0) + (countryData.taxed_amt || 0);
         }
     }
@@ -92,11 +129,13 @@ export default function RealizedGainsPage() {
     return { stockPL, optionPL, dividendPL, totalPL };
   }, [filteredData, selectedYear]);
 
-
   if (loading) return <CircularProgress sx={{ display: 'block', margin: 'auto', mt: 4 }} />;
-  if (error) return <Alert severity="error" sx={{ m: 2 }}>{error}</Alert>;
-  if (!allRealizedGainsData && !loading) return <Typography sx={{ textAlign: 'center', mt: 4 }}>No data loaded. Please upload a file first.</Typography>;
+  if (isError) return <Alert severity="error" sx={{ m: 2 }}>{error?.message || UI_TEXT.errorLoadingData}</Alert>;
+  if (!allRealizedGainsData && !loading && !isError) return <Typography sx={{ textAlign: 'center', mt: 4 }}>No data loaded. Please upload a file first.</Typography>;
 
+
+  // ... (rest of the JSX rendering logic using filteredData, summaryPLs, loading, isError, etc.)
+  // The structure of the page remains largely the same.
   return (
     <Box sx={{ p: { xs: 1, sm: 2, md: 3 } }}>
       <Typography variant="h4" component="h1" gutterBottom>
@@ -125,9 +164,7 @@ export default function RealizedGainsPage() {
       </Grid>
 
       <Grid container spacing={3} sx={{ mb: 3 }}>
-        {/* P/L Summary Panel (Sidebar-style) */}
         <Grid item xs={12} md={4} lg={3}>
-          {/* Changed elevation to 0 */}
           <Paper elevation={0} sx={{ p: 2, height: '100%', display: 'flex', flexDirection: 'column', border: 'none' }}>
             <Typography variant="h6" gutterBottom sx={{ textAlign: 'center', mb: 2 }}>
               P/L Summary ({selectedYear === ALL_YEARS_OPTION ? 'All Years' : selectedYear})
@@ -162,7 +199,6 @@ export default function RealizedGainsPage() {
           </Paper>
         </Grid>
 
-        {/* Overall P/L Chart */}
         <Grid item xs={12} md={8} lg={9}>
           {allRealizedGainsData && (
             <OverallPLChart
@@ -173,18 +209,19 @@ export default function RealizedGainsPage() {
         </Grid>
       </Grid>
 
-      {/* Holdings Section: Stocks on top, Options below */}
       <Typography variant="h5" sx={{mt: 2, mb: 1, borderBottom: 1, borderColor: 'divider', pb:1 }}>Current Holdings</Typography>
-      {/* Removed wrapping Box elements */}
       <StockHoldingsSection holdingsData={filteredData.StockHoldings} selectedYear={selectedYear} />
       <OptionHoldingsSection holdingsData={filteredData.OptionHoldings} selectedYear={selectedYear} />
-
 
       <Divider sx={{ my: 3 }} />
       <Typography variant="h5" sx={{mt: 2, mb: 1, borderBottom: 1, borderColor: 'divider', pb:1}}>Activity Summary {selectedYear !== ALL_YEARS_OPTION ? `(${selectedYear})` : '(All Years)'}</Typography>
       <StockSalesSection stockSalesData={filteredData.StockSaleDetails} selectedYear={selectedYear} hideIndividualTotalPL={true} />
       <OptionSalesSection optionSalesData={filteredData.OptionSaleDetails} selectedYear={selectedYear} hideIndividualTotalPL={true} />
-      <DividendsSection dividendSummaryData={filteredData.DividendTaxResult} selectedYear={selectedYear} hideIndividualTotalPL={true} />
+      <DividendsSection 
+        dividendSummaryData={allRealizedGainsData?.DividendTaxResult || {}} // Pass the full dividend summary from top-level data
+        selectedYear={selectedYear} 
+        hideIndividualTotalPL={true} 
+      />
     </Box>
   );
 }

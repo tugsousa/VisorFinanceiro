@@ -1,23 +1,22 @@
 // frontend/src/pages/UploadPage.js
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { useProcessedTransactions } from '../hooks/useProcessedTransactions'; // Kept for refetch function
 import { apiUploadFile } from '../api/apiService';
 import './UploadPage.css';
 import { ALLOWED_FILE_TYPES, MAX_FILE_SIZE_BYTES, MAX_FILE_SIZE_MB, UI_TEXT } from '../constants';
-import { Typography, Box, Button, LinearProgress, Paper, Alert } from '@mui/material'; // Removed Table specific imports
+import { Typography, Box, Button, LinearProgress, Paper, Alert } from '@mui/material';
+import { useQueryClient } from '@tanstack/react-query'; // Import useQueryClient
 
 const UploadPage = () => {
-  const { token } = useAuth();
+  const { token, refreshUserDataCheck } = useAuth(); // Get refreshUserDataCheck from AuthContext
+  const queryClient = useQueryClient(); // Get query client instance
   const [selectedFile, setSelectedFile] = useState(null);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadStatus, setUploadStatus] = useState('idle');
   const [fileError, setFileError] = useState(null);
   
-  // We still need the refetch function from the hook
-  const { refetch: refetchProcessedTransactions } = useProcessedTransactions();
-
   const handleFileChange = (e) => {
+    // ... (existing logic)
     const file = e.target.files[0];
     if (!file) {
         setSelectedFile(null);
@@ -64,7 +63,17 @@ const UploadPage = () => {
 
       setUploadStatus('success');
       console.log('Upload successful:', response.data);
-      refetchProcessedTransactions(); // Refetch transactions so the new page will have up-to-date data
+      
+      // Invalidate queries to refetch data
+      // The query keys should match those used in useQuery calls elsewhere
+      queryClient.invalidateQueries({ queryKey: ['realizedGainsData', token] });
+      queryClient.invalidateQueries({ queryKey: ['processedTransactions', token] });
+      queryClient.invalidateQueries({ queryKey: ['taxReportData', token] });
+      queryClient.invalidateQueries({ queryKey: ['dividendTransactionsForChart', token] });
+      // Add any other query keys that depend on the uploaded data
+
+      await refreshUserDataCheck(); // Re-check if user has data to update AuthContext state
+
       setSelectedFile(null); 
       const fileInput = document.getElementById('file-input-upload-page');
       if (fileInput) fileInput.value = '';
@@ -77,6 +86,7 @@ const UploadPage = () => {
  
   return (
     <Box className="upload-container" sx={{ p: {xs: 2, sm: 3} }}>
+      {/* ... (Rest of JSX is the same) ... */}
       <Typography variant="h4" component="h1" gutterBottom>Upload Tax Documents</Typography>
       <Paper elevation={3} sx={{ p: {xs: 2, sm: 3}, mb: 3 }}>
         <Box component="form" noValidate autoComplete="off" className="upload-form">
@@ -103,7 +113,7 @@ const UploadPage = () => {
           )}
           
           {fileError && <Alert severity="error" sx={{my:2}}>{fileError}</Alert>}
-          {uploadStatus === 'success' && <Alert severity="success" sx={{my:2}}>Upload completed successfully! Processed transactions can be viewed on the Transactions page.</Alert>}
+          {uploadStatus === 'success' && <Alert severity="success" sx={{my:2}}>Upload completed successfully! Data has been updated.</Alert>}
 
           <Button
             variant="contained"
@@ -114,9 +124,6 @@ const UploadPage = () => {
           </Button>
         </Box>
       </Paper>
-
-      {/* The section displaying processed transactions has been removed from this page. */}
-      
     </Box>
   );
 };

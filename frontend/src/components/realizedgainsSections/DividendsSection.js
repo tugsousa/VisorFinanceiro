@@ -1,43 +1,60 @@
-// frontend/src/components/dashboardSections/DividendsSection.js
+// frontend/src/components/realizedgainsSections/DividendsSection.js
 import React, { useMemo } from 'react';
-import {
-  Typography, Paper, Table, TableBody, TableCell,
-  TableContainer, TableHead, TableRow, Box, CircularProgress, Alert
-} from '@mui/material';
+import { /* ...MUI imports... */ Typography, Paper, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Box, CircularProgress, Alert } from '@mui/material';
 import { Bar } from 'react-chartjs-2';
 import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend } from 'chart.js';
-import { useDividendTransactions } from '../../hooks/useDividendTransactions';
+import { useQuery } from '@tanstack/react-query'; // Import useQuery
+import { apiFetchDividendTransactions } from '../../api/apiService'; // API function
+import { useAuth } from '../../context/AuthContext'; // To get token
+
 import { ALL_YEARS_OPTION, UI_TEXT } from '../../constants';
 import { getYearString } from '../../utils/dateUtils';
-import { getBaseProductName } // generateDistinctColor is no longer needed here
-from '../../utils/chartUtils';
+import { getBaseProductName } from '../../utils/chartUtils';
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend);
 
-// Define green colors
-const GREEN_COLOR_BG = 'rgba(75, 192, 192, 0.6)'; // Greenish background
-const GREEN_COLOR_BORDER = 'rgba(75, 192, 192, 1)'; // Greenish border
+const GREEN_COLOR_BG = 'rgba(75, 192, 192, 0.6)';
+const GREEN_COLOR_BORDER = 'rgba(75, 192, 192, 1)';
+
+const fetchDividendTransactionsForChart = async () => {
+  const response = await apiFetchDividendTransactions();
+  return response.data || []; // Ensure it returns an array
+};
 
 export default function DividendsSection({ dividendSummaryData, selectedYear, hideIndividualTotalPL = false }) {
-  const { 
-    dividendTransactions: rawDividendTransactions, 
-    loading: chartLoading, 
-    error: chartError 
-  } = useDividendTransactions();
+  const { token } = useAuth();
 
+  const { 
+    data: rawDividendTransactions = [], // Default to empty array
+    isLoading: chartLoading, 
+    error: chartErrorObj,
+    isError: isChartError,
+  } = useQuery({
+    queryKey: ['dividendTransactionsForChart', token], // Separate query key
+    queryFn: fetchDividendTransactionsForChart,
+    enabled: !!token && !hideIndividualTotalPL, // Fetch only if chart is to be shown and user is logged in
+    staleTime: 1000 * 60 * 5, // 5 minutes
+  });
+  
+  const chartError = isChartError ? (chartErrorObj?.message || UI_TEXT.errorLoadingData) : null;
+
+  // processedDividendData for the table (uses prop dividendSummaryData)
   const processedDividendData = useMemo(() => {
+    // ... (this logic remains the same as it uses props)
     const rows = [];
     let totalGross = 0;
     let totalTax = 0;
     
+    // Ensure dividendSummaryData is an object before trying to Object.entries
     const dataToProcess = (selectedYear === ALL_YEARS_OPTION || !selectedYear)
-        ? dividendSummaryData
-        : (dividendSummaryData?.[selectedYear] ? { [selectedYear]: dividendSummaryData[selectedYear] } : {});
+        ? (dividendSummaryData || {})
+        : ((dividendSummaryData && dividendSummaryData[selectedYear]) ? { [selectedYear]: dividendSummaryData[selectedYear] } : {});
+
 
     for (const [year, countries] of Object.entries(dataToProcess)) {
       if (selectedYear !== ALL_YEARS_OPTION && year !== selectedYear && selectedYear !== '') continue; 
-
-      for (const [country, amounts] of Object.entries(countries)) {
+      // Ensure countries is an object
+      for (const [country, amounts] of Object.entries(countries || {})) {
         const gross = amounts.gross_amt || 0;
         const tax = amounts.taxed_amt || 0; 
         const net = gross + tax;
@@ -51,7 +68,9 @@ export default function DividendsSection({ dividendSummaryData, selectedYear, hi
   }, [dividendSummaryData, selectedYear]);
 
 
+  // productChartData for the Bar chart (uses fetched rawDividendTransactions)
   const productChartData = useMemo(() => {
+    // ... (this logic remains the same, but now uses rawDividendTransactions from useQuery)
     const filteredForChart = rawDividendTransactions.filter(tx => {
         const orderTypeLower = tx.OrderType?.toLowerCase();
         const isDividendType = orderTypeLower === 'dividend';
@@ -72,10 +91,8 @@ export default function DividendsSection({ dividendSummaryData, selectedYear, hi
     });
 
     const productsWithDividends = Object.entries(productDividendMap).map(([name, amount]) => ({ name, amount }));
-
-    // Sort by dividend amount descending to identify the most significant items for "Others" aggregation
-    const sortedByAmountForOthers = [...productsWithDividends].sort((a, b) => b.amount - a.amount);
     
+    const sortedByAmountForOthers = [...productsWithDividends].sort((a, b) => b.amount - a.amount);
     const topN = 15; 
     let itemsForChart = [];
     let othersAmount = 0;
@@ -94,21 +111,15 @@ export default function DividendsSection({ dividendSummaryData, selectedYear, hi
         itemsForChart.push({ name: 'Others', amount: othersAmount });
     }
     
-    // Sort the final list by amount ASCENDING (lowest on left, highest on right)
     itemsForChart.sort((a, b) => {
-      if (a.amount !== b.amount) {
-        return a.amount - b.amount; // Ascending amount
-      }
-      // If amounts are the same, handle 'Others' to be last among them
+      if (a.amount !== b.amount) return a.amount - b.amount; 
       if (a.name === 'Others') return 1; 
       if (b.name === 'Others') return -1;
-      return a.name.localeCompare(b.name); // Alphabetical for same amount non-'Others'
+      return a.name.localeCompare(b.name);
     });
     
     const finalLabels = itemsForChart.map(p => p.name);
     const finalAmounts = itemsForChart.map(p => p.amount);
-    
-    // Use consistent green color for all bars
     const finalBackgroundColors = finalAmounts.map(() => GREEN_COLOR_BG);
     const finalBorderColors = finalAmounts.map(() => GREEN_COLOR_BORDER);
     
@@ -117,7 +128,7 @@ export default function DividendsSection({ dividendSummaryData, selectedYear, hi
     return {
       labels: finalLabels,
       datasets: [{
-        label: `Gross Dividends`, // This label appears in tooltips
+        label: `Gross Dividends`,
         data: finalAmounts,
         backgroundColor: finalBackgroundColors,
         borderColor: finalBorderColors,
@@ -127,6 +138,7 @@ export default function DividendsSection({ dividendSummaryData, selectedYear, hi
   }, [rawDividendTransactions, selectedYear]);
 
   const productChartOptions = useMemo(() => ({
+    // ... (this logic remains the same)
       responsive: true,
       maintainAspectRatio: false,
       plugins: {
@@ -148,11 +160,7 @@ export default function DividendsSection({ dividendSummaryData, selectedYear, hi
           },
           x: { 
             title: { display: true, text: 'Product'},
-            ticks: {
-              autoSkip: false, 
-              maxRotation: 45, 
-              minRotation: 30, 
-            }
+            ticks: { autoSkip: false, maxRotation: 45, minRotation: 30 }
           }
       }
   }), [selectedYear]);
@@ -169,6 +177,7 @@ export default function DividendsSection({ dividendSummaryData, selectedYear, hi
 
   return (
     <Paper elevation={0} sx={{ p: 2, mb: 3, border: 'none' }}>
+      {/* ... (Rest of the JSX rendering logic for table and summary text) ... */}
       <Typography variant="subtitle1" gutterBottom>
         Dividend Summary ({(selectedYear === ALL_YEARS_OPTION || !selectedYear) ? 'All Years' : selectedYear})
       </Typography>

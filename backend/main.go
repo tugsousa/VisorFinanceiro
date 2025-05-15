@@ -6,11 +6,12 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/patrickmn/go-cache" // Import go-cache
 	"github.com/username/taxfolio/backend/src/config"
 	"github.com/username/taxfolio/backend/src/database"
 	"github.com/username/taxfolio/backend/src/handlers"
-	"github.com/username/taxfolio/backend/src/logger" // Structured logger
-	_ "github.com/username/taxfolio/backend/src/model"
+	"github.com/username/taxfolio/backend/src/logger"  // Structured logger
+	_ "github.com/username/taxfolio/backend/src/model" // Ensure models are compiled, user model is used by handlers
 	"github.com/username/taxfolio/backend/src/parsers"
 	"github.com/username/taxfolio/backend/src/processors"
 	"github.com/username/taxfolio/backend/src/security"
@@ -39,19 +40,19 @@ func enableCORS(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		origin := r.Header.Get("Origin")
 		// Be more specific in production if possible, e.g., your frontend domain
+		// For development, allowing localhost:3000 is common.
+		// Consider making the allowed origin configurable.
 		if origin == "http://localhost:3000" || origin == "" { // "" for same-origin or non-browser clients
 			w.Header().Set("Access-Control-Allow-Origin", origin)
 			w.Header().Set("Access-Control-Allow-Credentials", "true")
-			// Note: For GET requests with Authorization, specific headers might not be needed in Allow-Headers
-			// but for POST/PUT etc. they are.
 			w.Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS, PUT, DELETE, PATCH")
-			w.Header().Set("Access-Control-Allow-Headers", "Accept, Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization, X-Requested-With, Cookie")
-			w.Header().Set("Access-Control-Expose-Headers", "X-CSRF-Token") // Expose CSRF token to frontend
+			w.Header().Set("Access-Control-Allow-Headers", "Accept, Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization, X-Requested-With, Cookie, If-None-Match") // Added If-None-Match for ETags
+			w.Header().Set("Access-Control-Expose-Headers", "X-CSRF-Token, ETag")                                                                                                         // Added ETag for exposure
 		}
 
 		if r.Method == "OPTIONS" {
 			logger.L.Debug("Handling OPTIONS preflight request", "path", r.URL.Path, "origin", origin)
-			w.WriteHeader(http.StatusOK) // Preflight requests only need status OK
+			w.WriteHeader(http.StatusOK)
 			return
 		}
 		next.ServeHTTP(w, r)
@@ -69,7 +70,7 @@ func main() {
 	// Critical configuration checks
 	if config.Cfg.JWTSecret == "" || len(config.Cfg.JWTSecret) < 32 {
 		logger.L.Error("FATAL: JWT_SECRET configuration invalid. Must be at least 32 bytes.")
-		stdlog.Fatal("JWT_SECRET is not configured correctly.") // Use stdlog for fatal before full app init
+		stdlog.Fatal("JWT_SECRET is not configured correctly.")
 	}
 	if len(config.Cfg.CSRFAuthKey) < 32 {
 		logger.L.Error("FATAL: CSRF_AUTH_KEY must be at least 32 bytes long.")
@@ -92,10 +93,17 @@ func main() {
 	database.InitDB(config.Cfg.DatabasePath)
 	logger.L.Info("Database initialized successfully.")
 
-	// 5. Initialize Services and Core Handlers
+	// 5. Initialize Cache for services
+	logger.L.Info("Initializing report cache...")
+	// Default expiration 15 mins, cleanup interval 30 mins.
+	// These values could also come from config.Cfg if desired.
+	reportCache := cache.New(15*time.Minute, 30*time.Minute)
+	logger.L.Info("Report cache initialized.")
+
+	// 6. Initialize Services and Core Handlers
 	logger.L.Info("Initializing services and handlers...")
 	authService := security.NewAuthService(config.Cfg.JWTSecret)
-	userHandler := handlers.NewUserHandler(authService) // User handler needs auth service
+	userHandler := handlers.NewUserHandler(authService)
 
 	csvParser := parsers.NewCSVParser()
 	transactionProcessor := parsers.NewTransactionProcessor()
@@ -107,48 +115,38 @@ func main() {
 	uploadService := services.NewUploadService(
 		csvParser, transactionProcessor, dividendProcessor,
 		stockProcessor, optionProcessor, cashMovementProcessor,
+		reportCache, // Pass the initialized cache to the service
 	)
 
-	// Application-specific handlers
+	// Application-specific handlers that use the uploadService
 	uploadHandler := handlers.NewUploadHandler(uploadService)
 	portfolioHandler := handlers.NewPortfolioHandler(uploadService)
 	dividendHandler := handlers.NewDividendHandler(uploadService)
 	txHandler := handlers.NewTransactionHandler() // Direct DB access for now
 
-	// 6. Configure Routing
+	// 7. Configure Routing
 	logger.L.Info("Configuring routes...")
-	rootMux := http.NewServeMux()   // Main mux for the server
-	apiRouter := http.NewServeMux() // Router for all /api prefixed paths
+	rootMux := http.NewServeMux()
+	apiRouter := http.NewServeMux()
 
 	// --- Authentication Routes ---
-	// These are defined first on apiRouter to ensure they are matched before a general /api/auth/ rule.
-	// GET /api/auth/csrf: Publicly accessible to get CSRF token, does not need prior CSRF check.
 	apiRouter.HandleFunc("GET /api/auth/csrf", handlers.GetCSRFToken)
-
-	// POST /api/auth/refresh: Used to refresh access tokens. Does not need CSRF check.
-	// Relies on the refresh token in the body for security.
 	apiRouter.HandleFunc("POST /api/auth/refresh", userHandler.RefreshTokenHandler)
 
-	// Sub-router for auth actions that DO require CSRF protection
 	authProtectedRouter := http.NewServeMux()
 	authProtectedRouter.HandleFunc("POST /login", userHandler.LoginUserHandler)
 	authProtectedRouter.HandleFunc("POST /register", userHandler.RegisterUserHandler)
-	// Logout is CSRF protected and also requires authentication (JWT)
 	authProtectedRouter.HandleFunc("POST /logout", userHandler.AuthMiddleware(userHandler.LogoutUserHandler))
-	// Mount this sub-router under /api/auth/, with CSRF protection applied to it.
-	// Note: The paths inside authProtectedRouter are relative to its mounting point.
-	// e.g., "POST /login" becomes POST /api/auth/login
 	apiRouter.Handle("/api/auth/", http.StripPrefix("/api/auth", handlers.CSRFMiddleware(config.Cfg.CSRFAuthKey)(authProtectedRouter)))
 
 	// --- Other Authenticated and CSRF-Protected API Routes ---
-	// Create a CSRF middleware instance to wrap these handlers
 	csrfProtection := handlers.CSRFMiddleware(config.Cfg.CSRFAuthKey)
-
-	// Helper function to chain AuthMiddleware and CSRFMiddleware
 	applyCsrfAndAuth := func(handler http.HandlerFunc) http.Handler {
 		return csrfProtection(http.HandlerFunc(userHandler.AuthMiddleware(handler)))
 	}
 
+	// Note: The ETag logic is handled within the uploadHandler.HandleGetRealizedGainsData method.
+	// main.go just routes to it.
 	apiRouter.Handle("POST /api/upload", applyCsrfAndAuth(uploadHandler.HandleUpload))
 	apiRouter.Handle("GET /api/realizedgains-data", applyCsrfAndAuth(uploadHandler.HandleGetRealizedGainsData))
 	apiRouter.Handle("GET /api/transactions/processed", applyCsrfAndAuth(txHandler.HandleGetProcessedTransactions))
@@ -160,27 +158,23 @@ func main() {
 	apiRouter.Handle("GET /api/dividend-transactions", applyCsrfAndAuth(dividendHandler.HandleGetDividendTransactions))
 	apiRouter.Handle("GET /api/user/has-data", applyCsrfAndAuth(userHandler.HandleCheckUserData))
 
-	// Mount the apiRouter under the rootMux.
-	// All requests to /api/... will be routed through apiRouter.
-	rootMux.Handle("/api/", apiRouter) // No stripping prefix here, apiRouter handles full /api/... paths
+	rootMux.Handle("/api/", apiRouter)
 
-	// Specific handler for GET / (root path)
 	rootMux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/" && r.Method == http.MethodGet {
 			w.Header().Set("Content-Type", "application/json")
 			json.NewEncoder(w).Encode(map[string]string{"message": "TAXFOLIO Backend is running"})
 		} else {
-			// Any other path not /api/ and not GET / will be a 404.
 			logger.L.Warn("Root level path not found", "method", r.Method, "path", r.URL.Path)
 			http.NotFound(w, r)
 		}
 	})
 
-	// 7. Apply Global Middlewares (CORS, Rate Limiting)
+	// 8. Apply Global Middlewares (CORS, Rate Limiting)
 	logger.L.Info("Applying global middleware...")
 	finalHandler := enableCORS(rateLimitMiddleware(rootMux))
 
-	// 8. Start HTTP Server
+	// 9. Start HTTP Server
 	serverAddr := ":" + config.Cfg.Port
 	server := &http.Server{
 		Addr:         serverAddr,

@@ -1,14 +1,31 @@
 // frontend/src/pages/ProcessedTransactionsPage.js
 import React from 'react';
-import { useProcessedTransactions } from '../hooks/useProcessedTransactions';
 import { Typography, Box, Paper, Alert, TableContainer, Table, TableHead, TableRow, TableCell, TableBody, CircularProgress } from '@mui/material';
+import { useQuery } from '@tanstack/react-query';
+import { apiFetchProcessedTransactions } from '../api/apiService';
+import { useAuth } from '../context/AuthContext';
+import { UI_TEXT } from '../constants';
+
+const fetchProcessedTransactions = async () => {
+  const response = await apiFetchProcessedTransactions();
+  return response.data || []; // Ensure it returns an array
+};
 
 const ProcessedTransactionsPage = () => {
+  const { token } = useAuth();
   const { 
-    transactions: processedTransactions, 
-    loading: transactionsLoading, 
-    error: transactionsError 
-  } = useProcessedTransactions();
+    data: processedTransactions = [], // Default to empty array
+    isLoading: transactionsLoading, 
+    error: transactionsErrorObj, // Rename to avoid conflict with potential error string
+    isError: isTransactionsError,
+    // refetch // React Query handles refetching via queryClient.invalidateQueries
+  } = useQuery({
+    queryKey: ['processedTransactions', token],
+    queryFn: fetchProcessedTransactions,
+    enabled: !!token,
+  });
+
+  const transactionsError = isTransactionsError ? (transactionsErrorObj?.message || UI_TEXT.errorLoadingData) : null;
 
   if (transactionsLoading) {
     return (
@@ -34,7 +51,7 @@ const ProcessedTransactionsPage = () => {
           <Typography variant="body2" sx={{ mb: 1 }}>
             These are all the transactions processed and stored in the database.
           </Typography>
-          <TableContainer component={Paper} sx={{ maxHeight: '70vh' }}> {/* Adjust maxHeight as needed */}
+          <TableContainer component={Paper} sx={{ maxHeight: '70vh' }}>
             <Table stickyHeader size="small" aria-label="processed transactions table">
               <TableHead>
                 <TableRow>
