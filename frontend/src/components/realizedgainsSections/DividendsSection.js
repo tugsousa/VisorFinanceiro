@@ -8,7 +8,7 @@ import { apiFetchDividendTransactions } from '../../api/apiService';
 import { useAuth } from '../../context/AuthContext';
 
 import { ALL_YEARS_OPTION, UI_TEXT } from '../../constants';
-import { getYearString } from '../../utils/dateUtils';
+import { getYearString, parseDateRobust } from '../../utils/dateUtils';
 import { getBaseProductName } from '../../utils/chartUtils';
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend);
@@ -16,22 +16,21 @@ ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend)
 const GREEN_COLOR_BG = 'rgba(75, 192, 192, 0.6)';
 const GREEN_COLOR_BORDER = 'rgba(75, 192, 192, 1)';
 
-const fetchDividendTransactions = async () => { // Renamed for clarity
+const fetchDividendTransactions = async () => {
   const response = await apiFetchDividendTransactions();
-  return response.data || []; // Ensure it returns an array
+  return response.data || [];
 };
 
-// Note: The 'dividendSummaryData' prop is REMOVED
 export default function DividendsSection({ selectedYear, hideIndividualTotalPL = false }) {
   const { token } = useAuth();
 
   const {
     data: rawDividendTransactions = [],
-    isLoading: dataLoading, // Renamed from chartLoading for broader use
-    error: dataErrorObj,    // Renamed from chartErrorObj
-    isError: isDataError,   // Renamed from isChartError
+    isLoading: dataLoading,
+    error: dataErrorObj,
+    isError: isDataError,
   } = useQuery({
-    queryKey: ['allDividendTransactions', token], // More generic query key
+    queryKey: ['allDividendTransactions', token],
     queryFn: fetchDividendTransactions,
     enabled: !!token,
     staleTime: 1000 * 60 * 5, // 5 minutes
@@ -39,75 +38,61 @@ export default function DividendsSection({ selectedYear, hideIndividualTotalPL =
 
   const dataError = isDataError ? (dataErrorObj?.message || UI_TEXT.errorLoadingData) : null;
 
-  // Process rawDividendTransactions for the TABLE
-  const processedTableData = useMemo(() => {
+  // This processes data for the summary text (Total Gross, Total Tax, Total Net)
+  const processedSummaryData = useMemo(() => {
     if (!rawDividendTransactions || rawDividendTransactions.length === 0) {
-      return { rows: [], totalGross: 0, totalTax: 0, totalNet: 0 };
+      return { totalGross: 0, totalTax: 0, totalNet: 0 };
     }
 
-    // Filter transactions by selectedYear if not 'all'
     const transactionsForSelectedPeriod = (selectedYear === ALL_YEARS_OPTION || !selectedYear)
       ? rawDividendTransactions
       : rawDividendTransactions.filter(tx => getYearString(tx.Date) === selectedYear);
 
-    // Aggregate data: map[yearString]->map[countryString]->{gross, tax}
-    const aggregated = {};
-
-    transactionsForSelectedPeriod.forEach(tx => {
-      const year = getYearString(tx.Date);
-      const country = tx.CountryCode || 'Unknown'; // CountryCode is from ProcessedTransaction
-      const amount = tx.AmountEUR || 0;
-
-      if (!year) return; // Skip if year cannot be determined
-
-      if (!aggregated[year]) {
-        aggregated[year] = {};
-      }
-      if (!aggregated[year][country]) {
-        aggregated[year][country] = { gross_amt: 0, taxed_amt: 0 };
-      }
-
-      if (tx.OrderType?.toLowerCase() === 'dividend') {
-        aggregated[year][country].gross_amt += amount;
-      } else if (tx.OrderType?.toLowerCase() === 'dividendtax') {
-        aggregated[year][country].taxed_amt += amount; // tax is usually negative
-      }
-    });
-
-    const rows = [];
     let totalGross = 0;
     let totalTax = 0;
 
-    // Sort years if displaying all years, otherwise it's just one year
-    const yearsToIterate = (selectedYear === ALL_YEARS_OPTION || !selectedYear)
-        ? Object.keys(aggregated).sort((a,b) => a.localeCompare(b))
-        : (aggregated[selectedYear] ? [selectedYear] : []);
-
-
-    yearsToIterate.forEach(year => {
-      const countries = aggregated[year] || {};
-      Object.keys(countries).sort().forEach(country => {
-        const amounts = countries[country];
-        const gross = amounts.gross_amt || 0;
-        const tax = amounts.taxed_amt || 0;
-        const net = gross + tax;
-        rows.push({ year, country, grossAmount: gross, taxAmount: tax, netAmount: net });
-        if (selectedYear === ALL_YEARS_OPTION || !selectedYear || year === selectedYear) {
-          totalGross += gross;
-          totalTax += tax;
-        }
-      });
+    transactionsForSelectedPeriod.forEach(tx => {
+      const amount = tx.AmountEUR || 0;
+      if (tx.OrderType?.toLowerCase() === 'dividend') {
+        totalGross += amount;
+      } else if (tx.OrderType?.toLowerCase() === 'dividendtax') {
+        totalTax += amount; // tax is usually negative
+      }
     });
     
-    return { rows, totalGross, totalTax, totalNet: totalGross + totalTax };
+    return { totalGross, totalTax, totalNet: totalGross + totalTax };
   }, [rawDividendTransactions, selectedYear]);
 
 
-  // productChartData for the Bar chart (uses rawDividendTransactions - logic unchanged)
+  // Process rawDividendTransactions for the DETAILED TABLE
+  const detailedDividendTransactions = useMemo(() => {
+    if (!rawDividendTransactions || rawDividendTransactions.length === 0) {
+      return [];
+    }
+
+    const transactionsForSelectedPeriod = (selectedYear === ALL_YEARS_OPTION || !selectedYear)
+      ? rawDividendTransactions
+      : rawDividendTransactions.filter(tx => getYearString(tx.Date) === selectedYear);
+
+    return transactionsForSelectedPeriod.sort((a, b) => {
+        const dateA = parseDateRobust(a.Date);
+        const dateB = parseDateRobust(b.Date);
+        
+        if (dateA === null && dateB === null) return 0;
+        if (dateA === null) return 1; 
+        if (dateB === null) return -1;
+
+        if (dateB.getTime() - dateA.getTime() !== 0) return dateB.getTime() - dateA.getTime(); // Descending by date
+        return (a.OrderID || "").localeCompare(b.OrderID || ""); 
+    });
+  }, [rawDividendTransactions, selectedYear]);
+
+
+  // productChartData for the Bar chart (uses rawDividendTransactions)
   const productChartData = useMemo(() => {
     const filteredForChart = rawDividendTransactions.filter(tx => {
         const orderTypeLower = tx.OrderType?.toLowerCase();
-        const isDividendType = orderTypeLower === 'dividend'; // Chart only shows gross dividends
+        const isDividendType = orderTypeLower === 'dividend';
         if (!isDividendType) return false;
         if (selectedYear === ALL_YEARS_OPTION || !selectedYear) return true;
         const transactionYear = getYearString(tx.Date);
@@ -216,7 +201,7 @@ export default function DividendsSection({ selectedYear, hideIndividualTotalPL =
     );
   }
 
-  if (processedTableData.rows.length === 0) {
+  if (rawDividendTransactions.length === 0) {
     return (
       <Paper elevation={0} sx={{ p: 2, mb: 3, border: 'none' }}>
         <Typography variant="subtitle1" gutterBottom>Dividends</Typography>
@@ -232,40 +217,63 @@ export default function DividendsSection({ selectedYear, hideIndividualTotalPL =
       </Typography>
       {!hideIndividualTotalPL && (
         <>
-          <Typography variant="body2">Total Gross: <Typography component="span" sx={{ fontWeight: 'bold' }}>{processedTableData.totalGross.toFixed(2)} €</Typography></Typography>
-          <Typography variant="body2">Total Tax: <Typography component="span" sx={{ fontWeight: 'bold', color: processedTableData.totalTax < 0 ? 'error.main' : 'inherit' }}>{processedTableData.totalTax.toFixed(2)} €</Typography></Typography>
-          <Typography variant="body2" sx={{ mb: 2 }}>Total Net: <Typography component="span" sx={{ fontWeight: 'bold' }}>{processedTableData.totalNet.toFixed(2)} €</Typography></Typography>
+          <Typography variant="body2">Total Gross: <Typography component="span" sx={{ fontWeight: 'bold' }}>{processedSummaryData.totalGross.toFixed(2)} €</Typography></Typography>
+          <Typography variant="body2">Total Tax: <Typography component="span" sx={{ fontWeight: 'bold', color: processedSummaryData.totalTax < 0 ? 'error.main' : 'inherit' }}>{processedSummaryData.totalTax.toFixed(2)} €</Typography></Typography>
+          <Typography variant="body2" sx={{ mb: 2 }}>Total Net: <Typography component="span" sx={{ fontWeight: 'bold' }}>{processedSummaryData.totalNet.toFixed(2)} €</Typography></Typography>
         </>
       )}
 
-      {/* Chart (already uses rawDividendTransactions) */}
       {productChartData.datasets && productChartData.datasets.length > 0 && productChartData.datasets.some(ds => ds.data.some(d => d > 0)) && (
          <Box sx={{ height: 350, mb: 2 }}>
             <Bar options={productChartOptions} data={productChartData} />
          </Box>
       )}
 
-      <TableContainer sx={{ maxHeight: 400 }}>
+      <TableContainer sx={{ maxHeight: 400, mt: 1 }}>
         <Table stickyHeader size="small">
           <TableHead>
             <TableRow>
-              {(selectedYear === ALL_YEARS_OPTION || !selectedYear) && <TableCell>Year</TableCell>}
-              <TableCell>Country</TableCell>
-              <TableCell align="right">Gross (€)</TableCell>
-              <TableCell align="right">Tax (€)</TableCell>
-              <TableCell align="right">Net (€)</TableCell>
+              <TableCell sx={{ minWidth: 100 }}>Date</TableCell>
+              <TableCell sx={{ minWidth: 200, maxWidth: 300, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>Product Name</TableCell>
+              {/* Removed Type column from header */}
+              <TableCell align="right" sx={{ minWidth: 90 }}>Amount</TableCell>
+              <TableCell sx={{ minWidth: 70 }}>Currency</TableCell>
+              <TableCell align="right" sx={{ minWidth: 90 }}>Exch. Rate</TableCell>
+              <TableCell align="right" sx={{ minWidth: 110 }}>Amount (EUR)</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
-            {processedTableData.rows.map((row, index) => (
-              <TableRow hover key={`${row.year}-${row.country}-${index}`}>
-                {(selectedYear === ALL_YEARS_OPTION || !selectedYear) && <TableCell>{row.year}</TableCell>}
-                <TableCell>{row.country}</TableCell>
-                <TableCell align="right">{row.grossAmount.toFixed(2)}</TableCell>
-                <TableCell align="right" sx={{ color: row.taxAmount < 0 ? 'error.main' : 'inherit' }}>{row.taxAmount.toFixed(2)}</TableCell>
-                <TableCell align="right">{row.netAmount.toFixed(2)}</TableCell>
+            {detailedDividendTransactions.length > 0 ? (
+              detailedDividendTransactions.map((tx, index) => (
+                <TableRow hover key={tx.ID || `${tx.OrderID}-${index}`}>
+                  <TableCell>{tx.Date}</TableCell>
+                  <TableCell sx={{ maxWidth: 300, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={tx.ProductName}>
+                    {tx.ProductName}
+                  </TableCell>
+                  {/* Removed Type column from body */}
+                  <TableCell align="right">{tx.Amount?.toFixed(2)}</TableCell>
+                  <TableCell>{tx.Currency}</TableCell>
+                  <TableCell align="right">{tx.ExchangeRate?.toFixed(4)}</TableCell>
+                  <TableCell 
+                    align="right" 
+                    sx={{ 
+                      // Color logic simplified as OrderType isn't directly used for display here
+                      // We determine color based on whether AmountEUR is positive (typical for dividend) or negative (typical for tax)
+                      color: tx.AmountEUR >= 0 ? 'success.main' : 'error.main'
+                    }}
+                  >
+                    {tx.AmountEUR?.toFixed(2)}
+                  </TableCell>
+                </TableRow>
+              ))
+            ) : (
+              <TableRow>
+                {/* Adjusted colSpan since one column was removed */}
+                <TableCell colSpan={6} align="center">
+                  No individual dividend transactions for {(selectedYear === ALL_YEARS_OPTION || !selectedYear) ? 'all periods' : `year ${selectedYear}`}.
+                </TableCell>
               </TableRow>
-            ))}
+            )}
           </TableBody>
         </Table>
       </TableContainer>
