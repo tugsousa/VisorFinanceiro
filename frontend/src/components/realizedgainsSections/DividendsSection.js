@@ -38,43 +38,48 @@ export default function DividendsSection({ selectedYear, hideIndividualTotalPL =
 
   const dataError = isDataError ? (dataErrorObj?.message || UI_TEXT.errorLoadingData) : null;
 
-  // This processes data for the summary text (Total Gross, Total Tax, Total Net)
-  const processedSummaryData = useMemo(() => {
-    if (!rawDividendTransactions || rawDividendTransactions.length === 0) {
-      return { totalGross: 0, totalTax: 0, totalNet: 0 };
-    }
-
-    const transactionsForSelectedPeriod = (selectedYear === ALL_YEARS_OPTION || !selectedYear)
-      ? rawDividendTransactions
-      : rawDividendTransactions.filter(tx => getYearString(tx.Date) === selectedYear);
-
-    let totalGross = 0;
-    let totalTax = 0;
-
-    transactionsForSelectedPeriod.forEach(tx => {
-      const amount = tx.AmountEUR || 0;
-      if (tx.OrderType?.toLowerCase() === 'dividend') {
-        totalGross += amount;
-      } else if (tx.OrderType?.toLowerCase() === 'dividendtax') {
-        totalTax += amount; // tax is usually negative
-      }
-    });
-    
-    return { totalGross, totalTax, totalNet: totalGross + totalTax };
-  }, [rawDividendTransactions, selectedYear]);
-
-
-  // Process rawDividendTransactions for the DETAILED TABLE
-  const detailedDividendTransactions = useMemo(() => {
+  // This serves as the common base for summary, table, and chart data.
+  const relevantDividendTransactions = useMemo(() => {
     if (!rawDividendTransactions || rawDividendTransactions.length === 0) {
       return [];
     }
+    // Filter for actual dividend transactions first
+    const dividendTxs = rawDividendTransactions.filter(
+      tx => tx.OrderType?.toLowerCase() === 'dividend'
+    );
 
-    const transactionsForSelectedPeriod = (selectedYear === ALL_YEARS_OPTION || !selectedYear)
-      ? rawDividendTransactions
-      : rawDividendTransactions.filter(tx => getYearString(tx.Date) === selectedYear);
+    // Then, filter by selectedYear if a specific year is chosen
+    if (selectedYear === ALL_YEARS_OPTION || !selectedYear) {
+      return dividendTxs;
+    }
+    return dividendTxs.filter(tx => getYearString(tx.Date) === selectedYear);
+  }, [rawDividendTransactions, selectedYear]);
 
-    return transactionsForSelectedPeriod.sort((a, b) => {
+
+  // Processes data for the summary text (Total Dividends Received)
+  const summaryData = useMemo(() => {
+    if (relevantDividendTransactions.length === 0) {
+      return { totalDividends: 0 };
+    }
+
+    let accumulatedDividends = 0;
+    relevantDividendTransactions.forEach(tx => {
+      // AmountEUR is assumed to be the gross dividend amount for 'dividend' type transactions.
+      accumulatedDividends += tx.AmountEUR || 0;
+    });
+    
+    // The summary only shows total dividends received.
+    return { totalDividends: accumulatedDividends };
+  }, [relevantDividendTransactions]);
+
+
+  // Process and sort transactions for the DETAILED TABLE
+  const sortedDetailedTableTransactions = useMemo(() => {
+    if (relevantDividendTransactions.length === 0) {
+      return [];
+    }
+    // Sort a copy of the array
+    return [...relevantDividendTransactions].sort((a, b) => {
         const dateA = parseDateRobust(a.Date);
         const dateB = parseDateRobust(b.Date);
         
@@ -85,25 +90,16 @@ export default function DividendsSection({ selectedYear, hideIndividualTotalPL =
         if (dateB.getTime() - dateA.getTime() !== 0) return dateB.getTime() - dateA.getTime(); // Descending by date
         return (a.OrderID || "").localeCompare(b.OrderID || ""); 
     });
-  }, [rawDividendTransactions, selectedYear]);
+  }, [relevantDividendTransactions]);
 
 
-  // productChartData for the Bar chart (uses rawDividendTransactions)
+  // productChartData for the Bar chart (uses relevantDividendTransactions)
   const productChartData = useMemo(() => {
-    const filteredForChart = rawDividendTransactions.filter(tx => {
-        const orderTypeLower = tx.OrderType?.toLowerCase();
-        const isDividendType = orderTypeLower === 'dividend';
-        if (!isDividendType) return false;
-        if (selectedYear === ALL_YEARS_OPTION || !selectedYear) return true;
-        const transactionYear = getYearString(tx.Date);
-        return transactionYear === selectedYear;
-    });
-
-    if (filteredForChart.length === 0) return { labels: [], datasets: [] };
+    if (relevantDividendTransactions.length === 0) return { labels: [], datasets: [] };
 
     const productDividendMap = {};
-    filteredForChart.forEach(tx => {
-        if (tx.AmountEUR != null) {
+    relevantDividendTransactions.forEach(tx => {
+        if (tx.AmountEUR != null) { 
             const baseProduct = getBaseProductName(tx.ProductName);
             productDividendMap[baseProduct] = (productDividendMap[baseProduct] || 0) + tx.AmountEUR;
         }
@@ -139,22 +135,19 @@ export default function DividendsSection({ selectedYear, hideIndividualTotalPL =
     
     const finalLabels = itemsForChart.map(p => p.name);
     const finalAmounts = itemsForChart.map(p => p.amount);
-    const finalBackgroundColors = finalAmounts.map(() => GREEN_COLOR_BG);
-    const finalBorderColors = finalAmounts.map(() => GREEN_COLOR_BORDER);
     
     if (finalLabels.length === 0) return { labels: [], datasets: [] };
 
     return {
       labels: finalLabels,
       datasets: [{
-        label: `Gross Dividends`,
         data: finalAmounts,
-        backgroundColor: finalBackgroundColors,
-        borderColor: finalBorderColors,
+        backgroundColor: finalAmounts.map(() => GREEN_COLOR_BG),
+        borderColor: finalAmounts.map(() => GREEN_COLOR_BORDER),
         borderWidth: 1,
       }]
     };
-  }, [rawDividendTransactions, selectedYear]);
+  }, [relevantDividendTransactions]);
 
   const productChartOptions = useMemo(() => ({
       responsive: true,
@@ -167,14 +160,14 @@ export default function DividendsSection({ selectedYear, hideIndividualTotalPL =
           },
           tooltip: {
             callbacks: {
-              label: (context) => `${context.dataset.label || 'Gross Amount'}: ${new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(context.raw || 0)}`
+              label: (context) => `${new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(context.raw || 0)}`
             }
           }
       },
       scales: {
           y: { 
             beginAtZero: true, 
-            title: { display: true, text: 'Gross Amount (€)'}
+            title: { display: true, text: 'Amount (€)'}
           },
           x: { 
             title: { display: true, text: 'Product'},
@@ -201,6 +194,7 @@ export default function DividendsSection({ selectedYear, hideIndividualTotalPL =
     );
   }
 
+  // This message is for when the API returns no data at all.
   if (rawDividendTransactions.length === 0) {
     return (
       <Paper elevation={0} sx={{ p: 2, mb: 3, border: 'none' }}>
@@ -209,7 +203,7 @@ export default function DividendsSection({ selectedYear, hideIndividualTotalPL =
       </Paper>
     );
   }
-
+  
   return (
     <Paper elevation={0} sx={{ p: 2, mb: 3, border: 'none' }}>
       <Typography variant="subtitle1" gutterBottom>
@@ -217,16 +211,28 @@ export default function DividendsSection({ selectedYear, hideIndividualTotalPL =
       </Typography>
       {!hideIndividualTotalPL && (
         <>
-          <Typography variant="body2">Total Gross: <Typography component="span" sx={{ fontWeight: 'bold' }}>{processedSummaryData.totalGross.toFixed(2)} €</Typography></Typography>
-          <Typography variant="body2">Total Tax: <Typography component="span" sx={{ fontWeight: 'bold', color: processedSummaryData.totalTax < 0 ? 'error.main' : 'inherit' }}>{processedSummaryData.totalTax.toFixed(2)} €</Typography></Typography>
-          <Typography variant="body2" sx={{ mb: 2 }}>Total Net: <Typography component="span" sx={{ fontWeight: 'bold' }}>{processedSummaryData.totalNet.toFixed(2)} €</Typography></Typography>
+          {/* Simplified summary: only total dividends received */}
+          <Typography variant="body2" sx={{ mb: 2 }}>
+            Total Dividends Received: 
+            <Typography component="span" sx={{ fontWeight: 'bold' }}>
+              {summaryData.totalDividends.toFixed(2)} €
+            </Typography>
+          </Typography>
         </>
       )}
 
-      {productChartData.datasets && productChartData.datasets.length > 0 && productChartData.datasets.some(ds => ds.data.some(d => d > 0)) && (
+      {/* Chart rendering condition: ensure there are labels to display (i.e., chartable data exists) */}
+      {productChartData.labels && productChartData.labels.length > 0 ? (
          <Box sx={{ height: 350, mb: 2 }}>
             <Bar options={productChartOptions} data={productChartData} />
          </Box>
+      ) : (
+        // Optional: Display a message if chart has no data but there were transactions.
+        // This occurs if relevantDividendTransactions has items, but they don't result in chartable data (e.g., all amounts are zero).
+        relevantDividendTransactions.length > 0 &&
+        <Typography sx={{ textAlign: 'center', color: 'text.secondary', fontStyle: 'italic', mb: 2 }}>
+            No chart data to display for dividends in the selected period.
+        </Typography>
       )}
 
       <TableContainer sx={{ maxHeight: 400, mt: 1 }}>
@@ -235,7 +241,6 @@ export default function DividendsSection({ selectedYear, hideIndividualTotalPL =
             <TableRow>
               <TableCell sx={{ minWidth: 100 }}>Date</TableCell>
               <TableCell sx={{ minWidth: 200, maxWidth: 300, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>Product Name</TableCell>
-              {/* Removed Type column from header */}
               <TableCell align="right" sx={{ minWidth: 90 }}>Amount</TableCell>
               <TableCell sx={{ minWidth: 70 }}>Currency</TableCell>
               <TableCell align="right" sx={{ minWidth: 90 }}>Exch. Rate</TableCell>
@@ -243,23 +248,21 @@ export default function DividendsSection({ selectedYear, hideIndividualTotalPL =
             </TableRow>
           </TableHead>
           <TableBody>
-            {detailedDividendTransactions.length > 0 ? (
-              detailedDividendTransactions.map((tx, index) => (
+            {sortedDetailedTableTransactions.length > 0 ? (
+              sortedDetailedTableTransactions.map((tx, index) => (
                 <TableRow hover key={tx.ID || `${tx.OrderID}-${index}`}>
                   <TableCell>{tx.Date}</TableCell>
                   <TableCell sx={{ maxWidth: 300, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={tx.ProductName}>
                     {tx.ProductName}
                   </TableCell>
-                  {/* Removed Type column from body */}
                   <TableCell align="right">{tx.Amount?.toFixed(2)}</TableCell>
                   <TableCell>{tx.Currency}</TableCell>
                   <TableCell align="right">{tx.ExchangeRate?.toFixed(4)}</TableCell>
                   <TableCell 
                     align="right" 
                     sx={{ 
-                      // Color logic simplified as OrderType isn't directly used for display here
-                      // We determine color based on whether AmountEUR is positive (typical for dividend) or negative (typical for tax)
-                      color: tx.AmountEUR >= 0 ? 'success.main' : 'error.main'
+                      // Color based on AmountEUR's sign (positive for typical dividend, negative for reversal/correction)
+                      color: tx.AmountEUR != null && tx.AmountEUR >= 0 ? 'success.main' : 'error.main'
                     }}
                   >
                     {tx.AmountEUR?.toFixed(2)}
@@ -268,9 +271,9 @@ export default function DividendsSection({ selectedYear, hideIndividualTotalPL =
               ))
             ) : (
               <TableRow>
-                {/* Adjusted colSpan since one column was removed */}
                 <TableCell colSpan={6} align="center">
                   No individual dividend transactions for {(selectedYear === ALL_YEARS_OPTION || !selectedYear) ? 'all periods' : `year ${selectedYear}`}.
+                  {/* This message appears if relevantDividendTransactions is empty. */}
                 </TableCell>
               </TableRow>
             )}

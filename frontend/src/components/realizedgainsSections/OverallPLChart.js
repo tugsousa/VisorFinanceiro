@@ -147,9 +147,6 @@ const OverallPLChart = ({ allRealizedGainsData, selectedYear }) => {
   return (
     // Changed elevation to 0
     <Paper elevation={0} sx={{ p: 2, mb: 3, border: 'none' }}> 
-      <Typography variant="h6" gutterBottom>
-        Overall Profit/Loss Overview
-      </Typography>
       <Box sx={{ height: 350 }}> 
         <Bar data={chartData} options={chartOptions} />
       </Box>

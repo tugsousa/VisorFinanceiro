@@ -162,13 +162,10 @@ export default function RealizedGainsPage() {
           </FormControl>
         </Grid>
       </Grid>
-
+<Typography variant="h5" sx={{mt: 2, mb: 1, borderBottom: 1, borderColor: 'divider', pb:1 }}>Overview</Typography>
       <Grid container spacing={3} sx={{ mb: 3 }}>
         <Grid item xs={12} md={4} lg={3}>
           <Paper elevation={0} sx={{ p: 2, height: '100%', display: 'flex', flexDirection: 'column', border: 'none' }}>
-            <Typography variant="h6" gutterBottom sx={{ textAlign: 'center', mb: 2 }}>
-              P/L Summary ({selectedYear === ALL_YEARS_OPTION ? 'All Years' : selectedYear})
-            </Typography>
             <Box sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column', justifyContent: 'flex-start' }}>
               <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.75 }}>
                 <Typography variant="body1">Stocks P/L:</Typography>
@@ -213,15 +210,12 @@ export default function RealizedGainsPage() {
       <StockHoldingsSection holdingsData={filteredData.StockHoldings} selectedYear={selectedYear} />
       <OptionHoldingsSection holdingsData={filteredData.OptionHoldings} selectedYear={selectedYear} />
 
-      <Divider sx={{ my: 3 }} />
-      <Typography variant="h5" sx={{mt: 2, mb: 1, borderBottom: 1, borderColor: 'divider', pb:1}}>Activity Summary {selectedYear !== ALL_YEARS_OPTION ? `(${selectedYear})` : '(All Years)'}</Typography>
+      <Typography variant="h5" sx={{mt: 2, mb: 1, borderBottom: 1, borderColor: 'divider', pb:1 }}>Stock Sales</Typography>
       <StockSalesSection stockSalesData={filteredData.StockSaleDetails} selectedYear={selectedYear} hideIndividualTotalPL={true} />
+      <Typography variant="h5" sx={{mt: 2, mb: 1, borderBottom: 1, borderColor: 'divider', pb:1 }}>Option Sales</Typography>
       <OptionSalesSection optionSalesData={filteredData.OptionSaleDetails} selectedYear={selectedYear} hideIndividualTotalPL={true} />
-      <DividendsSection
-        //dividendSummaryData={allRealizedGainsData?.DividendTaxResult || {}}
-        selectedYear={selectedYear}
-        hideIndividualTotalPL={true}
-      />
+      <Typography variant="h5" sx={{mt: 2, mb: 1, borderBottom: 1, borderColor: 'divider', pb:1 }}>Dividend Sales</Typography>
+      <DividendsSection selectedYear={selectedYear} hideIndividualTotalPL={true}/>
     </Box>
   );
 }
