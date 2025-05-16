@@ -119,18 +119,20 @@ export const extractYearsFromData = (data, dateFieldAccessors) => {
       if (Array.isArray(items)) {
         items.forEach(item => {
           const dateStr = typeof accessor === 'function' ? accessor(item) : item[accessor];
-          const year = getYear(dateStr);
+          const year = getYear(dateStr); // getYear returns number or null
           if (year) yearsSet.add(year);
         });
       } else if (dataType === 'DividendTaxResult' && typeof items === 'object' && items !== null) {
-        // Special handling for DividendTaxResult: { "year": { ... } }
+        // Special handling for DividendTaxResult: { "yearString": { ... } }
         Object.keys(items).forEach(yearStr => {
           const yearNum = parseInt(yearStr, 10);
-          if(!isNaN(yearNum)) yearsSet.add(yearNum);
+          if (!isNaN(yearNum)) yearsSet.add(yearNum);
         });
       }
     });
   }
-  const sortedYears = Array.from(yearsSet).sort((a, b) => b - a); // Descending
-  return [NO_YEAR_SELECTED, ...sortedYears];
+  const sortedYearNumbers = Array.from(yearsSet).sort((a, b) => b - a); // Descending numbers
+  // Convert year numbers to strings
+  const sortedYearStrings = sortedYearNumbers.map(y => String(y));
+  return sortedYearStrings; // Returns an array of year strings, e.g., ['2023', '2022']
 };

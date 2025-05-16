@@ -1,11 +1,11 @@
 // frontend/src/components/realizedgainsSections/DividendsSection.js
 import React, { useMemo } from 'react';
-import { /* ...MUI imports... */ Typography, Paper, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Box, CircularProgress, Alert } from '@mui/material';
+import { Typography, Paper, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Box, CircularProgress, Alert } from '@mui/material';
 import { Bar } from 'react-chartjs-2';
 import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend } from 'chart.js';
-import { useQuery } from '@tanstack/react-query'; // Import useQuery
-import { apiFetchDividendTransactions } from '../../api/apiService'; // API function
-import { useAuth } from '../../context/AuthContext'; // To get token
+import { useQuery } from '@tanstack/react-query';
+import { apiFetchDividendTransactions } from '../../api/apiService';
+import { useAuth } from '../../context/AuthContext';
 
 import { ALL_YEARS_OPTION, UI_TEXT } from '../../constants';
 import { getYearString } from '../../utils/dateUtils';
@@ -16,64 +16,98 @@ ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend)
 const GREEN_COLOR_BG = 'rgba(75, 192, 192, 0.6)';
 const GREEN_COLOR_BORDER = 'rgba(75, 192, 192, 1)';
 
-const fetchDividendTransactionsForChart = async () => {
+const fetchDividendTransactions = async () => { // Renamed for clarity
   const response = await apiFetchDividendTransactions();
   return response.data || []; // Ensure it returns an array
 };
 
-export default function DividendsSection({ dividendSummaryData, selectedYear, hideIndividualTotalPL = false }) {
+// Note: The 'dividendSummaryData' prop is REMOVED
+export default function DividendsSection({ selectedYear, hideIndividualTotalPL = false }) {
   const { token } = useAuth();
 
-  const { 
-    data: rawDividendTransactions = [], // Default to empty array
-    isLoading: chartLoading, 
-    error: chartErrorObj,
-    isError: isChartError,
+  const {
+    data: rawDividendTransactions = [],
+    isLoading: dataLoading, // Renamed from chartLoading for broader use
+    error: dataErrorObj,    // Renamed from chartErrorObj
+    isError: isDataError,   // Renamed from isChartError
   } = useQuery({
-    queryKey: ['dividendTransactionsForChart', token], // Separate query key
-    queryFn: fetchDividendTransactionsForChart,
-    enabled: !!token && !hideIndividualTotalPL, // Fetch only if chart is to be shown and user is logged in
+    queryKey: ['allDividendTransactions', token], // More generic query key
+    queryFn: fetchDividendTransactions,
+    enabled: !!token,
     staleTime: 1000 * 60 * 5, // 5 minutes
   });
-  
-  const chartError = isChartError ? (chartErrorObj?.message || UI_TEXT.errorLoadingData) : null;
 
-  // processedDividendData for the table (uses prop dividendSummaryData)
-  const processedDividendData = useMemo(() => {
-    // ... (this logic remains the same as it uses props)
+  const dataError = isDataError ? (dataErrorObj?.message || UI_TEXT.errorLoadingData) : null;
+
+  // Process rawDividendTransactions for the TABLE
+  const processedTableData = useMemo(() => {
+    if (!rawDividendTransactions || rawDividendTransactions.length === 0) {
+      return { rows: [], totalGross: 0, totalTax: 0, totalNet: 0 };
+    }
+
+    // Filter transactions by selectedYear if not 'all'
+    const transactionsForSelectedPeriod = (selectedYear === ALL_YEARS_OPTION || !selectedYear)
+      ? rawDividendTransactions
+      : rawDividendTransactions.filter(tx => getYearString(tx.Date) === selectedYear);
+
+    // Aggregate data: map[yearString]->map[countryString]->{gross, tax}
+    const aggregated = {};
+
+    transactionsForSelectedPeriod.forEach(tx => {
+      const year = getYearString(tx.Date);
+      const country = tx.CountryCode || 'Unknown'; // CountryCode is from ProcessedTransaction
+      const amount = tx.AmountEUR || 0;
+
+      if (!year) return; // Skip if year cannot be determined
+
+      if (!aggregated[year]) {
+        aggregated[year] = {};
+      }
+      if (!aggregated[year][country]) {
+        aggregated[year][country] = { gross_amt: 0, taxed_amt: 0 };
+      }
+
+      if (tx.OrderType?.toLowerCase() === 'dividend') {
+        aggregated[year][country].gross_amt += amount;
+      } else if (tx.OrderType?.toLowerCase() === 'dividendtax') {
+        aggregated[year][country].taxed_amt += amount; // tax is usually negative
+      }
+    });
+
     const rows = [];
     let totalGross = 0;
     let totalTax = 0;
-    
-    // Ensure dividendSummaryData is an object before trying to Object.entries
-    const dataToProcess = (selectedYear === ALL_YEARS_OPTION || !selectedYear)
-        ? (dividendSummaryData || {})
-        : ((dividendSummaryData && dividendSummaryData[selectedYear]) ? { [selectedYear]: dividendSummaryData[selectedYear] } : {});
+
+    // Sort years if displaying all years, otherwise it's just one year
+    const yearsToIterate = (selectedYear === ALL_YEARS_OPTION || !selectedYear)
+        ? Object.keys(aggregated).sort((a,b) => a.localeCompare(b))
+        : (aggregated[selectedYear] ? [selectedYear] : []);
 
 
-    for (const [year, countries] of Object.entries(dataToProcess)) {
-      if (selectedYear !== ALL_YEARS_OPTION && year !== selectedYear && selectedYear !== '') continue; 
-      // Ensure countries is an object
-      for (const [country, amounts] of Object.entries(countries || {})) {
+    yearsToIterate.forEach(year => {
+      const countries = aggregated[year] || {};
+      Object.keys(countries).sort().forEach(country => {
+        const amounts = countries[country];
         const gross = amounts.gross_amt || 0;
-        const tax = amounts.taxed_amt || 0; 
+        const tax = amounts.taxed_amt || 0;
         const net = gross + tax;
         rows.push({ year, country, grossAmount: gross, taxAmount: tax, netAmount: net });
-        totalGross += gross;
-        totalTax += tax;
-      }
-    }
-    rows.sort((a, b) => (String(a.year).localeCompare(String(b.year)) || a.country.localeCompare(b.country)));
+        if (selectedYear === ALL_YEARS_OPTION || !selectedYear || year === selectedYear) {
+          totalGross += gross;
+          totalTax += tax;
+        }
+      });
+    });
+    
     return { rows, totalGross, totalTax, totalNet: totalGross + totalTax };
-  }, [dividendSummaryData, selectedYear]);
+  }, [rawDividendTransactions, selectedYear]);
 
 
-  // productChartData for the Bar chart (uses fetched rawDividendTransactions)
+  // productChartData for the Bar chart (uses rawDividendTransactions - logic unchanged)
   const productChartData = useMemo(() => {
-    // ... (this logic remains the same, but now uses rawDividendTransactions from useQuery)
     const filteredForChart = rawDividendTransactions.filter(tx => {
         const orderTypeLower = tx.OrderType?.toLowerCase();
-        const isDividendType = orderTypeLower === 'dividend';
+        const isDividendType = orderTypeLower === 'dividend'; // Chart only shows gross dividends
         if (!isDividendType) return false;
         if (selectedYear === ALL_YEARS_OPTION || !selectedYear) return true;
         const transactionYear = getYearString(tx.Date);
@@ -138,7 +172,6 @@ export default function DividendsSection({ dividendSummaryData, selectedYear, hi
   }, [rawDividendTransactions, selectedYear]);
 
   const productChartOptions = useMemo(() => ({
-    // ... (this logic remains the same)
       responsive: true,
       maintainAspectRatio: false,
       plugins: {
@@ -166,7 +199,24 @@ export default function DividendsSection({ dividendSummaryData, selectedYear, hi
   }), [selectedYear]);
 
 
-  if (!processedDividendData || processedDividendData.rows.length === 0) {
+  if (dataLoading) {
+    return (
+      <Paper elevation={0} sx={{ p: 2, mb: 3, border: 'none', textAlign: 'center' }}>
+        <CircularProgress />
+        <Typography>Loading dividend data...</Typography>
+      </Paper>
+    );
+  }
+
+  if (dataError) {
+    return (
+      <Paper elevation={0} sx={{ p: 2, mb: 3, border: 'none' }}>
+        <Alert severity="error">{dataError}</Alert>
+      </Paper>
+    );
+  }
+
+  if (processedTableData.rows.length === 0) {
     return (
       <Paper elevation={0} sx={{ p: 2, mb: 3, border: 'none' }}>
         <Typography variant="subtitle1" gutterBottom>Dividends</Typography>
@@ -177,24 +227,21 @@ export default function DividendsSection({ dividendSummaryData, selectedYear, hi
 
   return (
     <Paper elevation={0} sx={{ p: 2, mb: 3, border: 'none' }}>
-      {/* ... (Rest of the JSX rendering logic for table and summary text) ... */}
       <Typography variant="subtitle1" gutterBottom>
         Dividend Summary ({(selectedYear === ALL_YEARS_OPTION || !selectedYear) ? 'All Years' : selectedYear})
       </Typography>
       {!hideIndividualTotalPL && (
         <>
-          <Typography variant="body2">Total Gross: <Typography component="span" sx={{ fontWeight: 'bold' }}>{processedDividendData.totalGross.toFixed(2)} €</Typography></Typography>
-          <Typography variant="body2">Total Tax: <Typography component="span" sx={{ fontWeight: 'bold', color: processedDividendData.totalTax < 0 ? 'error.main' : 'inherit' }}>{processedDividendData.totalTax.toFixed(2)} €</Typography></Typography>
-          <Typography variant="body2" sx={{ mb: 2 }}>Total Net: <Typography component="span" sx={{ fontWeight: 'bold' }}>{processedDividendData.totalNet.toFixed(2)} €</Typography></Typography>
+          <Typography variant="body2">Total Gross: <Typography component="span" sx={{ fontWeight: 'bold' }}>{processedTableData.totalGross.toFixed(2)} €</Typography></Typography>
+          <Typography variant="body2">Total Tax: <Typography component="span" sx={{ fontWeight: 'bold', color: processedTableData.totalTax < 0 ? 'error.main' : 'inherit' }}>{processedTableData.totalTax.toFixed(2)} €</Typography></Typography>
+          <Typography variant="body2" sx={{ mb: 2 }}>Total Net: <Typography component="span" sx={{ fontWeight: 'bold' }}>{processedTableData.totalNet.toFixed(2)} €</Typography></Typography>
         </>
       )}
 
-      {chartLoading && <CircularProgress size={24} sx={{display: 'block', margin: '10px auto'}} />}
-      {chartError && <Alert severity="error" sx={{fontSize: '0.8rem', textAlign: 'center', mb:1}}>{chartError}</Alert>}
-      
-      {!chartLoading && !chartError && productChartData.datasets && productChartData.datasets.length > 0 && productChartData.datasets.some(ds => ds.data.some(d => d > 0)) && (
+      {/* Chart (already uses rawDividendTransactions) */}
+      {productChartData.datasets && productChartData.datasets.length > 0 && productChartData.datasets.some(ds => ds.data.some(d => d > 0)) && (
          <Box sx={{ height: 350, mb: 2 }}>
-            <Bar options={productChartOptions} data={productChartData} /> 
+            <Bar options={productChartOptions} data={productChartData} />
          </Box>
       )}
 
@@ -210,7 +257,7 @@ export default function DividendsSection({ dividendSummaryData, selectedYear, hi
             </TableRow>
           </TableHead>
           <TableBody>
-            {processedDividendData.rows.map((row, index) => (
+            {processedTableData.rows.map((row, index) => (
               <TableRow hover key={`${row.year}-${row.country}-${index}`}>
                 {(selectedYear === ALL_YEARS_OPTION || !selectedYear) && <TableCell>{row.year}</TableCell>}
                 <TableCell>{row.country}</TableCell>

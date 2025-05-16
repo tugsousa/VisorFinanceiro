@@ -4,9 +4,9 @@ import {
   Typography, Box, FormControl, InputLabel, Select, MenuItem,
   Paper, CircularProgress, Grid, Divider, Alert
 } from '@mui/material';
-import { useQuery } from '@tanstack/react-query'; // Import useQuery
-import { apiFetchRealizedGainsData } from '../api/apiService'; // API function
-import { useAuth } from '../context/AuthContext'; // To get token for query key
+import { useQuery } from '@tanstack/react-query';
+import { apiFetchRealizedGainsData } from '../api/apiService';
+import { useAuth } from '../context/AuthContext';
 
 import StockHoldingsSection from '../components/realizedgainsSections/StockHoldingsSection';
 import OptionHoldingsSection from '../components/realizedgainsSections/OptionHoldingsSection';
@@ -14,27 +14,27 @@ import StockSalesSection from '../components/realizedgainsSections/StockSalesSec
 import OptionSalesSection from '../components/realizedgainsSections/OptionSalesSection';
 import DividendsSection from '../components/realizedgainsSections/DividendsSection';
 import OverallPLChart from '../components/realizedgainsSections/OverallPLChart';
-import { ALL_YEARS_OPTION, NO_YEAR_SELECTED, UI_TEXT } from '../constants';
+import { ALL_YEARS_OPTION, UI_TEXT } from '../constants';
 import { getYearString, extractYearsFromData } from '../utils/dateUtils';
 import { formatCurrency } from '../utils/formatUtils';
 
 const fetchRealizedGainsData = async () => {
   const response = await apiFetchRealizedGainsData();
-  return response.data;
+  return response.data; // Expecting the backend to return the UploadResult structure
 };
 
 export default function RealizedGainsPage() {
-  const { token } = useAuth(); // Get token, used as part of queryKey to auto-refetch on auth change
-  
-  const { 
-    data: allRealizedGainsData, 
-    isLoading: loading, // isLoading from useQuery
-    error, // error from useQuery
-    isError, // isError boolean from useQuery
+  const { token } = useAuth();
+
+  const {
+    data: allRealizedGainsData,
+    isLoading: loading,
+    error,
+    isError,
   } = useQuery({
-    queryKey: ['realizedGainsData', token], // Query key, token ensures refetch on login/logout
+    queryKey: ['realizedGainsData', token],
     queryFn: fetchRealizedGainsData,
-    enabled: !!token, // Only run query if token exists
+    enabled: !!token,
     staleTime: 1000 * 60 * 5, // 5 minutes
   });
 
@@ -44,43 +44,40 @@ export default function RealizedGainsPage() {
   useEffect(() => {
     if (allRealizedGainsData) {
       const dateAccessors = {
+        // These keys must match the keys in allRealizedGainsData
         StockHoldings: 'buy_date',
         StockSaleDetails: 'SaleDate',
         OptionHoldings: 'open_date',
         OptionSaleDetails: 'close_date',
-        DividendTaxResult: null,
+        DividendTaxResult: null, // Special handling for DividendTaxResult: keys are years
       };
-      const extractedYearsWithPossibleEmpty = extractYearsFromData(allRealizedGainsData, dateAccessors);
-      const actualNumericYears = extractedYearsWithPossibleEmpty.filter(
-        year => year !== NO_YEAR_SELECTED && year !== ALL_YEARS_OPTION
-      );
-      setAvailableYears([ALL_YEARS_OPTION, ...actualNumericYears]);
-      // Reset to ALL_YEARS_OPTION when data reloads to ensure consistency
-      // Or, try to preserve selectedYear if it's still valid within the new actualNumericYears
-      if (!actualNumericYears.includes(selectedYear) && selectedYear !== ALL_YEARS_OPTION) {
-          setSelectedYear(ALL_YEARS_OPTION);
-      } else if (actualNumericYears.length > 0 && selectedYear === ALL_YEARS_OPTION && actualNumericYears.length === 1) {
-          // If only one actual year is available, consider setting it as default,
-          // but for now, stick to ALL_YEARS_OPTION if it was selected.
-          // Or, if selectedYear wasn't ALL_YEARS and is now invalid, reset to ALL_YEARS.
-      } else if (actualNumericYears.length === 0) {
-          setSelectedYear(ALL_YEARS_OPTION);
+      // extractYearsFromData should return an array of unique year strings, sorted
+      const dataYears = extractYearsFromData(allRealizedGainsData, dateAccessors);
+
+      setAvailableYears([ALL_YEARS_OPTION, ...dataYears]);
+
+      // If the current selectedYear (that is not 'all') is no longer in the new dataYears,
+      // or if dataYears is empty, reset selectedYear to ALL_YEARS_OPTION.
+      if (
+        (selectedYear !== ALL_YEARS_OPTION && !dataYears.includes(selectedYear)) ||
+        (dataYears.length === 0 && selectedYear !== ALL_YEARS_OPTION)
+      ) {
+        setSelectedYear(ALL_YEARS_OPTION);
       }
-
-
+      // If dataYears has items and selectedYear is 'all', it's fine.
+      // If selectedYear is a specific year and it's in dataYears, it's also fine.
     } else {
+      // No data, reset to defaults
       setAvailableYears([ALL_YEARS_OPTION]);
       setSelectedYear(ALL_YEARS_OPTION);
     }
-  }, [allRealizedGainsData, selectedYear]); // Added selectedYear to deps to re-evaluate if it's still valid
+  }, [allRealizedGainsData]); // Only re-run when allRealizedGainsData changes
 
   const handleYearChange = (event) => {
-    setSelectedYear(event.target.value);
+    setSelectedYear(event.target.value); // event.target.value from Select is a string
   };
 
   const filteredData = useMemo(() => {
-    // ... (existing filtering logic based on allRealizedGainsData and selectedYear) ...
-    // This logic remains the same.
     if (!allRealizedGainsData) {
       return {
         StockHoldings: [], OptionHoldings: [], StockSaleDetails: [],
@@ -97,9 +94,10 @@ export default function RealizedGainsPage() {
       };
     }
 
+    // selectedYear is a string like "2023"
     return {
-      StockHoldings: allRealizedGainsData.StockHoldings || [], // Holdings are typically current, not year-filtered this way
-      OptionHoldings: allRealizedGainsData.OptionHoldings || [], // Same for option holdings
+      StockHoldings: allRealizedGainsData.StockHoldings || [], // Holdings are current, not year-filtered
+      OptionHoldings: allRealizedGainsData.OptionHoldings || [], // Option holdings are current
       StockSaleDetails: (allRealizedGainsData.StockSaleDetails || []).filter(s => getYearString(s.SaleDate) === selectedYear),
       OptionSaleDetails: (allRealizedGainsData.OptionSaleDetails || []).filter(o => getYearString(o.close_date) === selectedYear),
       DividendTaxResult: allRealizedGainsData.DividendTaxResult?.[selectedYear]
@@ -109,33 +107,35 @@ export default function RealizedGainsPage() {
   }, [allRealizedGainsData, selectedYear]);
 
   const summaryPLs = useMemo(() => {
-    // ... (existing summary P/L calculation logic) ...
-    // This logic also remains the same.
     const stockPL = (filteredData.StockSaleDetails || []).reduce((sum, sale) => sum + (sale.Delta || 0), 0);
     const optionPL = (filteredData.OptionSaleDetails || []).reduce((sum, sale) => sum + (sale.delta || 0), 0);
 
     let dividendPL = 0;
-    const dividendDataToProcess = selectedYear === ALL_YEARS_OPTION
-        ? filteredData.DividendTaxResult
-        : (filteredData.DividendTaxResult && filteredData.DividendTaxResult[selectedYear] ? { [selectedYear]: filteredData.DividendTaxResult[selectedYear] } : {});
+    // DividendTaxResult is { "year": { "country": { gross, tax } } }
+    // If selectedYear is 'all', filteredData.DividendTaxResult contains all years.
+    // If selectedYear is specific, filteredData.DividendTaxResult contains only that year: { "selectedYear": { ... } }
+    const dividendDataToProcess = filteredData.DividendTaxResult || {};
 
-
-    for (const yearData of Object.values(dividendDataToProcess || {})) { // Add guard for dividendDataToProcess
-        for (const countryData of Object.values(yearData || {})) { // Add guard for yearData
-            dividendPL += (countryData.gross_amt || 0) + (countryData.taxed_amt || 0);
-        }
+    for (const yearData of Object.values(dividendDataToProcess)) { // Iterates over countries if year is specific, or years if 'all'
+      for (const countryData of Object.values(yearData || {})) {
+        dividendPL += (countryData.gross_amt || 0) + (countryData.taxed_amt || 0);
+      }
     }
     const totalPL = stockPL + optionPL + dividendPL;
     return { stockPL, optionPL, dividendPL, totalPL };
-  }, [filteredData, selectedYear]);
+  }, [filteredData]);
 
   if (loading) return <CircularProgress sx={{ display: 'block', margin: 'auto', mt: 4 }} />;
   if (isError) return <Alert severity="error" sx={{ m: 2 }}>{error?.message || UI_TEXT.errorLoadingData}</Alert>;
-  if (!allRealizedGainsData && !loading && !isError) return <Typography sx={{ textAlign: 'center', mt: 4 }}>No data loaded. Please upload a file first.</Typography>;
+  if (!allRealizedGainsData && !loading && !isError) {
+    return (
+        <Box sx={{ p: { xs: 1, sm: 2, md: 3 }, textAlign: 'center', mt: 4 }}>
+            <Typography variant="h5" gutterBottom>Realized Gains</Typography>
+            <Typography>No data loaded. Please upload a file first.</Typography>
+        </Box>
+    );
+}
 
-
-  // ... (rest of the JSX rendering logic using filteredData, summaryPLs, loading, isError, etc.)
-  // The structure of the page remains largely the same.
   return (
     <Box sx={{ p: { xs: 1, sm: 2, md: 3 } }}>
       <Typography variant="h4" component="h1" gutterBottom>
@@ -154,7 +154,7 @@ export default function RealizedGainsPage() {
               disabled={(availableYears.length <= 1 && availableYears[0] === ALL_YEARS_OPTION) || loading}
             >
               {availableYears.map(year => (
-                <MenuItem key={year} value={String(year)}>
+                <MenuItem key={year} value={year}>
                   {year === ALL_YEARS_OPTION ? 'All Years' : year}
                 </MenuItem>
               ))}
@@ -217,10 +217,10 @@ export default function RealizedGainsPage() {
       <Typography variant="h5" sx={{mt: 2, mb: 1, borderBottom: 1, borderColor: 'divider', pb:1}}>Activity Summary {selectedYear !== ALL_YEARS_OPTION ? `(${selectedYear})` : '(All Years)'}</Typography>
       <StockSalesSection stockSalesData={filteredData.StockSaleDetails} selectedYear={selectedYear} hideIndividualTotalPL={true} />
       <OptionSalesSection optionSalesData={filteredData.OptionSaleDetails} selectedYear={selectedYear} hideIndividualTotalPL={true} />
-      <DividendsSection 
-        dividendSummaryData={allRealizedGainsData?.DividendTaxResult || {}} // Pass the full dividend summary from top-level data
-        selectedYear={selectedYear} 
-        hideIndividualTotalPL={true} 
+      <DividendsSection
+        //dividendSummaryData={allRealizedGainsData?.DividendTaxResult || {}}
+        selectedYear={selectedYear}
+        hideIndividualTotalPL={true}
       />
     </Box>
   );
