@@ -206,9 +206,6 @@ export default function DividendsSection({ selectedYear, hideIndividualTotalPL =
   
   return (
     <Paper elevation={0} sx={{ p: 2, mb: 3, border: 'none' }}>
-      <Typography variant="subtitle1" gutterBottom>
-        Dividend Summary ({(selectedYear === ALL_YEARS_OPTION || !selectedYear) ? 'All Years' : selectedYear})
-      </Typography>
       {!hideIndividualTotalPL && (
         <>
           {/* Simplified summary: only total dividends received */}

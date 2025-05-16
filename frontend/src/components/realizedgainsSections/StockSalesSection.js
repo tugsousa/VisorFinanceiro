@@ -150,9 +150,6 @@ export default function StockSalesSection({ stockSalesData, selectedYear, hideIn
 
   return (
     <Paper elevation={0} sx={{ p: 2, mb: 3 , border: 'none'}}>
-      <Typography variant="subtitle1" gutterBottom>
-        Stock Sales Summary ({(selectedYear === ALL_YEARS_OPTION || !selectedYear) ? 'All Years' : selectedYear})
-      </Typography>
       {!hideIndividualTotalPL && (
         <Typography variant="body2" component="div" sx={{ mb: 2 }}>Total P/L: <Typography component="span" sx={{ fontWeight: 'bold', ml: 1, color: totalDelta >= 0 ? 'success.main' : 'error.main' }}>{new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(totalDelta)}</Typography></Typography>
       )}
