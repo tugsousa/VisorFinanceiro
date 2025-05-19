@@ -13,12 +13,13 @@ import (
 type UploadResult struct {
 	// These fields reflect the processing of the *current* upload batch.
 	// For example, DividendTaxResult here would be the summary *from this upload only*.
-	DividendTaxResult models.DividendTaxResult  // Summary from the current upload
-	StockSaleDetails  []models.SaleDetail       // Sales from the current upload
-	StockHoldings     []models.PurchaseLot      // Holdings *after* this upload, based on this upload's impact
-	OptionSaleDetails []models.OptionSaleDetail // Options sales from this upload
-	OptionHoldings    []models.OptionHolding    // Option holdings *after* this upload
-	CashMovements     []models.CashMovement     // Cash movements in this upload
+	DividendTaxResult        models.DividendTaxResult      // Summary from the current upload
+	StockSaleDetails         []models.SaleDetail           // Sales from the current upload
+	StockHoldings            []models.PurchaseLot          // Holdings *after* this upload, based on this upload's impact
+	OptionSaleDetails        []models.OptionSaleDetail     // Options sales from this upload
+	OptionHoldings           []models.OptionHolding        // Option holdings *after* this upload
+	CashMovements            []models.CashMovement         // Cash movements in this upload
+	DividendTransactionsList []models.ProcessedTransaction `json:"DividendTransactionsList,omitempty"`
 }
 
 // UploadService defines the interface for the core upload processing logic.

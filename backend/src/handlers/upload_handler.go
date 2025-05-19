@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"strings" // For If-None-Match parsing
 
-	"github.com/username/taxfolio/backend/src/logger" // Use new logger
+	"github.com/username/taxfolio/backend/src/logger"
 	"github.com/username/taxfolio/backend/src/models"
 	"github.com/username/taxfolio/backend/src/services"
 	"github.com/username/taxfolio/backend/src/utils" // For GenerateETag
@@ -52,14 +52,14 @@ func (h *UploadHandler) HandleUpload(w http.ResponseWriter, r *http.Request) {
 		sendJSONError(w, "only CSV files are allowed", http.StatusBadRequest)
 		return
 	}
-	if fileHeader.Size > 10<<20 {
+	if fileHeader.Size > 10<<20 { // Check against 10MB again
 		logger.L.Warn("Uploaded file too large", "userID", userID, "fileSize", fileHeader.Size)
-		sendJSONError(w, "file too large", http.StatusBadRequest)
+		sendJSONError(w, "file too large, max 10MB", http.StatusBadRequest) // User friendly max size
 		return
 	}
 
 	logger.L.Info("Handling upload", "userID", userID, "filename", fileHeader.Filename)
-	result, err := h.uploadService.ProcessUpload(file, userID)
+	result, err := h.uploadService.ProcessUpload(file, userID) // This now returns DividendTransactionsList for the batch
 	if err != nil {
 		logger.L.Error("Error processing upload", "userID", userID, "filename", fileHeader.Filename, "error", err)
 		sendJSONError(w, fmt.Sprintf("Error processing upload: %v", err), http.StatusInternalServerError)
@@ -83,7 +83,7 @@ func (h *UploadHandler) HandleGetRealizedGainsData(w http.ResponseWriter, r *htt
 	}
 	logger.L.Debug("Handling GetRealizedGainsData request with ETag support", "userID", userID)
 
-	realizedgainsData, err := h.uploadService.GetLatestUploadResult(userID)
+	realizedgainsData, err := h.uploadService.GetLatestUploadResult(userID) // This will now include DividendTransactionsList
 	if err != nil {
 		logger.L.Error("Error retrieving realizedgains data from service", "userID", userID, "error", err)
 		sendJSONError(w, fmt.Sprintf("Error retrieving realizedgains data for userID %d: %v", userID, err), http.StatusInternalServerError)
@@ -106,8 +106,11 @@ func (h *UploadHandler) HandleGetRealizedGainsData(w http.ResponseWriter, r *htt
 	if realizedgainsData.OptionHoldings == nil {
 		realizedgainsData.OptionHoldings = []models.OptionHolding{}
 	}
-	if realizedgainsData.CashMovements == nil { // Assuming CashMovements is part of UploadResult
+	if realizedgainsData.CashMovements == nil {
 		realizedgainsData.CashMovements = []models.CashMovement{}
+	}
+	if realizedgainsData.DividendTransactionsList == nil { // Check for the new field
+		realizedgainsData.DividendTransactionsList = []models.ProcessedTransaction{}
 	}
 
 	// Generate ETag for the current data
@@ -129,9 +132,6 @@ func (h *UploadHandler) HandleGetRealizedGainsData(w http.ResponseWriter, r *htt
 		// Check If-None-Match request header
 		clientETag := r.Header.Get("If-None-Match")
 
-		// Handle potential multiple ETags in If-None-Match (e.g., "etag1", "etag2")
-		// For this simple case, we check if our quotedETag is among them.
-		// A more robust parser might be needed for complex scenarios.
 		clientETags := strings.Split(clientETag, ",")
 		for _, cETag := range clientETags {
 			if strings.TrimSpace(cETag) == quotedETag {
@@ -140,10 +140,9 @@ func (h *UploadHandler) HandleGetRealizedGainsData(w http.ResponseWriter, r *htt
 				return
 			}
 		}
-		if clientETag != "" { // Log if client sent an ETag but it didn't match
+		if clientETag != "" {
 			logger.L.Debug("ETag mismatch", "userID", userID, "clientETags", clientETag, "serverETag", quotedETag)
 		}
-
 	} else {
 		logger.L.Warn("Proceeding without ETag check due to ETag generation error or empty ETag", "userID", userID)
 	}
@@ -160,8 +159,6 @@ func (h *UploadHandler) HandleGetRealizedGainsData(w http.ResponseWriter, r *htt
 func sendJSONError(w http.ResponseWriter, message string, statusCode int) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(statusCode)
-	// Use the global logger here if preferred, or keep using log for consistency within this file.
-	// For consistency with the rest of the app, using logger.L
 	logger.L.Warn("Sending JSON error to client", "message", message, "statusCode", statusCode)
 	json.NewEncoder(w).Encode(map[string]string{"error": message})
 }

@@ -2,18 +2,15 @@
 package services
 
 import (
-	// "bytes" // Not used directly here, but could be if you generate ETag from binary
-	"crypto/sha256"
-	"encoding/hex"
-	"encoding/json"
+	// Keep for ETag, though not directly used in this file after utils.GenerateETag
+	// Keep for ETag
+	// Keep for ETag
 	"fmt"
 	"io"
-
-	// "log" // Replaced by logger.L
-	"strings"
+	"strings" // Added for string manipulation
 	"time"
 
-	"github.com/patrickmn/go-cache" // Import go-cache
+	"github.com/patrickmn/go-cache"
 	"github.com/username/taxfolio/backend/src/database"
 	"github.com/username/taxfolio/backend/src/logger"
 	"github.com/username/taxfolio/backend/src/models"
@@ -29,16 +26,11 @@ const (
 	ckDividendSummary    = "dividend_summary_user_%d"
 	ckStockHoldings      = "stock_holdings_user_%d"
 	ckOptionHoldings     = "option_holdings_user_%d"
-	ckDividendTxns       = "dividend_txns_user_%d" // Added missing prefix
+	ckDividendTxns       = "dividend_txns_user_%d"
 
 	// Default cache expirations
-	defaultCacheExpiration               = 15 * time.Minute
-	cacheCleanupInterval                 = 30 * time.Minute        // This is for the cache constructor
-	noExpiration           time.Duration = cache.DefaultExpiration // Use cache.DefaultExpiration for items managed by cache's global default
-	// Or for truly no expiration (manual delete only):
-	// noExpiration time.Duration = -1 // or cache.NoExpiration if the library defines it that way. Check library docs.
-	// The library uses 0 for DefaultExpiration and negative for NoExpiration.
-	// For clarity, let's use a positive duration for default and rely on cache invalidation.
+	defaultCacheExpiration = 15 * time.Minute
+	cacheCleanupInterval   = 30 * time.Minute
 )
 
 // uploadServiceImpl implements the UploadService interface.
@@ -81,7 +73,7 @@ func fetchUserProcessedTransactions(userID int64) ([]models.ProcessedTransaction
 		exchange_rate, amount_eur, country_code
 		FROM processed_transactions
 		WHERE user_id = ?
-		ORDER BY date ASC, id ASC`, userID)
+		ORDER BY date ASC, id ASC`, userID) //Ensure consistent ordering for processing
 
 	if err != nil {
 		logger.L.Error("Error querying transactions from DB", "userID", userID, "error", err)
@@ -122,13 +114,14 @@ func (s *uploadServiceImpl) ProcessUpload(fileReader io.Reader, userID int64) (*
 	}
 	if len(rawTransactions) == 0 {
 		logger.L.Info("No raw transactions parsed from file", "userID", userID)
-		return &UploadResult{ /* empty result */
-			DividendTaxResult: make(models.DividendTaxResult),
-			StockSaleDetails:  []models.SaleDetail{},
-			StockHoldings:     []models.PurchaseLot{},
-			OptionSaleDetails: []models.OptionSaleDetail{},
-			OptionHoldings:    []models.OptionHolding{},
-			CashMovements:     []models.CashMovement{},
+		return &UploadResult{
+			DividendTaxResult:        make(models.DividendTaxResult),
+			StockSaleDetails:         []models.SaleDetail{},
+			StockHoldings:            []models.PurchaseLot{},
+			OptionSaleDetails:        []models.OptionSaleDetail{},
+			OptionHoldings:           []models.OptionHolding{},
+			CashMovements:            []models.CashMovement{},
+			DividendTransactionsList: []models.ProcessedTransaction{},
 		}, nil
 	}
 
@@ -139,13 +132,14 @@ func (s *uploadServiceImpl) ProcessUpload(fileReader io.Reader, userID int64) (*
 	}
 	if len(processedTransactions) == 0 {
 		logger.L.Info("No transactions were processed from raw data", "userID", userID)
-		return &UploadResult{ /* empty result */
-			DividendTaxResult: make(models.DividendTaxResult),
-			StockSaleDetails:  []models.SaleDetail{},
-			StockHoldings:     []models.PurchaseLot{},
-			OptionSaleDetails: []models.OptionSaleDetail{},
-			OptionHoldings:    []models.OptionHolding{},
-			CashMovements:     []models.CashMovement{},
+		return &UploadResult{
+			DividendTaxResult:        make(models.DividendTaxResult),
+			StockSaleDetails:         []models.SaleDetail{},
+			StockHoldings:            []models.PurchaseLot{},
+			OptionSaleDetails:        []models.OptionSaleDetail{},
+			OptionHoldings:           []models.OptionHolding{},
+			CashMovements:            []models.CashMovement{},
+			DividendTransactionsList: []models.ProcessedTransaction{},
 		}, nil
 	}
 
@@ -157,7 +151,10 @@ func (s *uploadServiceImpl) ProcessUpload(fileReader io.Reader, userID int64) (*
 	committed := false
 	defer func() {
 		if !committed {
-			dbTx.Rollback()
+			rbErr := dbTx.Rollback()
+			if rbErr != nil {
+				logger.L.Error("Error rolling back DB transaction", "userID", userID, "rollbackError", rbErr)
+			}
 		}
 	}()
 
@@ -180,6 +177,7 @@ func (s *uploadServiceImpl) ProcessUpload(fileReader io.Reader, userID int64) (*
 			tx.Commission, tx.OrderID, tx.ExchangeRate, tx.AmountEUR, tx.CountryCode)
 		if err != nil {
 			logger.L.Error("Error inserting transaction into DB", "userID", userID, "orderID", tx.OrderID, "error", err)
+			// Rollback is handled by defer
 			return nil, fmt.Errorf("error inserting processed transaction (OrderID: %s): %w", tx.OrderID, err)
 		}
 	}
@@ -194,18 +192,28 @@ func (s *uploadServiceImpl) ProcessUpload(fileReader io.Reader, userID int64) (*
 	// Invalidate all caches for this user
 	s.invalidateUserCache(userID)
 
-	dividendTaxResult := s.dividendProcessor.CalculateTaxSummary(processedTransactions)
-	stockSaleDetails, stockHoldings := s.stockProcessor.Process(processedTransactions)
-	optionSaleDetails, optionHoldings := s.optionProcessor.Process(processedTransactions)
-	cashMovements := s.cashMovementProcessor.Process(processedTransactions)
+	// Process *only the newly uploaded transactions* for the immediate response
+	dividendTaxResultBatch := s.dividendProcessor.CalculateTaxSummary(processedTransactions)
+	stockSaleDetailsBatch, stockHoldingsBatch := s.stockProcessor.Process(processedTransactions)
+	optionSaleDetailsBatch, optionHoldingsBatch := s.optionProcessor.Process(processedTransactions)
+	cashMovementsBatch := s.cashMovementProcessor.Process(processedTransactions)
+
+	var dividendTransactionsListBatch []models.ProcessedTransaction
+	for _, tx := range processedTransactions { // Iterate over the newly processed ones
+		orderTypeLower := strings.ToLower(tx.OrderType)
+		if orderTypeLower == "dividend" || orderTypeLower == "dividendtax" {
+			dividendTransactionsListBatch = append(dividendTransactionsListBatch, tx)
+		}
+	}
 
 	result := &UploadResult{
-		DividendTaxResult: dividendTaxResult,
-		StockSaleDetails:  stockSaleDetails,
-		StockHoldings:     stockHoldings,
-		OptionSaleDetails: optionSaleDetails,
-		OptionHoldings:    optionHoldings,
-		CashMovements:     cashMovements,
+		DividendTaxResult:        dividendTaxResultBatch,
+		StockSaleDetails:         stockSaleDetailsBatch,
+		StockHoldings:            stockHoldingsBatch, // These holdings are after THIS batch, not overall yet
+		OptionSaleDetails:        optionSaleDetailsBatch,
+		OptionHoldings:           optionHoldingsBatch, // These holdings are after THIS batch
+		CashMovements:            cashMovementsBatch,
+		DividendTransactionsList: dividendTransactionsListBatch,
 	}
 
 	logger.L.Info("ProcessUpload END", "userID", userID, "duration", time.Since(overallStartTime))
@@ -229,16 +237,6 @@ func (s *uploadServiceImpl) invalidateUserCache(userID int64) {
 	logger.L.Info("Invalidated all caches for user", "userID", userID)
 }
 
-// Helper to generate ETag from data
-func generateETag(data interface{}) (string, error) {
-	jsonData, err := json.Marshal(data)
-	if err != nil {
-		return "", err
-	}
-	hash := sha256.Sum256(jsonData)
-	return hex.EncodeToString(hash[:]), nil
-}
-
 func (s *uploadServiceImpl) GetLatestUploadResult(userID int64) (*UploadResult, error) {
 	cacheKey := fmt.Sprintf(ckLatestUploadResult, userID)
 	if cachedResult, found := s.reportCache.Get(cacheKey); found {
@@ -260,12 +258,13 @@ func (s *uploadServiceImpl) GetLatestUploadResult(userID int64) (*UploadResult, 
 	if len(userTransactions) == 0 {
 		logger.L.Info("No transactions found for user, returning empty result", "userID", userID)
 		emptyResult := &UploadResult{
-			DividendTaxResult: make(models.DividendTaxResult),
-			StockSaleDetails:  []models.SaleDetail{},
-			StockHoldings:     []models.PurchaseLot{},
-			OptionSaleDetails: []models.OptionSaleDetail{},
-			OptionHoldings:    []models.OptionHolding{},
-			CashMovements:     []models.CashMovement{},
+			DividendTaxResult:        make(models.DividendTaxResult),
+			StockSaleDetails:         []models.SaleDetail{},
+			StockHoldings:            []models.PurchaseLot{},
+			OptionSaleDetails:        []models.OptionSaleDetail{},
+			OptionHoldings:           []models.OptionHolding{},
+			CashMovements:            []models.CashMovement{},
+			DividendTransactionsList: []models.ProcessedTransaction{},
 		}
 		s.reportCache.Set(cacheKey, emptyResult, defaultCacheExpiration)
 		return emptyResult, nil
@@ -276,15 +275,24 @@ func (s *uploadServiceImpl) GetLatestUploadResult(userID int64) (*UploadResult, 
 	stockSaleDetails, stockHoldings := s.stockProcessor.Process(userTransactions)
 	optionSaleDetails, optionHoldings := s.optionProcessor.Process(userTransactions)
 	cashMovements := s.cashMovementProcessor.Process(userTransactions)
+
+	var dividendTransactionsList []models.ProcessedTransaction
+	for _, tx := range userTransactions {
+		orderTypeLower := strings.ToLower(tx.OrderType)
+		if orderTypeLower == "dividend" || orderTypeLower == "dividendtax" {
+			dividendTransactionsList = append(dividendTransactionsList, tx)
+		}
+	}
 	logger.L.Debug("Processing complete for GetLatestUploadResult", "userID", userID, "duration", time.Since(processingStartTime))
 
 	uploadResult := &UploadResult{
-		DividendTaxResult: dividendTaxResult,
-		StockSaleDetails:  stockSaleDetails,
-		StockHoldings:     stockHoldings,
-		OptionSaleDetails: optionSaleDetails,
-		OptionHoldings:    optionHoldings,
-		CashMovements:     cashMovements,
+		DividendTaxResult:        dividendTaxResult,
+		StockSaleDetails:         stockSaleDetails,
+		StockHoldings:            stockHoldings,
+		OptionSaleDetails:        optionSaleDetails,
+		OptionHoldings:           optionHoldings,
+		CashMovements:            cashMovements,
+		DividendTransactionsList: dividendTransactionsList,
 	}
 
 	s.reportCache.Set(cacheKey, uploadResult, defaultCacheExpiration)
@@ -327,6 +335,7 @@ func (s *uploadServiceImpl) GetDividendTaxSummary(userID int64) (models.Dividend
 			logger.L.Info("Cache hit for GetDividendTaxSummary", "userID", userID)
 			return summary, nil
 		}
+		logger.L.Warn("Cache data type mismatch for GetDividendTaxSummary", "userID", userID, "cacheKey", cacheKey)
 	}
 	logger.L.Info("Cache miss for GetDividendTaxSummary, computing...", "userID", userID)
 	userTransactions, err := fetchUserProcessedTransactions(userID)
@@ -351,6 +360,7 @@ func (s *uploadServiceImpl) GetDividendTransactions(userID int64) ([]models.Proc
 			logger.L.Info("Cache hit for GetDividendTransactions", "userID", userID)
 			return txns, nil
 		}
+		logger.L.Warn("Cache data type mismatch for GetDividendTransactions", "userID", userID, "cacheKey", cacheKey)
 	}
 	logger.L.Info("Cache miss for GetDividendTransactions, computing...", "userID", userID)
 	userTransactions, err := fetchUserProcessedTransactions(userID)
@@ -379,6 +389,7 @@ func (s *uploadServiceImpl) GetStockHoldings(userID int64) ([]models.PurchaseLot
 			logger.L.Info("Cache hit for GetStockHoldings", "userID", userID)
 			return holdings, nil
 		}
+		logger.L.Warn("Cache data type mismatch for GetStockHoldings", "userID", userID, "cacheKey", cacheKey)
 	}
 	logger.L.Info("Cache miss for GetStockHoldings, computing...", "userID", userID)
 	userTransactions, err := fetchUserProcessedTransactions(userID)
@@ -403,6 +414,7 @@ func (s *uploadServiceImpl) GetOptionHoldings(userID int64) ([]models.OptionHold
 			logger.L.Info("Cache hit for GetOptionHoldings", "userID", userID)
 			return holdings, nil
 		}
+		logger.L.Warn("Cache data type mismatch for GetOptionHoldings", "userID", userID, "cacheKey", cacheKey)
 	}
 	logger.L.Info("Cache miss for GetOptionHoldings, computing...", "userID", userID)
 	userTransactions, err := fetchUserProcessedTransactions(userID)
@@ -427,6 +439,7 @@ func (s *uploadServiceImpl) GetOptionSaleDetails(userID int64) ([]models.OptionS
 			logger.L.Info("Cache hit for GetOptionSaleDetails", "userID", userID)
 			return sales, nil
 		}
+		logger.L.Warn("Cache data type mismatch for GetOptionSaleDetails", "userID", userID, "cacheKey", cacheKey)
 	}
 	logger.L.Info("Cache miss for GetOptionSaleDetails, computing...", "userID", userID)
 	userTransactions, err := fetchUserProcessedTransactions(userID)
