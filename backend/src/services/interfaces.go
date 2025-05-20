@@ -5,15 +5,12 @@ import (
 	"io"
 
 	"github.com/username/taxfolio/backend/src/models"
-	// No direct import of "processors" needed here if DividendTaxResult is from "models"
 )
 
 // UploadResult is primarily for the result of a single ProcessUpload call.
 // It contains data derived *only* from the newly uploaded file.
 type UploadResult struct {
 	// These fields reflect the processing of the *current* upload batch.
-	// For example, DividendTaxResult here would be the summary *from this upload only*.
-	DividendTaxResult        models.DividendTaxResult      // Summary from the current upload
 	StockSaleDetails         []models.SaleDetail           // Sales from the current upload
 	StockHoldings            []models.PurchaseLot          // Holdings *after* this upload, based on this upload's impact
 	OptionSaleDetails        []models.OptionSaleDetail     // Options sales from this upload

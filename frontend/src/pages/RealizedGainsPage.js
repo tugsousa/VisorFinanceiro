@@ -5,7 +5,8 @@ import {
   Paper, CircularProgress, Grid, Divider, Alert
 } from '@mui/material';
 import { useQuery } from '@tanstack/react-query';
-import { apiFetchRealizedGainsData } from '../api/apiService';
+// Import both API functions
+import { apiFetchRealizedGainsData, apiFetchDividendTaxSummary } from '../api/apiService';
 import { useAuth } from '../context/AuthContext';
 
 import StockHoldingsSection from '../components/realizedgainsSections/StockHoldingsSection';
@@ -20,102 +21,127 @@ import { formatCurrency } from '../utils/formatUtils';
 
 const fetchRealizedGainsData = async () => {
   const response = await apiFetchRealizedGainsData();
-  // The backend now ensures that all arrays/maps are initialized if empty
+  // DividendTaxResult is no longer expected here.
   return response.data;
 };
+
+// Function to fetch dividend tax summary
+const fetchDividendTaxSummary = async () => {
+    const response = await apiFetchDividendTaxSummary();
+    return response.data || {}; // Ensure it's an object
+};
+
 
 export default function RealizedGainsPage() {
   const { token } = useAuth();
 
+  // Query for main realized gains data (without dividend summary)
   const {
     data: allRealizedGainsData,
-    isLoading: loading,
-    error,
-    isError,
+    isLoading: realizedGainsLoading,
+    error: realizedGainsErrorObj,
+    isError: isRealizedGainsError,
   } = useQuery({
-    queryKey: ['realizedGainsData', token], // This query fetches the consolidated data
+    queryKey: ['realizedGainsData', token],
     queryFn: fetchRealizedGainsData,
     enabled: !!token,
     staleTime: 1000 * 60 * 5, // 5 minutes
   });
 
+  // Query for dividend tax summary
+  const {
+    data: dividendTaxSummaryData,
+    isLoading: dividendSummaryLoading,
+    error: dividendSummaryErrorObj,
+    isError: isDividendSummaryError,
+  } = useQuery({
+    queryKey: ['dividendTaxSummary', token], // Different query key
+    queryFn: fetchDividendTaxSummary,
+    enabled: !!token,
+    staleTime: 1000 * 60 * 5,
+  });
+
   const [selectedYear, setSelectedYear] = useState(ALL_YEARS_OPTION);
   const [availableYears, setAvailableYears] = useState([ALL_YEARS_OPTION]);
 
+  const loading = realizedGainsLoading || dividendSummaryLoading;
+  const apiError = isRealizedGainsError
+    ? (realizedGainsErrorObj?.message || UI_TEXT.errorLoadingData)
+    : isDividendSummaryError
+    ? (dividendSummaryErrorObj?.message || UI_TEXT.errorLoadingData)
+    : null;
+
+  // Define handleYearChange
+  const handleYearChange = (event) => {
+    setSelectedYear(event.target.value);
+  };
+
   useEffect(() => {
-    if (allRealizedGainsData) {
+    // Wait for both data sources to be available (or determined to be not loading and not errored)
+    if (!loading && !apiError && (allRealizedGainsData || dividendTaxSummaryData)) {
       const dateAccessors = {
         StockHoldings: 'buy_date',
         StockSaleDetails: 'SaleDate',
         OptionHoldings: 'open_date',
         OptionSaleDetails: 'close_date',
-        DividendTaxResult: null, // Still used for OverallPLChart & summary
-        DividendTransactionsList: 'Date', // Accessor for the raw dividend transactions
+        DividendTaxResult: null, // For year extraction from dividendTaxSummaryData keys
+        DividendTransactionsList: 'Date',
       };
-      // Ensure allRealizedGainsData includes the new list for year extraction
+
       const dataForYearExtraction = {
-        ...allRealizedGainsData,
-        DividendTransactionsList: allRealizedGainsData.DividendTransactionsList || [],
-        DividendTaxResult: allRealizedGainsData.DividendTaxResult || {},
-        StockSaleDetails: allRealizedGainsData.StockSaleDetails || [],
-        OptionSaleDetails: allRealizedGainsData.OptionSaleDetails || [],
+        StockHoldings: allRealizedGainsData?.StockHoldings || [],
+        StockSaleDetails: allRealizedGainsData?.StockSaleDetails || [],
+        OptionHoldings: allRealizedGainsData?.OptionHoldings || [],
+        OptionSaleDetails: allRealizedGainsData?.OptionSaleDetails || [],
+        DividendTaxResult: dividendTaxSummaryData || {}, // Use the separately fetched summary for year keys
+        DividendTransactionsList: allRealizedGainsData?.DividendTransactionsList || [],
       };
 
       const dataYears = extractYearsFromData(dataForYearExtraction, dateAccessors);
       setAvailableYears([ALL_YEARS_OPTION, ...dataYears]);
 
+      // Logic to reset selectedYear if it becomes invalid
       if (
         (selectedYear !== ALL_YEARS_OPTION && !dataYears.includes(selectedYear)) ||
         (dataYears.length === 0 && selectedYear !== ALL_YEARS_OPTION)
       ) {
         setSelectedYear(ALL_YEARS_OPTION);
       }
-    } else {
-      setAvailableYears([ALL_YEARS_OPTION]);
-      setSelectedYear(ALL_YEARS_OPTION);
+    } else if (!loading && !apiError) { // If no data and not loading/errored
+        setAvailableYears([ALL_YEARS_OPTION]);
+        setSelectedYear(ALL_YEARS_OPTION);
     }
-  }, [allRealizedGainsData]); // Removed selectedYear from dependency array to avoid potential loop with setSelectedYear
+  }, [allRealizedGainsData, dividendTaxSummaryData, loading, apiError, selectedYear]);
 
-  const handleYearChange = (event) => {
-    setSelectedYear(event.target.value);
-  };
 
   const filteredData = useMemo(() => {
     const defaultStructure = {
       StockHoldings: [], OptionHoldings: [], StockSaleDetails: [],
-      OptionSaleDetails: [], DividendTaxResult: {}, DividendTransactionsList: [],
+      OptionSaleDetails: [], DividendTransactionsList: [], CashMovements: []
+      // DividendTaxResult is no longer part of this structure
     };
 
     if (!allRealizedGainsData) {
       return defaultStructure;
     }
 
-    // Ensure all top-level properties are at least empty arrays/objects
     const data = {
       StockHoldings: allRealizedGainsData.StockHoldings || [],
       OptionHoldings: allRealizedGainsData.OptionHoldings || [],
       StockSaleDetails: allRealizedGainsData.StockSaleDetails || [],
       OptionSaleDetails: allRealizedGainsData.OptionSaleDetails || [],
-      DividendTaxResult: allRealizedGainsData.DividendTaxResult || {},
       DividendTransactionsList: allRealizedGainsData.DividendTransactionsList || [],
       CashMovements: allRealizedGainsData.CashMovements || [],
     };
 
-
     if (selectedYear === ALL_YEARS_OPTION) {
-      return data; // Return all data (already defaults to empty arrays if props are missing)
+      return data;
     }
 
-    // Filter data for a specific year
     return {
-      ...data, // Keep holdings and cash movements as they are (not year-specific views here)
+      ...data,
       StockSaleDetails: data.StockSaleDetails.filter(s => getYearString(s.SaleDate) === selectedYear),
       OptionSaleDetails: data.OptionSaleDetails.filter(o => getYearString(o.close_date) === selectedYear),
-      // DividendTaxResult for a specific year
-      DividendTaxResult: data.DividendTaxResult?.[selectedYear]
-        ? { [selectedYear]: data.DividendTaxResult[selectedYear] }
-        : {},
-      // DividendTransactionsList for a specific year
       DividendTransactionsList: data.DividendTransactionsList.filter(tx => getYearString(tx.Date) === selectedYear),
     };
   }, [allRealizedGainsData, selectedYear]);
@@ -125,36 +151,31 @@ export default function RealizedGainsPage() {
     const optionPL = (filteredData.OptionSaleDetails || []).reduce((sum, sale) => sum + (sale.delta || 0), 0);
 
     let dividendPL = 0;
-    // DividendTaxResult is { "year": { "country": { gross, tax } } } when ALL_YEARS_OPTION
-    // or { "selectedYear": { "country": { gross, tax }} } when a specific year is selected
-    const dividendSummaryToProcess = filteredData.DividendTaxResult || {};
+    const summaryToProcess = dividendTaxSummaryData || {}; // Use the fetched dividend summary
 
-    // If ALL_YEARS_OPTION, dividendSummaryToProcess will contain all years from backend
-    // If specific year, it will contain { "year": { "country": {gross, tax } } }
-    // The Object.values() correctly handles both cases for iteration.
-    for (const yearData of Object.values(dividendSummaryToProcess)) {
-      // yearData here is the map of countries for a given year
-      for (const countryData of Object.values(yearData || {})) {
+    if (selectedYear === ALL_YEARS_OPTION) {
+      for (const yearData of Object.values(summaryToProcess)) {
+        for (const countryData of Object.values(yearData || {})) {
+          dividendPL += (countryData.gross_amt || 0) + (countryData.taxed_amt || 0);
+        }
+      }
+    } else if (summaryToProcess[selectedYear]) {
+      for (const countryData of Object.values(summaryToProcess[selectedYear] || {})) {
         dividendPL += (countryData.gross_amt || 0) + (countryData.taxed_amt || 0);
       }
     }
+
     const totalPL = stockPL + optionPL + dividendPL;
     return { stockPL, optionPL, dividendPL, totalPL };
-  }, [filteredData]);
+  }, [filteredData.StockSaleDetails, filteredData.OptionSaleDetails, dividendTaxSummaryData, selectedYear]);
+
 
   if (loading) return <CircularProgress sx={{ display: 'block', margin: 'auto', mt: 4 }} />;
-  if (isError) return <Alert severity="error" sx={{ m: 2 }}>{error?.message || UI_TEXT.errorLoadingData}</Alert>;
-  
-  // This check is important: if allRealizedGainsData is null/undefined (after loading and no error)
-  // it means the API call might have succeeded but returned no data (e.g. user has no transactions yet)
-  const noDataLoaded = !allRealizedGainsData || (
-    (allRealizedGainsData.StockSaleDetails?.length === 0 || !allRealizedGainsData.StockSaleDetails) &&
-    (allRealizedGainsData.OptionSaleDetails?.length === 0 || !allRealizedGainsData.OptionSaleDetails) &&
-    (Object.keys(allRealizedGainsData.DividendTaxResult || {}).length === 0) &&
-    (allRealizedGainsData.DividendTransactionsList?.length === 0 || !allRealizedGainsData.DividendTransactionsList)
-  );
+  if (apiError) return <Alert severity="error" sx={{ m: 2 }}>{apiError}</Alert>;
 
-  if (noDataLoaded && !loading && !isError) {
+  const noDataAvailableForDisplay = !allRealizedGainsData && !dividendTaxSummaryData;
+
+  if (noDataAvailableForDisplay && !loading && !apiError) {
     return (
         <Box sx={{ p: { xs: 1, sm: 2, md: 3 }, textAlign: 'center', mt: 4 }}>
             <Typography variant="h5" gutterBottom>Realized Gains</Typography>
@@ -177,7 +198,7 @@ export default function RealizedGainsPage() {
               labelId="year-select-realizedgains-label"
               value={selectedYear}
               label="Year"
-              onChange={handleYearChange}
+              onChange={handleYearChange} // This was missing
               disabled={(availableYears.length <= 1 && availableYears[0] === ALL_YEARS_OPTION) || loading}
             >
               {availableYears.map(year => (
@@ -189,6 +210,7 @@ export default function RealizedGainsPage() {
           </FormControl>
         </Grid>
       </Grid>
+
       <Typography variant="h5" sx={{mt: 2, mb: 1, borderBottom: 1, borderColor: 'divider', pb:1 }}>Overview</Typography>
       <Grid container spacing={3} sx={{ mb: 3 }}>
         <Grid item xs={12} md={4} lg={3}>
@@ -224,10 +246,12 @@ export default function RealizedGainsPage() {
         </Grid>
 
         <Grid item xs={12} md={8} lg={9}>
-          {/* OverallPLChart uses allRealizedGainsData to get DividendTaxResult */}
-          {allRealizedGainsData && (
+          {/* Pass individual data parts to OverallPLChart */}
+          {allRealizedGainsData && dividendTaxSummaryData && (
             <OverallPLChart
-                allRealizedGainsData={allRealizedGainsData}
+                stockSaleDetails={allRealizedGainsData.StockSaleDetails || []}
+                optionSaleDetails={allRealizedGainsData.OptionSaleDetails || []}
+                dividendTaxResultForChart={dividendTaxSummaryData} // Pass the separately fetched dividend summary
                 selectedYear={selectedYear}
             />
           )}
@@ -240,17 +264,14 @@ export default function RealizedGainsPage() {
 
       <Typography variant="h5" sx={{mt: 2, mb: 1, borderBottom: 1, borderColor: 'divider', pb:1 }}>Stock Sales</Typography>
       <StockSalesSection stockSalesData={filteredData.StockSaleDetails} selectedYear={selectedYear} hideIndividualTotalPL={true} />
-      
+
       <Typography variant="h5" sx={{mt: 2, mb: 1, borderBottom: 1, borderColor: 'divider', pb:1 }}>Option Sales</Typography>
       <OptionSalesSection optionSalesData={filteredData.OptionSaleDetails} selectedYear={selectedYear} hideIndividualTotalPL={true} />
-      
+
       <Typography variant="h5" sx={{mt: 2, mb: 1, borderBottom: 1, borderColor: 'divider', pb:1 }}>Dividends</Typography>
       <DividendsSection
-        // Pass the raw list of dividend transactions.
-        // If selectedYear is 'all', filteredData.DividendTransactionsList will be the full list from backend.
-        // If selectedYear is specific, filteredData.DividendTransactionsList will be pre-filtered by RealizedGainsPage.
         dividendTransactionsData={filteredData.DividendTransactionsList}
-        selectedYear={selectedYear} // Still pass selectedYear for internal chart title and potentially other logic
+        selectedYear={selectedYear}
         hideIndividualTotalPL={true}
       />
     </Box>

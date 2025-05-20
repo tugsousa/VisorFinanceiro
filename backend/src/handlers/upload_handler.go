@@ -59,7 +59,9 @@ func (h *UploadHandler) HandleUpload(w http.ResponseWriter, r *http.Request) {
 	}
 
 	logger.L.Info("Handling upload", "userID", userID, "filename", fileHeader.Filename)
-	result, err := h.uploadService.ProcessUpload(file, userID) // This now returns DividendTransactionsList for the batch
+	// ProcessUpload might still return an UploadResult containing DividendTaxResult for the batch.
+	// This is specific to the /upload endpoint's immediate response.
+	result, err := h.uploadService.ProcessUpload(file, userID)
 	if err != nil {
 		logger.L.Error("Error processing upload", "userID", userID, "filename", fileHeader.Filename, "error", err)
 		sendJSONError(w, fmt.Sprintf("Error processing upload: %v", err), http.StatusInternalServerError)
@@ -74,7 +76,8 @@ func (h *UploadHandler) HandleUpload(w http.ResponseWriter, r *http.Request) {
 }
 
 // HandleGetRealizedGainsData retrieves all relevant summary data for the realizedgains.
-// This version includes ETag support.
+// This version includes ETag support and no longer explicitly includes DividendTaxResult in its response structure
+// if the underlying service method omits it and the struct has omitempty.
 func (h *UploadHandler) HandleGetRealizedGainsData(w http.ResponseWriter, r *http.Request) {
 	userID, ok := GetUserIDFromContext(r.Context())
 	if !ok {
@@ -83,7 +86,9 @@ func (h *UploadHandler) HandleGetRealizedGainsData(w http.ResponseWriter, r *htt
 	}
 	logger.L.Debug("Handling GetRealizedGainsData request with ETag support", "userID", userID)
 
-	realizedgainsData, err := h.uploadService.GetLatestUploadResult(userID) // This will now include DividendTransactionsList
+	// GetLatestUploadResult now returns an UploadResult where DividendTaxResult field is nil (or not populated).
+	// If the UploadResult struct has `json:",omitempty"` for DividendTaxResult, it will be excluded from the JSON.
+	realizedgainsData, err := h.uploadService.GetLatestUploadResult(userID)
 	if err != nil {
 		logger.L.Error("Error retrieving realizedgains data from service", "userID", userID, "error", err)
 		sendJSONError(w, fmt.Sprintf("Error retrieving realizedgains data for userID %d: %v", userID, err), http.StatusInternalServerError)
@@ -91,9 +96,10 @@ func (h *UploadHandler) HandleGetRealizedGainsData(w http.ResponseWriter, r *htt
 	}
 
 	// Ensure nil slices/maps are returned as empty ones for JSON consistency and ETag stability
-	if realizedgainsData.DividendTaxResult == nil {
-		realizedgainsData.DividendTaxResult = make(models.DividendTaxResult)
-	}
+	// REMOVE DividendTaxResult handling here as it's no longer expected from GetLatestUploadResult for this endpoint.
+	// if realizedgainsData.DividendTaxResult == nil { // THIS BLOCK IS REMOVED
+	// 	realizedgainsData.DividendTaxResult = make(models.DividendTaxResult)
+	// }
 	if realizedgainsData.StockSaleDetails == nil {
 		realizedgainsData.StockSaleDetails = []models.SaleDetail{}
 	}
@@ -109,7 +115,7 @@ func (h *UploadHandler) HandleGetRealizedGainsData(w http.ResponseWriter, r *htt
 	if realizedgainsData.CashMovements == nil {
 		realizedgainsData.CashMovements = []models.CashMovement{}
 	}
-	if realizedgainsData.DividendTransactionsList == nil { // Check for the new field
+	if realizedgainsData.DividendTransactionsList == nil {
 		realizedgainsData.DividendTransactionsList = []models.ProcessedTransaction{}
 	}
 
