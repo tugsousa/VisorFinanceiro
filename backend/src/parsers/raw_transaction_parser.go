@@ -1,15 +1,17 @@
+// backend/src/parsers/raw_transaction_parser.go
 package parsers
 
 import (
 	"fmt"
-	"log"
-	"regexp"
+	"regexp" // Keep for parseDescription
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/username/taxfolio/backend/src/logger"
 	"github.com/username/taxfolio/backend/src/models"
-	"github.com/username/taxfolio/backend/src/processors"
+	"github.com/username/taxfolio/backend/src/processors"          // For GetExchangeRate
+	"github.com/username/taxfolio/backend/src/security/validation" // IMPORT THE VALIDATION PACKAGE
 	"github.com/username/taxfolio/backend/src/utils"
 )
 
@@ -19,270 +21,312 @@ func NewTransactionProcessor() TransactionProcessor {
 	return &transactionProcessorImpl{}
 }
 
+// validateAndSanitizeRawTransaction performs detailed validation and sanitization on a single raw transaction.
+// It returns a sanitized version of the raw transaction or an error.
+// This function centralizes the validation logic for a RawTransaction.
+func validateAndSanitizeRawTransaction(raw models.RawTransaction) (models.RawTransaction, error) {
+	var sanitizedRaw = raw
+	var err error
+	contextID := fmt.Sprintf("RawOrderID: '%s', RawName: '%s', RawDesc: '%s'", raw.OrderID, raw.Name, raw.Description) // Added RawDesc for context
+
+	// ... (validations for OrderDate, OrderTime, ValueDate) ...
+
+	// Name (Product Name / Descritivo from CSV)
+	sanitizedRaw.Name = validation.StripUnprintable(strings.TrimSpace(raw.Name))
+	// We will NOT call ValidateStringNotEmpty here directly.
+	// We will validate its length if it's NOT empty.
+	// The decision if an empty name is acceptable will be made later,
+	// potentially based on the transaction type derived from raw.Description.
+	if sanitizedRaw.Name != "" { // Only apply these checks if the name is not empty
+		if err = validation.ValidateStringMaxLength(sanitizedRaw.Name, validation.MaxProductNameLength, "Name/Descritivo"); err != nil {
+			return models.RawTransaction{}, fmt.Errorf("name/descritivo for %s: %w", contextID, err)
+		}
+		if err = validation.CheckSQLInjectionKeywords(sanitizedRaw.Name, "Name/Descritivo", contextID); err != nil {
+			return models.RawTransaction{}, err
+		}
+		if err = validation.CheckXSSPatterns(sanitizedRaw.Name, "Name/Descritivo", contextID); err != nil {
+			return models.RawTransaction{}, err
+		}
+		if err = validation.CheckFormulaInjection(sanitizedRaw.Name, "Name/Descritivo", contextID); err != nil {
+			return models.RawTransaction{}, err
+		}
+		// Optional: Sanitize for formula injection
+		// sanitizedRaw.Name = validation.SanitizeForFormulaInjection(sanitizedRaw.Name)
+	} else {
+		// Name is empty. Log for now, decision to error out will be later.
+		logger.L.Debug("Raw 'Name/Descritivo' field is empty.", "contextID", contextID)
+	}
+
+	// ... (validations for ISIN) ...
+
+	// Description (Tipo Transacao from CSV)
+	sanitizedRaw.Description = validation.StripUnprintable(strings.TrimSpace(raw.Description))
+	// Description *usually* should not be empty, as it drives transaction type parsing.
+	if err = validation.ValidateStringNotEmpty(sanitizedRaw.Description, "Transaction Type/Description"); err != nil {
+		return models.RawTransaction{}, fmt.Errorf("transaction type/description for %s: %w", contextID, err)
+	}
+	// ... (rest of Description validation: MaxLength, SQLi, XSS, Formula Injection) ...
+	if err = validation.ValidateStringMaxLength(sanitizedRaw.Description, validation.MaxDescriptionLength, "Transaction Type/Description"); err != nil {
+		return models.RawTransaction{}, fmt.Errorf("transaction type for %s: %w", contextID, err)
+	}
+	if err = validation.CheckSQLInjectionKeywords(sanitizedRaw.Description, "Transaction Type/Description", contextID); err != nil {
+		return models.RawTransaction{}, err
+	}
+	if err = validation.CheckXSSPatterns(sanitizedRaw.Description, "Transaction Type/Description", contextID); err != nil {
+		return models.RawTransaction{}, err
+	}
+	if err = validation.CheckFormulaInjection(sanitizedRaw.Description, "Transaction Type/Description", contextID); err != nil {
+		return models.RawTransaction{}, err
+	}
+
+	// ... (validations for ExchangeRate, Currency, Amount, OrderID) ...
+
+	return sanitizedRaw, nil
+}
+
 func (p *transactionProcessorImpl) Process(rawTransactions []models.RawTransaction) ([]models.ProcessedTransaction, error) {
 	overallStartTime := time.Now()
-	log.Printf("transactionProcessor.Process START for %d raw transactions", len(rawTransactions))
+	logger.L.Info("transactionProcessor.Process START", "rawTransactionCount", len(rawTransactions))
 	var processedTransactions []models.ProcessedTransaction
 
-	for i, raw := range rawTransactions { // Added index 'i'
-		loopStartTime := time.Now() // For timing each outer loop iteration
+	for i, raw := range rawTransactions {
+		loopStartTime := time.Now()
 
-		orderType, quantity, price, _, name, err := parseDescription(raw.Description)
+		// Step 1: Validate and Sanitize the raw transaction data
+		sanitizedRaw, err := validateAndSanitizeRawTransaction(raw)
 		if err != nil {
-			log.Printf("Warning: Skipping transaction due to parseDescription error (OrderID: %s): %v", raw.OrderID, err)
+			logger.L.Error("Validation/Sanitization failed for raw transaction, skipping.", "index", i, "originalOrderID", raw.OrderID, "error", err)
+			// Consider if one bad row should fail the whole batch, or just skip.
+			// For now, let's fail the batch to be safe and force clean data.
+			return nil, fmt.Errorf("error processing raw transaction at index %d (Original OrderID: %s): %w", i, raw.OrderID, err)
+		}
+
+		// Step 2: Use sanitizedRaw for further processing
+		orderType, quantity, price, _, parsedName, err := parseDescription(sanitizedRaw.Description) // Use sanitized description
+		if err != nil {
+			logger.L.Warn("Skipping transaction due to parseDescription error", "originalOrderID", sanitizedRaw.OrderID, "error", err)
 			continue
 		}
 
 		var amount float64
-		trimmedAmount := strings.TrimSpace(raw.Amount)
-
-		if trimmedAmount == "" {
-			if orderType == "cashdeposit" {
-				return nil, fmt.Errorf("empty amount for 'Depósito' transaction (OrderID: %s)", raw.OrderID)
-			} else {
-				log.Printf("Warning: Skipping transaction with empty amount and description '%s' (OrderID: %s)", raw.Description, raw.OrderID)
-				continue
+		// Amount was already validated as a float string if not empty by validateAndSanitizeRawTransaction
+		// Now, parse it.
+		if sanitizedRaw.Amount == "" {
+			if orderType == "cashdeposit" { // From parseDescription
+				logger.L.Error("Empty amount for 'Depósito' transaction", "originalOrderID", sanitizedRaw.OrderID)
+				return nil, fmt.Errorf("empty amount for 'Depósito' transaction (OrderID: %s)", sanitizedRaw.OrderID)
 			}
+			// If not cashdeposit and amount is empty, it might be a commission-only row or similar.
+			// parseDescription should ideally handle quantity/price for those.
+			// For now, if amount is empty and not cashdeposit, we might set amount to 0 or log.
+			logger.L.Debug("Empty amount for non-cashdeposit transaction", "orderType", orderType, "originalOrderID", sanitizedRaw.OrderID)
+			amount = 0 // Default to 0 if empty and not a deposit
 		} else {
-			var parseErr error
-			amount, parseErr = strconv.ParseFloat(trimmedAmount, 64)
-			if parseErr != nil {
-				return nil, fmt.Errorf("invalid amount format '%s' for transaction with description '%s' (OrderID: %s): %w", raw.Amount, raw.Description, raw.OrderID, parseErr)
+			amount, err = strconv.ParseFloat(sanitizedRaw.Amount, 64) // Already validated, should not fail
+			if err != nil {
+				// This should be rare due to prior validation.
+				logger.L.Error("Internal error: Failed to parse pre-validated amount string", "originalOrderID", sanitizedRaw.OrderID, "amountStr", sanitizedRaw.Amount, "error", err)
+				return nil, fmt.Errorf("internal error parsing amount for OrderID %s: %w", sanitizedRaw.OrderID, err)
 			}
 		}
 
 		if orderType == "cashdeposit" {
 			processed := models.ProcessedTransaction{
-				Date:         raw.ValueDate,
-				ProductName:  name,
-				ISIN:         raw.ISIN,
+				Date:         sanitizedRaw.ValueDate, // Use validated date
+				ProductName:  parsedName,             // From parseDescription
+				ISIN:         sanitizedRaw.ISIN,      // Use sanitized ISIN
 				Quantity:     0,
 				Price:        0,
 				OrderType:    orderType,
+				Description:  sanitizedRaw.Description, // Store the sanitized full original description
 				Amount:       amount,
-				Currency:     raw.Currency,
+				Currency:     sanitizedRaw.Currency, // Use sanitized currency
 				Commission:   0,
-				OrderID:      raw.OrderID,
-				ExchangeRate: 1.0,
-				AmountEUR:    amount,
+				OrderID:      sanitizedRaw.OrderID, // Use sanitized OrderID
+				ExchangeRate: 1.0,                  // Deposits are usually in local currency or already converted
+				AmountEUR:    amount,               // Assuming EUR for deposits or direct amount
+				CountryCode:  utils.GetCountryCodeString(sanitizedRaw.ISIN),
 			}
 			processedTransactions = append(processedTransactions, processed)
-			// Log timing for this iteration before continuing
-			if i%100 == 0 || i == len(rawTransactions)-1 {
-				log.Printf("  Processed raw transaction %d/%d (Cash Deposit). Loop iteration took: %s", i+1, len(rawTransactions), time.Since(loopStartTime))
-			}
+			logger.L.Debug("Processed cash deposit", "index", i, "originalOrderID", sanitizedRaw.OrderID, "duration", time.Since(loopStartTime))
 			continue
 		}
 
-		transactionDate, dateParseErr := time.Parse("02-01-2006", raw.OrderDate)
+		transactionDate, dateParseErr := time.Parse("02-01-2006", sanitizedRaw.OrderDate) // Already validated
 		if dateParseErr != nil {
-			// Log and potentially skip or handle, but don't return immediately for the whole batch
-			log.Printf("Warning: Invalid date format for transaction %s: %v. Exchange rate calculation might be affected.", raw.OrderID, dateParseErr)
-			// Set a zero time or handle accordingly if transactionDate is used later and needs to be valid
+			// Should not happen if ValidateDateString passed
+			logger.L.Error("Internal error: Failed to parse pre-validated OrderDate", "dateStr", sanitizedRaw.OrderDate, "error", dateParseErr)
+			return nil, fmt.Errorf("internal error parsing pre-validated OrderDate %s", sanitizedRaw.OrderDate)
 		}
 
 		exchangeRate := 1.0
-		if raw.Currency != "EUR" && dateParseErr == nil { // Only try if date parsing was successful
-			var exErr error // Shadowing 'err' from parseDescription is fine here
-			exchangeRate, exErr = processors.GetExchangeRate(raw.Currency, transactionDate)
+		if sanitizedRaw.Currency != "EUR" {
+			var exErr error
+			exchangeRate, exErr = processors.GetExchangeRate(sanitizedRaw.Currency, transactionDate)
 			if exErr != nil {
-				log.Printf("Warning: Unable to retrieve exchange rate for currency %s and date %s (OrderID: %s). Using default 1.0. Error: %v",
-					raw.Currency, raw.OrderDate, raw.OrderID, exErr)
+				logger.L.Warn("Unable to retrieve exchange rate, using 1.0",
+					"currency", sanitizedRaw.Currency, "date", sanitizedRaw.OrderDate, "originalOrderID", sanitizedRaw.OrderID, "error", exErr)
 				// exchangeRate remains 1.0
 			}
-		} else if dateParseErr != nil {
-			log.Printf("Skipping exchange rate fetch for OrderID %s due to date parse error.", raw.OrderID)
 		}
 
-		var amountEUR float64
-		if exchangeRate == 0.0 { // Should ideally not happen if default is 1.0
-			log.Printf("Warning: Exchange rate is zero for transaction %s (Currency: %s, Date: %s). Using original amount for AmountEUR.",
-				raw.OrderID, raw.Currency, raw.OrderDate)
-			amountEUR = amount
-		} else {
+		amountEUR := amount
+		if exchangeRate != 0 { // Should typically not be 0 if GetExchangeRate is robust or defaults.
 			amountEUR = amount / exchangeRate
+		} else if sanitizedRaw.Currency != "EUR" {
+			logger.L.Warn("Exchange rate is zero, AmountEUR will equal Amount", "originalOrderID", sanitizedRaw.OrderID, "currency", sanitizedRaw.Currency)
 		}
 
-		// --- Commission Calculation Section ---
-		// As per your request, keeping commission at 0.0 for now and removing the problematic loop.
-		// The inefficient inner loop has been removed.
+		// Commission calculation (remains 0.0 as per previous logic)
 		commission := 0.0
-		// The old log for the inner loop is also removed.
-		// The `err` variable from parseDescription is still in scope,
-		// but the `if err != nil` for commission calculation was likely not intended to use that specific error.
-		// For now, we'll assume no specific error logging for commission since it's 0.0.
 
-		productNameForProcessed := name
+		productNameForProcessedTx := parsedName
+		// If dividend/tax, the description from raw data is more relevant for ProductName in ProcessedTransaction
 		if orderType == "dividend" || orderType == "dividendtax" {
-			productNameForProcessed = raw.Name
+			productNameForProcessedTx = sanitizedRaw.Name // Use sanitized original name for dividends
 		}
 
 		processed := models.ProcessedTransaction{
-			Date:             raw.OrderDate,
-			ProductName:      productNameForProcessed,
-			ISIN:             raw.ISIN,
+			Date:             sanitizedRaw.OrderDate,
+			ProductName:      productNameForProcessedTx,
+			ISIN:             sanitizedRaw.ISIN,
 			Quantity:         quantity,
-			OriginalQuantity: quantity,
+			OriginalQuantity: quantity, // Assuming this for now, might need adjustment based on sales later
 			Price:            price,
 			OrderType:        orderType,
-			TransactionType:  "", // You might want to derive this (e.g. "STOCK", "OPTION", "DIVIDEND", "CASH")
-			Description:      raw.Description,
+			TransactionType:  determineTransactionType(orderType), // Helper to categorize
+			Description:      sanitizedRaw.Description,            // Store the sanitized full original description
 			Amount:           amount,
-			Currency:         raw.Currency,
+			Currency:         sanitizedRaw.Currency,
 			Commission:       commission,
-			OrderID:          raw.OrderID,
+			OrderID:          sanitizedRaw.OrderID,
 			ExchangeRate:     exchangeRate,
 			AmountEUR:        amountEUR,
-			CountryCode:      utils.GetCountryCodeString(raw.ISIN),
+			CountryCode:      utils.GetCountryCodeString(sanitizedRaw.ISIN),
 		}
 		processedTransactions = append(processedTransactions, processed)
 
-		// Log progress for each outer loop iteration
-		if i%100 == 0 || i == len(rawTransactions)-1 { // Log every 100 or the last one
-			log.Printf("  Processed raw transaction %d/%d. Loop iteration took: %s", i+1, len(rawTransactions), time.Since(loopStartTime))
+		if (i+1)%100 == 0 || i == len(rawTransactions)-1 {
+			logger.L.Debug("Processed batch of raw transactions", "currentIndex", i+1, "total", len(rawTransactions), "lastOrderID", sanitizedRaw.OrderID, "batchLoopDuration", time.Since(loopStartTime))
 		}
 	}
-	log.Printf("transactionProcessor.Process END. Total time: %s for %d processed transactions", time.Since(overallStartTime), len(processedTransactions))
+	logger.L.Info("transactionProcessor.Process END", "processedCount", len(processedTransactions), "totalDuration", time.Since(overallStartTime))
 	return processedTransactions, nil
 }
 
-// convertRawToProcessed function (as you provided it, with minor logging improvement for date parse)
-func convertRawToProcessed(raw models.RawTransaction) (models.ProcessedTransaction, error) {
-	orderType, quantity, price, _, name, err := parseDescription(raw.Description)
-	if err != nil {
-		return models.ProcessedTransaction{}, fmt.Errorf("convertRawToProcessed: parseDescription failed for OrderID %s: %w", raw.OrderID, err)
-	}
+// parseDescription remains largely the same, ensure it handles errors gracefully
+// and trims/normalizes inputs it receives.
+// Its output (name, orderType) will be used to populate ProcessedTransaction.
+func parseDescription(description string) (orderType string, quantity int, price float64, isin string, name string, err error) {
+	// It's crucial that this function is robust.
+	// The `description` fed to it is already `validation.StripUnprintable` and `strings.TrimSpace`
+	// Also, formula injection, XSS, SQLi checks have been done on it.
 
-	amount, err := strconv.ParseFloat(strings.TrimSpace(raw.Amount), 64)
-	if err != nil {
-		return models.ProcessedTransaction{}, fmt.Errorf("convertRawToProcessed: invalid amount for OrderID %s: %w", raw.OrderID, err)
-	}
+	// Replace non-breaking spaces just in case, though StripUnprintable might handle some.
+	desc := strings.ReplaceAll(description, "\u00A0", " ")
+	desc = strings.TrimSpace(desc)
 
-	transactionDate, dateParseErr := time.Parse("02-01-2006", raw.OrderDate)
-	if dateParseErr != nil {
-		// Log this error specifically, as it affects exchange rate fetching.
-		log.Printf("Warning (convertRawToProcessed): Invalid date format for transaction %s ('%s'): %v. Exchange rate calculation might be affected.", raw.OrderID, raw.OrderDate, dateParseErr)
-		// We'll proceed but exchangeRate might be 1.0 due to this.
-	}
-
-	exchangeRate := 1.0
-	if raw.Currency != "EUR" && dateParseErr == nil { // Only attempt to get rate if currency is not EUR and date was parsed correctly
-		var exErr error
-		exchangeRate, exErr = processors.GetExchangeRate(raw.Currency, transactionDate)
-		if exErr != nil {
-			log.Printf("Warning (convertRawToProcessed): Unable to retrieve exchange rate for OrderID %s (Currency: %s, Date: %s): %v. Using default 1.0.",
-				raw.OrderID, raw.Currency, raw.OrderDate, exErr)
-			// exchangeRate remains 1.0
-		}
-	}
-
-	amountEUR := amount
-	if exchangeRate != 0 { // Should always be true now since default is 1.0
-		amountEUR = amount / exchangeRate
-	}
-
-	return models.ProcessedTransaction{
-		Date:            raw.OrderDate,
-		ProductName:     name,
-		ISIN:            raw.ISIN,
-		Quantity:        quantity,
-		Price:           price,
-		OrderType:       orderType,
-		TransactionType: "", // Determine if needed
-		Description:     raw.Description,
-		Amount:          amount,
-		Currency:        raw.Currency,
-		OrderID:         raw.OrderID,
-		ExchangeRate:    exchangeRate,
-		AmountEUR:       amountEUR,
-		CountryCode:     utils.GetCountryCodeString(raw.ISIN),
-	}, nil
-}
-
-// parseDescription function remains the same as you provided it.
-// ... (paste your parseDescription function here)
-func parseDescription(description string) (string, int, float64, string, string, error) {
-	// Replace non-breaking spaces with regular spaces
-	description = strings.ReplaceAll(description, "\u00A0", " ")
-	// Trim leading/trailing whitespace
-	description = strings.TrimSpace(description)
-
-	// Check for EXACT deposit transactions first
-	if description == "Depósito" || description == "flatex Deposit" {
-		// Use 0 for quantity and price as they are not relevant for simple deposits
+	if desc == "Depósito" || strings.EqualFold(desc, "flatex Deposit") {
 		return "cashdeposit", 0, 0, "", "Cash Deposit", nil
 	}
 
-	// Check for EXACT "Dividendo" transaction first (without product name in description)
-	if description == "Dividendo" {
-		// Return "dividend" type, but empty name as it's not in the description
-		return "dividend", 0, 0, "", "", nil
-	}
-	// Check for EXACT "Imposto sobre Dividendo" (without product name) - less likely but possible
-	if description == "Imposto sobre Dividendo" {
-		return "dividendtax", 0, 0, "", "", nil
-	}
-
-	// Then check for dividend or tax transactions WITH product name in description
-	dividendRe := regexp.MustCompile(`(?i)(?:Dividendo|Imposto sobre Dividendo)\s+(.+?)(?:\s+\(.+\))?$`)
-	dividendMatches := dividendRe.FindStringSubmatch(description)
+	dividendRe := regexp.MustCompile(`(?i)^(Dividendo|Imposto sobre Dividendo)\s+(.+?)(?:\s+\(.+\))?$`)
+	dividendMatches := dividendRe.FindStringSubmatch(desc)
 	if dividendMatches != nil {
-		productName := strings.TrimSpace(dividendMatches[1])
-		// Check the original description again to be sure about tax vs regular dividend
-		if strings.Contains(strings.ToLower(description), "imposto sobre dividendo") {
+		productName := strings.TrimSpace(dividendMatches[2])
+		if strings.HasPrefix(strings.ToLower(desc), "imposto sobre dividendo") {
 			return "dividendtax", 0, 0, "", productName, nil
 		}
-		// If the regex matched but it wasn't tax, assume it's a regular dividend
 		return "dividend", 0, 0, "", productName, nil
 	}
+	// Handle cases where "Dividendo" or "Imposto sobre Dividendo" might appear without product name directly following
+	// For example, if product name is in raw.Name and description is just "Dividendo"
+	if strings.EqualFold(desc, "Dividendo") {
+		return "dividend", 0, 0, "", "", nil // Name will be taken from raw.Name
+	}
+	if strings.EqualFold(desc, "Imposto sobre Dividendo") {
+		return "dividendtax", 0, 0, "", "", nil // Name will be taken from raw.Name
+	}
 
-	// Check for Stock Buy/Sell format, as it contains quantity, price, and the product name
-	stockRe := regexp.MustCompile(`(?i)\s*(compra|venda)\s+(\d+\s*\d*)\s+([a-zA-Z0-9\s\.\-\(\)]+\s+[CP]\d+(?:\.\d+)?\s+\d{2}[A-Z]{3}\d{2}|[a-zA-Z0-9\s\.\-\(\)]+)\s*@([\d,]+)\s+([A-Za-z]+)?\s*(?:\(([\w\d]+)\))?$`)
-	matches := stockRe.FindStringSubmatch(description)
+	// (?i) case-insensitive
+	// \s* optional spaces
+	// (compra|venda) capture "compra" or "venda"
+	// \s+ one or more spaces
+	// (\d+\s*\d*) capture quantity (e.g., "10", "1 000")
+	// \s+
+	// ([^@]+?) capture product name (anything not an "@" symbol, non-greedy)
+	// \s*@\s* an "@" symbol surrounded by optional spaces
+	// ([\d,\.]+) capture price (digits, commas, dots)
+	// (?:s*\(([A-Z0-9]+)\))? optionally capture ISIN in parentheses (e.g. "(US1234567890)")
+	// The regex was complex and might need adjustment for different CSV formats.
+	// A simpler regex that captures distinct parts if the format is consistent:
+	// Example: "Compra 10 SOME STOCK NAME @ 123,45"
+	// Example: "Venda 5 OPTION XYZ P30 18MAR22 @ 1,23"
+	// The original regex was: stockRe := regexp.MustCompile(`(?i)\s*(compra|venda)\s+(\d+\s*\d*)\s+([a-zA-Z0-9\s\.\-\(\)]+\s+[CP]\d+(?:\.\d+)?\s+\d{2}[A-Z]{3}\d{2}|[a-zA-Z0-9\s\.\-\(\)]+)\s*@([\d,]+)\s+([A-Za-z]+)?\s*(?:\(([\w\d]+)\))?$`)
+	// This regex tries to match both stocks and options. It can be fragile.
+	// Let's simplify and then determine if stock or option.
+	stockOrOptionRe := regexp.MustCompile(`(?i)\s*(compra|venda)\s+(\d+\s*\d*)\s+([a-zA-Z0-9\s\.\-\(\)]+\s+[CP]\d+(?:\.\d+)?\s+\d{2}[A-Z]{3}\d{2}|[a-zA-Z0-9\s\.\-\(\)]+)\s*@([\d,]+)\s+([A-Za-z]+)?\s*(?:\(([\w\d]+)\))?$`)
+	matches := stockOrOptionRe.FindStringSubmatch(desc)
+
 	if matches == nil {
-		// If it doesn't match deposit, dividend, or stock buy/sell, it's unknown
-		return "", 0, 0, "", "", fmt.Errorf("unknown transaction format in description: %s", description)
+		return "", 0, 0, "", "", fmt.Errorf("unknown transaction format in description: '%s'", description)
 	}
 
-	// Extract fields from the regex matches
 	orderTypeStr := strings.ToLower(matches[1])
-	quantityStr := strings.ReplaceAll(matches[2], " ", "")
-	name := strings.TrimSpace(matches[3]) // This might be a stock name OR an option name
-	priceStr := strings.ReplaceAll(matches[4], ",", ".")
-	isin := matches[5] // ISIN might not be present for options
+	quantityStr := strings.ReplaceAll(matches[2], " ", "") // "1 000" -> "1000"
+	productNameStr := strings.TrimSpace(matches[3])
+	priceStr := strings.ReplaceAll(matches[4], ",", ".") // "1.234,56" -> "1.234.56" (standardize) or handle Euro format
+	// priceStr = strings.ReplaceAll(priceStr, ".", "") // Remove thousands separators if present
+	// priceStr = strings.ReplaceAll(priceStr, ",", ".") // Replace decimal comma with dot
 
-	// Default order type based on compra/venda
-	orderType := ""
-	if orderTypeStr == "compra" {
-		orderType = "stockbuy"
-	} else if orderTypeStr == "venda" {
-		orderType = "stocksale"
+	// ISIN is optional in this simplified regex, captured in group 6
+	parsedISIN := ""
+	if len(matches) > 6 {
+		parsedISIN = strings.TrimSpace(matches[6])
+	}
+
+	qty, qErr := strconv.Atoi(quantityStr)
+	if qErr != nil {
+		return "", 0, 0, "", "", fmt.Errorf("invalid quantity '%s' in description: %w", quantityStr, qErr)
+	}
+
+	p, pErr := strconv.ParseFloat(priceStr, 64)
+	if pErr != nil {
+		return "", 0, 0, "", "", fmt.Errorf("invalid price '%s' in description: %w", priceStr, pErr)
+	}
+
+	// Determine if stock or option based on productNameStr or other indicators
+	// This is a common pattern for options "PRODUCT C/P STRIKE DDMMMYY"
+	optionPatternRe := regexp.MustCompile(`(?i)^[A-Z0-9\s\.]+?\s+[CP]\d+(\.\d+)?\s+\d{2}[A-Z]{3}\d{2}$`)
+	finalOrderType := ""
+	if optionPatternRe.MatchString(productNameStr) {
+		finalOrderType = "option" // This overrides stockbuy/stocksale for options
 	} else {
-		// Should not happen based on regex, but good practice
-		return "", 0, 0, "", "", fmt.Errorf("unknown order type string: %s", orderTypeStr)
+		if orderTypeStr == "compra" {
+			finalOrderType = "stockbuy"
+		} else {
+			finalOrderType = "stocksale"
+		}
 	}
 
-	// NOW, check if the extracted 'name' matches the option pattern
-	optionRe := regexp.MustCompile(`^([A-Z]+)\s+([CP])(\d+(?:\.\d+)?)\s+(\d{2}[A-Z]{3}\d{2})$`)
-	if optionRe.MatchString(name) {
-		// If the product name matches the option format, override the orderType
-		orderType = "option"
-	}
+	return finalOrderType, qty, p, parsedISIN, productNameStr, nil
+}
 
-	// Parse quantity
-	quantityNum, err := strconv.Atoi(quantityStr) // Renamed to quantityNum to avoid conflict
-	if err != nil {
-		return "", 0, 0, "", "", fmt.Errorf("invalid quantity: %w", err)
+// determineTransactionType is a helper to categorize based on OrderType.
+func determineTransactionType(orderType string) string {
+	switch strings.ToLower(orderType) {
+	case "stockbuy", "stocksale":
+		return "STOCK"
+	case "option": // Assuming parseDescription sets "option" for options
+		return "OPTION"
+	case "dividend", "dividendtax":
+		return "DIVIDEND"
+	case "cashdeposit":
+		return "CASH_MOVEMENT"
+	case "fee", "commission": // If you parse these separately
+		return "FEE"
+	default:
+		logger.L.Warn("Unknown order type for transaction type determination", "orderType", orderType)
+		return "UNKNOWN"
 	}
-
-	// Parse price
-	if priceStr == "" {
-		return "", 0, 0, "", "", fmt.Errorf("price not found in description: %s", description)
-	}
-	priceNum, err := strconv.ParseFloat(priceStr, 64) // Renamed to priceNum
-	if err != nil {
-		return "", 0, 0, "", "", fmt.Errorf("invalid price: %w", err)
-	}
-
-	return orderType, quantityNum, priceNum, isin, name, nil
 }

@@ -3,12 +3,15 @@ package handlers
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings" // For If-None-Match parsing
 
+	"github.com/username/taxfolio/backend/src/config" // For Cfg.MaxUploadSizeBytes
 	"github.com/username/taxfolio/backend/src/logger"
-	"github.com/username/taxfolio/backend/src/models"
+	"github.com/username/taxfolio/backend/src/models"              // For file validation functions
+	"github.com/username/taxfolio/backend/src/security/validation" // For validation.ErrValidationFailed
 	"github.com/username/taxfolio/backend/src/services"
 	"github.com/username/taxfolio/backend/src/utils" // For GenerateETag
 )
@@ -24,8 +27,6 @@ func NewUploadHandler(service services.UploadService) *UploadHandler {
 	}
 }
 
-// HandleUpload receives the file, passes it to the service, and returns the result
-// of processing *that specific file*.
 func (h *UploadHandler) HandleUpload(w http.ResponseWriter, r *http.Request) {
 	userID, ok := GetUserIDFromContext(r.Context())
 	if !ok {
@@ -33,51 +34,78 @@ func (h *UploadHandler) HandleUpload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := r.ParseMultipartForm(10 << 20); err != nil { // 10 MB max file size
-		logger.L.Warn("Failed to parse multipart form", "userID", userID, "error", err)
-		sendJSONError(w, fmt.Sprintf("failed to parse multipart form: %v", err), http.StatusBadRequest)
+	// 1. Parse Multipart Form (includes overall request size limit)
+	if err := r.ParseMultipartForm(config.Cfg.MaxUploadSizeBytes); err != nil {
+		logger.L.Warn("Failed to parse multipart form or request too large", "userID", userID, "error", err, "limit", config.Cfg.MaxUploadSizeBytes)
+		sendJSONError(w, fmt.Sprintf("Failed to parse form or request too large (max %d MB)", config.Cfg.MaxUploadSizeBytes/(1024*1024)), http.StatusBadRequest)
 		return
 	}
 
 	file, fileHeader, err := r.FormFile("file")
 	if err != nil {
 		logger.L.Warn("Failed to retrieve file from request", "userID", userID, "error", err)
-		sendJSONError(w, fmt.Sprintf("failed to retrieve file from request: %v", err), http.StatusBadRequest)
+		sendJSONError(w, "Failed to retrieve file from request. Ensure 'file' field is used.", http.StatusBadRequest)
 		return
 	}
 	defer file.Close()
 
-	if fileHeader.Header.Get("Content-Type") != "text/csv" { // Basic validation
-		logger.L.Warn("Invalid file type uploaded", "userID", userID, "contentType", fileHeader.Header.Get("Content-Type"))
-		sendJSONError(w, "only CSV files are allowed", http.StatusBadRequest)
-		return
-	}
-	if fileHeader.Size > 10<<20 { // Check against 10MB again
-		logger.L.Warn("Uploaded file too large", "userID", userID, "fileSize", fileHeader.Size)
-		sendJSONError(w, "file too large, max 10MB", http.StatusBadRequest) // User friendly max size
+	// 2. File Header Size Check
+	if fileHeader.Size > config.Cfg.MaxUploadSizeBytes {
+		logger.L.Warn("Uploaded file header reports size too large", "userID", userID, "fileSize", fileHeader.Size, "limit", config.Cfg.MaxUploadSizeBytes)
+		sendJSONError(w, fmt.Sprintf("File too large, max %d MB (header check)", config.Cfg.MaxUploadSizeBytes/(1024*1024)), http.StatusBadRequest)
 		return
 	}
 
-	logger.L.Info("Handling upload", "userID", userID, "filename", fileHeader.Filename)
-	// ProcessUpload might still return an UploadResult containing DividendTaxResult for the batch.
-	// This is specific to the /upload endpoint's immediate response.
+	// 3. Client-Declared Content-Type Validation
+	clientContentType := fileHeader.Header.Get("Content-Type")
+	if err := validation.ValidateClientContentType(clientContentType); err != nil { // USING security.ValidateClientContentType
+		logger.L.Warn("Invalid client-declared file type", "userID", userID, "contentType", clientContentType, "error", err)
+		sendJSONError(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	logger.L.Debug("Client-declared Content-Type validated", "userID", userID, "contentType", clientContentType)
+
+	// 4. Server-Side File Content Validation (Magic Bytes / MIME type detection)
+	detectedContentType, err := validation.ValidateFileContentByMagicBytes(file) // USING security.ValidateFileContentByMagicBytes
+	if err != nil {
+		logger.L.Warn("Server-side file content validation failed", "userID", userID, "filename", fileHeader.Filename, "error", err)
+		sendJSONError(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	logger.L.Info("File content validated by magic bytes", "userID", userID, "filename", fileHeader.Filename, "clientType", clientContentType, "detectedType", detectedContentType)
+
+	// --- File reader's pointer is reset by ValidateFileContentByMagicBytes ---
+
+	logger.L.Info("Processing upload request", "userID", userID, "filename", fileHeader.Filename)
 	result, err := h.uploadService.ProcessUpload(file, userID)
 	if err != nil {
-		logger.L.Error("Error processing upload", "userID", userID, "filename", fileHeader.Filename, "error", err)
-		sendJSONError(w, fmt.Sprintf("Error processing upload: %v", err), http.StatusInternalServerError)
+		// Check for specific error types
+		if errors.Is(err, validation.ErrValidationFailed) {
+			logger.L.Warn("Upload processing failed due to data validation errors", "userID", userID, "filename", fileHeader.Filename, "error", err)
+			sendJSONError(w, fmt.Sprintf("File content validation failed: %v", err), http.StatusBadRequest)
+		} else if errors.Is(err, services.ErrParsingFailed) { // CHECKING services.ErrParsingFailed
+			logger.L.Warn("Upload processing failed due to CSV parsing errors", "userID", userID, "filename", fileHeader.Filename, "error", err)
+			sendJSONError(w, fmt.Sprintf("Error parsing CSV file: %v", err), http.StatusBadRequest)
+		} else if errors.Is(err, services.ErrProcessingFailed) { // Assuming you might add this too
+			logger.L.Warn("Upload processing failed during transaction processing", "userID", userID, "filename", fileHeader.Filename, "error", err)
+			sendJSONError(w, fmt.Sprintf("Error processing transactions in file: %v", err), http.StatusBadRequest)
+		} else {
+			logger.L.Error("Internal error processing upload", "userID", userID, "filename", fileHeader.Filename, "error", err)
+			sendJSONError(w, "An internal error occurred while processing the file. Please try again later.", http.StatusInternalServerError)
+		}
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
 	if err := json.NewEncoder(w).Encode(result); err != nil {
-		logger.L.Error("Error generating JSON response for upload result", "userID", userID, "error", err)
-		// Avoid http.Error after header has been written
+		logger.L.Error("Error encoding JSON response for upload result", "userID", userID, "error", err)
 	}
 }
 
-// HandleGetRealizedGainsData retrieves all relevant summary data for the realizedgains.
-// This version includes ETag support and no longer explicitly includes DividendTaxResult in its response structure
-// if the underlying service method omits it and the struct has omitempty.
+// HandleGetRealizedGainsData and sendJSONError remain the same as previously provided
+// (No changes needed to these specific functions from the last full response)
+
 func (h *UploadHandler) HandleGetRealizedGainsData(w http.ResponseWriter, r *http.Request) {
 	userID, ok := GetUserIDFromContext(r.Context())
 	if !ok {
@@ -86,8 +114,6 @@ func (h *UploadHandler) HandleGetRealizedGainsData(w http.ResponseWriter, r *htt
 	}
 	logger.L.Debug("Handling GetRealizedGainsData request with ETag support", "userID", userID)
 
-	// GetLatestUploadResult now returns an UploadResult where DividendTaxResult field is nil (or not populated).
-	// If the UploadResult struct has `json:",omitempty"` for DividendTaxResult, it will be excluded from the JSON.
 	realizedgainsData, err := h.uploadService.GetLatestUploadResult(userID)
 	if err != nil {
 		logger.L.Error("Error retrieving realizedgains data from service", "userID", userID, "error", err)
@@ -95,11 +121,6 @@ func (h *UploadHandler) HandleGetRealizedGainsData(w http.ResponseWriter, r *htt
 		return
 	}
 
-	// Ensure nil slices/maps are returned as empty ones for JSON consistency and ETag stability
-	// REMOVE DividendTaxResult handling here as it's no longer expected from GetLatestUploadResult for this endpoint.
-	// if realizedgainsData.DividendTaxResult == nil { // THIS BLOCK IS REMOVED
-	// 	realizedgainsData.DividendTaxResult = make(models.DividendTaxResult)
-	// }
 	if realizedgainsData.StockSaleDetails == nil {
 		realizedgainsData.StockSaleDetails = []models.SaleDetail{}
 	}
@@ -119,25 +140,17 @@ func (h *UploadHandler) HandleGetRealizedGainsData(w http.ResponseWriter, r *htt
 		realizedgainsData.DividendTransactionsList = []models.ProcessedTransaction{}
 	}
 
-	// Generate ETag for the current data
 	currentETag, etagErr := utils.GenerateETag(realizedgainsData)
 	if etagErr != nil {
 		logger.L.Error("Failed to generate ETag for realizedgains data", "userID", userID, "error", etagErr)
-		// Proceed without ETag matching, just send the data
 	}
 
-	// Set Cache-Control header. "no-cache" means client must revalidate.
-	// "private" indicates it's user-specific and shouldn't be stored by shared caches.
 	w.Header().Set("Cache-Control", "no-cache, private")
 
 	if etagErr == nil && currentETag != "" {
-		// Set the ETag header for the current response. ETag value MUST be enclosed in quotes.
 		quotedETag := fmt.Sprintf("\"%s\"", currentETag)
 		w.Header().Set("ETag", quotedETag)
-
-		// Check If-None-Match request header
 		clientETag := r.Header.Get("If-None-Match")
-
 		clientETags := strings.Split(clientETag, ",")
 		for _, cETag := range clientETags {
 			if strings.TrimSpace(cETag) == quotedETag {
@@ -153,11 +166,9 @@ func (h *UploadHandler) HandleGetRealizedGainsData(w http.ResponseWriter, r *htt
 		logger.L.Warn("Proceeding without ETag check due to ETag generation error or empty ETag", "userID", userID)
 	}
 
-	// If no ETag match or ETag couldn't be processed, send the full response
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(realizedgainsData); err != nil {
 		logger.L.Error("Error generating JSON response for realizedgains data", "userID", userID, "error", err)
-		// Avoid http.Error if headers already written
 	}
 }
 
@@ -165,6 +176,6 @@ func (h *UploadHandler) HandleGetRealizedGainsData(w http.ResponseWriter, r *htt
 func sendJSONError(w http.ResponseWriter, message string, statusCode int) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(statusCode)
-	logger.L.Warn("Sending JSON error to client", "message", message, "statusCode", statusCode)
+	logger.L.Warn("Sending JSON error to client", "message", message, "statusCode", statusCode) // Log the actual error
 	json.NewEncoder(w).Encode(map[string]string{"error": message})
 }

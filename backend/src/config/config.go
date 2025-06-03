@@ -16,8 +16,9 @@ type AppConfig struct {
 	CSRFAuthKey        []byte
 	HistoricalDataPath string
 	CountryDataPath    string
-	AccessTokenExpiry  time.Duration // New
-	RefreshTokenExpiry time.Duration // New
+	AccessTokenExpiry  time.Duration
+	RefreshTokenExpiry time.Duration
+	MaxUploadSizeBytes int64
 }
 
 var Cfg *AppConfig
@@ -57,6 +58,13 @@ func LoadConfig() {
 		refreshTokenExpiry = 7 * 24 * time.Hour // 7 days
 	}
 
+	maxUploadSizeBytesStr := getEnv("MAX_UPLOAD_SIZE_BYTES", "10485760") // Default 10MB (10 * 1024 * 1024)
+	maxUploadSizeBytes, err := strconv.ParseInt(maxUploadSizeBytesStr, 10, 64)
+	if err != nil {
+		log.Printf("WARNING: Invalid MAX_UPLOAD_SIZE_BYTES format '%s'. Using default 10MB. Error: %v", maxUploadSizeBytesStr, err)
+		maxUploadSizeBytes = 10 * 1024 * 1024 // Default to 10MB
+	}
+
 	Cfg = &AppConfig{
 		JWTSecret:          jwtSecret,
 		Port:               getEnv("PORT", "8080"),
@@ -67,10 +75,11 @@ func LoadConfig() {
 		CountryDataPath:    getEnv("COUNTRY_DATA_PATH", "data/country.json"),
 		AccessTokenExpiry:  accessTokenExpiry,
 		RefreshTokenExpiry: refreshTokenExpiry,
+		MaxUploadSizeBytes: maxUploadSizeBytes,
 	}
 
-	log.Printf("Configuration loaded: Port=%s, LogLevel=%s, DBPath=%s, AccessTokenExpiry=%s, RefreshTokenExpiry=%s",
-		Cfg.Port, Cfg.LogLevel, Cfg.DatabasePath, Cfg.AccessTokenExpiry, Cfg.RefreshTokenExpiry)
+	log.Printf("Configuration loaded: Port=%s, LogLevel=%s, DBPath=%s, AccessTokenExpiry=%s, RefreshTokenExpiry=%s, MaxUploadSize=%d bytes",
+		Cfg.Port, Cfg.LogLevel, Cfg.DatabasePath, Cfg.AccessTokenExpiry, Cfg.RefreshTokenExpiry, Cfg.MaxUploadSizeBytes)
 }
 
 // getEnv retrieves an environment variable or returns a default value.

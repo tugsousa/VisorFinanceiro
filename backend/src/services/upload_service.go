@@ -106,8 +106,8 @@ func (s *uploadServiceImpl) ProcessUpload(fileReader io.Reader, userID int64) (*
 
 	rawTransactions, err := s.csvParser.Parse(fileReader)
 	if err != nil {
-		logger.L.Error("Error parsing CSV", "userID", userID, "error", err)
-		return nil, fmt.Errorf("error parsing csv file for userID %d: %w", userID, err)
+		logger.L.Error("Error parsing CSV in service", "userID", userID, "error", err)
+		return nil, fmt.Errorf("%w: %v", ErrParsingFailed, err) // Wrap the error
 	}
 	if len(rawTransactions) == 0 {
 		logger.L.Info("No raw transactions parsed from file", "userID", userID)

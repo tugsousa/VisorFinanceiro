@@ -2,6 +2,7 @@
 package services
 
 import (
+	"errors"
 	"io"
 
 	"github.com/username/taxfolio/backend/src/models"
@@ -19,22 +20,20 @@ type UploadResult struct {
 	DividendTransactionsList []models.ProcessedTransaction `json:"DividendTransactionsList,omitempty"`
 }
 
+// Define common service errors
+var (
+	ErrParsingFailed    = errors.New("csv parsing failed")
+	ErrProcessingFailed = errors.New("transaction processing failed")
+	// ErrValidationFailed is already defined in the validation package
+	// If the service layer needs to wrap it or return it directly, ensure consistency.
+)
+
 // UploadService defines the interface for the core upload processing logic.
 type UploadService interface {
-	// ProcessUpload handles a new file upload, stores its transactions,
-	// and returns an UploadResult based *only* on the processed file.
 	ProcessUpload(fileReader io.Reader, userID int64) (*UploadResult, error)
-
-	// GetLatestUploadResult provides a comprehensive result based on *all*
-	// historical transactions for the given user.
-	// This is what pages like Holdings, TaxPage, etc., will typically use
-	// to get a complete picture.
 	GetLatestUploadResult(userID int64) (*UploadResult, error)
-
-	// Specific getters that operate on a user's historical data from the DB.
-	// These are alternatives to GetLatestUploadResult if only a subset of data is needed.
 	GetDividendTaxSummary(userID int64) (models.DividendTaxResult, error)
-	GetDividendTransactions(userID int64) ([]models.ProcessedTransaction, error) // Gets 'dividend' and 'dividendtax' types
+	GetDividendTransactions(userID int64) ([]models.ProcessedTransaction, error)
 	GetStockHoldings(userID int64) ([]models.PurchaseLot, error)
 	GetOptionHoldings(userID int64) ([]models.OptionHolding, error)
 	GetStockSaleDetails(userID int64) ([]models.SaleDetail, error)
