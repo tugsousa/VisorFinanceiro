@@ -1,37 +1,64 @@
-import React, { useState, useContext } from 'react';
+// frontend/src/pages/SignInPage.js
+import React, { useState, useContext, useEffect } from 'react';
 import { useNavigate, Link as RouterLink } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
 import {
   Container, Paper, Box, Typography, TextField, Button, Alert, CircularProgress, Grid, Link
 } from '@mui/material';
-// No longer need to import '../App.css' for these specific styles
 
 function SignInPage() {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
-  const [success, setSuccess] = useState(false); // Local success state for feedback
-  const { login, loading: authLoading } = useContext(AuthContext);
-  // const navigate = useNavigate(); // Not strictly needed here if PublicRoute handles redirect effectively
+  const [localError, setLocalError] = useState('');
+  const [localSuccess, setLocalSuccess] = useState(false);
+  const { login, loading: authLoading, authError: contextAuthError } = useContext(AuthContext); // Get contextAuthError
+
+  // useEffect to sync contextAuthError to localError if it changes
+  // This is a failsafe if AuthContext itself sets an error relevant to login
+  useEffect(() => {
+    if (contextAuthError) {
+        console.log('[SignInPage] Syncing contextAuthError to localError:', contextAuthError);
+        setLocalError(contextAuthError);
+    }
+  }, [contextAuthError]);
+
+
+  // DEBUG: Log localError state changes
+  useEffect(() => {
+    console.log('[SignInPage] localError state changed to:', localError);
+  }, [localError]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setError('');
-    setSuccess(false);
+    console.log('[SignInPage] handleSubmit started.');
+    
+    // Clear previous states ONLY if not already loading
+    // This prevents clearing the error from a previous failed attempt if the user clicks submit again while it's already processing
+    if (!authLoading) {
+        console.log('[SignInPage] Clearing localError and localSuccess.');
+        setLocalError('');
+        setLocalSuccess(false);
+    }
 
     try {
-      await login(username, password);
-      setSuccess(true); // Indicate login attempt was successful from frontend perspective
-      // Navigation is handled by PublicRoute due to user state change in AuthContext
+      console.log('[SignInPage] Attempting login for username:', username);
+      await login(username, password); // This login is from AuthContext
+      console.log('[SignInPage] Login call to AuthContext successful. Setting localSuccess true.');
+      setLocalSuccess(true);
+      // No need to clear localError here if login is successful because it was cleared at the start
+      // Navigation will be handled by PublicRoute due to user state change in AuthContext
     } catch (err) {
-      if (err.message && err.message.toLowerCase().includes("email not verified")) {
-        setError("Your email address has not been verified. Please check your inbox for the verification link. You may need to check your spam folder.");
-      } else {
-        setError(err.message || 'Invalid username or password');
-      }
-      console.error('Login error on SignInPage:', err);
+      // This 'err' is the one re-thrown by AuthContext's login method
+      const errorMessage = err.message || 'An unexpected error occurred during login.';
+      console.log(`[SignInPage] Login call to AuthContext failed. Error message caught: "${errorMessage}"`);
+      setLocalError(errorMessage); // Set the local error state for display
+      setLocalSuccess(false); // Ensure success is false if login failed
+      console.error('[SignInPage] Detailed error object caught in handleSubmit:', err);
     }
+    console.log('[SignInPage] handleSubmit finished.');
   };
+
+  console.log('[SignInPage] Rendering - authLoading:', authLoading, 'localError:', localError, 'localSuccess:', localSuccess);
 
   return (
     <Container component="main" maxWidth="xs" sx={{ mt: 4, mb: 4 }}>
@@ -39,8 +66,19 @@ function SignInPage() {
         <Typography component="h1" variant="h5">
           Sign In
         </Typography>
-        {error && <Alert severity="error" sx={{ width: '100%', mt: 2 }}>{error}</Alert>}
-        {success && !error && <Alert severity="success" sx={{ width: '100%', mt: 2 }}>Login successful! Redirecting...</Alert>}
+        
+        {localError && (
+          <Alert severity="error" sx={{ width: '100%', mt: 2, mb: 1 }}>
+            {localError}
+          </Alert>
+        )}
+        
+        {localSuccess && !localError && (
+          <Alert severity="success" sx={{ width: '100%', mt: 2, mb: 1 }}>
+            Login successful! Redirecting...
+          </Alert>
+        )}
+        
         <Box component="form" onSubmit={handleSubmit} noValidate sx={{ mt: 1, width: '100%' }}>
           <TextField
             margin="normal"
@@ -53,7 +91,7 @@ function SignInPage() {
             autoFocus
             value={username}
             onChange={(e) => setUsername(e.target.value)}
-            disabled={authLoading || (success && !error)}
+            disabled={authLoading || (localSuccess && !localError)}
           />
           <TextField
             margin="normal"
@@ -66,14 +104,14 @@ function SignInPage() {
             autoComplete="current-password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            disabled={authLoading || (success && !error)}
+            disabled={authLoading || (localSuccess && !localError)}
           />
           <Button
             type="submit"
             fullWidth
             variant="contained"
             sx={{ mt: 3, mb: 2 }}
-            disabled={authLoading || (success && !error)}
+            disabled={authLoading || (localSuccess && !localError)}
           >
             {authLoading ? <CircularProgress size={24} color="inherit" /> : 'Sign In'}
           </Button>
