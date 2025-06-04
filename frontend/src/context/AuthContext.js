@@ -1,4 +1,3 @@
-// frontend/src/context/AuthContext.js
 import React, { createContext, useState, useEffect, useContext, useCallback } from 'react';
 import {
   apiLogin, apiRegister, apiLogout,
@@ -22,7 +21,7 @@ export const AuthProvider = ({ children }) => {
   const [token, setToken] = useState(() => localStorage.getItem('auth_token'));
   const [refreshTokenState, setRefreshTokenState] = useState(() => localStorage.getItem('refresh_token'));
   const [loading, setLoading] = useState(true);
-  const [authError, setAuthError] = useState(null);
+  const [authError, setAuthError] = useState(null); // Context-level auth error
   const [csrfTokenState, setCsrfTokenState] = useState('');
   const [hasInitialData, setHasInitialData] = useState(null);
   const [checkingData, setCheckingData] = useState(false);
@@ -114,7 +113,7 @@ export const AuthProvider = ({ children }) => {
             setHasInitialData(JSON.parse(storedHasData));
             setCheckingData(false);
         } else {
-            if (storedUser) { // Only check user data if user was potentially loaded
+            if (storedUser) { 
                  await checkUserData();
             } else {
                  setHasInitialData(false);
@@ -142,19 +141,53 @@ export const AuthProvider = ({ children }) => {
     };
   }, [performLogout]);
 
-  const register = async (username, email, password) => { // Added email
+  const register = async (username, email, password) => {
     setLoading(true);
-    setAuthError(null);
+    setAuthError(null); 
     try {
       if (!csrfTokenState) await fetchCsrfTokenAndUpdateService();
-      const response = await apiRegister(username, email, password); // Pass email
+      const response = await apiRegister(username, email, password);
       setLoading(false);
       return { success: true, message: response.data.message || "Registration successful. Please check your email." };
     } catch (err) {
-      const errMsg = err.response?.data?.error || err.message || UI_TEXT.errorLoadingData;
-      setAuthError(errMsg);
+      // --- START DETAILED CONSOLE LOGGING FOR DEBUGGING ---
+      console.error("AuthContext Register - Raw Error Object:", err);
+      if (err.isAxiosError && err.response) {
+        console.error("AuthContext Register - Axios Response Status:", err.response.status);
+        console.error("AuthContext Register - Axios Response Data:", JSON.stringify(err.response.data, null, 2)); // Stringify for better object visibility
+        console.error("AuthContext Register - Axios Response Headers:", err.response.headers);
+      } else if (err.response) { // Fallback for non-Axios errors with a response
+        console.error("AuthContext Register - Error Response Status:", err.response.status);
+        console.error("AuthContext Register - Error Response Data:", JSON.stringify(err.response.data, null, 2));
+      }
+      // --- END DETAILED CONSOLE LOGGING FOR DEBUGGING ---
+
+      let specificMessage = UI_TEXT.errorLoadingData; 
+
+      if (err.response) { 
+        const status = err.response.status;
+        const responseData = err.response.data;
+
+        if (responseData && typeof responseData === 'object' && responseData.error) {
+          specificMessage = responseData.error;
+        } else if (typeof responseData === 'string' && responseData.trim() !== '') {
+          specificMessage = responseData;
+        } else if (status === 409) {
+          specificMessage = "Username or email already exists. Please try different credentials.";
+        } else if (err.message) {
+          specificMessage = err.message;
+        }
+      } else if (err.request) { 
+        specificMessage = "Network error. Could not reach the server. Please check your connection.";
+      } else if (err.message) { 
+        specificMessage = err.message;
+      }
+      
+      console.log("AuthContext Register - Determined specificMessage to throw:", specificMessage);
+
+      setAuthError(specificMessage); 
       setLoading(false);
-      throw new Error(errMsg);
+      throw new Error(specificMessage);
     }
   };
 
@@ -178,23 +211,19 @@ export const AuthProvider = ({ children }) => {
       if (data.user) localStorage.setItem('user', JSON.stringify(data.user));
       
       await fetchCsrfTokenAndUpdateService();
-      await checkUserData(); // This will set checkingData to false
+      await checkUserData(); 
       
       setLoading(false);
       return data;
     } catch (err) {
       const errMsg = err.response?.data?.error || err.message || 'Login failed';
-      // Special handling for "Email not verified" from backend
       if (err.response && err.response.status === 403 && errMsg.toLowerCase().includes("email not verified")) {
-         // Do not clear tokens or user here, let the user see the message
       } else {
-        performLogout(false); // For other login errors, clear session
+        performLogout(false); 
       }
       setAuthError(errMsg);
       setLoading(false);
       setCheckingData(false);
-      // setHasInitialData(false); // This might be too aggressive for email not verified case
-      // localStorage.removeItem('has_initial_data');
       throw new Error(errMsg);
     }
   };
