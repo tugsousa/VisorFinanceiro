@@ -6,17 +6,16 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"strings" // For If-None-Match parsing
+	"strings"
 
-	"github.com/username/taxfolio/backend/src/config" // For Cfg.MaxUploadSizeBytes
+	"github.com/username/taxfolio/backend/src/config"
 	"github.com/username/taxfolio/backend/src/logger"
-	"github.com/username/taxfolio/backend/src/models"              // For file validation functions
-	"github.com/username/taxfolio/backend/src/security/validation" // For validation.ErrValidationFailed
+	"github.com/username/taxfolio/backend/src/models"
+	"github.com/username/taxfolio/backend/src/security/validation"
 	"github.com/username/taxfolio/backend/src/services"
-	"github.com/username/taxfolio/backend/src/utils" // For GenerateETag
+	"github.com/username/taxfolio/backend/src/utils" // Import utils package
 )
 
-// UploadHandler struct and NewUploadHandler constructor remain the same.
 type UploadHandler struct {
 	uploadService services.UploadService
 }
@@ -27,71 +26,66 @@ func NewUploadHandler(service services.UploadService) *UploadHandler {
 	}
 }
 
+// sendJSONError IS REMOVED FROM HERE
+
 func (h *UploadHandler) HandleUpload(w http.ResponseWriter, r *http.Request) {
-	userID, ok := GetUserIDFromContext(r.Context())
+	userID, ok := GetUserIDFromContext(r.Context()) // Assumes GetUserIDFromContext is available (it's in user_handler.go)
 	if !ok {
-		sendJSONError(w, "authentication required or user ID not found in context", http.StatusUnauthorized)
+		utils.SendJSONError(w, "authentication required or user ID not found in context", http.StatusUnauthorized) // Use utils.SendJSONError
 		return
 	}
 
-	// 1. Parse Multipart Form (includes overall request size limit)
 	if err := r.ParseMultipartForm(config.Cfg.MaxUploadSizeBytes); err != nil {
 		logger.L.Warn("Failed to parse multipart form or request too large", "userID", userID, "error", err, "limit", config.Cfg.MaxUploadSizeBytes)
-		sendJSONError(w, fmt.Sprintf("Failed to parse form or request too large (max %d MB)", config.Cfg.MaxUploadSizeBytes/(1024*1024)), http.StatusBadRequest)
+		utils.SendJSONError(w, fmt.Sprintf("Failed to parse form or request too large (max %d MB)", config.Cfg.MaxUploadSizeBytes/(1024*1024)), http.StatusBadRequest) // Use utils.SendJSONError
 		return
 	}
 
 	file, fileHeader, err := r.FormFile("file")
 	if err != nil {
 		logger.L.Warn("Failed to retrieve file from request", "userID", userID, "error", err)
-		sendJSONError(w, "Failed to retrieve file from request. Ensure 'file' field is used.", http.StatusBadRequest)
+		utils.SendJSONError(w, "Failed to retrieve file from request. Ensure 'file' field is used.", http.StatusBadRequest) // Use utils.SendJSONError
 		return
 	}
 	defer file.Close()
 
-	// 2. File Header Size Check
 	if fileHeader.Size > config.Cfg.MaxUploadSizeBytes {
 		logger.L.Warn("Uploaded file header reports size too large", "userID", userID, "fileSize", fileHeader.Size, "limit", config.Cfg.MaxUploadSizeBytes)
-		sendJSONError(w, fmt.Sprintf("File too large, max %d MB (header check)", config.Cfg.MaxUploadSizeBytes/(1024*1024)), http.StatusBadRequest)
+		utils.SendJSONError(w, fmt.Sprintf("File too large, max %d MB (header check)", config.Cfg.MaxUploadSizeBytes/(1024*1024)), http.StatusBadRequest) // Use utils.SendJSONError
 		return
 	}
 
-	// 3. Client-Declared Content-Type Validation
 	clientContentType := fileHeader.Header.Get("Content-Type")
-	if err := validation.ValidateClientContentType(clientContentType); err != nil { // USING security.ValidateClientContentType
+	if err := validation.ValidateClientContentType(clientContentType); err != nil {
 		logger.L.Warn("Invalid client-declared file type", "userID", userID, "contentType", clientContentType, "error", err)
-		sendJSONError(w, err.Error(), http.StatusBadRequest)
+		utils.SendJSONError(w, err.Error(), http.StatusBadRequest) // Use utils.SendJSONError
 		return
 	}
 	logger.L.Debug("Client-declared Content-Type validated", "userID", userID, "contentType", clientContentType)
 
-	// 4. Server-Side File Content Validation (Magic Bytes / MIME type detection)
-	detectedContentType, err := validation.ValidateFileContentByMagicBytes(file) // USING security.ValidateFileContentByMagicBytes
+	detectedContentType, err := validation.ValidateFileContentByMagicBytes(file)
 	if err != nil {
 		logger.L.Warn("Server-side file content validation failed", "userID", userID, "filename", fileHeader.Filename, "error", err)
-		sendJSONError(w, err.Error(), http.StatusBadRequest)
+		utils.SendJSONError(w, err.Error(), http.StatusBadRequest) // Use utils.SendJSONError
 		return
 	}
 	logger.L.Info("File content validated by magic bytes", "userID", userID, "filename", fileHeader.Filename, "clientType", clientContentType, "detectedType", detectedContentType)
 
-	// --- File reader's pointer is reset by ValidateFileContentByMagicBytes ---
-
 	logger.L.Info("Processing upload request", "userID", userID, "filename", fileHeader.Filename)
 	result, err := h.uploadService.ProcessUpload(file, userID)
 	if err != nil {
-		// Check for specific error types
 		if errors.Is(err, validation.ErrValidationFailed) {
 			logger.L.Warn("Upload processing failed due to data validation errors", "userID", userID, "filename", fileHeader.Filename, "error", err)
-			sendJSONError(w, fmt.Sprintf("File content validation failed: %v", err), http.StatusBadRequest)
-		} else if errors.Is(err, services.ErrParsingFailed) { // CHECKING services.ErrParsingFailed
+			utils.SendJSONError(w, fmt.Sprintf("File content validation failed: %v", err), http.StatusBadRequest) // Use utils.SendJSONError
+		} else if errors.Is(err, services.ErrParsingFailed) {
 			logger.L.Warn("Upload processing failed due to CSV parsing errors", "userID", userID, "filename", fileHeader.Filename, "error", err)
-			sendJSONError(w, fmt.Sprintf("Error parsing CSV file: %v", err), http.StatusBadRequest)
-		} else if errors.Is(err, services.ErrProcessingFailed) { // Assuming you might add this too
+			utils.SendJSONError(w, fmt.Sprintf("Error parsing CSV file: %v", err), http.StatusBadRequest) // Use utils.SendJSONError
+		} else if errors.Is(err, services.ErrProcessingFailed) {
 			logger.L.Warn("Upload processing failed during transaction processing", "userID", userID, "filename", fileHeader.Filename, "error", err)
-			sendJSONError(w, fmt.Sprintf("Error processing transactions in file: %v", err), http.StatusBadRequest)
+			utils.SendJSONError(w, fmt.Sprintf("Error processing transactions in file: %v", err), http.StatusBadRequest) // Use utils.SendJSONError
 		} else {
 			logger.L.Error("Internal error processing upload", "userID", userID, "filename", fileHeader.Filename, "error", err)
-			sendJSONError(w, "An internal error occurred while processing the file. Please try again later.", http.StatusInternalServerError)
+			utils.SendJSONError(w, "An internal error occurred while processing the file. Please try again later.", http.StatusInternalServerError) // Use utils.SendJSONError
 		}
 		return
 	}
@@ -103,13 +97,10 @@ func (h *UploadHandler) HandleUpload(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// HandleGetRealizedGainsData and sendJSONError remain the same as previously provided
-// (No changes needed to these specific functions from the last full response)
-
 func (h *UploadHandler) HandleGetRealizedGainsData(w http.ResponseWriter, r *http.Request) {
-	userID, ok := GetUserIDFromContext(r.Context())
+	userID, ok := GetUserIDFromContext(r.Context()) // Assumes GetUserIDFromContext is available
 	if !ok {
-		sendJSONError(w, "authentication required or user ID not found in context", http.StatusUnauthorized)
+		utils.SendJSONError(w, "authentication required or user ID not found in context", http.StatusUnauthorized) // Use utils.SendJSONError
 		return
 	}
 	logger.L.Debug("Handling GetRealizedGainsData request with ETag support", "userID", userID)
@@ -117,7 +108,7 @@ func (h *UploadHandler) HandleGetRealizedGainsData(w http.ResponseWriter, r *htt
 	realizedgainsData, err := h.uploadService.GetLatestUploadResult(userID)
 	if err != nil {
 		logger.L.Error("Error retrieving realizedgains data from service", "userID", userID, "error", err)
-		sendJSONError(w, fmt.Sprintf("Error retrieving realizedgains data for userID %d: %v", userID, err), http.StatusInternalServerError)
+		utils.SendJSONError(w, fmt.Sprintf("Error retrieving realizedgains data for userID %d: %v", userID, err), http.StatusInternalServerError) // Use utils.SendJSONError
 		return
 	}
 
@@ -170,12 +161,4 @@ func (h *UploadHandler) HandleGetRealizedGainsData(w http.ResponseWriter, r *htt
 	if err := json.NewEncoder(w).Encode(realizedgainsData); err != nil {
 		logger.L.Error("Error generating JSON response for realizedgains data", "userID", userID, "error", err)
 	}
-}
-
-// Helper function to send JSON errors
-func sendJSONError(w http.ResponseWriter, message string, statusCode int) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(statusCode)
-	logger.L.Warn("Sending JSON error to client", "message", message, "statusCode", statusCode) // Log the actual error
-	json.NewEncoder(w).Encode(map[string]string{"error": message})
 }

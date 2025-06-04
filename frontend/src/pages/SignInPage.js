@@ -1,16 +1,16 @@
 // frontend/src/pages/SignInPage.js
 import React, { useState, useContext } from 'react';
-import { useNavigate } from 'react-router-dom'; // Keep useNavigate for other potential uses if any
+import { useNavigate } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
-import '../App.css';
+import '../App.css'; // Assuming this has .auth-container styles
 
 function SignInPage() {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
-  const [success, setSuccess] = useState(false);
-  const { login, loading: authLoading } = useContext(AuthContext); // Get authLoading for disabling form
-  // const navigate = useNavigate(); // No longer strictly needed for post-login redirect here
+  const [success, setSuccess] = useState(false); // Local success state for feedback
+  const { login, loading: authLoading } = useContext(AuthContext);
+  // const navigate = useNavigate(); // Not strictly needed here as PublicRoute handles redirect
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -19,12 +19,15 @@ function SignInPage() {
 
     try {
       await login(username, password);
-      // If login is successful, AuthContext updates user state.
-      // PublicRoute will then see 'user' is populated and redirect to '/dashboard'.
-      setSuccess(true); // For local feedback on the SignInPage
-      // No explicit navigation here. Let AuthContext and routing handle it.
+      setSuccess(true); // Indicate login attempt was successful from frontend perspective
+      // Navigation is handled by PublicRoute due to user state change in AuthContext
     } catch (err) {
-      setError(err.message || 'Invalid username or password');
+      // Specific check for "Email not verified" message
+      if (err.message && err.message.toLowerCase().includes("email not verified")) {
+        setError("Your email address has not been verified. Please check your inbox for the verification link. You may need to check your spam folder.");
+      } else {
+        setError(err.message || 'Invalid username or password');
+      }
       console.error('Login error on SignInPage:', err);
     }
   };

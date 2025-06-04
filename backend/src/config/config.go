@@ -19,23 +19,40 @@ type AppConfig struct {
 	AccessTokenExpiry  time.Duration
 	RefreshTokenExpiry time.Duration
 	MaxUploadSizeBytes int64
+
+	// Email Service Choice
+	EmailServiceProvider string // e.g., "smtp", "mailgun", "mock"
+
+	// SMTP Config (kept for flexibility or fallback)
+	SMTPServer   string
+	SMTPPort     int
+	SMTPUser     string
+	SMTPPassword string
+
+	// Mailgun Config
+	MailgunDomain        string
+	MailgunPrivateAPIKey string
+
+	// SenderEmail and SenderName can be shared or specific depending on the provider chosen
+	SenderEmail string
+	SenderName  string // Optional: For the "From" name display, e.g., "Taxfolio Team"
+
+	VerificationEmailBaseURL string // e.g., "http://localhost:3000/verify-email"
+	VerificationTokenExpiry  time.Duration
 }
 
 var Cfg *AppConfig
 
 // LoadConfig loads configuration from environment variables.
-// It should be called once at application startup.
 func LoadConfig() {
-	// Standard library log for bootstrap messages before logger is initialized
 	log.Println("Loading application configuration...")
 
 	jwtSecret := getEnv("JWT_SECRET", "your-very-secure-and-long-jwt-secret-key-for-hs256-minimum-32-bytes")
 	if jwtSecret == "your-very-secure-and-long-jwt-secret-key-for-hs256-minimum-32-bytes" {
 		log.Println("WARNING: Using default insecure JWT_SECRET. Set JWT_SECRET environment variable for production.")
 	}
-	// Length check will be in main.go after config is loaded
 
-	csrfAuthKeyStr := getEnv("CSRF_AUTH_KEY", "a-very-secure-32-byte-long-key-must-be-32-bytes!") // Ensure 32 bytes
+	csrfAuthKeyStr := getEnv("CSRF_AUTH_KEY", "a-very-secure-32-byte-long-key-must-be-32-bytes!")
 	if csrfAuthKeyStr == "a-very-secure-32-byte-long-key-must-be-32-bytes!" {
 		log.Println("WARNING: Using default insecure CSRF_AUTH_KEY. Set CSRF_AUTH_KEY environment variable for production.")
 	}
@@ -43,26 +60,31 @@ func LoadConfig() {
 		log.Fatalf("FATAL: CSRF_AUTH_KEY must be at least 32 bytes long. Current length: %d", len(csrfAuthKeyStr))
 	}
 
-	accessTokenExpiryStr := getEnv("ACCESS_TOKEN_EXPIRY", "60m")    // Default to 60 minutes
-	refreshTokenExpiryStr := getEnv("REFRESH_TOKEN_EXPIRY", "168h") // Default to 7 days (168h)
-
+	accessTokenExpiryStr := getEnv("ACCESS_TOKEN_EXPIRY", "60m")
+	refreshTokenExpiryStr := getEnv("REFRESH_TOKEN_EXPIRY", "168h")
 	accessTokenExpiry, err := time.ParseDuration(accessTokenExpiryStr)
 	if err != nil {
 		log.Printf("WARNING: Invalid ACCESS_TOKEN_EXPIRY format '%s'. Using default 60m. Error: %v", accessTokenExpiryStr, err)
 		accessTokenExpiry = 60 * time.Minute
 	}
-
 	refreshTokenExpiry, err := time.ParseDuration(refreshTokenExpiryStr)
 	if err != nil {
 		log.Printf("WARNING: Invalid REFRESH_TOKEN_EXPIRY format '%s'. Using default 7d (168h). Error: %v", refreshTokenExpiryStr, err)
-		refreshTokenExpiry = 7 * 24 * time.Hour // 7 days
+		refreshTokenExpiry = 7 * 24 * time.Hour
 	}
 
-	maxUploadSizeBytesStr := getEnv("MAX_UPLOAD_SIZE_BYTES", "10485760") // Default 10MB (10 * 1024 * 1024)
+	maxUploadSizeBytesStr := getEnv("MAX_UPLOAD_SIZE_BYTES", "10485760")
 	maxUploadSizeBytes, err := strconv.ParseInt(maxUploadSizeBytesStr, 10, 64)
 	if err != nil {
 		log.Printf("WARNING: Invalid MAX_UPLOAD_SIZE_BYTES format '%s'. Using default 10MB. Error: %v", maxUploadSizeBytesStr, err)
-		maxUploadSizeBytes = 10 * 1024 * 1024 // Default to 10MB
+		maxUploadSizeBytes = 10 * 1024 * 1024
+	}
+
+	verificationTokenExpiryStr := getEnv("VERIFICATION_TOKEN_EXPIRY", "24h")
+	verificationTokenExpiry, err := time.ParseDuration(verificationTokenExpiryStr)
+	if err != nil {
+		log.Printf("WARNING: Invalid VERIFICATION_TOKEN_EXPIRY format '%s'. Using default 24h. Error: %v", verificationTokenExpiryStr, err)
+		verificationTokenExpiry = 24 * time.Hour
 	}
 
 	Cfg = &AppConfig{
@@ -76,13 +98,28 @@ func LoadConfig() {
 		AccessTokenExpiry:  accessTokenExpiry,
 		RefreshTokenExpiry: refreshTokenExpiry,
 		MaxUploadSizeBytes: maxUploadSizeBytes,
+
+		EmailServiceProvider: getEnv("EMAIL_SERVICE_PROVIDER", "mock"), // Default to mock
+
+		SMTPServer:   getEnv("SMTP_SERVER", ""), // Empty default means SMTP might not be configured
+		SMTPPort:     getEnvAsInt("SMTP_PORT", 587),
+		SMTPUser:     getEnv("SMTP_USER", ""),
+		SMTPPassword: getEnv("SMTP_PASSWORD", ""), // For sensitive data, consider better secret management
+
+		MailgunDomain:        getEnv("MAILGUN_DOMAIN", ""),
+		MailgunPrivateAPIKey: getEnv("MAILGUN_PRIVATE_API_KEY", ""),
+
+		SenderEmail: getEnv("SENDER_EMAIL", "noreply@taxfolio.com"),
+		SenderName:  getEnv("SENDER_NAME", "Taxfolio"), // Default sender name for display
+
+		VerificationEmailBaseURL: getEnv("VERIFICATION_EMAIL_BASE_URL", "http://localhost:3000/verify-email"),
+		VerificationTokenExpiry:  verificationTokenExpiry,
 	}
 
-	log.Printf("Configuration loaded: Port=%s, LogLevel=%s, DBPath=%s, AccessTokenExpiry=%s, RefreshTokenExpiry=%s, MaxUploadSize=%d bytes",
-		Cfg.Port, Cfg.LogLevel, Cfg.DatabasePath, Cfg.AccessTokenExpiry, Cfg.RefreshTokenExpiry, Cfg.MaxUploadSizeBytes)
+	log.Printf("Configuration loaded: Port=%s, LogLevel=%s, DBPath=%s, EmailProvider=%s",
+		Cfg.Port, Cfg.LogLevel, Cfg.DatabasePath, Cfg.EmailServiceProvider)
 }
 
-// getEnv retrieves an environment variable or returns a default value.
 func getEnv(key, fallback string) string {
 	if value, exists := os.LookupEnv(key); exists {
 		return value
@@ -91,11 +128,9 @@ func getEnv(key, fallback string) string {
 	return fallback
 }
 
-// getEnvAsInt retrieves an environment variable as an integer or returns a default.
-// Not used in current Cfg struct, but useful for future additions.
 func getEnvAsInt(key string, fallback int) int {
 	valueStr := getEnv(key, "")
-	if valueStr == "" { // If fallback was empty and env var not set
+	if valueStr == "" {
 		log.Printf("Missing integer value for %s, using default: %d", key, fallback)
 		return fallback
 	}
@@ -106,9 +141,6 @@ func getEnvAsInt(key string, fallback int) int {
 	return fallback
 }
 
-// getEnvAsDuration retrieves an environment variable as time.Duration or returns a default.
-// This function is effectively replaced by direct parsing in LoadConfig for specific duration fields.
-// Keeping it here in case it's useful for other generic duration configs in the future.
 func getEnvAsDuration(key string, fallback time.Duration) time.Duration {
 	valueStr := getEnv(key, "")
 	if valueStr == "" {

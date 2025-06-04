@@ -7,14 +7,15 @@ import SignInPage from './pages/SignInPage';
 import SignUpPage from './pages/SignUpPage';
 import RealizedGainsPage from './pages/RealizedGainsPage';
 import ProcessedTransactionsPage from './pages/ProcessedTransactionsPage';
-import NotFoundPage from './pages/NotFoundPage'; 
+import NotFoundPage from './pages/NotFoundPage';
+import VerifyEmailPage from './pages/VerifyEmailPage'; // Import the new page
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { CircularProgress, Box } from '@mui/material';
 
 const ProtectedRoute = ({ children }) => {
-  const { user, loading: authLoading } = useAuth(); // Renamed loading to authLoading for clarity
+  const { user, loading: authLoading } = useAuth();
 
-  if (authLoading) { // Use combined loading state from AuthContext
+  if (authLoading) {
     return (
       <Box display="flex" justifyContent="center" alignItems="center" minHeight="80vh">
         <CircularProgress />
@@ -29,9 +30,9 @@ const ProtectedRoute = ({ children }) => {
 };
 
 const PublicRoute = ({ children }) => {
-  const { user, loading: authLoading, hasInitialData } = useAuth(); // Get hasInitialData
+  const { user, loading: authLoading, hasInitialData } = useAuth();
 
-  if (authLoading) { // Use combined loading state
+  if (authLoading) {
     return (
       <Box display="flex" justifyContent="center" alignItems="center" minHeight="80vh">
         <CircularProgress />
@@ -40,10 +41,7 @@ const PublicRoute = ({ children }) => {
   }
 
   if (user) {
-    // If hasInitialData is null, it means we are still checking (should be covered by authLoading)
-    // If hasInitialData is true, go to realizedgains
-    // If hasInitialData is false, go to upload page (root)
-    if (hasInitialData === null) { // Still waiting for the data check
+    if (hasInitialData === null) {
         return (
           <Box display="flex" justifyContent="center" alignItems="center" minHeight="80vh">
             <CircularProgress />
@@ -65,6 +63,8 @@ function App() {
           <Routes>
             <Route path="/signin" element={<PublicRoute><SignInPage /></PublicRoute>} />
             <Route path="/signup" element={<PublicRoute><SignUpPage /></PublicRoute>} />
+            <Route path="/verify-email" element={<VerifyEmailPage />} /> {/* New Route */}
+            {/* Or if using path param: <Route path="/verify-email/:token" element={<VerifyEmailPage />} /> */}
             
             <Route path="/realizedgains" element={<ProtectedRoute><RealizedGainsPage /></ProtectedRoute>} />
             <Route path="/" element={<ProtectedRoute><UploadPage /></ProtectedRoute>} />

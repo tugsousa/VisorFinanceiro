@@ -20,7 +20,7 @@ export const useAuth = () => {
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [token, setToken] = useState(() => localStorage.getItem('auth_token'));
-  const [refreshTokenState, setRefreshTokenState] = useState(() => localStorage.getItem('refresh_token')); // Added for refresh token
+  const [refreshTokenState, setRefreshTokenState] = useState(() => localStorage.getItem('refresh_token'));
   const [loading, setLoading] = useState(true);
   const [authError, setAuthError] = useState(null);
   const [csrfTokenState, setCsrfTokenState] = useState('');
@@ -59,14 +59,14 @@ export const AuthProvider = ({ children }) => {
       return userHasData;
     } catch (err) {
       console.error('AuthContext: Error checking user data:', err);
-      setHasInitialData(false); // Default to false on error
+      setHasInitialData(false);
       localStorage.setItem('has_initial_data', 'false');
       return false;
     } finally {
       setCheckingData(false);
     }
   }, []);
-  
+
   const performLogout = useCallback(async (apiCall = true) => {
     const oldToken = localStorage.getItem('auth_token');
     localStorage.removeItem('auth_token');
@@ -77,49 +77,52 @@ export const AuthProvider = ({ children }) => {
     setToken(null);
     setRefreshTokenState(null);
     setHasInitialData(null);
-    setAuthError(null); // Clear any existing auth errors
+    setAuthError(null);
 
     if (apiCall && oldToken) {
         try {
-            await apiLogout(); // Call API logout
+            await apiLogout();
         } catch (err) {
             console.error('API Logout error during performLogout:', err);
         }
     }
-    await fetchCsrfTokenAndUpdateService(true); // Always fetch a new CSRF token
+    await fetchCsrfTokenAndUpdateService(true);
   }, [fetchCsrfTokenAndUpdateService]);
-
 
   useEffect(() => {
     const initializeAuth = async () => {
       setLoading(true);
-      setCheckingData(true); // Start checking data flag
-      await fetchCsrfTokenAndUpdateService(true); // Silent CSRF fetch on init
+      setCheckingData(true);
+      await fetchCsrfTokenAndUpdateService(true);
       const storedToken = localStorage.getItem('auth_token');
       const storedRefreshToken = localStorage.getItem('refresh_token');
 
       if (storedToken && storedRefreshToken) {
         setToken(storedToken);
-        setRefreshTokenState(storedRefreshToken); // Set refresh token state
+        setRefreshTokenState(storedRefreshToken);
         const storedUser = localStorage.getItem('user');
         if (storedUser) {
           try {
             setUser(JSON.parse(storedUser));
           } catch (e) {
             console.error("Failed to parse stored user", e);
-            localStorage.removeItem('user'); // Clear corrupted user
+            localStorage.removeItem('user');
           }
         }
         const storedHasData = localStorage.getItem('has_initial_data');
         if (storedHasData !== null) {
             setHasInitialData(JSON.parse(storedHasData));
-            setCheckingData(false); // Data status known
+            setCheckingData(false);
         } else {
-            await checkUserData(); // This will set checkingData to false
+            if (storedUser) { // Only check user data if user was potentially loaded
+                 await checkUserData();
+            } else {
+                 setHasInitialData(false);
+                 setCheckingData(false);
+            }
         }
       } else {
-        // If no tokens, clear everything to be sure
-        performLogout(false); // Don't call API if no tokens
+        performLogout(false);
         setHasInitialData(false);
         setCheckingData(false);
       }
@@ -129,26 +132,24 @@ export const AuthProvider = ({ children }) => {
   }, [fetchCsrfTokenAndUpdateService, checkUserData, performLogout]);
 
   useEffect(() => {
-    const handleLogoutEvent = () => {
-      console.warn("AuthContext: Received auth-error-logout event. Logging out without API call.");
-      performLogout(false); // Logout without making an API call, as API likely failed
+    const handleLogoutEvent = (event) => {
+      console.warn(`AuthContext: Received auth-error-logout event. Detail: ${event.detail}. Logging out without API call.`);
+      performLogout(false);
     };
-
     window.addEventListener('auth-error-logout', handleLogoutEvent);
     return () => {
       window.removeEventListener('auth-error-logout', handleLogoutEvent);
     };
   }, [performLogout]);
 
-
-  const register = async (username, password) => {
+  const register = async (username, email, password) => { // Added email
     setLoading(true);
     setAuthError(null);
     try {
       if (!csrfTokenState) await fetchCsrfTokenAndUpdateService();
-      const response = await apiRegister(username, password);
+      const response = await apiRegister(username, email, password); // Pass email
       setLoading(false);
-      return { success: true, message: response.data.message || "Registration successful. Please sign in." };
+      return { success: true, message: response.data.message || "Registration successful. Please check your email." };
     } catch (err) {
       const errMsg = err.response?.data?.error || err.message || UI_TEXT.errorLoadingData;
       setAuthError(errMsg);
@@ -159,7 +160,7 @@ export const AuthProvider = ({ children }) => {
 
   const login = async (username, password) => {
     setLoading(true);
-    setCheckingData(true); // Start checking data
+    setCheckingData(true);
     setAuthError(null);
     try {
       if (!csrfTokenState) await fetchCsrfTokenAndUpdateService();
@@ -170,42 +171,46 @@ export const AuthProvider = ({ children }) => {
       
       setUser(data.user);
       setToken(data.access_token);
-      setRefreshTokenState(data.refresh_token); // Set refresh token state
+      setRefreshTokenState(data.refresh_token);
 
       localStorage.setItem('auth_token', data.access_token);
-      localStorage.setItem('refresh_token', data.refresh_token); // Store refresh token
+      localStorage.setItem('refresh_token', data.refresh_token);
       if (data.user) localStorage.setItem('user', JSON.stringify(data.user));
       
-      await fetchCsrfTokenAndUpdateService(); // Get a fresh CSRF after login
-      await checkUserData(); // Check data after login (this will set checkingData to false)
+      await fetchCsrfTokenAndUpdateService();
+      await checkUserData(); // This will set checkingData to false
       
       setLoading(false);
       return data;
     } catch (err) {
       const errMsg = err.response?.data?.error || err.message || 'Login failed';
+      // Special handling for "Email not verified" from backend
+      if (err.response && err.response.status === 403 && errMsg.toLowerCase().includes("email not verified")) {
+         // Do not clear tokens or user here, let the user see the message
+      } else {
+        performLogout(false); // For other login errors, clear session
+      }
       setAuthError(errMsg);
       setLoading(false);
-      setCheckingData(false); // Ensure checkingData is false on error
-      setHasInitialData(false); // Reset hasInitialData on login failure
-      localStorage.removeItem('has_initial_data');
+      setCheckingData(false);
+      // setHasInitialData(false); // This might be too aggressive for email not verified case
+      // localStorage.removeItem('has_initial_data');
       throw new Error(errMsg);
     }
   };
 
-  // Use performLogout in the context's logout function
   const logout = async () => {
     setLoading(true);
-    await performLogout(true); // Call with apiCall = true
+    await performLogout(true);
     setLoading(false);
   };
-
 
   return (
     <AuthContext.Provider
       value={{
         user, token, 
-        refreshToken: refreshTokenState, // Expose refresh token if needed by apiService directly
-        loading: loading || checkingData, // Combined loading state
+        refreshToken: refreshTokenState,
+        loading: loading || checkingData,
         authError,
         csrfToken: csrfTokenState,
         hasInitialData,
@@ -213,7 +218,7 @@ export const AuthProvider = ({ children }) => {
         login, logout,
         fetchCsrfToken: fetchCsrfTokenAndUpdateService,
         refreshUserDataCheck: checkUserData,
-        performLogout, // Expose performLogout for apiService
+        performLogout,
       }}
     >
       {children}

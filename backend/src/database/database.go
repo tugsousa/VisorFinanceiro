@@ -23,13 +23,20 @@ func InitDB(databasePath string) {
 	} else {
 		stdlog.Println("Checking database migrations for:", databasePath)
 	}
-	migrateDatabase()
+	migrateUserTable() // Migration for users table
+	migrateDatabase()  // Existing migration for processed_transactions
 
 	createTableStatement := `
 	CREATE TABLE IF NOT EXISTS users (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
 		username TEXT NOT NULL UNIQUE,
-		password TEXT NOT NULL
+		password TEXT NOT NULL,
+		email TEXT NOT NULL UNIQUE,
+		is_email_verified BOOLEAN DEFAULT FALSE,
+		email_verification_token TEXT,
+		email_verification_token_expires_at TIMESTAMP,
+		created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+		updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 	);
 	
 	CREATE TABLE IF NOT EXISTS sessions (
@@ -52,11 +59,11 @@ func InitDB(databasePath string) {
 		product_name TEXT NOT NULL,
 		isin TEXT,
 		quantity INTEGER,
-		original_quantity INTEGER, -- Will be added by migration if not exists
+		original_quantity INTEGER,
 		price REAL,
 		order_type TEXT,
 		transaction_type TEXT,
-		description TEXT,          -- Will be added by migration if not exists
+		description TEXT,
 		amount REAL,
 		currency TEXT,
 		commission REAL,
@@ -66,7 +73,7 @@ func InitDB(databasePath string) {
 		country_code TEXT,
 		FOREIGN KEY(user_id) REFERENCES users(id)
 	);
-	` // Removed trailing comma from country_code
+	`
 
 	_, err = DB.Exec(createTableStatement)
 	if err != nil {
@@ -82,7 +89,123 @@ func InitDB(databasePath string) {
 	}
 }
 
-func migrateDatabase() {
+func migrateUserTable() {
+	var tableName string
+	err := DB.QueryRow("SELECT name FROM sqlite_master WHERE type='table' AND name='users'").Scan(&tableName)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			if logger.L != nil {
+				logger.L.Info("'users' table does not exist, no migration needed as table will be created.")
+			} else {
+				stdlog.Println("'users' table does not exist, no migration needed as table will be created.")
+			}
+			return // Table will be created by InitDB
+		}
+		if logger.L != nil {
+			logger.L.Error("Error checking for 'users' table", "error", err)
+		} else {
+			stdlog.Printf("Error checking for 'users' table: %v", err)
+		}
+		return
+	}
+
+	rows, err := DB.Query("PRAGMA table_info(users)")
+	if err != nil {
+		if logger.L != nil {
+			logger.L.Error("Error querying table schema for 'users'", "error", err)
+		} else {
+			stdlog.Printf("Error querying table schema for 'users': %v", err)
+		}
+		return
+	}
+	defer rows.Close()
+
+	columnExists := make(map[string]bool)
+	for rows.Next() {
+		var cid, pk int
+		var name, dataType string
+		var notnullVal int // Changed to notnullVal to avoid confusion
+		var dfltValue interface{}
+
+		if err := rows.Scan(&cid, &name, &dataType, notnullVal, &dfltValue, &pk); err != nil {
+			if logger.L != nil {
+				logger.L.Error("Error scanning column info for 'users'", "error", err)
+			} else {
+				stdlog.Printf("Error scanning column info for 'users': %v", err)
+			}
+			return
+		}
+		columnExists[name] = true
+	}
+	if err = rows.Err(); err != nil {
+		if logger.L != nil {
+			logger.L.Error("Error iterating over column info for 'users'", "error", err)
+		} else {
+			stdlog.Printf("Error iterating over column info for 'users': %v", err)
+		}
+		return
+	}
+
+	// Migration for email (add UNIQUE later if needed after ensuring data is clean)
+	if _, ok := columnExists["email"]; !ok {
+		// Adding NOT NULL DEFAULT '' for existing rows to avoid constraint issues before they're populated.
+		// New users will require an email. Consider adding a UNIQUE constraint separately after ensuring data integrity.
+		_, err := DB.Exec("ALTER TABLE users ADD COLUMN email TEXT NOT NULL DEFAULT ''")
+		if err != nil {
+			logger.L.Error("Error adding 'email' column to 'users' table", "error", err)
+		} else {
+			logger.L.Info("Added 'email' column to 'users' table. Consider adding a UNIQUE constraint manually later.")
+		}
+	}
+
+	// Migration for is_email_verified
+	if _, ok := columnExists["is_email_verified"]; !ok {
+		_, err := DB.Exec("ALTER TABLE users ADD COLUMN is_email_verified BOOLEAN DEFAULT FALSE")
+		if err != nil {
+			logger.L.Error("Error adding 'is_email_verified' column", "error", err)
+		} else {
+			logger.L.Info("Added 'is_email_verified' column to 'users' table")
+		}
+	}
+	// Migration for email_verification_token
+	if _, ok := columnExists["email_verification_token"]; !ok {
+		_, err := DB.Exec("ALTER TABLE users ADD COLUMN email_verification_token TEXT")
+		if err != nil {
+			logger.L.Error("Error adding 'email_verification_token' column", "error", err)
+		} else {
+			logger.L.Info("Added 'email_verification_token' column to 'users' table")
+		}
+	}
+	// Migration for email_verification_token_expires_at
+	if _, ok := columnExists["email_verification_token_expires_at"]; !ok {
+		_, err := DB.Exec("ALTER TABLE users ADD COLUMN email_verification_token_expires_at TIMESTAMP")
+		if err != nil {
+			logger.L.Error("Error adding 'email_verification_token_expires_at' column", "error", err)
+		} else {
+			logger.L.Info("Added 'email_verification_token_expires_at' column to 'users' table")
+		}
+	}
+	// Migration for created_at
+	if _, ok := columnExists["created_at"]; !ok {
+		_, err := DB.Exec("ALTER TABLE users ADD COLUMN created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP")
+		if err != nil {
+			logger.L.Error("Error adding 'created_at' column to 'users' table", "error", err)
+		} else {
+			logger.L.Info("Added 'created_at' column to 'users' table")
+		}
+	}
+	// Migration for updated_at
+	if _, ok := columnExists["updated_at"]; !ok {
+		_, err := DB.Exec("ALTER TABLE users ADD COLUMN updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP")
+		if err != nil {
+			logger.L.Error("Error adding 'updated_at' column to 'users' table", "error", err)
+		} else {
+			logger.L.Info("Added 'updated_at' column to 'users' table")
+		}
+	}
+}
+
+func migrateDatabase() { // This is the existing migration for processed_transactions
 	var tableName string
 	err := DB.QueryRow("SELECT name FROM sqlite_master WHERE type='table' AND name='processed_transactions'").Scan(&tableName)
 	if err != nil {
@@ -128,8 +251,6 @@ func migrateDatabase() {
 			} else {
 				stdlog.Printf("Error scanning column info: %v", err)
 			}
-			// Continue to try and scan other rows, but this row is problematic.
-			// Or return, as schema inspection is now unreliable. For migrations, better to be cautious.
 			return
 		}
 		columnExists[name] = true
@@ -159,7 +280,6 @@ func migrateDatabase() {
 			} else {
 				stdlog.Println("Added original_quantity column to processed_transactions table")
 			}
-			// Initialize original_quantity with quantity for existing rows
 			_, errUpdate := DB.Exec("UPDATE processed_transactions SET original_quantity = quantity WHERE original_quantity IS NULL")
 			if errUpdate != nil {
 				if logger.L != nil {
