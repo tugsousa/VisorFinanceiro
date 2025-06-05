@@ -225,4 +225,9 @@ export const apiFetchDividendTaxSummary = () => apiClient.get(API_ENDPOINTS.DIVI
 export const apiFetchDividendTransactions = () => apiClient.get(API_ENDPOINTS.DIVIDEND_TRANSACTIONS);
 export const apiCheckUserHasData = () => apiClient.get(API_ENDPOINTS.USER_HAS_DATA);
 
+// New function
+export const apiDeleteAllTransactions = () => {
+  return apiClient.delete(API_ENDPOINTS.DELETE_ALL_TRANSACTIONS);
+};
+
 export default apiClient;

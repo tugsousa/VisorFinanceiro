@@ -38,4 +38,5 @@ type UploadService interface {
 	GetOptionHoldings(userID int64) ([]models.OptionHolding, error)
 	GetStockSaleDetails(userID int64) ([]models.SaleDetail, error)
 	GetOptionSaleDetails(userID int64) ([]models.OptionSaleDetail, error)
+	InvalidateUserCache(userID int64)
 }

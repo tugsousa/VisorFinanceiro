@@ -185,7 +185,7 @@ func (s *uploadServiceImpl) ProcessUpload(fileReader io.Reader, userID int64) (*
 	committed = true
 	logger.L.Info("Successfully stored processed transactions in DB", "userID", userID, "count", len(processedTransactions))
 
-	s.invalidateUserCache(userID)
+	s.InvalidateUserCache(userID)
 
 	// Process *only the newly uploaded transactions* for the immediate response
 	// dividendTaxResultBatch := s.dividendProcessor.CalculateTaxSummary(processedTransactions) // REMOVED if field is gone
@@ -215,7 +215,8 @@ func (s *uploadServiceImpl) ProcessUpload(fileReader io.Reader, userID int64) (*
 	return result, nil
 }
 
-func (s *uploadServiceImpl) invalidateUserCache(userID int64) {
+// InvalidateUserCache clears all cached report data for a specific user.
+func (s *uploadServiceImpl) InvalidateUserCache(userID int64) {
 	keysToDelete := []string{
 		fmt.Sprintf(ckLatestUploadResult, userID),
 		fmt.Sprintf(ckStockSales, userID),

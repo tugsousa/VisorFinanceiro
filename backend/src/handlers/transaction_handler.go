@@ -7,15 +7,20 @@ import (
 	"net/http"
 
 	"github.com/username/taxfolio/backend/src/database"
+	"github.com/username/taxfolio/backend/src/logger" // Use actual logger for new method
 	"github.com/username/taxfolio/backend/src/models"
-	"github.com/username/taxfolio/backend/src/utils" // Import utils package
+	"github.com/username/taxfolio/backend/src/services" // Import services
+	"github.com/username/taxfolio/backend/src/utils"
 )
 
 type TransactionHandler struct {
+	uploadService services.UploadService // Added
 }
 
-func NewTransactionHandler() *TransactionHandler {
-	return &TransactionHandler{}
+func NewTransactionHandler(uploadService services.UploadService) *TransactionHandler { // Modified
+	return &TransactionHandler{
+		uploadService: uploadService, // Added
+	}
 }
 
 func (h *TransactionHandler) HandleGetProcessedTransactions(w http.ResponseWriter, r *http.Request) {
@@ -65,4 +70,34 @@ func (h *TransactionHandler) HandleGetProcessedTransactions(w http.ResponseWrite
 	if err := json.NewEncoder(w).Encode(processedTransactions); err != nil {
 		log.Printf("Error generating JSON response for processed transactions userID %d: %v", userID, err)
 	}
+}
+
+func (h *TransactionHandler) HandleDeleteAllProcessedTransactions(w http.ResponseWriter, r *http.Request) {
+	userID, ok := GetUserIDFromContext(r.Context())
+	if !ok {
+		utils.SendJSONError(w, "authentication required or user ID not found in context", http.StatusUnauthorized)
+		return
+	}
+	logger.L.Info("Handling DeleteAllProcessedTransactions", "userID", userID)
+
+	result, err := database.DB.Exec("DELETE FROM processed_transactions WHERE user_id = ?", userID)
+	if err != nil {
+		logger.L.Error("Error deleting all processed transactions from DB", "userID", userID, "error", err)
+		utils.SendJSONError(w, fmt.Sprintf("Error deleting transactions for userID %d: %v", userID, err), http.StatusInternalServerError)
+		return
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		logger.L.Error("Error getting rows affected after deleting all transactions", "userID", userID, "error", err)
+		// Continue even if this fails, deletion might have succeeded.
+	} else {
+		logger.L.Info("Successfully deleted all processed transactions", "userID", userID, "rowsAffected", rowsAffected)
+	}
+
+	// Invalidate cache for the user
+	h.uploadService.InvalidateUserCache(userID)
+	logger.L.Info("User cache invalidated after deleting all transactions", "userID", userID)
+
+	w.WriteHeader(http.StatusNoContent) // 204 No Content is appropriate for successful deletion with no body
 }

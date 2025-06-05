@@ -8,7 +8,7 @@ export const API_ENDPOINTS = {
   AUTH_REGISTER: `${API_BASE_PATH}/auth/register`,
   AUTH_LOGOUT: `${API_BASE_PATH}/auth/logout`,
   AUTH_REFRESH: `${API_BASE_PATH}/auth/refresh`,
-   AUTH_VERIFY_EMAIL: `${API_BASE_PATH}/auth/verify-email`, 
+  AUTH_VERIFY_EMAIL: `${API_BASE_PATH}/auth/verify-email`,
   UPLOAD: `${API_BASE_PATH}/upload`,
   REALIZEDGAINS_DATA: `${API_BASE_PATH}/realizedgains-data`,
   PROCESSED_TRANSACTIONS: `${API_BASE_PATH}/transactions/processed`,
@@ -19,6 +19,7 @@ export const API_ENDPOINTS = {
   DIVIDEND_TAX_SUMMARY: `${API_BASE_PATH}/dividend-tax-summary`,
   DIVIDEND_TRANSACTIONS: `${API_BASE_PATH}/dividend-transactions`,
   USER_HAS_DATA: `${API_BASE_PATH}/user/has-data`,
+  DELETE_ALL_TRANSACTIONS: `${API_BASE_PATH}/transactions/all`,
 };
 
 // Filter/Selection Constants

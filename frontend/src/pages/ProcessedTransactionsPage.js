@@ -1,8 +1,9 @@
 // frontend/src/pages/ProcessedTransactionsPage.js
-import React from 'react';
+import React, { useState } from 'react'; // Added useState
 import { Typography, Box, Paper, Alert, TableContainer, Table, TableHead, TableRow, TableCell, TableBody, CircularProgress } from '@mui/material';
-import { useQuery } from '@tanstack/react-query';
-import { apiFetchProcessedTransactions } from '../api/apiService';
+import { Button, Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle } from '@mui/material'; // Added Dialog components
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'; // Added useMutation, useQueryClient
+import { apiFetchProcessedTransactions, apiDeleteAllTransactions } from '../api/apiService'; // Added apiDeleteAllTransactions
 import { useAuth } from '../context/AuthContext';
 import { UI_TEXT } from '../constants';
 
@@ -12,7 +13,9 @@ const fetchProcessedTransactions = async () => {
 };
 
 const ProcessedTransactionsPage = () => {
-  const { token } = useAuth();
+  const { token, refreshUserDataCheck } = useAuth(); // Get refreshUserDataCheck
+  const queryClient = useQueryClient(); // Get queryClient
+
   const { 
     data: processedTransactions = [], // Default to empty array
     isLoading: transactionsLoading, 
@@ -25,6 +28,38 @@ const ProcessedTransactionsPage = () => {
     enabled: !!token,
   });
 
+  const [showDeleteConfirmDialog, setShowDeleteConfirmDialog] = useState(false);
+
+  const deleteTransactionsMutation = useMutation({
+    mutationFn: apiDeleteAllTransactions,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['processedTransactions', token] });
+      refreshUserDataCheck(); // Update hasInitialData in AuthContext
+      // Potentially invalidate other queries if they depend on transactions
+      queryClient.invalidateQueries({ queryKey: ['realizedGainsData', token] });
+      queryClient.invalidateQueries({ queryKey: ['taxReportData', token] });
+      // TODO: Add a success snackbar or alert here
+      setShowDeleteConfirmDialog(false); // Close dialog on success
+    },
+    onError: (error) => {
+      // TODO: Add an error snackbar or alert here
+      console.error("Error deleting transactions:", error);
+      setShowDeleteConfirmDialog(false); // Close dialog on error
+    },
+  });
+
+  const handleDeleteAllClick = () => {
+    setShowDeleteConfirmDialog(true);
+  };
+
+  const handleConfirmDeleteAll = () => {
+    deleteTransactionsMutation.mutate();
+  };
+
+  const handleCloseDeleteConfirmDialog = () => {
+    setShowDeleteConfirmDialog(false);
+  };
+
   const transactionsError = isTransactionsError ? (transactionsErrorObj?.message || UI_TEXT.errorLoadingData) : null;
 
   if (transactionsLoading) {
@@ -36,7 +71,8 @@ const ProcessedTransactionsPage = () => {
     );
   }
 
-  if (transactionsError) {
+  // This error is for fetching, mutation will have its own error handling (e.g. snackbar)
+  if (transactionsError && !deleteTransactionsMutation.isPending) {
     return <Alert severity="error" sx={{ my: 2, mx: { xs: 2, sm: 3 } }}>{transactionsError}</Alert>;
   }
   
@@ -46,7 +82,20 @@ const ProcessedTransactionsPage = () => {
         Processed Transactions
       </Typography>
       
-      {processedTransactions.length > 0 ? (
+      {processedTransactions.length > 0 && !transactionsLoading && (
+        <Box sx={{ mb: 2, display: 'flex', justifyContent: 'flex-end' }}>
+          <Button
+            variant="contained"
+            color="error"
+            onClick={handleDeleteAllClick}
+            disabled={deleteTransactionsMutation.isPending || transactionsLoading}
+          >
+            {deleteTransactionsMutation.isPending ? <CircularProgress size={24} color="inherit" /> : "Delete All Transactions"}
+          </Button>
+        </Box>
+      )}
+
+      {(processedTransactions.length > 0 || deleteTransactionsMutation.isPending || transactionsLoading) ? (
         <Paper elevation={3} sx={{ p: { xs: 1, sm: 2 } }}>
           <Typography variant="body2" sx={{ mb: 1 }}>
             These are all the transactions processed and stored in the database.
@@ -93,6 +142,33 @@ const ProcessedTransactionsPage = () => {
           No processed transactions found.
         </Typography>
       )}
+
+      <Dialog
+        open={showDeleteConfirmDialog}
+        onClose={handleCloseDeleteConfirmDialog}
+        aria-labelledby="alert-dialog-title"
+        aria-describedby="alert-dialog-description"
+      >
+        <DialogTitle id="alert-dialog-title">{"Confirm Deletion"}</DialogTitle>
+        <DialogContent>
+          <DialogContentText id="alert-dialog-description">
+            Are you sure you want to delete ALL processed transactions? This action cannot be undone.
+          </DialogContentText>
+          {deleteTransactionsMutation.isError && (
+            <Alert severity="error" sx={{ mt: 2 }}>
+              {deleteTransactionsMutation.error.response?.data?.error || deleteTransactionsMutation.error.message || "Failed to delete transactions."}
+            </Alert>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCloseDeleteConfirmDialog} color="primary" disabled={deleteTransactionsMutation.isPending}>
+            Cancel
+          </Button>
+          <Button onClick={handleConfirmDeleteAll} color="error" autoFocus disabled={deleteTransactionsMutation.isPending}>
+            {deleteTransactionsMutation.isPending ? <CircularProgress size={24} /> : "Delete All"}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 };

@@ -119,7 +119,7 @@ func main() {
 	uploadHandler := handlers.NewUploadHandler(uploadService)
 	portfolioHandler := handlers.NewPortfolioHandler(uploadService)
 	dividendHandler := handlers.NewDividendHandler(uploadService)
-	txHandler := handlers.NewTransactionHandler()
+	txHandler := handlers.NewTransactionHandler(uploadService) // Pass uploadService
 
 	logger.L.Info("Configuring routes...")
 	rootMux := http.NewServeMux()
@@ -150,6 +150,7 @@ func main() {
 	apiRouter.Handle("GET /api/option-sales", applyCsrfAndAuth(portfolioHandler.HandleGetOptionSales))
 	apiRouter.Handle("GET /api/dividend-tax-summary", applyCsrfAndAuth(dividendHandler.HandleGetDividendTaxSummary))
 	apiRouter.Handle("GET /api/dividend-transactions", applyCsrfAndAuth(dividendHandler.HandleGetDividendTransactions))
+	apiRouter.Handle("DELETE /api/transactions/all", applyCsrfAndAuth(txHandler.HandleDeleteAllProcessedTransactions)) // New route
 	apiRouter.Handle("GET /api/user/has-data", applyCsrfAndAuth(userHandler.HandleCheckUserData))
 
 	rootMux.Handle("/api/", apiRouter)
