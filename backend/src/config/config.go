@@ -5,9 +5,11 @@ import (
 	"os"
 	"strconv"
 	"time"
+
+	"github.com/joho/godotenv"
 )
 
-// AppConfig holds all application configuration.
+// AppConfig struct remains the same
 type AppConfig struct {
 	JWTSecret          string
 	Port               string
@@ -20,33 +22,36 @@ type AppConfig struct {
 	RefreshTokenExpiry time.Duration
 	MaxUploadSizeBytes int64
 
-	// Email Service Choice
-	EmailServiceProvider string // e.g., "smtp", "mailgun", "mock"
+	EmailServiceProvider string
 
-	// SMTP Config (kept for flexibility or fallback)
 	SMTPServer   string
 	SMTPPort     int
 	SMTPUser     string
 	SMTPPassword string
 
-	// Mailgun Config
 	MailgunDomain        string
 	MailgunPrivateAPIKey string
 
-	// SenderEmail and SenderName can be shared or specific depending on the provider chosen
 	SenderEmail string
-	SenderName  string // Optional: For the "From" name display, e.g., "Taxfolio Team"
+	SenderName  string
 
-	VerificationEmailBaseURL string // e.g., "http://localhost:3000/verify-email"
+	VerificationEmailBaseURL string
 	VerificationTokenExpiry  time.Duration
 }
 
 var Cfg *AppConfig
 
-// LoadConfig loads configuration from environment variables.
 func LoadConfig() {
+	errEnv := godotenv.Load()
+	if errEnv != nil {
+		log.Println("Info: No .env file found or error loading .env file. Relying on OS environment variables and defaults. Error (if any):", errEnv)
+	} else {
+		log.Println(".env file loaded successfully.")
+	}
+
 	log.Println("Loading application configuration...")
 
+	// ... (other config loading as before) ...
 	jwtSecret := getEnv("JWT_SECRET", "your-very-secure-and-long-jwt-secret-key-for-hs256-minimum-32-bytes")
 	if jwtSecret == "your-very-secure-and-long-jwt-secret-key-for-hs256-minimum-32-bytes" {
 		log.Println("WARNING: Using default insecure JWT_SECRET. Set JWT_SECRET environment variable for production.")
@@ -73,11 +78,11 @@ func LoadConfig() {
 		refreshTokenExpiry = 7 * 24 * time.Hour
 	}
 
-	maxUploadSizeBytesStr := getEnv("MAX_UPLOAD_SIZE_BYTES", "10485760")
+	maxUploadSizeBytesStr := getEnv("MAX_UPLOAD_SIZE_BYTES", "10485760") // Default 10MB
 	maxUploadSizeBytes, err := strconv.ParseInt(maxUploadSizeBytesStr, 10, 64)
 	if err != nil {
 		log.Printf("WARNING: Invalid MAX_UPLOAD_SIZE_BYTES format '%s'. Using default 10MB. Error: %v", maxUploadSizeBytesStr, err)
-		maxUploadSizeBytes = 10 * 1024 * 1024
+		maxUploadSizeBytes = 10 * 1024 * 1024 // 10MB
 	}
 
 	verificationTokenExpiryStr := getEnv("VERIFICATION_TOKEN_EXPIRY", "24h")
@@ -99,27 +104,45 @@ func LoadConfig() {
 		RefreshTokenExpiry: refreshTokenExpiry,
 		MaxUploadSizeBytes: maxUploadSizeBytes,
 
-		EmailServiceProvider: getEnv("EMAIL_SERVICE_PROVIDER", "mock"), // Default to mock
+		EmailServiceProvider: getEnv("EMAIL_SERVICE_PROVIDER", "mailgun"),
 
-		SMTPServer:   getEnv("SMTP_SERVER", ""), // Empty default means SMTP might not be configured
+		SMTPServer:   getEnv("SMTP_SERVER", ""),
 		SMTPPort:     getEnvAsInt("SMTP_PORT", 587),
 		SMTPUser:     getEnv("SMTP_USER", ""),
-		SMTPPassword: getEnv("SMTP_PASSWORD", ""), // For sensitive data, consider better secret management
+		SMTPPassword: getEnv("SMTP_PASSWORD", ""),
 
+		// << MODIFICATION START for Mailgun keys >>
+		// Use empty string as fallback. The check below will enforce them if Mailgun is provider.
 		MailgunDomain:        getEnv("MAILGUN_DOMAIN", ""),
 		MailgunPrivateAPIKey: getEnv("MAILGUN_PRIVATE_API_KEY", ""),
+		// << MODIFICATION END for Mailgun keys >>
 
-		SenderEmail: getEnv("SENDER_EMAIL", "noreply@taxfolio.com"),
-		SenderName:  getEnv("SENDER_NAME", "Taxfolio"), // Default sender name for display
+		SenderEmail: getEnv("SENDER_EMAIL", "noreply@example.com"), // Generic fallback
+		SenderName:  getEnv("SENDER_NAME", "Taxfolio App"),         // Generic fallback
 
 		VerificationEmailBaseURL: getEnv("VERIFICATION_EMAIL_BASE_URL", "http://localhost:3000/verify-email"),
 		VerificationTokenExpiry:  verificationTokenExpiry,
 	}
 
+	// << ADDED: Validation for Mailgun config if it's the chosen provider >>
+	if Cfg.EmailServiceProvider == "mailgun" {
+		if Cfg.MailgunDomain == "" {
+			log.Fatalf("FATAL: MAILGUN_DOMAIN is required when EMAIL_SERVICE_PROVIDER is 'mailgun', but it's not set in environment or .env file.")
+		}
+		if Cfg.MailgunPrivateAPIKey == "" {
+			log.Fatalf("FATAL: MAILGUN_PRIVATE_API_KEY is required when EMAIL_SERVICE_PROVIDER is 'mailgun', but it's not set in environment or .env file.")
+		}
+		if Cfg.SenderEmail == "noreply@example.com" || Cfg.SenderEmail == "" { // Check if it's still the generic fallback or empty
+			log.Fatalf("FATAL: SENDER_EMAIL must be configured properly (e.g., your Mailgun sender) when EMAIL_SERVICE_PROVIDER is 'mailgun'.")
+		}
+	}
+	// << END ADDED VALIDATION >>
+
 	log.Printf("Configuration loaded: Port=%s, LogLevel=%s, DBPath=%s, EmailProvider=%s",
 		Cfg.Port, Cfg.LogLevel, Cfg.DatabasePath, Cfg.EmailServiceProvider)
 }
 
+// getEnv, getEnvAsInt, getEnvAsDuration functions remain the same
 func getEnv(key, fallback string) string {
 	if value, exists := os.LookupEnv(key); exists {
 		return value
@@ -131,7 +154,7 @@ func getEnv(key, fallback string) string {
 func getEnvAsInt(key string, fallback int) int {
 	valueStr := getEnv(key, "")
 	if valueStr == "" {
-		log.Printf("Missing integer value for %s, using default: %d", key, fallback)
+		log.Printf("Integer value for %s not set or empty, using default: %d", key, fallback)
 		return fallback
 	}
 	if value, err := strconv.Atoi(valueStr); err == nil {
@@ -144,7 +167,7 @@ func getEnvAsInt(key string, fallback int) int {
 func getEnvAsDuration(key string, fallback time.Duration) time.Duration {
 	valueStr := getEnv(key, "")
 	if valueStr == "" {
-		log.Printf("Missing duration value for %s, using default: %s", key, fallback.String())
+		log.Printf("Duration value for %s not set or empty, using default: %s", key, fallback.String())
 		return fallback
 	}
 	if value, err := time.ParseDuration(valueStr); err == nil {
