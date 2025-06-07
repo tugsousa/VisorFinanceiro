@@ -152,59 +152,62 @@ export const AuthProvider = ({ children }) => {
   }, [performLogout]);
 
 
-  const register = async (username, email, password) => {
-    setLoading(true);
+    const register = async (username, email, password, onSuccess, onError) => { // Added onSuccess, onError callbacks
     setAuthError(null);
+    setLoading(true); // Set loading true at the very start
+    console.log("[AuthContext.register] setLoading(true) called.");
+
+    let operationStage = "init";
+    console.log("[AuthContext.register] Stage:", operationStage, "- Process started.");
+
     try {
-      // Ensure CSRF token is available; apiService request interceptor will try to fetch it.
-      // For explicit pre-fetch if needed:
+      operationStage = "csrf_check";
+      console.log("[AuthContext.register] Stage:", operationStage, "- Checking CSRF token.");
       if (!getApiServiceCsrfToken()) {
-         await fetchCsrfTokenAndUpdateService();
-         if (!getApiServiceCsrfToken()) throw new Error("CSRF token could not be obtained for registration.");
-      }
-
-      const response = await apiRegister(username, email, password);
-      setLoading(false);
-      return { success: true, message: response.data.message || "Registration successful. Please check your email." };
-    } catch (err) {
-      console.error("AuthContext Register - Raw Error Object:", err);
-      if (err.isAxiosError && err.response) {
-        console.error("AuthContext Register - Axios Response Status:", err.response.status);
-        console.error("AuthContext Register - Axios Response Data:", JSON.stringify(err.response.data, null, 2));
-        console.error("AuthContext Register - Axios Response Headers:", err.response.headers);
-      } else if (err.response) {
-        console.error("AuthContext Register - Error Response Status:", err.response.status);
-        console.error("AuthContext Register - Error Response Data:", JSON.stringify(err.response.data, null, 2));
-      }
-
-      let specificMessage = UI_TEXT.errorLoadingData;
-      if (err.response) {
-        const status = err.response.status;
-        const responseData = err.response.data;
-        if (responseData && typeof responseData === 'object' && responseData.error) {
-          specificMessage = responseData.error;
-        } else if (typeof responseData === 'string' && responseData.trim() !== '') {
-          specificMessage = responseData;
-        } else if (status === 409) {
-          specificMessage = "Username or email already exists. Please try different credentials.";
-        } else if (err.message) {
-          specificMessage = err.message;
+        await fetchCsrfTokenAndUpdateService(true);
+        if (!getApiServiceCsrfToken()) {
+          const csrfErrorMsg = "A security token is missing. Please refresh and try again.";
+          console.error("[AuthContext.register] Stage:", operationStage, "- CSRF token fetch FAILED:", csrfErrorMsg);
+          throw new Error(csrfErrorMsg); // This will be caught by the outer catch
         }
-      } else if (err.request) {
-        specificMessage = "Network error. Could not reach the server. Please check your connection.";
+      }
+      console.log("[AuthContext.register] Stage:", operationStage, "- CSRF token check PASSED/OBTAINED.");
+
+
+      operationStage = "api_call";
+      console.log("[AuthContext.register] Stage:", operationStage, "- Calling apiRegister with:", { username, email });
+      const response = await apiRegister(username, email, password);
+      console.log("[AuthContext.register] Stage:", operationStage, "- apiRegister call SUCCEEDED. Status:", response.status, "Data:", response.data);
+
+      const successMsg = response?.data?.message || "Registration successful! Please check your email to verify your account.";
+      console.log("[AuthContext.register] Stage: success_processing - Extracted success message:", successMsg);
+      
+      setLoading(false); // Set loading false *before* calling onSuccess
+      console.log("[AuthContext.register] setLoading(false) called on SUCCESS path.");
+      if (onSuccess) onSuccess({ message: successMsg, warning: response?.data?.warning }); // Call success callback
+      return; // Explicitly return, no value needed if using callbacks for result
+
+    } catch (err) {
+      operationStage = "error_handling";
+      console.error("[AuthContext.register] Stage:", operationStage, "- Error during registration. Raw error:", err);
+      
+      let specificMessage = "An unexpected error occurred during registration.";
+      if (err.isAxiosError && err.response) {
+        specificMessage = err.response.data?.error || err.response.data?.message || err.message || specificMessage;
+      } else if (err.response) {
+        specificMessage = err.response.data?.error || err.response.data?.message || err.message || specificMessage;
       } else if (err.message) {
         specificMessage = err.message;
       }
       
-      if (specificMessage === UI_TEXT.errorLoadingData && err.message) {
-        specificMessage = err.message;
-      }
-
-      console.log("AuthContext Register - Determined specificMessage to throw:", specificMessage);
+      console.error("[AuthContext.register] Stage:", operationStage, "- Determined specific error message:", specificMessage);
       setAuthError(specificMessage);
-      setLoading(false);
-      throw new Error(specificMessage);
+      setLoading(false); // Set loading false *before* calling onError
+      console.log("[AuthContext.register] setLoading(false) called on ERROR path.");
+      if (onError) onError(new Error(specificMessage)); // Call error callback
+      // No need to re-throw if using callbacks to handle the outcome in the component
     }
+    // `finally` block is no longer strictly necessary for setLoading as it's handled in try/catch
   };
 
   const login = async (username, password) => {

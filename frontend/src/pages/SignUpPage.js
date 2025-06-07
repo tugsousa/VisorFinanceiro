@@ -11,83 +11,80 @@ function SignUpPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [localError, setLocalError] = useState('');
-  const [localSuccessMessage, setLocalSuccessMessage] = useState('');
-  const { register, loading: authLoading, authError: contextAuthError } = useContext(AuthContext);
+  
+  const [pageError, setPageError] = useState('');
+  const [pageSuccessMessage, setPageSuccessMessage] = useState('');
+  // isSubmittingThisPage is no longer strictly needed if we rely on authContextLoading for the spinner
+  // but can be kept if you want a visual cue specific to this page's action *initiation*
 
-  // useEffect to sync contextAuthError to localError
+  const { register, loading: authContextLoading, authError: contextAuthError } = useContext(AuthContext);
+
   useEffect(() => {
-    // Only sync if we aren't in a success state from *this* component's actions
-    // and if contextAuthError is new and different from current localError
-    if (contextAuthError && !localSuccessMessage && contextAuthError !== localError) {
-        console.log('[SignUpPage] Syncing contextAuthError to localError:', contextAuthError);
-        setLocalError(contextAuthError);
+    if (contextAuthError && !pageSuccessMessage /*&& !isSubmittingThisPage - remove if isSubmitting is removed */) {
+      console.log('[SignUpPage_useEffect_ContextError] Syncing contextAuthError to pageError:', contextAuthError);
+      setPageError(contextAuthError);
     }
-  }, [contextAuthError, localSuccessMessage, localError]);
-
-  // DEBUG: Log localError state changes
-  useEffect(() => {
-    console.log('[SignUpPage] useEffect: localError state changed to:', localError);
-  }, [localError]);
-
-  // DEBUG: Log localSuccessMessage state changes
-  useEffect(() => {
-    console.log('[SignUpPage] useEffect: localSuccessMessage state changed to:', localSuccessMessage);
-  }, [localSuccessMessage]);
+  }, [contextAuthError, pageSuccessMessage /*, isSubmittingThisPage*/]);
 
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    console.log('[SignUpPage] handleSubmit started.');
+    console.log('[SignUpPage_handleSubmit] Triggered.');
 
-    // 1. Clear previous local success/error messages for this submission attempt.
-    //    This ensures that a new submission starts with a clean slate for UI feedback from this component.
-    setLocalSuccessMessage('');
-    setLocalError('');
+    setPageSuccessMessage('');
+    setPageError('');
+    // setIsSubmittingThisPage(true); // Context will handle loading state
 
-    // 2. Perform client-side validations.
     let clientValidationError = '';
-    if (password !== confirmPassword) {
-      clientValidationError = 'Passwords do not match';
-    } else if (!email.trim()) {
-      clientValidationError = 'Email is required.';
-    } else if (!/\S+@\S+\.\S+/.test(email)) {
-      clientValidationError = 'Please enter a valid email address.';
-    } else if (password.length < 6) {
-      clientValidationError = 'Password must be at least 6 characters long.';
-    }
+    if (!username.trim()) clientValidationError = 'Username is required.';
+    else if (!email.trim()) clientValidationError = 'Email is required.';
+    else if (!/\S+@\S+\.\S+/.test(email)) clientValidationError = 'Please enter a valid email address.';
+    else if (!password) clientValidationError = 'Password is required.';
+    else if (password.length < 6) clientValidationError = 'Password must be at least 6 characters long.';
+    else if (password !== confirmPassword) clientValidationError = 'Passwords do not match.';
 
-    // 3. If there's a client-side validation error, set it and stop.
     if (clientValidationError) {
-      console.log('[SignUpPage] Client-side validation failed:', clientValidationError);
-      setLocalError(clientValidationError);
-      console.log('[SignUpPage] handleSubmit finished due to client-side validation error.');
+      console.warn('[SignUpPage_handleSubmit] Client validation FAILED:', clientValidationError);
+      setPageError(clientValidationError);
+      // setIsSubmittingThisPage(false);
       return;
     }
+    console.log('[SignUpPage_handleSubmit] Client validation PASSED.');
 
-    // 4. If client-side validations pass, proceed with API call.
-    console.log('[SignUpPage] Client-side validations passed. Proceeding with API call.');
-    try {
-      console.log('[SignUpPage] Attempting registration for:', { username, email });
-      const result = await register(username, email, password); // register from AuthContext
-      const successMsg = result.message || 'Registration submitted. Please check your email to verify your account.';
-      console.log('[SignUpPage] Registration call to AuthContext successful. Message:', successMsg);
-      setLocalSuccessMessage(successMsg);
-      setLocalError(''); // Ensure error is cleared on success
-    } catch (err) {
-      // This 'err' is the one re-thrown by AuthContext's register method
+    const handleRegistrationSuccess = (result) => {
+      const successMsg = result.message || 'Registration successful! Please check your email to verify your account.';
+      console.log('[SignUpPage_handleRegistrationSuccess] CALLED. Setting pageSuccessMessage:', successMsg);
+      setPageSuccessMessage(successMsg); 
+      setPageError('');
+      // setIsSubmittingThisPage(false);
+    };
+
+    const handleRegistrationError = (err) => {
       const errorMessage = err.message || 'Registration failed. Please try again.';
-      console.log(`[SignUpPage] Registration call to AuthContext failed. Error message caught: "${errorMessage}"`);
-      setLocalError(errorMessage);
-      setLocalSuccessMessage(''); // Ensure success message is cleared on error
-      console.error('[SignUpPage] Detailed error object caught in handleSubmit (API error):', err);
-    }
-    console.log('[SignUpPage] handleSubmit finished.');
+      console.error('[SignUpPage_handleRegistrationError] CALLED. Setting pageError:', errorMessage, err);
+      setPageError(errorMessage);
+      setPageSuccessMessage(''); 
+      // setIsSubmittingThisPage(false);
+    };
+
+    console.log('[SignUpPage_handleSubmit] Calling AuthContext.register with callbacks for:', { username, email });
+    // No await here if register doesn't return a promise that needs awaiting for this logic
+    // AuthContext.register is async internally but we are using callbacks for results
+    register(username, email, password, handleRegistrationSuccess, handleRegistrationError);
+    
+    // Since register itself is now more of a fire-and-forget from SignUpPage's perspective
+    // (outcome handled by callbacks), we don't await it here.
+    // The loading state is managed by AuthContext.
   };
 
-  const formDisabled = authLoading || !!localSuccessMessage;
+  const formDisabled = authContextLoading || !!pageSuccessMessage;
 
-  console.log('[SignUpPage] Rendering - authLoading:', authLoading, 'localError:', localError, 'localSuccessMessage:', localSuccessMessage);
+  console.log(
+    '[SignUpPage_render] Pre-render state: authContextLoading:', authContextLoading, 
+    'pageSuccessMessage:', `"${pageSuccessMessage}"`, 
+    'pageError:', `"${pageError}"`,          
+    'formDisabled:', formDisabled
+  );
 
   return (
     <Container component="main" maxWidth="xs" sx={{ mt: 4, mb: 4 }}>
@@ -96,78 +93,27 @@ function SignUpPage() {
           Sign Up
         </Typography>
 
-        {localError && (
-          <Alert severity="error" sx={{ width: '100%', mt: 2, mb: 1 }}>
-            {localError}
+        {pageSuccessMessage && (
+          <Alert severity="success" sx={{ width: '100%', mt: 2, mb: 1 }}>
+            {pageSuccessMessage}
           </Alert>
         )}
 
-        {localSuccessMessage && (
-          <Alert severity="success" sx={{ width: '100%', mt: 2, mb: 1 }}>
-            {localSuccessMessage}
+        {pageError && !pageSuccessMessage && (
+          <Alert severity="error" sx={{ width: '100%', mt: 2, mb: 1 }}>
+            {pageError}
           </Alert>
         )}
 
         <Box component="form" onSubmit={handleSubmit} noValidate sx={{ mt: 1, width: '100%' }}>
-          <TextField
-            margin="normal"
-            required
-            fullWidth
-            id="username"
-            label="Username"
-            name="username"
-            autoComplete="username"
-            autoFocus
-            value={username}
-            onChange={(e) => setUsername(e.target.value)}
-            disabled={formDisabled}
-          />
-          <TextField
-            margin="normal"
-            required
-            fullWidth
-            id="email"
-            label="Email Address"
-            name="email"
-            autoComplete="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            disabled={formDisabled}
-          />
-          <TextField
-            margin="normal"
-            required
-            fullWidth
-            name="password"
-            label="Password (min. 6 characters)"
-            type="password"
-            id="password"
-            autoComplete="new-password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            disabled={formDisabled}
-          />
-          <TextField
-            margin="normal"
-            required
-            fullWidth
-            name="confirmPassword"
-            label="Confirm Password"
-            type="password"
-            id="confirmPassword"
-            autoComplete="new-password"
-            value={confirmPassword}
-            onChange={(e) => setConfirmPassword(e.target.value)}
-            disabled={formDisabled}
-          />
-          <Button
-            type="submit"
-            fullWidth
-            variant="contained"
-            sx={{ mt: 3, mb: 2 }}
-            disabled={formDisabled}
-          >
-            {authLoading ? <CircularProgress size={24} color="inherit" /> : 'Sign Up'}
+          {/* TextFields */}
+          <TextField margin="normal" required fullWidth id="username" label="Username" /* ...props... */ value={username} onChange={(e) => setUsername(e.target.value)} disabled={formDisabled}/>
+          <TextField margin="normal" required fullWidth id="email" label="Email Address" /* ...props... */ value={email} onChange={(e) => setEmail(e.target.value)} disabled={formDisabled}/>
+          <TextField margin="normal" required fullWidth name="password" label="Password (min. 6 characters)" type="password" /* ...props... */ value={password} onChange={(e) => setPassword(e.target.value)} disabled={formDisabled}/>
+          <TextField margin="normal" required fullWidth name="confirmPassword" label="Confirm Password" type="password" /* ...props... */ value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} disabled={formDisabled}/>
+          
+          <Button type="submit" fullWidth variant="contained" sx={{ mt: 3, mb: 2 }} disabled={formDisabled}>
+            {authContextLoading ? <CircularProgress size={24} color="inherit" /> : 'Sign Up'}
           </Button>
           <Grid container justifyContent="flex-end">
             <Grid item>
