@@ -1,14 +1,16 @@
 // frontend/src/layouts/Layout.js
 import React, { useState } from 'react';
-import { Box, AppBar, Toolbar, Typography, Drawer, IconButton, Tooltip, Avatar, Menu, MenuItem } from '@mui/material';
+import { Box, AppBar, Toolbar, Typography, Drawer, IconButton, Tooltip, Avatar, Menu, MenuItem, Divider } from '@mui/material';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import {
   Upload as UploadIcon,
   Paid as RealizedGainsIcon,
   ReceiptLong as TaxIcon, 
-  TableView as TableViewIcon, // Import an icon for transactions
-  Person as PersonIcon
+  TableView as TableViewIcon, 
+  Person as PersonIcon,
+  Settings as SettingsIcon, // Import Settings icon
+  Logout as LogoutIcon // Optional: if you want a specific icon for logout
 } from '@mui/icons-material';
 
 export default function Layout({ children }) {
@@ -25,17 +27,22 @@ export default function Layout({ children }) {
     setAnchorEl(null);
   };
 
-  const handleLogout = () => {
-    logout();
+  const handleLogout = async () => {
+    handleMenuClose(); // Close menu first
+    await logout();    // Perform logout logic from AuthContext
+    navigate('/signin'); // Then navigate
+  };
+
+  const handleSettings = () => {
     handleMenuClose();
-    navigate('/signin');
+    navigate('/settings');
   };
 
   const sidebarItems = [
     { title: "Upload", to: "/", icon: <UploadIcon /> },
     { title: "Ganhos Realizados", to: "/realizedgains", icon: <RealizedGainsIcon /> },
     { title: "Relatorio IRS", to: "/tax", icon: <TaxIcon /> },
-    { title: "Transações", to: "/transactions", icon: <TableViewIcon /> }, // Added new sidebar item
+    { title: "Transações", to: "/transactions", icon: <TableViewIcon /> },
   ];
 
   return (
@@ -48,12 +55,12 @@ export default function Layout({ children }) {
           '& .MuiDrawer-paper': {
             width: 64,
             boxSizing: 'border-box',
-            backgroundColor: 'white',
+            backgroundColor: 'white', // Or your theme.palette.background.paper
             borderRight: '1px solid rgba(0, 0, 0, 0.12)',
           },
         }}
       >
-        <Toolbar />
+        <Toolbar /> 
         <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1, pt: 2 }}>
           {sidebarItems.map((item) => (
             <Tooltip title={item.title} placement="right" arrow key={item.title}>
@@ -64,7 +71,7 @@ export default function Layout({ children }) {
                 sx={{
                   color: 'text.secondary',
                   '&:hover': {
-                    backgroundColor: 'rgba(25, 118, 210, 0.08)',
+                    backgroundColor: 'rgba(25, 118, 210, 0.08)', // Example hover color
                     color: 'primary.main'
                   }
                 }}
@@ -81,7 +88,7 @@ export default function Layout({ children }) {
           position="fixed"
           sx={{
             zIndex: (theme) => theme.zIndex.drawer + 1,
-            backgroundColor: 'primary.main', // Or your theme's primary color
+            backgroundColor: 'primary.main', 
             color: 'white',
           }}
         >
@@ -110,7 +117,7 @@ export default function Layout({ children }) {
                   id="account-menu"
                   open={openMenu}
                   onClose={handleMenuClose}
-                  onClick={handleMenuClose}
+                  // onClick={handleMenuClose} // Keep onClick on individual items for specific actions
                   PaperProps={{
                     elevation: 0,
                     sx: {
@@ -129,10 +136,16 @@ export default function Layout({ children }) {
                   transformOrigin={{ horizontal: 'right', vertical: 'top' }}
                   anchorOrigin={{ horizontal: 'right', vertical: 'bottom' }}
                 >
-                  <MenuItem disabled sx={{ fontWeight: 'bold' }}>
+                  <MenuItem disabled sx={{ fontWeight: 'medium', opacity: 0.8 }}>
                     {user.username}
                   </MenuItem>
+                  <Divider sx={{ my: 0.5 }} />
+                  <MenuItem onClick={handleSettings}>
+                    <SettingsIcon sx={{ mr: 1, color: 'text.secondary' }} fontSize="small" />
+                    Settings
+                  </MenuItem>
                   <MenuItem onClick={handleLogout}>
+                    <LogoutIcon sx={{ mr: 1, color: 'text.secondary' }} fontSize="small" />
                     Logout
                   </MenuItem>
                 </Menu>
@@ -147,7 +160,7 @@ export default function Layout({ children }) {
             )}
           </Toolbar>
         </AppBar>
-        <Box sx={{ p: { xs: 1, sm: 2, md: 3 }, mt: { xs: 7, sm: 8 } }}> {/* Responsive margin top and padding */}
+        <Box sx={{ p: { xs: 1, sm: 2, md: 3 }, mt: { xs: 7, sm: 8 } }}>
           {children}
         </Box>
       </Box>

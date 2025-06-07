@@ -32,12 +32,14 @@ var passwordRegex = regexp.MustCompile(`^.{6,}$`) // Basic: at least 6 character
 type UserHandler struct {
 	authService  *security.AuthService
 	emailService services.EmailService
+	// uploadService services.UploadService // Only add if you intend to use it here, e.g., for cache invalidation on delete
 }
 
-func NewUserHandler(authService *security.AuthService, emailService services.EmailService) *UserHandler {
+func NewUserHandler(authService *security.AuthService, emailService services.EmailService /*, uploadService services.UploadService */) *UserHandler {
 	return &UserHandler{
 		authService:  authService,
 		emailService: emailService,
+		// uploadService: uploadService,
 	}
 }
 
@@ -49,7 +51,6 @@ func sendJSONError(w http.ResponseWriter, message string, statusCode int) {
 }
 
 func (h *UserHandler) RegisterUserHandler(w http.ResponseWriter, r *http.Request) {
-	// ... (no changes here) ...
 	var credentials struct {
 		Username string `json:"username"`
 		Email    string `json:"email"`
@@ -149,7 +150,6 @@ func (h *UserHandler) RegisterUserHandler(w http.ResponseWriter, r *http.Request
 }
 
 func (h *UserHandler) VerifyEmailHandler(w http.ResponseWriter, r *http.Request) {
-	// ... (no changes here) ...
 	token := r.URL.Query().Get("token")
 	if token == "" {
 		sendJSONError(w, "Verification token is missing", http.StatusBadRequest)
@@ -188,7 +188,6 @@ func (h *UserHandler) VerifyEmailHandler(w http.ResponseWriter, r *http.Request)
 }
 
 func (h *UserHandler) LoginUserHandler(w http.ResponseWriter, r *http.Request) {
-	// ... (no changes here) ...
 	logger.L.Debug("Login request received", "remoteAddr", r.RemoteAddr)
 	origin := r.Header.Get("Origin")
 	if origin == "http://localhost:3000" {
@@ -271,7 +270,6 @@ func (h *UserHandler) LoginUserHandler(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// ** NEW HANDLERS FOR PASSWORD RESET **
 func (h *UserHandler) RequestPasswordResetHandler(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Email string `json:"email"`
@@ -289,7 +287,6 @@ func (h *UserHandler) RequestPasswordResetHandler(w http.ResponseWriter, r *http
 
 	user, err := model.GetUserByEmail(database.DB, req.Email)
 	if err != nil {
-		// Do not reveal if email exists or not. Send generic success message.
 		logger.L.Info("Password reset requested for email, user not found or DB error, sending generic response", "email", req.Email, "errorIfAny", err)
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]string{"message": "If an account with that email exists and is verified, a password reset link has been sent."})
@@ -321,8 +318,6 @@ func (h *UserHandler) RequestPasswordResetHandler(w http.ResponseWriter, r *http
 	err = h.emailService.SendPasswordResetEmail(user.Email, user.Username, resetToken)
 	if err != nil {
 		logger.L.Error("Failed to send password reset email", "userEmail", user.Email, "error", err)
-		// Don't reveal email sending failure to user, as token is set.
-		// However, this is a critical failure point. Consider a retry mechanism or admin alert.
 	}
 
 	logger.L.Info("Password reset email process initiated successfully", "email", req.Email, "userID", user.ID)
@@ -361,9 +356,6 @@ func (h *UserHandler) ResetPasswordHandler(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	// Redundant check, GetUserByPasswordResetToken already checks expiry
-	// if time.Now().After(user.PasswordResetTokenExpiresAt) { ... }
-
 	hashedPassword, err := h.authService.HashPassword(req.Password)
 	if err != nil {
 		logger.L.Error("Failed to hash new password", "userID", user.ID, "error", err)
@@ -377,21 +369,162 @@ func (h *UserHandler) ResetPasswordHandler(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	// Optional: Invalidate all active sessions for this user for security
-	// _, err = database.DB.Exec("DELETE FROM sessions WHERE user_id = ?", user.ID)
-	// if err != nil {
-	//  logger.L.Error("Failed to delete active sessions after password reset", "userID", user.ID, "error", err)
-	// }
-
 	logger.L.Info("Password reset successfully", "userID", user.ID)
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"message": "Password has been reset successfully. You can now log in with your new password."})
 }
 
-// ** END NEW HANDLERS **
+type ChangePasswordRequest struct {
+	CurrentPassword    string `json:"current_password"`
+	NewPassword        string `json:"new_password"`
+	ConfirmNewPassword string `json:"confirm_new_password"`
+}
+
+func (h *UserHandler) ChangePasswordHandler(w http.ResponseWriter, r *http.Request) {
+	userID, ok := GetUserIDFromContext(r.Context())
+	if !ok {
+		sendJSONError(w, "Authentication required", http.StatusUnauthorized)
+		return
+	}
+
+	var req ChangePasswordRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		sendJSONError(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	if req.NewPassword != req.ConfirmNewPassword {
+		sendJSONError(w, "New passwords do not match", http.StatusBadRequest)
+		return
+	}
+	if !passwordRegex.MatchString(req.NewPassword) {
+		sendJSONError(w, "New password must be at least 6 characters long", http.StatusBadRequest)
+		return
+	}
+
+	user, err := model.GetUserByID(database.DB, userID)
+	if err != nil {
+		logger.L.Error("Failed to get user for password change", "userID", userID, "error", err)
+		sendJSONError(w, "Failed to retrieve user information", http.StatusInternalServerError)
+		return
+	}
+
+	if err := user.CheckPassword(req.CurrentPassword); err != nil {
+		logger.L.Warn("Current password mismatch for password change", "userID", userID)
+		sendJSONError(w, "Incorrect current password", http.StatusForbidden)
+		return
+	}
+
+	hashedNewPassword, err := h.authService.HashPassword(req.NewPassword)
+	if err != nil {
+		logger.L.Error("Failed to hash new password", "userID", userID, "error", err)
+		sendJSONError(w, "Failed to process new password", http.StatusInternalServerError)
+		return
+	}
+
+	if err := user.UpdatePassword(database.DB, hashedNewPassword); err != nil {
+		logger.L.Error("Failed to update password in DB", "userID", userID, "error", err)
+		sendJSONError(w, "Failed to change password", http.StatusInternalServerError)
+		return
+	}
+
+	// Optional: Invalidate other sessions for the user.
+	// Could be done by deleting all sessions for user ID except the current one.
+	// This requires getting the current session token, which is not straightforward here.
+	// A simpler approach is to delete all sessions, forcing re-login on all devices.
+	// Or, add a last_password_change_at timestamp to user and check against session.created_at.
+	// For now, keeping it simple.
+
+	logger.L.Info("Password changed successfully", "userID", userID)
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"message": "Password changed successfully."})
+}
+
+type DeleteAccountRequest struct {
+	Password string `json:"password"`
+}
+
+func (h *UserHandler) DeleteAccountHandler(w http.ResponseWriter, r *http.Request) {
+	userID, ok := GetUserIDFromContext(r.Context())
+	if !ok {
+		sendJSONError(w, "Authentication required", http.StatusUnauthorized)
+		return
+	}
+
+	var req DeleteAccountRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		sendJSONError(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	user, err := model.GetUserByID(database.DB, userID)
+	if err != nil {
+		logger.L.Error("Failed to get user for account deletion", "userID", userID, "error", err)
+		sendJSONError(w, "Failed to retrieve user information", http.StatusInternalServerError)
+		return
+	}
+
+	if err := user.CheckPassword(req.Password); err != nil {
+		logger.L.Warn("Password mismatch for account deletion", "userID", userID)
+		sendJSONError(w, "Incorrect password. Account deletion failed.", http.StatusForbidden)
+		return
+	}
+
+	// Begin transaction
+	txDB, err := database.DB.Begin() // Renamed to txDB to avoid conflict with local tx
+	if err != nil {
+		logger.L.Error("Failed to begin transaction for account deletion", "userID", userID, "error", err)
+		sendJSONError(w, "Failed to delete account", http.StatusInternalServerError)
+		return
+	}
+	// Defer rollback/commit logic
+	committed := false
+	defer func() {
+		if !committed && txDB != nil { // Check if txDB is not nil before rollback
+			rbErr := txDB.Rollback()
+			if rbErr != nil {
+				logger.L.Error("Error rolling back DB transaction for account deletion", "userID", userID, "rollbackError", rbErr)
+			}
+		}
+	}()
+
+	// 1. Delete processed transactions
+	if _, err = txDB.Exec("DELETE FROM processed_transactions WHERE user_id = ?", userID); err != nil {
+		logger.L.Error("Failed to delete processed transactions for user", "userID", userID, "error", err)
+		sendJSONError(w, "Failed to delete account data (transactions)", http.StatusInternalServerError)
+		return // err is set, defer will rollback
+	}
+
+	// 2. Delete sessions
+	if _, err = txDB.Exec("DELETE FROM sessions WHERE user_id = ?", userID); err != nil {
+		logger.L.Error("Failed to delete sessions for user", "userID", userID, "error", err)
+		sendJSONError(w, "Failed to delete account data (sessions)", http.StatusInternalServerError)
+		return // err is set, defer will rollback
+	}
+
+	// 3. Delete user
+	if _, err = txDB.Exec("DELETE FROM users WHERE id = ?", userID); err != nil {
+		logger.L.Error("Failed to delete user from users table", "userID", userID, "error", err)
+		sendJSONError(w, "Failed to delete user account", http.StatusInternalServerError)
+		return // err is set, defer will rollback
+	}
+
+	if err = txDB.Commit(); err != nil {
+		logger.L.Error("Failed to commit transaction for account deletion", "userID", userID, "error", err)
+		sendJSONError(w, "Failed to finalize account deletion", http.StatusInternalServerError)
+		return // err is set, defer would have already rolled back due to commit error setting err
+	}
+	committed = true
+
+	// If UserHandler had uploadService:
+	// h.uploadService.InvalidateUserCache(userID)
+	// Logger statement for this action would be inside InvalidateUserCache.
+
+	logger.L.Info("Account deleted successfully", "userID", userID)
+	w.WriteHeader(http.StatusNoContent) // 204 No Content is appropriate
+}
 
 func (h *UserHandler) AuthMiddleware(next http.HandlerFunc) http.HandlerFunc {
-	// ... (no changes here) ...
 	return func(w http.ResponseWriter, r *http.Request) {
 		authHeader := r.Header.Get("Authorization")
 		if authHeader == "" {
@@ -440,7 +573,6 @@ func (h *UserHandler) AuthMiddleware(next http.HandlerFunc) http.HandlerFunc {
 }
 
 func (h *UserHandler) RefreshTokenHandler(w http.ResponseWriter, r *http.Request) {
-	// ... (no changes here) ...
 	var requestBody struct {
 		RefreshToken string `json:"refresh_token"`
 	}
@@ -505,7 +637,6 @@ func (h *UserHandler) RefreshTokenHandler(w http.ResponseWriter, r *http.Request
 }
 
 func (h *UserHandler) LogoutUserHandler(w http.ResponseWriter, r *http.Request) {
-	// ... (no changes here) ...
 	logger.L.Info("Logout request received")
 	origin := r.Header.Get("Origin")
 	if origin == "http://localhost:3000" {
@@ -536,7 +667,6 @@ func (h *UserHandler) LogoutUserHandler(w http.ResponseWriter, r *http.Request) 
 }
 
 func (h *UserHandler) HandleCheckUserData(w http.ResponseWriter, r *http.Request) {
-	// ... (no changes here) ...
 	userID, ok := GetUserIDFromContext(r.Context())
 	if !ok {
 		sendJSONError(w, "authentication required", http.StatusUnauthorized)
@@ -556,13 +686,11 @@ func (h *UserHandler) HandleCheckUserData(w http.ResponseWriter, r *http.Request
 }
 
 func GetUserIDFromContext(ctx context.Context) (int64, bool) {
-	// ... (no changes here) ...
 	userID, ok := ctx.Value(userIDContextKey).(int64)
 	return userID, ok
 }
 
 func min(a, b int) int {
-	// ... (no changes here) ...
 	if a < b {
 		return a
 	}

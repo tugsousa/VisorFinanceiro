@@ -26,8 +26,8 @@ const (
 	ckDividendTxns       = "dividend_txns_user_%d"
 
 	// Default cache expirations
-	defaultCacheExpiration = 15 * time.Minute
-	cacheCleanupInterval   = 30 * time.Minute
+	DefaultCacheExpiration = 15 * time.Minute
+	CacheCleanupInterval   = 30 * time.Minute
 )
 
 // uploadServiceImpl implements the UploadService interface.
@@ -261,7 +261,7 @@ func (s *uploadServiceImpl) GetLatestUploadResult(userID int64) (*UploadResult, 
 			CashMovements:            []models.CashMovement{},
 			DividendTransactionsList: []models.ProcessedTransaction{},
 		}
-		s.reportCache.Set(cacheKey, emptyResult, defaultCacheExpiration)
+		s.reportCache.Set(cacheKey, emptyResult, DefaultCacheExpiration)
 		return emptyResult, nil
 	}
 
@@ -290,7 +290,7 @@ func (s *uploadServiceImpl) GetLatestUploadResult(userID int64) (*UploadResult, 
 		DividendTransactionsList: dividendTransactionsList,
 	}
 
-	s.reportCache.Set(cacheKey, uploadResult, defaultCacheExpiration)
+	s.reportCache.Set(cacheKey, uploadResult, DefaultCacheExpiration)
 	logger.L.Info("Computed and cached GetLatestUploadResult", "userID", userID, "cacheKey", cacheKey, "duration", time.Since(overallStartTime))
 	return uploadResult, nil
 }
@@ -313,11 +313,11 @@ func (s *uploadServiceImpl) GetDividendTaxSummary(userID int64) (models.Dividend
 	}
 	if len(userTransactions) == 0 {
 		emptySummary := make(models.DividendTaxResult)
-		s.reportCache.Set(cacheKey, emptySummary, defaultCacheExpiration)
+		s.reportCache.Set(cacheKey, emptySummary, DefaultCacheExpiration)
 		return emptySummary, nil
 	}
 	summary := s.dividendProcessor.CalculateTaxSummary(userTransactions)
-	s.reportCache.Set(cacheKey, summary, defaultCacheExpiration)
+	s.reportCache.Set(cacheKey, summary, DefaultCacheExpiration)
 	logger.L.Info("Computed and cached GetDividendTaxSummary", "userID", userID)
 	return summary, nil
 }
@@ -341,12 +341,12 @@ func (s *uploadServiceImpl) GetStockSaleDetails(userID int64) ([]models.SaleDeta
 	if len(userTransactions) == 0 {
 		logger.L.Info("No transactions for userID, returning empty stock sales", "userID", userID)
 		emptyResult := []models.SaleDetail{}
-		s.reportCache.Set(cacheKey, emptyResult, defaultCacheExpiration)
+		s.reportCache.Set(cacheKey, emptyResult, DefaultCacheExpiration)
 		return emptyResult, nil
 	}
 
 	stockSaleDetails, _ := s.stockProcessor.Process(userTransactions)
-	s.reportCache.Set(cacheKey, stockSaleDetails, defaultCacheExpiration)
+	s.reportCache.Set(cacheKey, stockSaleDetails, DefaultCacheExpiration)
 	logger.L.Info("Computed and cached GetStockSaleDetails", "userID", userID, "cacheKey", cacheKey, "count", len(stockSaleDetails))
 	return stockSaleDetails, nil
 }
@@ -375,7 +375,7 @@ func (s *uploadServiceImpl) GetDividendTransactions(userID int64) ([]models.Proc
 			}
 		}
 	}
-	s.reportCache.Set(cacheKey, dividends, defaultCacheExpiration)
+	s.reportCache.Set(cacheKey, dividends, DefaultCacheExpiration)
 	logger.L.Info("Computed and cached GetDividendTransactions", "userID", userID, "count", len(dividends))
 	return dividends, nil
 }
@@ -396,11 +396,11 @@ func (s *uploadServiceImpl) GetStockHoldings(userID int64) ([]models.PurchaseLot
 	}
 	if len(userTransactions) == 0 {
 		emptyHoldings := []models.PurchaseLot{}
-		s.reportCache.Set(cacheKey, emptyHoldings, defaultCacheExpiration)
+		s.reportCache.Set(cacheKey, emptyHoldings, DefaultCacheExpiration)
 		return emptyHoldings, nil
 	}
 	_, stockHoldings := s.stockProcessor.Process(userTransactions)
-	s.reportCache.Set(cacheKey, stockHoldings, defaultCacheExpiration)
+	s.reportCache.Set(cacheKey, stockHoldings, DefaultCacheExpiration)
 	logger.L.Info("Computed and cached GetStockHoldings", "userID", userID, "count", len(stockHoldings))
 	return stockHoldings, nil
 }
@@ -421,11 +421,11 @@ func (s *uploadServiceImpl) GetOptionHoldings(userID int64) ([]models.OptionHold
 	}
 	if len(userTransactions) == 0 {
 		emptyHoldings := []models.OptionHolding{}
-		s.reportCache.Set(cacheKey, emptyHoldings, defaultCacheExpiration)
+		s.reportCache.Set(cacheKey, emptyHoldings, DefaultCacheExpiration)
 		return emptyHoldings, nil
 	}
 	_, optionHoldings := s.optionProcessor.Process(userTransactions)
-	s.reportCache.Set(cacheKey, optionHoldings, defaultCacheExpiration)
+	s.reportCache.Set(cacheKey, optionHoldings, DefaultCacheExpiration)
 	logger.L.Info("Computed and cached GetOptionHoldings", "userID", userID, "count", len(optionHoldings))
 	return optionHoldings, nil
 }
@@ -446,11 +446,11 @@ func (s *uploadServiceImpl) GetOptionSaleDetails(userID int64) ([]models.OptionS
 	}
 	if len(userTransactions) == 0 {
 		emptySales := []models.OptionSaleDetail{}
-		s.reportCache.Set(cacheKey, emptySales, defaultCacheExpiration)
+		s.reportCache.Set(cacheKey, emptySales, DefaultCacheExpiration)
 		return emptySales, nil
 	}
 	optionSaleDetails, _ := s.optionProcessor.Process(userTransactions)
-	s.reportCache.Set(cacheKey, optionSaleDetails, defaultCacheExpiration)
+	s.reportCache.Set(cacheKey, optionSaleDetails, DefaultCacheExpiration)
 	logger.L.Info("Computed and cached GetOptionSaleDetails", "userID", userID, "count", len(optionSaleDetails))
 	return optionSaleDetails, nil
 }

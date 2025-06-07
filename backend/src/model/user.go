@@ -5,32 +5,30 @@ import (
 	"errors"
 	"time"
 
-	// Import logger if you want to use it directly in the model for this specific log
-	// "github.com/username/taxfolio/backend/src/logger" // Example
-	"log" // Or use standard log for simplicity if logger is not passed around
+	"log"
 
 	"golang.org/x/crypto/bcrypt"
 )
 
 type User struct {
-	ID        int       `json:"id"`
+	ID        int64     `json:"id"` // Changed to int64 to match GetUserIDFromContext
 	Username  string    `json:"username"`
 	Email     string    `json:"email"`
-	Password  string    `json:"-"` // Internal use
+	Password  string    `json:"-"`
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 
 	IsEmailVerified                 bool      `json:"is_email_verified"`
-	EmailVerificationToken          string    `json:"-"` // Internal use
-	EmailVerificationTokenExpiresAt time.Time `json:"-"` // Internal use
+	EmailVerificationToken          string    `json:"-"`
+	EmailVerificationTokenExpiresAt time.Time `json:"-"`
 
-	PasswordResetToken          string    `json:"-"` // Internal use
-	PasswordResetTokenExpiresAt time.Time `json:"-"` // Internal use
+	PasswordResetToken          string    `json:"-"`
+	PasswordResetTokenExpiresAt time.Time `json:"-"`
 }
 
 type Session struct {
 	ID           int       `json:"id"`
-	UserID       int       `json:"user_id"`
+	UserID       int64     `json:"user_id"` // Changed to int64
 	Token        string    `json:"token"`
 	RefreshToken string    `json:"refresh_token"`
 	UserAgent    string    `json:"user_agent"`
@@ -67,13 +65,9 @@ func (u *User) CreateUser(db *sql.DB) error {
 	}
 	defer stmt.Close()
 
-	// For EmailVerificationTokenExpiresAt, if it's a zero time, it should be inserted as NULL or a default SQL timestamp.
-	// SQLite handles zero time.Time values fine for TIMESTAMP columns by default (stores as '0001-01-01 00:00:00+00:00').
-	// If you specifically need NULL, you'd use sql.NullTime for the u.EmailVerificationTokenExpiresAt field in the struct
-	// and pass it directly, or conditional logic here. For now, zero time is acceptable for SQLite.
 	var emailTokenExpiresArg interface{}
 	if u.EmailVerificationTokenExpiresAt.IsZero() {
-		emailTokenExpiresArg = nil // This will insert NULL if the column allows it
+		emailTokenExpiresArg = nil
 	} else {
 		emailTokenExpiresArg = u.EmailVerificationTokenExpiresAt
 	}
@@ -84,7 +78,7 @@ func (u *User) CreateUser(db *sql.DB) error {
 		u.Password,
 		u.IsEmailVerified,
 		u.EmailVerificationToken,
-		emailTokenExpiresArg, // Use the argument that can be nil
+		emailTokenExpiresArg,
 		u.CreatedAt,
 		u.UpdatedAt,
 	)
@@ -95,8 +89,51 @@ func (u *User) CreateUser(db *sql.DB) error {
 	if err != nil {
 		return err
 	}
-	u.ID = int(id)
+	u.ID = id // Assign LastInsertId (which is int64)
 	return nil
+}
+
+func GetUserByID(db *sql.DB, id int64) (*User, error) {
+	query := `
+	SELECT id, username, email, password, is_email_verified,
+	       email_verification_token, email_verification_token_expires_at,
+	       password_reset_token, password_reset_token_expires_at,
+	       created_at, updated_at
+	FROM users
+	WHERE id = ?`
+	row := db.QueryRow(query, id)
+	var user User
+	var emailVerificationToken sql.NullString
+	var emailVerificationTokenExpiresAt sql.NullTime
+	var passwordResetToken sql.NullString
+	var passwordResetTokenExpiresAt sql.NullTime
+
+	err := row.Scan(
+		&user.ID, &user.Username, &user.Email, &user.Password,
+		&user.IsEmailVerified,
+		&emailVerificationToken, &emailVerificationTokenExpiresAt,
+		&passwordResetToken, &passwordResetTokenExpiresAt,
+		&user.CreatedAt, &user.UpdatedAt,
+	)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, errors.New("user not found")
+		}
+		return nil, err
+	}
+	if emailVerificationToken.Valid {
+		user.EmailVerificationToken = emailVerificationToken.String
+	}
+	if emailVerificationTokenExpiresAt.Valid {
+		user.EmailVerificationTokenExpiresAt = emailVerificationTokenExpiresAt.Time
+	}
+	if passwordResetToken.Valid {
+		user.PasswordResetToken = passwordResetToken.String
+	}
+	if passwordResetTokenExpiresAt.Valid {
+		user.PasswordResetTokenExpiresAt = passwordResetTokenExpiresAt.Time
+	}
+	return &user, nil
 }
 
 func GetUserByUsername(db *sql.DB, username string) (*User, error) {
@@ -321,8 +358,6 @@ func GetUserByPasswordResetToken(db *sql.DB, token string) (*User, error) {
 
 func (u *User) UpdatePassword(db *sql.DB, newPasswordHash string) error {
 	u.Password = newPasswordHash
-	// Store the token before clearing, if you need to log it
-	// oldResetToken := u.PasswordResetToken // <--- This was the unused variable
 	u.PasswordResetToken = ""
 	u.PasswordResetTokenExpiresAt = time.Time{}
 	u.UpdatedAt = time.Now()
@@ -339,15 +374,11 @@ func (u *User) UpdatePassword(db *sql.DB, newPasswordHash string) error {
 
 	_, err = stmt.Exec(u.Password, u.UpdatedAt, u.ID)
 	if err == nil {
-		// Example of using it if you had a logger instance here or passed it:
-		// logger.L.Debug("Password updated and reset token cleared for user", "userID", u.ID, "oldTokenUsed", oldResetToken)
-		// Or using standard log for simplicity:
 		log.Printf("DEBUG: Password updated and reset token cleared for user ID %d.\n", u.ID)
 	}
 	return err
 }
 
-// --- Session Methods ---
 func CreateSession(db *sql.DB, session *Session) error {
 	query := `
 	INSERT INTO sessions (user_id, token, refresh_token, user_agent, client_ip, is_blocked, expires_at, created_at)
@@ -452,10 +483,11 @@ func DeleteSessionByRefreshToken(db *sql.DB, refreshToken string) error {
 	}
 	rowsAffected, err := result.RowsAffected()
 	if err != nil {
-		return err
+		// Log error getting rows affected, but don't necessarily return it as critical
+		log.Printf("Error getting rows affected after deleting refresh token: %v (Rows: %d)", err, rowsAffected)
 	}
 	if rowsAffected == 0 {
-		// Not necessarily an error
+		// Not necessarily an error, token might have already been removed or never existed
 	}
-	return nil
+	return nil // Return nil if exec was successful
 }

@@ -1,4 +1,4 @@
- // frontend/src/api/apiService.js
+// frontend/src/api/apiService.js
     import axios from 'axios';
     import { API_ENDPOINTS } from '../constants';
 
@@ -36,7 +36,6 @@
     });
 
     export const fetchAndSetCsrfToken = async () => {
-      // ... (no changes)
       try {
         const response = await apiClient.get(API_ENDPOINTS.AUTH_CSRF);
         const headerToken = response.headers['x-csrf-token'];
@@ -59,14 +58,13 @@
 
     apiClient.interceptors.request.use(
       async (config) => {
-        // ... (no changes to this part of interceptor)
         const authToken = getAuthToken();
         if (authToken) {
           config.headers['Authorization'] = `Bearer ${authToken}`;
         }
 
         const isCsrfExemptGet = config.method?.toLowerCase() === 'get' && 
-                               (config.url?.startsWith(API_ENDPOINTS.AUTH_VERIFY_EMAIL) || config.url?.startsWith(API_ENDPOINTS.AUTH_RESET_PASSWORD_PAGE)); // Assuming reset page itself might be GET
+                               (config.url?.startsWith(API_ENDPOINTS.AUTH_VERIFY_EMAIL) || config.url?.startsWith(API_ENDPOINTS.AUTH_RESET_PASSWORD_PAGE));
 
         if (config.url !== API_ENDPOINTS.AUTH_CSRF &&
             config.url !== API_ENDPOINTS.AUTH_REFRESH &&
@@ -96,7 +94,6 @@
     apiClient.interceptors.response.use(
       (response) => response,
       async (error) => {
-        // ... (no changes to this interceptor)
         const originalRequest = error.config;
 
         if (error.response && error.response.status === 403 && !originalRequest._retryCSRF) {
@@ -194,7 +191,6 @@
       return apiClient.post(API_ENDPOINTS.AUTH_LOGOUT, {});
     };
 
-    // ** NEW API METHODS FOR PASSWORD RESET **
     export const apiRequestPasswordReset = (email) => {
       return apiClient.post(API_ENDPOINTS.AUTH_REQUEST_PASSWORD_RESET, { email });
     };
@@ -202,11 +198,21 @@
     export const apiResetPassword = (token, password, confirm_password) => {
       return apiClient.post(API_ENDPOINTS.AUTH_RESET_PASSWORD, { token, password, confirm_password });
     };
-    // ** END NEW API METHODS **
+    
+    export const apiChangePassword = (currentPassword, newPassword, confirmNewPassword) => {
+      return apiClient.post(API_ENDPOINTS.USER_CHANGE_PASSWORD, {
+        current_password: currentPassword,
+        new_password: newPassword,
+        confirm_new_password: confirmNewPassword,
+      });
+    };
+
+    export const apiDeleteAccount = (password) => {
+      return apiClient.post(API_ENDPOINTS.USER_DELETE_ACCOUNT, { password });
+    };
 
 
     export const apiUploadFile = (formData, onUploadProgress) => {
-      // ... (no changes)
       return apiClient.post(API_ENDPOINTS.UPLOAD, formData, {
         headers: {
           'Content-Type': 'multipart/form-data',
