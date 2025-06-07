@@ -6,10 +6,8 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"encoding/json"
-	"errors" // For errors.Is
+	"errors"
 	"fmt"
-
-	// stdlog "log" // Standard log, replaced by logger.L for most cases
 	"net/http"
 	"regexp"
 	"strconv"
@@ -18,10 +16,10 @@ import (
 
 	"github.com/username/taxfolio/backend/src/config"
 	"github.com/username/taxfolio/backend/src/database"
-	"github.com/username/taxfolio/backend/src/logger" // Using slog
+	"github.com/username/taxfolio/backend/src/logger"
 	"github.com/username/taxfolio/backend/src/model"
 	"github.com/username/taxfolio/backend/src/security"
-	"github.com/username/taxfolio/backend/src/services" // For EmailService
+	"github.com/username/taxfolio/backend/src/services"
 )
 
 type contextKey string
@@ -29,20 +27,20 @@ type contextKey string
 const userIDContextKey contextKey = "userID"
 
 var emailRegex = regexp.MustCompile(`^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$`)
+var passwordRegex = regexp.MustCompile(`^.{6,}$`) // Basic: at least 6 characters
 
 type UserHandler struct {
 	authService  *security.AuthService
-	emailService services.EmailService // Added
+	emailService services.EmailService
 }
 
-func NewUserHandler(authService *security.AuthService, emailService services.EmailService) *UserHandler { // Modified
+func NewUserHandler(authService *security.AuthService, emailService services.EmailService) *UserHandler {
 	return &UserHandler{
 		authService:  authService,
-		emailService: emailService, // Added
+		emailService: emailService,
 	}
 }
 
-// Local sendJSONError for user_handler.go. Ideally, this would be in a shared utils package.
 func sendJSONError(w http.ResponseWriter, message string, statusCode int) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(statusCode)
@@ -51,6 +49,7 @@ func sendJSONError(w http.ResponseWriter, message string, statusCode int) {
 }
 
 func (h *UserHandler) RegisterUserHandler(w http.ResponseWriter, r *http.Request) {
+	// ... (no changes here) ...
 	var credentials struct {
 		Username string `json:"username"`
 		Email    string `json:"email"`
@@ -74,12 +73,11 @@ func (h *UserHandler) RegisterUserHandler(w http.ResponseWriter, r *http.Request
 		sendJSONError(w, "Invalid email format", http.StatusBadRequest)
 		return
 	}
-	if len(credentials.Password) < 6 { // Example: Basic password length validation
+	if !passwordRegex.MatchString(credentials.Password) {
 		sendJSONError(w, "Password must be at least 6 characters long", http.StatusBadRequest)
 		return
 	}
 
-	// Check if username already exists
 	_, err := model.GetUserByUsername(database.DB, credentials.Username)
 	if err == nil {
 		sendJSONError(w, "Username already exists", http.StatusConflict)
@@ -90,7 +88,6 @@ func (h *UserHandler) RegisterUserHandler(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	// Check if email already exists
 	_, err = model.GetUserByEmail(database.DB, credentials.Email)
 	if err == nil {
 		sendJSONError(w, "Email address already in use", http.StatusConflict)
@@ -135,9 +132,8 @@ func (h *UserHandler) RegisterUserHandler(w http.ResponseWriter, r *http.Request
 	err = h.emailService.SendVerificationEmail(user.Email, user.Username, verificationToken)
 	if err != nil {
 		logger.L.Error("Failed to send verification email after user creation", "userEmail", user.Email, "error", err)
-		// Even if email fails, user is created. Frontend should handle this gracefully.
 		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusCreated) // User was created
+		w.WriteHeader(http.StatusCreated)
 		json.NewEncoder(w).Encode(map[string]string{
 			"message": "User registered. Failed to send verification email. Please contact support or try resending later.",
 			"warning": "email_not_sent",
@@ -153,6 +149,7 @@ func (h *UserHandler) RegisterUserHandler(w http.ResponseWriter, r *http.Request
 }
 
 func (h *UserHandler) VerifyEmailHandler(w http.ResponseWriter, r *http.Request) {
+	// ... (no changes here) ...
 	token := r.URL.Query().Get("token")
 	if token == "" {
 		sendJSONError(w, "Verification token is missing", http.StatusBadRequest)
@@ -176,7 +173,6 @@ func (h *UserHandler) VerifyEmailHandler(w http.ResponseWriter, r *http.Request)
 	if time.Now().After(user.EmailVerificationTokenExpiresAt) {
 		logger.L.Warn("Verification token expired", "userID", user.ID, "tokenExpiry", user.EmailVerificationTokenExpiresAt)
 		sendJSONError(w, "Verification token has expired. Please request a new one.", http.StatusBadRequest)
-		// Future: Implement resend logic
 		return
 	}
 
@@ -192,8 +188,8 @@ func (h *UserHandler) VerifyEmailHandler(w http.ResponseWriter, r *http.Request)
 }
 
 func (h *UserHandler) LoginUserHandler(w http.ResponseWriter, r *http.Request) {
+	// ... (no changes here) ...
 	logger.L.Debug("Login request received", "remoteAddr", r.RemoteAddr)
-	// CORS handling as per original (simplified here for brevity, your existing logic might be more complex)
 	origin := r.Header.Get("Origin")
 	if origin == "http://localhost:3000" {
 		w.Header().Set("Access-Control-Allow-Origin", origin)
@@ -251,7 +247,7 @@ func (h *UserHandler) LoginUserHandler(w http.ResponseWriter, r *http.Request) {
 		Token:        accessToken,
 		RefreshToken: refreshToken,
 		UserAgent:    r.UserAgent(),
-		ClientIP:     r.RemoteAddr, // Consider X-Forwarded-For if behind proxy
+		ClientIP:     r.RemoteAddr,
 		IsBlocked:    false,
 		ExpiresAt:    time.Now().Add(config.Cfg.RefreshTokenExpiry),
 	}
@@ -264,7 +260,7 @@ func (h *UserHandler) LoginUserHandler(w http.ResponseWriter, r *http.Request) {
 	userData := map[string]interface{}{
 		"id":       user.ID,
 		"username": user.Username,
-		"email":    user.Email, // Send email in user data
+		"email":    user.Email,
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -275,7 +271,127 @@ func (h *UserHandler) LoginUserHandler(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// ** NEW HANDLERS FOR PASSWORD RESET **
+func (h *UserHandler) RequestPasswordResetHandler(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Email string `json:"email"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		sendJSONError(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	req.Email = strings.ToLower(strings.TrimSpace(req.Email))
+	if !emailRegex.MatchString(req.Email) {
+		sendJSONError(w, "Invalid email format", http.StatusBadRequest)
+		return
+	}
+
+	user, err := model.GetUserByEmail(database.DB, req.Email)
+	if err != nil {
+		// Do not reveal if email exists or not. Send generic success message.
+		logger.L.Info("Password reset requested for email, user not found or DB error, sending generic response", "email", req.Email, "errorIfAny", err)
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]string{"message": "If an account with that email exists and is verified, a password reset link has been sent."})
+		return
+	}
+
+	if !user.IsEmailVerified {
+		logger.L.Info("Password reset requested for unverified email, sending generic response", "email", req.Email, "userID", user.ID)
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]string{"message": "If an account with that email exists and is verified, a password reset link has been sent."})
+		return
+	}
+
+	tokenBytes := make([]byte, 32)
+	if _, err := rand.Read(tokenBytes); err != nil {
+		logger.L.Error("Failed to generate password reset token bytes", "error", err)
+		sendJSONError(w, "Failed to process password reset request", http.StatusInternalServerError)
+		return
+	}
+	resetToken := hex.EncodeToString(tokenBytes)
+	tokenExpiry := time.Now().Add(config.Cfg.PasswordResetTokenExpiry)
+
+	if err := user.SetPasswordResetToken(database.DB, resetToken, tokenExpiry); err != nil {
+		logger.L.Error("Failed to set password reset token in DB", "userID", user.ID, "error", err)
+		sendJSONError(w, "Failed to process password reset request", http.StatusInternalServerError)
+		return
+	}
+
+	err = h.emailService.SendPasswordResetEmail(user.Email, user.Username, resetToken)
+	if err != nil {
+		logger.L.Error("Failed to send password reset email", "userEmail", user.Email, "error", err)
+		// Don't reveal email sending failure to user, as token is set.
+		// However, this is a critical failure point. Consider a retry mechanism or admin alert.
+	}
+
+	logger.L.Info("Password reset email process initiated successfully", "email", req.Email, "userID", user.ID)
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"message": "If an account with that email exists and is verified, a password reset link has been sent."})
+}
+
+func (h *UserHandler) ResetPasswordHandler(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Token           string `json:"token"`
+		Password        string `json:"password"`
+		ConfirmPassword string `json:"confirm_password"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		sendJSONError(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	if req.Token == "" {
+		sendJSONError(w, "Password reset token is missing", http.StatusBadRequest)
+		return
+	}
+	if req.Password != req.ConfirmPassword {
+		sendJSONError(w, "Passwords do not match", http.StatusBadRequest)
+		return
+	}
+	if !passwordRegex.MatchString(req.Password) {
+		sendJSONError(w, "Password must be at least 6 characters long", http.StatusBadRequest)
+		return
+	}
+
+	user, err := model.GetUserByPasswordResetToken(database.DB, req.Token)
+	if err != nil {
+		logger.L.Warn("Password reset token lookup failed or token expired", "tokenPrefix", req.Token[:min(10, len(req.Token))], "error", err)
+		sendJSONError(w, "Invalid or expired password reset token.", http.StatusBadRequest)
+		return
+	}
+
+	// Redundant check, GetUserByPasswordResetToken already checks expiry
+	// if time.Now().After(user.PasswordResetTokenExpiresAt) { ... }
+
+	hashedPassword, err := h.authService.HashPassword(req.Password)
+	if err != nil {
+		logger.L.Error("Failed to hash new password", "userID", user.ID, "error", err)
+		sendJSONError(w, "Failed to reset password", http.StatusInternalServerError)
+		return
+	}
+
+	if err := user.UpdatePassword(database.DB, hashedPassword); err != nil {
+		logger.L.Error("Failed to update password in DB", "userID", user.ID, "error", err)
+		sendJSONError(w, "Failed to reset password", http.StatusInternalServerError)
+		return
+	}
+
+	// Optional: Invalidate all active sessions for this user for security
+	// _, err = database.DB.Exec("DELETE FROM sessions WHERE user_id = ?", user.ID)
+	// if err != nil {
+	//  logger.L.Error("Failed to delete active sessions after password reset", "userID", user.ID, "error", err)
+	// }
+
+	logger.L.Info("Password reset successfully", "userID", user.ID)
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"message": "Password has been reset successfully. You can now log in with your new password."})
+}
+
+// ** END NEW HANDLERS **
+
 func (h *UserHandler) AuthMiddleware(next http.HandlerFunc) http.HandlerFunc {
+	// ... (no changes here) ...
 	return func(w http.ResponseWriter, r *http.Request) {
 		authHeader := r.Header.Get("Authorization")
 		if authHeader == "" {
@@ -304,7 +420,7 @@ func (h *UserHandler) AuthMiddleware(next http.HandlerFunc) http.HandlerFunc {
 			return
 		}
 
-		_, err = model.GetSessionByToken(database.DB, tokenString) // Check if session is active
+		_, err = model.GetSessionByToken(database.DB, tokenString)
 		if err != nil {
 			logger.L.Warn("AuthMiddleware: Session validation failed for access token", "path", r.URL.Path, "error", err)
 			sendJSONError(w, "Invalid or expired session", http.StatusUnauthorized)
@@ -324,6 +440,7 @@ func (h *UserHandler) AuthMiddleware(next http.HandlerFunc) http.HandlerFunc {
 }
 
 func (h *UserHandler) RefreshTokenHandler(w http.ResponseWriter, r *http.Request) {
+	// ... (no changes here) ...
 	var requestBody struct {
 		RefreshToken string `json:"refresh_token"`
 	}
@@ -347,7 +464,6 @@ func (h *UserHandler) RefreshTokenHandler(w http.ResponseWriter, r *http.Request
 
 	if err := model.DeleteSessionByRefreshToken(database.DB, requestBody.RefreshToken); err != nil {
 		logger.L.Error("Failed to delete old session during refresh", "refreshTokenPrefix", requestBody.RefreshToken[:min(10, len(requestBody.RefreshToken))], "error", err)
-		// Continue, but log this. Session might have already been removed.
 	}
 
 	userIDStr := fmt.Sprintf("%d", oldSession.UserID)
@@ -389,6 +505,7 @@ func (h *UserHandler) RefreshTokenHandler(w http.ResponseWriter, r *http.Request
 }
 
 func (h *UserHandler) LogoutUserHandler(w http.ResponseWriter, r *http.Request) {
+	// ... (no changes here) ...
 	logger.L.Info("Logout request received")
 	origin := r.Header.Get("Origin")
 	if origin == "http://localhost:3000" {
@@ -419,6 +536,7 @@ func (h *UserHandler) LogoutUserHandler(w http.ResponseWriter, r *http.Request) 
 }
 
 func (h *UserHandler) HandleCheckUserData(w http.ResponseWriter, r *http.Request) {
+	// ... (no changes here) ...
 	userID, ok := GetUserIDFromContext(r.Context())
 	if !ok {
 		sendJSONError(w, "authentication required", http.StatusUnauthorized)
@@ -438,11 +556,13 @@ func (h *UserHandler) HandleCheckUserData(w http.ResponseWriter, r *http.Request
 }
 
 func GetUserIDFromContext(ctx context.Context) (int64, bool) {
+	// ... (no changes here) ...
 	userID, ok := ctx.Value(userIDContextKey).(int64)
 	return userID, ok
 }
 
 func min(a, b int) int {
+	// ... (no changes here) ...
 	if a < b {
 		return a
 	}
