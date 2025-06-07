@@ -1,6 +1,6 @@
 // frontend/src/pages/SignUpPage.js
-import React, { useState, useContext, useEffect } from 'react';
-import { useNavigate, Link as RouterLink } from 'react-router-dom';
+import React, { useState, useContext, useEffect, useRef } from 'react';
+import { Link as RouterLink } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
 import {
   Container, Paper, Box, Typography, TextField, Button, Alert, CircularProgress, Grid, Link
@@ -13,18 +13,40 @@ function SignUpPage() {
   const [confirmPassword, setConfirmPassword] = useState('');
   
   const [pageError, setPageError] = useState('');
-  const [pageSuccessMessage, setPageSuccessMessage] = useState('');
-  // isSubmittingThisPage is no longer strictly needed if we rely on authContextLoading for the spinner
-  // but can be kept if you want a visual cue specific to this page's action *initiation*
+  const [pageSuccessMessage, _setPageSuccessMessage] = useState('');
+  const pageSuccessMessageRef = useRef(pageSuccessMessage);
 
-  const { register, loading: authContextLoading, authError: contextAuthError } = useContext(AuthContext);
+  const setPageSuccessMessage = (value) => {
+    console.log(`[SignUpPage setPageSuccessMessage INTENTION] New value to set: "${value}"`, 'Current ref before this call:', `"${pageSuccessMessageRef.current}"`);
+    pageSuccessMessageRef.current = value;
+    _setPageSuccessMessage(value);
+  };
+
+  // Use the specific loading state for auth actions from the context
+  const { register, isAuthActionLoading, authError: contextAuthError } = useContext(AuthContext);
 
   useEffect(() => {
-    if (contextAuthError && !pageSuccessMessage /*&& !isSubmittingThisPage - remove if isSubmitting is removed */) {
-      console.log('[SignUpPage_useEffect_ContextError] Syncing contextAuthError to pageError:', contextAuthError);
+    console.log('[SignUpPage] Component MOUNTED. Initial pageSuccessMessage (ref):', `"${pageSuccessMessageRef.current}"`, '(state):', `"${pageSuccessMessage}"`);
+    return () => {
+      console.log('[SignUpPage] Component WILL UNMOUNT. Current pageSuccessMessage (ref):', `"${pageSuccessMessageRef.current}"`, '(state):', `"${pageSuccessMessage}"`);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (contextAuthError && !pageSuccessMessageRef.current) {
+      console.log('[SignUpPage_useEffect_ContextError] Syncing contextAuthError to pageError:', `"${contextAuthError}"`);
       setPageError(contextAuthError);
+    } else if (!contextAuthError && !pageSuccessMessageRef.current) {
+        if (pageError) {
+            console.log('[SignUpPage_useEffect_ContextError] Clearing pageError as contextAuthError is null and no success message.');
+            setPageError('');
+        }
     }
-  }, [contextAuthError, pageSuccessMessage /*, isSubmittingThisPage*/]);
+  }, [contextAuthError, pageError]); // Added pageError to dependencies
+
+  useEffect(() => {
+    console.log('[SignUpPage useEffect pageSuccessMessage WATCHER] Actual state value is now:', `"${pageSuccessMessage}"`, 'Ref value is:', `"${pageSuccessMessageRef.current}"`);
+  }, [pageSuccessMessage]);
 
 
   const handleSubmit = async (e) => {
@@ -33,7 +55,6 @@ function SignUpPage() {
 
     setPageSuccessMessage('');
     setPageError('');
-    // setIsSubmittingThisPage(true); // Context will handle loading state
 
     let clientValidationError = '';
     if (!username.trim()) clientValidationError = 'Username is required.';
@@ -46,42 +67,35 @@ function SignUpPage() {
     if (clientValidationError) {
       console.warn('[SignUpPage_handleSubmit] Client validation FAILED:', clientValidationError);
       setPageError(clientValidationError);
-      // setIsSubmittingThisPage(false);
       return;
     }
     console.log('[SignUpPage_handleSubmit] Client validation PASSED.');
 
     const handleRegistrationSuccess = (result) => {
       const successMsg = result.message || 'Registration successful! Please check your email to verify your account.';
-      console.log('[SignUpPage_handleRegistrationSuccess] CALLED. Setting pageSuccessMessage:', successMsg);
-      setPageSuccessMessage(successMsg); 
+      console.log('[SignUpPage_handleRegistrationSuccess] CALLED from AuthContext.register.');
+      setPageSuccessMessage(successMsg);
       setPageError('');
-      // setIsSubmittingThisPage(false);
     };
 
     const handleRegistrationError = (err) => {
       const errorMessage = err.message || 'Registration failed. Please try again.';
-      console.error('[SignUpPage_handleRegistrationError] CALLED. Setting pageError:', errorMessage, err);
+      console.error('[SignUpPage_handleRegistrationError] CALLED from AuthContext.register.');
       setPageError(errorMessage);
-      setPageSuccessMessage(''); 
-      // setIsSubmittingThisPage(false);
+      setPageSuccessMessage('');
     };
 
     console.log('[SignUpPage_handleSubmit] Calling AuthContext.register with callbacks for:', { username, email });
-    // No await here if register doesn't return a promise that needs awaiting for this logic
-    // AuthContext.register is async internally but we are using callbacks for results
-    register(username, email, password, handleRegistrationSuccess, handleRegistrationError);
-    
-    // Since register itself is now more of a fire-and-forget from SignUpPage's perspective
-    // (outcome handled by callbacks), we don't await it here.
-    // The loading state is managed by AuthContext.
+    await register(username, email, password, handleRegistrationSuccess, handleRegistrationError);
   };
 
-  const formDisabled = authContextLoading || !!pageSuccessMessage;
+  // Use isAuthActionLoading for the button's loading state and form disabling
+  const formDisabled = isAuthActionLoading || !!pageSuccessMessageRef.current;
 
   console.log(
-    '[SignUpPage_render] Pre-render state: authContextLoading:', authContextLoading, 
-    'pageSuccessMessage:', `"${pageSuccessMessage}"`, 
+    '[SignUpPage_render] INFO - isAuthActionLoading:', isAuthActionLoading, 
+    'pageSuccessMessage (state):', `"${pageSuccessMessage}"`,
+    'pageSuccessMessage (ref):', `"${pageSuccessMessageRef.current}"`,
     'pageError:', `"${pageError}"`,          
     'formDisabled:', formDisabled
   );
@@ -106,14 +120,13 @@ function SignUpPage() {
         )}
 
         <Box component="form" onSubmit={handleSubmit} noValidate sx={{ mt: 1, width: '100%' }}>
-          {/* TextFields */}
-          <TextField margin="normal" required fullWidth id="username" label="Username" /* ...props... */ value={username} onChange={(e) => setUsername(e.target.value)} disabled={formDisabled}/>
-          <TextField margin="normal" required fullWidth id="email" label="Email Address" /* ...props... */ value={email} onChange={(e) => setEmail(e.target.value)} disabled={formDisabled}/>
-          <TextField margin="normal" required fullWidth name="password" label="Password (min. 6 characters)" type="password" /* ...props... */ value={password} onChange={(e) => setPassword(e.target.value)} disabled={formDisabled}/>
-          <TextField margin="normal" required fullWidth name="confirmPassword" label="Confirm Password" type="password" /* ...props... */ value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} disabled={formDisabled}/>
+          <TextField margin="normal" required fullWidth id="username" label="Username" name="username" autoComplete="username" autoFocus value={username} onChange={(e) => setUsername(e.target.value)} disabled={formDisabled}/>
+          <TextField margin="normal" required fullWidth id="email" label="Email Address" name="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} disabled={formDisabled}/>
+          <TextField margin="normal" required fullWidth name="password" label="Password (min. 6 characters)" type="password" id="password" autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} disabled={formDisabled}/>
+          <TextField margin="normal" required fullWidth name="confirmPassword" label="Confirm Password" type="password" id="confirmPassword" autoComplete="new-password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} disabled={formDisabled}/>
           
           <Button type="submit" fullWidth variant="contained" sx={{ mt: 3, mb: 2 }} disabled={formDisabled}>
-            {authContextLoading ? <CircularProgress size={24} color="inherit" /> : 'Sign Up'}
+            {isAuthActionLoading ? <CircularProgress size={24} color="inherit" /> : 'Sign Up'}
           </Button>
           <Grid container justifyContent="flex-end">
             <Grid item>
