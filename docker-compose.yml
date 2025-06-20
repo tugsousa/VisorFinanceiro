@@ -1,0 +1,29 @@
+version: '3.8'
+
+services:
+  backend:
+    build: ./backend
+    container_name: taxfolio-backend-container
+    restart: unless-stopped
+    env_file:
+      - .env # Load environment variables from a .env file in the root
+    volumes:
+      # Use a named volume to persist the SQLite database
+      # Mounts the volume at /app/data inside the container
+      - taxfolio-db:/app/data
+    # We don't need to expose ports to the host, as Nginx will proxy to it
+    # on the internal Docker network.
+
+  frontend-proxy:
+    build: ./frontend
+    container_name: taxfolio-frontend-container
+    restart: unless-stopped
+    ports:
+      # Map port 3000 on your local machine to port 80 in the container (where Nginx listens)
+      - "3000:80"
+    depends_on:
+      - backend
+
+volumes:
+  # Define the named volume for the database
+  taxfolio-db:
