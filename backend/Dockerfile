@@ -27,7 +27,6 @@ FROM alpine:latest
 
 # It's a good practice to run as a non-root user
 RUN addgroup -S appgroup && adduser -S appuser -G appgroup
-USER appuser
 
 WORKDIR /app
 
@@ -41,6 +40,14 @@ COPY --from=builder /app/taxfolio-backend .
 # in a specific directory inside the container, you can create it here.
 # For example, if DATABASE_PATH will be /app/data/taxfolio.db
 RUN mkdir -p /app/data
+
+# --- Important Change: Change ownership of the app directory ---
+# Change the ownership of the entire /app directory to the non-root user.
+# This ensures the app can write to the /app/data sub-directory where the volume is mounted.
+RUN chown -R appuser:appgroup /app
+
+# Now, switch to the non-root user
+USER appuser
 
 # Expose port 8080 to the outside world
 EXPOSE 8080
