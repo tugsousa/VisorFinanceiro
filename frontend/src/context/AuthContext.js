@@ -101,43 +101,37 @@ export const AuthProvider = ({ children }) => {
   useEffect(() => {
     const initializeAuth = async () => {
       setIsInitialAuthLoading(true);
-      // checkingData will be managed by checkUserData or if no user initially
-      await fetchCsrfTokenAndUpdateService(true);
+      await fetchCsrfTokenAndUpdateService(true); // Fetch CSRF silently first
       const storedToken = localStorage.getItem('auth_token');
       const storedRefreshToken = localStorage.getItem('refresh_token');
+      const storedUser = localStorage.getItem('user');
 
-      if (storedToken && storedRefreshToken) {
+      if (storedToken && storedRefreshToken && storedUser) {
         setToken(storedToken);
         setRefreshTokenState(storedRefreshToken);
-        const storedUser = localStorage.getItem('user');
-        if (storedUser) {
-          try {
-            setUser(JSON.parse(storedUser));
-          } catch (e) {
-            console.error("Failed to parse stored user", e);
-            localStorage.removeItem('user');
-            // If user parsing fails, treat as no user for checkUserData
-            setCheckingData(false); // No data to check if user is invalid
-            setHasInitialData(false);
-          }
-        }
-        if (storedUser && user) { // Check if user was successfully set
-          await checkUserData();
-        } else {
-          // If no storedUser or user couldn't be parsed, effectively logged out state
-          performLogout(false, "Incomplete stored user state during init");
-          setHasInitialData(false);
-          setCheckingData(false); // No data check needed
+        try {
+          const parsedUser = JSON.parse(storedUser);
+          setUser(parsedUser); // Set user state based on localStorage
+          // After user is set from localStorage, check their data status
+          await checkUserData(); 
+        } catch (e) {
+          console.error("Failed to parse stored user during init", e);
+          // If parsing fails, treat as no user and perform a silent logout
+          performLogout(false, "Corrupted user data in localStorage on init");
+          setHasInitialData(false); 
+          setCheckingData(false); 
         }
       } else {
-        performLogout(false, "No tokens on init");
-        setHasInitialData(false);
-        setCheckingData(false); // No data check needed
+        // No valid session found in localStorage
+        performLogout(false, "No tokens or user data in localStorage on init");
+        setHasInitialData(false); 
+        setCheckingData(false); 
       }
-      setIsInitialAuthLoading(false); // Initial auth check is complete
+      setIsInitialAuthLoading(false);
     };
     initializeAuth();
-  }, [fetchCsrfTokenAndUpdateService, checkUserData, performLogout, user]); // Added `user` here to re-run if user changes externally potentially
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Empty dependency array ensures this runs only once on mount
 
   useEffect(() => {
     const handleLogoutEvent = (event) => {
@@ -156,7 +150,6 @@ export const AuthProvider = ({ children }) => {
     console.log("[AuthContext.register] setIsAuthActionLoading(true) called.");
 
     let operationStage = "init";
-    // ... (rest of register logic is the same, using setIsAuthActionLoading)
     console.log("[AuthContext.register] Stage:", operationStage, "- Process started.");
 
     try {
