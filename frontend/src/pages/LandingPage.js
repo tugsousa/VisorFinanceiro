@@ -1,3 +1,5 @@
+// frontend/src/pages/LandingPage.js
+
 import React from 'react';
 import { Box, Button, Container, Typography } from '@mui/material';
 import { Link as RouterLink } from 'react-router-dom';
@@ -27,15 +29,18 @@ const LandingPage = () => {
             mb: 2,
           }}
         >
-          Track Your Investments, Simplify Your Taxes.
+          Bem-vindo ao Rumo Claro
         </Typography>
         <Typography 
-          variant="h6" 
+          variant="h5" 
           component="p" 
           color="text.secondary" 
           sx={{ mb: 4, maxWidth: '700px', margin: 'auto' }}
         >
-          Taxfolio helps you consolidate your transaction history, understand your portfolio's performance, and prepare for tax season with ease.
+          A sua ferramenta para a gestão de portfólio e simplificação de impostos.
+          Rumo Claro ajuda-te a analisar as transações efetuadas e as holdings atuais.
+          Vais conseguir analisar vendas de ações, dividendos e opções, e ainda obter ajuda na declaração de IRS.
+          Transforme dados complexos em insights claros e tome o controlo das suas finanças.
         </Typography>
         <Button
           component={RouterLink}
@@ -46,7 +51,7 @@ const LandingPage = () => {
           endIcon={<ArrowForwardIcon />}
           sx={{ textTransform: 'none', fontSize: '1.1rem', py: 1.5, px: 4 }}
         >
-          Get Started for Free
+          Começar Agora
         </Button>
       </Container>
     </Box>
