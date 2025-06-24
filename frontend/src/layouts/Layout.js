@@ -134,9 +134,21 @@ export default function Layout({ children }) {
               </>
             ) : (
               <Box>
-                  <Button component={RouterLink} to="/signin" color="inherit">Sign In</Button>
-                  <Button component={RouterLink} to="/signup" variant="outlined" color="primary" sx={{ ml: 1 }}>
-                    Sign Up
+                                    <Button
+                    component={RouterLink}
+                    to="/signin"
+                    variant="text"
+                    sx={{
+                      color: 'text.secondary',
+                      fontWeight: 'medium',
+                      textTransform: 'none',
+                      '&:hover': {
+                        color: 'text.primary',
+                        backgroundColor: 'transparent',
+                      }, fontWeight: 'bold'
+                    }}
+                  >
+                    Sign in
                   </Button>
               </Box>
             )}
