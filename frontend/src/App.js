@@ -1,4 +1,3 @@
-// frontend/src/App.js
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import Layout from './layouts/Layout';
 import UploadPage from './pages/UploadPage';
@@ -12,11 +11,25 @@ import VerifyEmailPage from './pages/VerifyEmailPage';
 import RequestPasswordResetPage from './pages/RequestPasswordResetPage';
 import ResetPasswordPage from './pages/ResetPasswordPage';
 import SettingsPage from './pages/SettingsPage';
+import LandingPage from './pages/LandingPage'; // Import new LandingPage
+import DashboardPage from './pages/DashboardPage'; // Import new DashboardPage
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { CircularProgress, Box } from '@mui/material';
 
+const HomePage = () => {
+    const { user, isInitialAuthLoading } = useAuth();
+    if (isInitialAuthLoading) {
+      return (
+        <Box display="flex" justifyContent="center" alignItems="center" minHeight="80vh">
+          <CircularProgress />
+        </Box>
+      );
+    }
+    return user ? <Navigate to="/dashboard" replace /> : <LandingPage />;
+};
+
 const ProtectedRoute = ({ children }) => {
-  const { user, isInitialAuthLoading } = useAuth(); // Use specific initial loading
+  const { user, isInitialAuthLoading } = useAuth();
 
   if (isInitialAuthLoading) {
     return (
@@ -33,9 +46,8 @@ const ProtectedRoute = ({ children }) => {
 };
 
 const PublicRoute = ({ children }) => {
-  const { user, isInitialAuthLoading, hasInitialData, checkingData } = useAuth(); // Use specific initial loading and checkingData
+  const { user, isInitialAuthLoading } = useAuth();
 
-  // Show global spinner ONLY during the app's very first auth check.
   if (isInitialAuthLoading) {
     return (
       <Box display="flex" justifyContent="center" alignItems="center" minHeight="80vh">
@@ -44,25 +56,10 @@ const PublicRoute = ({ children }) => {
     );
   }
 
-  // If user becomes defined (e.g., after successful login or if token was still valid)
   if (user) {
-    // If user exists, but we're still checking their initial data (e.g., after login)
-    // hasInitialData will be null initially, then true/false. checkingData covers the async.
-    if (checkingData || hasInitialData === null) {
-        return (
-          <Box display="flex" justifyContent="center" alignItems="center" minHeight="80vh">
-            <CircularProgress />
-            <span style={{marginLeft: 8}}>Verifying account status...</span>
-          </Box>
-        );
-    }
-    // Once user and hasInitialData are known, redirect authenticated users away from public routes.
-    return <Navigate to={hasInitialData ? "/realizedgains" : "/"} replace />;
+    return <Navigate to="/dashboard" replace />;
   }
 
-  // If no user, and initial auth loading phase is complete, render the public page (children).
-  // This ensures SignUpPage or SignInPage remains mounted even if AuthContext's `isAuthActionLoading`
-  // becomes true due to an action within those pages (like submitting the form).
   return children;
 };
 
@@ -73,13 +70,16 @@ function App() {
       <Router>
         <Layout>
           <Routes>
+            <Route path="/" element={<HomePage />} />
+
             <Route path="/signin" element={<PublicRoute><SignInPage /></PublicRoute>} />
             <Route path="/signup" element={<PublicRoute><SignUpPage /></PublicRoute>} />
             <Route path="/verify-email" element={<VerifyEmailPage />} />
             <Route path="/request-password-reset" element={<PublicRoute><RequestPasswordResetPage /></PublicRoute>} />
             <Route path="/reset-password" element={<PublicRoute><ResetPasswordPage /></PublicRoute>} />
             
-            <Route path="/" element={<ProtectedRoute><UploadPage /></ProtectedRoute>} />
+            <Route path="/dashboard" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
+            <Route path="/upload" element={<ProtectedRoute><UploadPage /></ProtectedRoute>} />
             <Route path="/realizedgains" element={<ProtectedRoute><RealizedGainsPage /></ProtectedRoute>} />
             <Route path="/tax" element={<ProtectedRoute><TaxPage /></ProtectedRoute>} />
             <Route path="/transactions" element={<ProtectedRoute><ProcessedTransactionsPage /></ProtectedRoute>} />

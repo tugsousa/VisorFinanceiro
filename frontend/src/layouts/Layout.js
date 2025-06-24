@@ -1,16 +1,11 @@
-// frontend/src/layouts/Layout.js
 import React, { useState } from 'react';
-import { Box, AppBar, Toolbar, Typography, Drawer, IconButton, Tooltip, Avatar, Menu, MenuItem, Divider } from '@mui/material';
-import { Link, useNavigate } from 'react-router-dom';
+import { Box, AppBar, Toolbar, Typography, IconButton, Tooltip, Avatar, Menu, MenuItem, Divider, Button } from '@mui/material';
+import { Link as RouterLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import {
-  Upload as UploadIcon,
-  Paid as RealizedGainsIcon,
-  ReceiptLong as TaxIcon, 
-  TableView as TableViewIcon, 
   Person as PersonIcon,
-  Settings as SettingsIcon, // Import Settings icon
-  Logout as LogoutIcon // Optional: if you want a specific icon for logout
+  Settings as SettingsIcon,
+  Logout as LogoutIcon
 } from '@mui/icons-material';
 
 export default function Layout({ children }) {
@@ -28,9 +23,9 @@ export default function Layout({ children }) {
   };
 
   const handleLogout = async () => {
-    handleMenuClose(); // Close menu first
-    await logout();    // Perform logout logic from AuthContext
-    navigate('/signin'); // Then navigate
+    handleMenuClose();
+    await logout();
+    navigate('/signin');
   };
 
   const handleSettings = () => {
@@ -38,71 +33,48 @@ export default function Layout({ children }) {
     navigate('/settings');
   };
 
-  const sidebarItems = [
-    { title: "Upload", to: "/", icon: <UploadIcon /> },
-    { title: "Ganhos Realizados", to: "/realizedgains", icon: <RealizedGainsIcon /> },
-    { title: "Relatorio IRS", to: "/tax", icon: <TaxIcon /> },
-    { title: "Transações", to: "/transactions", icon: <TableViewIcon /> },
+  const navItems = [
+    { title: 'Dashboard', to: '/dashboard' },
+    { title: 'Upload', to: '/upload' },
+    { title: 'Realized Gains', to: '/realizedgains' },
+    { title: 'Tax Report', to: '/tax' },
+    { title: 'Transactions', to: '/transactions' },
   ];
 
   return (
-    <Box sx={{ display: 'flex' }}>
-      <Drawer
-        variant="permanent"
+    <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
+      <AppBar
+        position="fixed"
         sx={{
-          width: 64,
-          flexShrink: 0,
-          '& .MuiDrawer-paper': {
-            width: 64,
-            boxSizing: 'border-box',
-            backgroundColor: 'white', // Or your theme.palette.background.paper
-            borderRight: '1px solid rgba(0, 0, 0, 0.12)',
-          },
+          backgroundColor: 'primary.main',
+          color: 'white',
         }}
       >
-        <Toolbar /> 
-        <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1, pt: 2 }}>
-          {sidebarItems.map((item) => (
-            <Tooltip title={item.title} placement="right" arrow key={item.title}>
-              <IconButton
-                component={Link}
-                to={item.to}
-                color="inherit"
-                sx={{
-                  color: 'text.secondary',
-                  '&:hover': {
-                    backgroundColor: 'rgba(25, 118, 210, 0.08)', // Example hover color
-                    color: 'primary.main'
-                  }
-                }}
-              >
-                {item.icon}
-              </IconButton>
-            </Tooltip>
-          ))}
-        </Box>
-      </Drawer>
+        <Toolbar>
+          <Typography 
+            variant="h6" 
+            component={RouterLink} 
+            to={user ? "/dashboard" : "/"} 
+            sx={{ flexGrow: 1, color: 'white', textDecoration: 'none' }}
+          >
+            TAXFOLIO
+          </Typography>
 
-      <Box component="main" sx={{ flexGrow: 1 }}>
-        <AppBar
-          position="fixed"
-          sx={{
-            zIndex: (theme) => theme.zIndex.drawer + 1,
-            backgroundColor: 'primary.main', 
-            color: 'white',
-          }}
-        >
-          <Toolbar>
-            <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
-              TAXFOLIO
-            </Typography>
-            {user ? (
-              <Box sx={{ display: 'flex', alignItems: 'center' }}>
+          {user ? (
+            <>
+              <Box sx={{ display: { xs: 'none', sm: 'block' } }}>
+                {navItems.map((item) => (
+                  <Button key={item.title} component={RouterLink} to={item.to} sx={{ color: 'white' }}>
+                    {item.title}
+                  </Button>
+                ))}
+              </Box>
+              <Box sx={{ display: 'flex', alignItems: 'center', ml: 2 }}>
                 <Tooltip title={user.username || "User Account"} placement="bottom">
                   <IconButton
                     onClick={handleMenuClick}
                     size="small"
-                    sx={{ ml: 2, p: 0 }}
+                    sx={{ p: 0 }}
                     aria-controls={openMenu ? 'account-menu' : undefined}
                     aria-haspopup="true"
                     aria-expanded={openMenu ? 'true' : undefined}
@@ -117,19 +89,14 @@ export default function Layout({ children }) {
                   id="account-menu"
                   open={openMenu}
                   onClose={handleMenuClose}
-                  // onClick={handleMenuClose} // Keep onClick on individual items for specific actions
                   PaperProps={{
                     elevation: 0,
                     sx: {
-                      overflow: 'visible',
-                      filter: 'drop-shadow(0px 2px 8px rgba(0,0,0,0.32))',
-                      mt: 1.5,
+                      overflow: 'visible', filter: 'drop-shadow(0px 2px 8px rgba(0,0,0,0.32))', mt: 1.5,
                       '& .MuiAvatar-root': { width: 32, height: 32, ml: -0.5, mr: 1 },
                       '&::before': {
-                        content: '""', display: 'block', position: 'absolute',
-                        top: 0, right: 14, width: 10, height: 10,
-                        bgcolor: 'background.paper', transform: 'translateY(-50%) rotate(45deg)',
-                        zIndex: 0,
+                        content: '""', display: 'block', position: 'absolute', top: 0, right: 14, width: 10, height: 10,
+                        bgcolor: 'background.paper', transform: 'translateY(-50%) rotate(45deg)', zIndex: 0,
                       },
                     },
                   }}
@@ -140,6 +107,15 @@ export default function Layout({ children }) {
                     {user.username}
                   </MenuItem>
                   <Divider sx={{ my: 0.5 }} />
+                   {/* Mobile nav items */}
+                  <Box sx={{ display: { xs: 'block', sm: 'none' } }}>
+                    {navItems.map((item) => (
+                      <MenuItem key={item.title} component={RouterLink} to={item.to} onClick={handleMenuClose}>
+                        {item.title}
+                      </MenuItem>
+                    ))}
+                    <Divider sx={{ my: 0.5 }} />
+                  </Box>
                   <MenuItem onClick={handleSettings}>
                     <SettingsIcon sx={{ mr: 1, color: 'text.secondary' }} fontSize="small" />
                     Settings
@@ -150,19 +126,18 @@ export default function Layout({ children }) {
                   </MenuItem>
                 </Menu>
               </Box>
-            ) : (
-              <Typography
-                variant="body1" component={Link} to="/signin"
-                sx={{ color: 'white', textDecoration: 'none', '&:hover': { textDecoration: 'underline' }}}
-              >
-                Sign in
-              </Typography>
-            )}
-          </Toolbar>
-        </AppBar>
-        <Box sx={{ p: { xs: 1, sm: 2, md: 3 }, mt: { xs: 7, sm: 8 } }}>
-          {children}
-        </Box>
+            </>
+          ) : (
+            <Box>
+                <Button component={RouterLink} to="/signin" color="inherit">Sign In</Button>
+                <Button component={RouterLink} to="/signup" variant="outlined" color="inherit" sx={{ ml: 1 }}>Sign Up</Button>
+            </Box>
+          )}
+        </Toolbar>
+      </AppBar>
+
+      <Box component="main" sx={{ flexGrow: 1, pt: { xs: 7, sm: 8 } }}>
+        {children}
       </Box>
     </Box>
   );

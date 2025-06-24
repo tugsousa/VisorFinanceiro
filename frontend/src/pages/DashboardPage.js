@@ -1,0 +1,55 @@
+import React from 'react';
+import { Box, Typography, Grid, Paper, Card, CardActionArea, CardContent } from '@mui/material';
+import {
+  Upload as UploadIcon,
+  Paid as RealizedGainsIcon,
+  ReceiptLong as TaxIcon, 
+  TableView as TableViewIcon, 
+} from '@mui/icons-material';
+import { useAuth } from '../context/AuthContext';
+import { Link as RouterLink } from 'react-router-dom';
+
+const dashboardItems = [
+  { title: "Upload Transactions", to: "/upload", icon: <UploadIcon fontSize="large" />, description: "Upload your latest transaction CSV file." },
+  { title: "View Realized Gains", to: "/realizedgains", icon: <RealizedGainsIcon fontSize="large" />, description: "Analyze your portfolio's performance and P/L." },
+  { title: "Generate Tax Report", to: "/tax", icon: <TaxIcon fontSize="large" />, description: "Prepare data for your annual tax declaration." },
+  { title: "Browse Transactions", to: "/transactions", icon: <TableViewIcon fontSize="large" />, description: "View all processed transaction records." },
+];
+
+const DashboardPage = () => {
+    const { user } = useAuth();
+
+    return (
+        <Box sx={{ p: { xs: 2, sm: 3 } }}>
+            <Typography variant="h4" component="h1" gutterBottom>
+                Welcome, {user?.username || 'User'}!
+            </Typography>
+            <Typography variant="subtitle1" color="text.secondary" sx={{ mb: 4 }}>
+                What would you like to do today?
+            </Typography>
+            <Grid container spacing={3}>
+                {dashboardItems.map((item) => (
+                    <Grid item xs={12} sm={6} md={4} key={item.title}>
+                        <Card component={RouterLink} to={item.to} sx={{ textDecoration: 'none', height: '100%' }}>
+                            <CardActionArea sx={{ p: 2, display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', height: '100%' }}>
+                                <Box sx={{ color: 'primary.main', mb: 2 }}>
+                                    {item.icon}
+                                </Box>
+                                <CardContent>
+                                    <Typography gutterBottom variant="h6" component="div">
+                                        {item.title}
+                                    </Typography>
+                                    <Typography variant="body2" color="text.secondary">
+                                        {item.description}
+                                    </Typography>
+                                </CardContent>
+                            </CardActionArea>
+                        </Card>
+                    </Grid>
+                ))}
+            </Grid>
+        </Box>
+    );
+};
+
+export default DashboardPage;
