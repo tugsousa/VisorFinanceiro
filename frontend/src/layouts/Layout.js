@@ -7,7 +7,8 @@ import { useAuth } from '../context/AuthContext';
 import {
   Person as PersonIcon,
   Settings as SettingsIcon,
-  Logout as LogoutIcon
+  Logout as LogoutIcon,
+  AutoGraph as AutoGraphIcon
 } from '@mui/icons-material';
 
 export default function Layout({ children }) {
@@ -57,20 +58,33 @@ export default function Layout({ children }) {
       >
         <Container maxWidth="lg">
           <Toolbar disableGutters>
-            <Typography 
-              variant="h6" 
-              component={RouterLink} 
-              to={user ? "/dashboard" : "/"} 
-              sx={{ flexGrow: 1, color: 'primary.main', textDecoration: 'none', fontWeight: 'bold' }}
-            >
-              RUMO CLARO
-            </Typography>
+            <Box component={RouterLink} to={user ? "/dashboard" : "/"} sx={{ display: 'flex', alignItems: 'center', textDecoration: 'none', flexGrow: 1 }}>
+              <AutoGraphIcon sx={{ mr: 1, color: '#178bba' }} />
+              <Typography 
+                variant="h6" 
+                sx={{
+                  fontFamily: "'Poppins', sans-serif",
+                  fontWeight: 600,
+                  color: '#6a6a62',
+                }}
+              >
+                Rumo Claro
+              </Typography>
+            </Box>
 
             {user ? (
               <>
                 <Box sx={{ display: { xs: 'none', sm: 'block' } }}>
                   {navItems.map((item) => (
-                    <Button key={item.title} component={RouterLink} to={item.to} sx={{ color: 'text.primary' }}>
+                    <Button key={item.title} component={RouterLink} to={item.to} sx={{
+                      fontFamily: "'Inter', sans-serif",
+                      color: '#4b5563',
+                      textTransform: 'none',
+                      fontWeight: 500,
+                      '&:hover': {
+                        color: '#111827',
+                      }
+                    }}>
                       {item.title}
                     </Button>
                   ))}
@@ -139,13 +153,14 @@ export default function Layout({ children }) {
                     to="/signin"
                     variant="text"
                     sx={{
-                      color: 'text.secondary',
-                      fontWeight: 'medium',
+                      fontFamily: "'Inter', sans-serif",
+                      color: '#4b5563',
+                      fontWeight: 500,
                       textTransform: 'none',
                       '&:hover': {
-                        color: 'text.primary',
+                        color: '#111827',
                         backgroundColor: 'transparent',
-                      }, fontWeight: 'bold'
+                      },
                     }}
                   >
                     Sign in
