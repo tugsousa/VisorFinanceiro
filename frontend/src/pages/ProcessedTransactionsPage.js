@@ -66,7 +66,7 @@ const ProcessedTransactionsPage = () => {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '200px', p: 3 }}>
         <CircularProgress />
-        <Typography sx={{ ml: 2 }}>Loading transactions...</Typography>
+        <Typography sx={{ ml: 2 }}>A carregar as transações...</Typography>
       </Box>
     );
   }
