@@ -14,9 +14,8 @@ import {
 import { useAuth } from '../context/AuthContext';
 import { UI_TEXT, NO_YEAR_SELECTED, ALL_YEARS_OPTION } from '../constants';
 import { getYear, getMonth, getDay, extractYearsFromData } from '../utils/dateUtils';
-import './TaxPage.css'; // Make sure this file contains the old summary table styles
+import './TaxPage.css';
 
-// Restored Styled Components from "before" version
 const StyledTableCell = styled(TableCell)(({ theme }) => ({
   backgroundColor: '#e5f5ff', color: '#50809b', fontWeight: 'normal',
   border: '1px solid #0084cc', textAlign: 'center', padding: '1px 2px',
@@ -34,7 +33,6 @@ const StyledTableBodyCell = styled(TableCell)(({ theme, align = 'center' }) => (
   padding: '4px 6px', fontSize: '0.8rem', verticalAlign: 'middle',
 }));
 
-
 const fetchTaxReportData = async () => {
   const [stockRes, optionRes, dividendRes] = await Promise.all([
     apiFetchStockSales(),
@@ -47,7 +45,6 @@ const fetchTaxReportData = async () => {
     dividendSummary: dividendRes.data || {},
   };
 };
-
 
 export default function TaxPage() {
   const { token } = useAuth();
@@ -66,89 +63,65 @@ export default function TaxPage() {
   const apiError = isQueryError ? (queryError?.message || UI_TEXT.errorLoadingData) : null;
 
   const [selectedYear, setSelectedYear] = useState(NO_YEAR_SELECTED);
-  const [availableYears, setAvailableYears] = useState([]);
 
-  const [allStockSaleDetails, setAllStockSaleDetails] = useState([]);
-  const [allOptionSaleDetails, setAllOptionSaleDetails] = useState([]);
-  const [allDividendTaxData, setAllDividendTaxData] = useState({});
+  // Derive availableYears directly from the API data using useMemo
+  const availableYears = useMemo(() => {
+    if (!taxApiData) return [];
+    const dateAccessors = {
+      stockSales: 'SaleDate',
+      optionSales: 'close_date',
+      DividendTaxResult: null,
+    };
+    const dataForYearExtraction = {
+      stockSales: taxApiData.stockSales || [],
+      optionSales: taxApiData.optionSales || [],
+      DividendTaxResult: taxApiData.dividendSummary || {},
+    };
+    const yearsFromUtil = extractYearsFromData(dataForYearExtraction, dateAccessors);
+    return yearsFromUtil
+      .filter(y => y && y !== NO_YEAR_SELECTED && y !== ALL_YEARS_OPTION)
+      .map(String)
+      .sort((a, b) => b.localeCompare(a));
+  }, [taxApiData]);
 
-  const [stockSaleDetails, setStockSaleDetails] = useState([]);
-  const [optionSaleDetails, setOptionSaleDetails] = useState([]);
-  const [dividendTaxReportRows, setDividendTaxReportRows] = useState([]);
-
-  const loading = queryLoading || (token && !taxApiData && !apiError);
-
+  // This useEffect now has a single, clear responsibility: to set the default selected year
+  // once the available years are calculated. This is a valid use of useEffect.
   useEffect(() => {
-    if (taxApiData) {
-      setAllStockSaleDetails(taxApiData.stockSales || []);
-      setAllOptionSaleDetails(taxApiData.optionSales || []);
-      setAllDividendTaxData(taxApiData.dividendSummary || {});
-
-      const dateAccessors = {
-        stockSales: 'SaleDate',
-        optionSales: 'close_date',
-        DividendTaxResult: null, 
-      };
-      const dataForYearExtraction = {
-        stockSales: taxApiData.stockSales || [],
-        optionSales: taxApiData.optionSales || [],
-        DividendTaxResult: taxApiData.dividendSummary || {}, 
-      };
-
-      const yearsFromUtil = extractYearsFromData(dataForYearExtraction, dateAccessors);
-      const actualDataYears = yearsFromUtil
-        .filter(y => y !== NO_YEAR_SELECTED && y !== ALL_YEARS_OPTION && y !== '')
-        .map(y => String(y))
-        .sort((a, b) => b.localeCompare(a));
-
-      setAvailableYears(actualDataYears);
-
+    if (availableYears.length > 0) {
       const currentSystemYear = new Date().getFullYear();
       const targetDefaultYearStr = String(currentSystemYear - 1);
-      let newSelectedYear = NO_YEAR_SELECTED;
-      if (actualDataYears.length > 0) {
-        if (actualDataYears.includes(targetDefaultYearStr)) {
-          newSelectedYear = targetDefaultYearStr;
-        } else {
-          newSelectedYear = actualDataYears[0]; 
-        }
+      if (availableYears.includes(targetDefaultYearStr)) {
+        setSelectedYear(targetDefaultYearStr);
+      } else {
+        setSelectedYear(availableYears[0]); // Default to the most recent year in the data
       }
-      setSelectedYear(newSelectedYear);
     } else if (!queryLoading) {
-      setAllStockSaleDetails([]);
-      setAllOptionSaleDetails([]);
-      setAllDividendTaxData({});
-      setAvailableYears([]);
       setSelectedYear(NO_YEAR_SELECTED);
     }
-  }, [taxApiData, queryLoading]);
+  }, [availableYears, queryLoading]);
 
-  const filterDataForYear = useCallback((yearToFilter) => {
-    if (yearToFilter === NO_YEAR_SELECTED || yearToFilter === '') {
-      setStockSaleDetails([]);
-      setOptionSaleDetails([]);
-      setDividendTaxReportRows([]);
-      return;
+  // Derive filtered data for the selected year using useMemo
+  const { stockSaleDetails, optionSaleDetails, dividendTaxReportRows, groupedOptionData } = useMemo(() => {
+    const year = selectedYear;
+    if (year === NO_YEAR_SELECTED || !taxApiData) {
+      return { stockSaleDetails: [], optionSaleDetails: [], dividendTaxReportRows: [], groupedOptionData: [] };
     }
-    const numYear = Number(yearToFilter);
-    setStockSaleDetails(allStockSaleDetails.filter(item => getYear(item.SaleDate) === numYear));
-    setOptionSaleDetails(allOptionSaleDetails.filter(item => getYear(item.close_date) === numYear));
-    
-    const dividendYearData = allDividendTaxData[String(yearToFilter)] || {};
-    const transformedDividends = Object.entries(dividendYearData).map(([country, details], index) => ({
-      // Naming from "before" for dividendTaxReportRows to match old table structure
-      id: `${yearToFilter}-${country}-${index}`, 
-      linha: 801 + index, // Original format for "Nº Linha"
-      codigo: 'E11', // Original "Código Rend."
-      paisFonte: country, // Original "País da Fonte"
-      rendimentoBruto: details.gross_amt || 0,
-      impostoFonte: Math.abs(details.taxed_amt || 0), // Original "No país da fonte" under "Imposto Pago"
-      // These were present in old table, mapping new data if available or keeping defaults
-      impostoRetido: 0, // Original "Imposto retido" under "Imposto Pago"
-      nifEntidade: '', // Original "NIF Ent. Retentora"
-      retencaoFonte: 0, // Original "Retenção Fonte" under "Imposto Retido em Portugal"
 
-      // Keep new data structure for calculation if needed, but use above for display
+    const numYear = Number(year);
+    const filteredStockSales = (taxApiData.stockSales || []).filter(item => getYear(item.SaleDate) === numYear);
+    const filteredOptionSales = (taxApiData.optionSales || []).filter(item => getYear(item.close_date) === numYear);
+    
+    const dividendYearData = taxApiData.dividendSummary?.[year] || {};
+    const transformedDividends = Object.entries(dividendYearData).map(([country, details], index) => ({
+      id: `${year}-${country}-${index}`,
+      linha: 801 + index,
+      codigo: 'E11',
+      paisFonte: country,
+      rendimentoBruto: details.gross_amt || 0,
+      impostoFonte: Math.abs(details.taxed_amt || 0),
+      impostoRetido: 0,
+      nifEntidade: '',
+      retencaoFonte: 0,
       _new_codigoPaisFonte: country,
       _new_impostoPagoCodigo: 'E11',
       _new_impostoPagoMontante: Math.abs(details.taxed_amt || 0),
@@ -156,14 +129,26 @@ export default function TaxPage() {
       _new_nifEntidadePagadora: '',
       _new_retencaoFontePT: 0,
     }));
-    setDividendTaxReportRows(transformedDividends);
-  }, [allStockSaleDetails, allOptionSaleDetails, allDividendTaxData]);
 
-  useEffect(() => {
-    if (!queryLoading && selectedYear !== undefined) {
-      filterDataForYear(selectedYear);
-    }
-  }, [selectedYear, allStockSaleDetails, allOptionSaleDetails, allDividendTaxData, filterDataForYear, queryLoading]);
+    const groupedOptions = filteredOptionSales.reduce((acc, row) => {
+      const country = row.country_code || 'Unknown';
+      if (!acc[country]) {
+        acc[country] = { country_code: country, rendimentoLiquido: 0, impostoPago: 0 };
+      }
+      acc[country].rendimentoLiquido += (row.delta || 0);
+      return acc;
+    }, {});
+
+    return {
+      stockSaleDetails: filteredStockSales,
+      optionSaleDetails: filteredOptionSales,
+      dividendTaxReportRows: transformedDividends,
+      groupedOptionData: Object.values(groupedOptions),
+    };
+  }, [selectedYear, taxApiData]);
+
+
+  const loading = queryLoading || (token && !taxApiData && !apiError);
 
   const handleYearChange = (event) => {
     setSelectedYear(event.target.value);
@@ -175,48 +160,36 @@ export default function TaxPage() {
       acc.aquisicao += Math.abs(row.BuyAmountEUR || 0);
       acc.despesas += row.Commission || 0;
       return acc;
-    }, { realizacao: 0, aquisicao: 0, despesas: 0, imposto: 0 } // imposto was in old totals
+    }, { realizacao: 0, aquisicao: 0, despesas: 0, imposto: 0 }
   ), [stockSaleDetails]);
-
-  const groupedOptionData = useMemo(() => {
-    const grouped = optionSaleDetails.reduce((acc, row) => {
-      const country = row.country_code || 'Unknown';
-      if (!acc[country]) {
-        acc[country] = { country_code: country, rendimentoLiquido: 0, impostoPago: 0 };
-      }
-      acc[country].rendimentoLiquido += (row.delta || 0); 
-      return acc;
-    }, {});
-    return Object.values(grouped);
-  }, [optionSaleDetails]);
 
   const optionTotals = useMemo(() => groupedOptionData.reduce(
     (acc, group) => {
       acc.rendimentoLiquido += group.rendimentoLiquido || 0;
-      acc.imposto += group.impostoPago || 0; // impostoPago was in old totals
+      acc.imposto += group.impostoPago || 0;
       return acc;
     }, { rendimentoLiquido: 0, imposto: 0 }
   ), [groupedOptionData]);
 
-  // Use original field names for dividendTotals to match old summary table
   const dividendTotals = useMemo(() => dividendTaxReportRows.reduce(
     (acc, row) => {
       acc.rendimentoBruto += row.rendimentoBruto || 0;
-      acc.impostoFonte += row.impostoFonte || 0; // "No país da fonte"
-      acc.impostoRetido += row.impostoRetido || 0; // "Imposto retido"
-      acc.retencaoFonte += row.retencaoFonte || 0; // "Retenção na Fonte"
+      acc.impostoFonte += row.impostoFonte || 0;
+      acc.impostoRetido += row.impostoRetido || 0;
+      acc.retencaoFonte += row.retencaoFonte || 0;
       return acc;
     }, { rendimentoBruto: 0, impostoFonte: 0, impostoRetido: 0, retencaoFonte: 0 }
   ), [dividendTaxReportRows]);
 
-
-  if (loading) { 
-      return <CircularProgress sx={{ display: 'block', margin: '20px auto' }} />;
+  if (loading) {
+    return <CircularProgress sx={{ display: 'block', margin: '20px auto' }} />;
   }
   if (apiError && availableYears.length === 0 && selectedYear === NO_YEAR_SELECTED) {
-      return <Alert severity="error" sx={{ m: 2 }}>{apiError}</Alert>;
+    return <Alert severity="error" sx={{ m: 2 }}>{apiError}</Alert>;
   }
 
+  // The rest of the JSX remains the same, but it will now use the memoized values
+  // like `stockSaleDetails`, `optionTotals`, etc.
   return (
     <Box sx={{ p: { xs: 1, sm: 2 } }}>
       <Typography variant="h4" component="h1" gutterBottom sx={{ mb: 2 }}>
@@ -234,8 +207,8 @@ export default function TaxPage() {
               onChange={handleYearChange}
               disabled={loading || (availableYears.length === 0 && selectedYear === NO_YEAR_SELECTED)}
             >
-              <MenuItem 
-                value={NO_YEAR_SELECTED} 
+              <MenuItem
+                value={NO_YEAR_SELECTED}
                 disabled={availableYears.length > 0}
               >
                 {availableYears.length === 0 ? "No Data" : "Select Year"}
@@ -307,26 +280,24 @@ export default function TaxPage() {
                 </TableBody>
               </Table>
             </TableContainer>
-            {/* Summary table using old CSS classes via TaxPage.css */}
             <div className="summary-container">
                 <table className="summary-table">
                     <thead>
                         <tr>
-                            {/* Using StyledTableCell here which now has old styling, TaxPage.css classes will override */}
-                            <StyledTableCell component="th" className="summary-header"></StyledTableCell>
-                            <StyledTableCell component="th" className="summary-header"><span className="header-line">Rendimento Bruto</span></StyledTableCell>
-                            <StyledTableCell component="th" className="summary-header"><span className="header-line">Imposto Pago no Estrangeiro</span><span className="header-separator">-</span><span className="header-line">No país da fonte</span></StyledTableCell>
-                            <StyledTableCell component="th" className="summary-header"><span className="header-line">Imposto Pago no Estrangeiro</span><span className="header-separator">-</span><span className="header-line">Imposto Retido</span></StyledTableCell>
-                            <StyledTableCell component="th" className="summary-header"><span className="header-line">Imposto Retido em Portugal</span><span className="header-separator">-</span><span className="header-line">Retenção na Fonte</span></StyledTableCell>
+                            <th className="summary-header"></th>
+                            <th className="summary-header"><span className="header-line">Rendimento Bruto</span></th>
+                            <th className="summary-header"><span className="header-line">Imposto Pago no Estrangeiro</span><span className="header-separator">-</span><span className="header-line">No país da fonte</span></th>
+                            <th className="summary-header"><span className="header-line">Imposto Pago no Estrangeiro</span><span className="header-separator">-</span><span className="header-line">Imposto Retido</span></th>
+                            <th className="summary-header"><span className="header-line">Imposto Retido em Portugal</span><span className="header-separator">-</span><span className="header-line">Retenção na Fonte</span></th>
                         </tr>
                     </thead>
                     <tbody>
                         <tr>
-                            <StyledTableCell component="td" className="control-sum">Soma de Controlo</StyledTableCell>
-                            <StyledTableCell component="td" className="summary-value">{dividendTotals.rendimentoBruto.toFixed(2)} €</StyledTableCell>
-                            <StyledTableCell component="td" className="summary-value">{dividendTotals.impostoFonte.toFixed(2)} €</StyledTableCell>
-                            <StyledTableCell component="td" className="summary-value">{dividendTotals.impostoRetido.toFixed(2)} €</StyledTableCell>
-                            <StyledTableCell component="td" className="summary-value">{dividendTotals.retencaoFonte.toFixed(2)} €</StyledTableCell>
+                            <td className="control-sum">Soma de Controlo</td>
+                            <td className="summary-value">{dividendTotals.rendimentoBruto.toFixed(2)} €</td>
+                            <td className="summary-value">{dividendTotals.impostoFonte.toFixed(2)} €</td>
+                            <td className="summary-value">{dividendTotals.impostoRetido.toFixed(2)} €</td>
+                            <td className="summary-value">{dividendTotals.retencaoFonte.toFixed(2)} €</td>
                         </tr>
                     </tbody>
                 </table>
@@ -348,7 +319,6 @@ export default function TaxPage() {
               <TableContainer component={Paper} sx={{ mb: 1, overflowX: 'auto' }}>
                  <Table size="small" aria-label="stock sale details table">
                    <TableHead>
-                    {/* Headers reflecting the old structure and style */}
                     <TableRow>
                       <StyledTableCell rowSpan={2}>Nº Linha<br />(951 a ...)</StyledTableCell>
                       <StyledTableCell rowSpan={2}>País Fonte</StyledTableCell>
@@ -376,7 +346,7 @@ export default function TaxPage() {
                         <TableRow hover key={`${row.ISIN}-${row.SaleDate}-${index}`}>
                             <StyledTableBodyCell>{951 + index}</StyledTableBodyCell>
                             <StyledTableBodyCell>{row.country_code || ''}</StyledTableBodyCell>
-                            <StyledTableBodyCell>G01</StyledTableBodyCell> {/* Defaulted to G01 as per old */}
+                            <StyledTableBodyCell>G01</StyledTableBodyCell>
                             <StyledTableBodyCell>{getYear(row.SaleDate)}</StyledTableBodyCell>
                             <StyledTableBodyCell>{getMonth(row.SaleDate)}</StyledTableBodyCell>
                             <StyledTableBodyCell>{getDay(row.SaleDate)}</StyledTableBodyCell>
@@ -398,20 +368,20 @@ export default function TaxPage() {
                 <table className="summary-table">
                   <thead>
                     <tr>
-                        <StyledTableCell component="th" className="summary-header"></StyledTableCell>
-                        <StyledTableCell component="th" className="summary-header"><span className="header-line">Valor Realização</span></StyledTableCell>
-                        <StyledTableCell component="th" className="summary-header"><span className="header-line">Valor Aquisição</span></StyledTableCell>
-                        <StyledTableCell component="th" className="summary-header"><span className="header-line">Despesas e Encargos</span></StyledTableCell>
-                        <StyledTableCell component="th" className="summary-header"><span className="header-line">Imposto pago no Estrangeiro</span></StyledTableCell>
+                        <th className="summary-header"></th>
+                        <th className="summary-header"><span className="header-line">Valor Realização</span></th>
+                        <th className="summary-header"><span className="header-line">Valor Aquisição</span></th>
+                        <th className="summary-header"><span className="header-line">Despesas e Encargos</span></th>
+                        <th className="summary-header"><span className="header-line">Imposto pago no Estrangeiro</span></th>
                     </tr>
                   </thead>
                   <tbody>
                     <tr>
-                        <StyledTableCell component="td" className="control-sum">Soma de Controlo</StyledTableCell>
-                        <StyledTableCell component="td" className="summary-value">{stockTotals.realizacao.toFixed(2)} €</StyledTableCell>
-                        <StyledTableCell component="td" className="summary-value">{stockTotals.aquisicao.toFixed(2)} €</StyledTableCell>
-                        <StyledTableCell component="td" className="summary-value">{stockTotals.despesas.toFixed(2)} €</StyledTableCell>
-                        <StyledTableCell component="td" className="summary-value">{stockTotals.imposto.toFixed(2)} €</StyledTableCell>
+                        <td className="control-sum">Soma de Controlo</td>
+                        <td className="summary-value">{stockTotals.realizacao.toFixed(2)} €</td>
+                        <td className="summary-value">{stockTotals.aquisicao.toFixed(2)} €</td>
+                        <td className="summary-value">{stockTotals.despesas.toFixed(2)} €</td>
+                        <td className="summary-value">{stockTotals.imposto.toFixed(2)} €</td>
                     </tr>
                   </tbody>
                 </table>
@@ -424,7 +394,6 @@ export default function TaxPage() {
               <TableContainer component={Paper} sx={{ mb: 1, overflowX: 'auto' }}>
                   <Table size="small" aria-label="option sale details table">
                     <TableHead>
-                        {/* Headers reflecting the old structure and style */}
                         <TableRow>
                             <StyledTableCell>Nº Linha<br />(991 a ...)</StyledTableCell>
                             <StyledTableCell>Código Rend.</StyledTableCell>
@@ -439,7 +408,7 @@ export default function TaxPage() {
                       groupedOptionData.map((group, index) => (
                         <TableRow hover key={`${group.country_code}-${index}`}>
                            <StyledTableBodyCell>{991 + index}</StyledTableBodyCell>
-                           <StyledTableBodyCell align="left">G30</StyledTableBodyCell> {/* G30 as per old */}
+                           <StyledTableBodyCell align="left">G30</StyledTableBodyCell>
                            <StyledTableBodyCell align="left">{group.country_code}</StyledTableBodyCell>
                            <StyledTableBodyCell>{(group.rendimentoLiquido || 0).toFixed(2)}</StyledTableBodyCell>
                            <StyledTableBodyCell>{(group.impostoPago || 0).toFixed(2)}</StyledTableBodyCell>
@@ -454,16 +423,16 @@ export default function TaxPage() {
                 <table className="summary-table">
                     <thead>
                         <tr>
-                            <StyledTableCell component="th" className="summary-header"></StyledTableCell>
-                            <StyledTableCell component="th" className="summary-header"><span className="header-line">Rendimento Líquido</span></StyledTableCell>
-                            <StyledTableCell component="th" className="summary-header"><span className="header-line">Imposto pago no Estrangeiro</span></StyledTableCell>
+                            <th className="summary-header"></th>
+                            <th className="summary-header"><span className="header-line">Rendimento Líquido</span></th>
+                            <th className="summary-header"><span className="header-line">Imposto pago no Estrangeiro</span></th>
                         </tr>
                     </thead>
                     <tbody>
                         <tr>
-                            <StyledTableCell component="td" className="control-sum">Soma de Controlo</StyledTableCell>
-                            <StyledTableCell component="td" className="summary-value">{optionTotals.rendimentoLiquido.toFixed(2)} €</StyledTableCell>
-                            <StyledTableCell component="td" className="summary-value">{optionTotals.imposto.toFixed(2)} €</StyledTableCell>
+                            <td className="control-sum">Soma de Controlo</td>
+                            <td className="summary-value">{optionTotals.rendimentoLiquido.toFixed(2)} €</td>
+                            <td className="summary-value">{optionTotals.imposto.toFixed(2)} €</td>
                         </tr>
                     </tbody>
                 </table>

@@ -37,11 +37,10 @@ export default function Layout({ children }) {
   };
 
   const navItems = [
-    { title: 'Dashboard', to: '/dashboard' },
-    { title: 'Upload', to: '/upload' },
-    { title: 'Realized Gains', to: '/realizedgains' },
-    { title: 'Tax Report', to: '/tax' },
-    { title: 'Transactions', to: '/transactions' },
+    { title: 'Carregar Transações', to: '/upload' },
+    { title: 'Ganhos', to: '/realizedgains' },
+    { title: 'IRS', to: '/tax' },
+    { title: 'Transações', to: '/transactions' },
   ];
 
   return (
@@ -137,11 +136,11 @@ export default function Layout({ children }) {
                     </Box>
                     <MenuItem onClick={handleSettings}>
                       <SettingsIcon sx={{ mr: 1, color: 'text.secondary' }} fontSize="small" />
-                      Settings
+                      Configurações
                     </MenuItem>
                     <MenuItem onClick={handleLogout}>
                       <LogoutIcon sx={{ mr: 1, color: 'text.secondary' }} fontSize="small" />
-                      Logout
+                      Sair
                     </MenuItem>
                   </Menu>
                 </Box>

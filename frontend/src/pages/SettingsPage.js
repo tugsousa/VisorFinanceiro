@@ -35,11 +35,11 @@ function SettingsPage() {
       setNewPassword('');
       setConfirmNewPassword('');
       setChangePasswordError('');
-      setChangePasswordSuccess(data.data.message || 'Password changed successfully!');
+      setChangePasswordSuccess(data.data.message || 'Password mudada com sucesso!');
     },
     onError: (error) => {
       setChangePasswordSuccess('');
-      setChangePasswordError(error.response?.data?.error || error.message || 'Failed to change password.');
+      setChangePasswordError(error.response?.data?.error || error.message || 'Falha ao mudar a password.');
     }
   });
 
@@ -49,12 +49,12 @@ function SettingsPage() {
       setOpenDeleteConfirm(false);
       setDeletePassword(''); // Clear password field
       setDeleteAccountErrorDialog(''); // Clear dialog error
-      alert('Account deleted successfully. You will be logged out.'); // Notify user
-      await performLogout(false, "Account deleted by user");
+      alert('Conta eliminada com sucesso. Vai ser desconectado.'); // Notify user
+      await performLogout(false, "Conta eliminada pelo usuário");
       navigate('/signin');
     },
     onError: (error) => {
-      setDeleteAccountErrorDialog(error.response?.data?.error || error.message || 'Failed to delete account. Password may be incorrect.');
+      setDeleteAccountErrorDialog(error.response?.data?.error || error.message || 'Falha ao tentar eliminar a conta. A password poderá estar incorrecta.');
       // Keep dialog open to show error
     }
   });
@@ -66,15 +66,15 @@ function SettingsPage() {
     setChangePasswordSuccess('');
 
     if (newPassword !== confirmNewPassword) {
-      setChangePasswordError("New passwords do not match.");
+      setChangePasswordError("As passwords novas não são iguais.");
       return;
     }
     if (newPassword.length < 6) {
-      setChangePasswordError("New password must be at least 6 characters long.");
+      setChangePasswordError("A nova password precisa de ter no mínimo 6 caracteres.");
       return;
     }
     if (!currentPassword) {
-      setChangePasswordError("Current password is required.");
+      setChangePasswordError("É necessário a password atual.");
       return;
     }
     await fetchCsrfToken(true); // Ensure CSRF token is fresh
@@ -95,7 +95,7 @@ function SettingsPage() {
   const handleConfirmDeleteAccount = async () => {
     setDeleteAccountErrorDialog(''); // Clear previous dialog errors
     if (!deletePassword) {
-        setDeleteAccountErrorDialog("Please enter your password to confirm account deletion.");
+        setDeleteAccountErrorDialog("Por favor insira a sua password para confirmar a eliminação da conta.");
         return;
     }
     await fetchCsrfToken(true); // Ensure CSRF token is fresh
@@ -105,13 +105,12 @@ function SettingsPage() {
   return (
     <Container maxWidth="md" sx={{ mt: {xs: 2, sm: 4}, mb: 4 }}>
       <Typography variant="h4" component="h1" gutterBottom sx={{ textAlign: {xs: 'center', sm: 'left'} }}>
-        Account Settings
+        Configurações
       </Typography>
 
-      {/* Change Password Section */}
-      <Paper elevation={2} sx={{ p: { xs: 2, sm: 3 }, mb: 4 }}>
+      <Box sx={{ p: { xs: 2, sm: 3 }, mb: 4 }}>
         <Typography variant="h6" component="h2" gutterBottom>
-          Change Password
+          Alterar Senha
         </Typography>
         {changePasswordError && (
           <Alert severity="error" sx={{ mb: 2 }}>{changePasswordError}</Alert>
@@ -126,7 +125,7 @@ function SettingsPage() {
                 required
                 fullWidth
                 name="currentPassword"
-                label="Current Password"
+                label="Senha atual"
                 type="password"
                 value={currentPassword}
                 onChange={(e) => setCurrentPassword(e.target.value)}
@@ -139,7 +138,7 @@ function SettingsPage() {
                 required
                 fullWidth
                 name="newPassword"
-                label="New Password (min. 6 characters)"
+                label="Nova Senha (min. 6 characters)"
                 type="password"
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
@@ -152,7 +151,7 @@ function SettingsPage() {
                 required
                 fullWidth
                 name="confirmNewPassword"
-                label="Confirm New Password"
+                label="Confirmação da nova senha"
                 type="password"
                 value={confirmNewPassword}
                 onChange={(e) => setConfirmNewPassword(e.target.value)}
@@ -167,20 +166,20 @@ function SettingsPage() {
             sx={{ mt: 3, mb: 2 }}
             disabled={changePasswordMutation.isPending}
           >
-            {changePasswordMutation.isPending ? <CircularProgress size={24} color="inherit" /> : 'Change Password'}
+            {changePasswordMutation.isPending ? <CircularProgress size={24} color="inherit" /> : 'Mude a sua senha'}
           </Button>
         </Box>
-      </Paper>
+      </Box>
 
       <Divider sx={{ my: 4 }} />
 
       {/* Delete Account Section */}
-      <Paper elevation={2} sx={{ p: { xs: 2, sm: 3 }, borderColor: 'error.main', borderWidth: 1, borderStyle: 'solid' }}>
+      <Box sx={{ p: { xs: 2, sm: 3 }}}>
         <Typography variant="h6" component="h2" gutterBottom color="error.main">
-          Danger Zone: Delete Account
+          Elimine a sua conta
         </Typography>
         <Typography variant="body2" sx={{ mb: 2 }}>
-          Permanently delete your account and all associated data. This action cannot be undone.
+          Elimine permanentemente a sua conta e toda a informação associada. Esta opção não pode ser desfeita depois de realizada.
         </Typography>
         <Button
           variant="outlined"
@@ -188,24 +187,24 @@ function SettingsPage() {
           onClick={handleOpenDeleteDialog}
           disabled={deleteAccountMutation.isPending}
         >
-          Delete My Account
+          Eliminar a minha conta
         </Button>
-      </Paper>
+      </Box>
 
       {/* Delete Account Confirmation Dialog */}
       <Dialog open={openDeleteConfirm} onClose={handleCloseDeleteDialog} maxWidth="xs" fullWidth>
-        <DialogTitle sx={{backgroundColor: 'error.main', color: 'white'}}>Confirm Account Deletion</DialogTitle>
+        <DialogTitle sx={{backgroundColor: 'error.main', color: 'white'}}>Confirmação de eliminação de conta</DialogTitle>
         <DialogContent sx={{pt: '20px !important' }}> {/* Add padding top for content */}
           <DialogContentText sx={{ mb:2 }}>
-            Are you absolutely sure you want to delete your account? All your data will be permanently removed. This action cannot be undone.
+            Tem a certeza absoluta de que deseja eliminar a sua conta? Todos os seus dados serão removidos permanentemente. Esta opção não pode ser revertida.
             <br/><br/>
-            Please enter your password to confirm.
+            Por favor insira a sua senha para confirmação.
           </DialogContentText>
           <TextField
             autoFocus
             margin="dense"
             id="deletePassword"
-            label="Your Password"
+            label="Sua senha"
             type="password"
             fullWidth
             variant="outlined" // Changed to outlined for better visibility
@@ -221,9 +220,9 @@ function SettingsPage() {
             )}
         </DialogContent>
         <DialogActions sx={{pb: 2, pr: 2}}>
-          <Button onClick={handleCloseDeleteDialog} disabled={deleteAccountMutation.isPending} color="inherit">Cancel</Button>
+          <Button onClick={handleCloseDeleteDialog} disabled={deleteAccountMutation.isPending} color="inherit">Cancelar</Button>
           <Button onClick={handleConfirmDeleteAccount} color="error" variant="contained" disabled={deleteAccountMutation.isPending}>
-            {deleteAccountMutation.isPending ? <CircularProgress size={24} color="inherit"/> : 'Delete Account'}
+            {deleteAccountMutation.isPending ? <CircularProgress size={24} color="inherit"/> : 'Eliminar conta'}
           </Button>
         </DialogActions>
       </Dialog>

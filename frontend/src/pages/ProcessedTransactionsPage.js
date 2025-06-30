@@ -79,7 +79,7 @@ const ProcessedTransactionsPage = () => {
   return (
     <Box sx={{ p: { xs: 2, sm: 3 } }}>
       <Typography variant="h4" component="h1" gutterBottom>
-        Processed Transactions
+        Transações Processadas
       </Typography>
       
       {processedTransactions.length > 0 && !transactionsLoading && (
@@ -90,30 +90,27 @@ const ProcessedTransactionsPage = () => {
             onClick={handleDeleteAllClick}
             disabled={deleteTransactionsMutation.isPending || transactionsLoading}
           >
-            {deleteTransactionsMutation.isPending ? <CircularProgress size={24} color="inherit" /> : "Delete All Transactions"}
+            {deleteTransactionsMutation.isPending ? <CircularProgress size={24} color="inherit" /> : "Eliminar todas as transações"}
           </Button>
         </Box>
       )}
 
       {(processedTransactions.length > 0 || deleteTransactionsMutation.isPending || transactionsLoading) ? (
-        <Paper elevation={3} sx={{ p: { xs: 1, sm: 2 } }}>
-          <Typography variant="body2" sx={{ mb: 1 }}>
-            These are all the transactions processed and stored in the database.
-          </Typography>
+        <Box sx={{ p: { xs: 1, sm: 2 } }}>
           <TableContainer component={Paper} sx={{ maxHeight: '70vh' }}>
             <Table stickyHeader size="small" aria-label="processed transactions table">
               <TableHead>
                 <TableRow>
-                  <TableCell>Date</TableCell>
-                  <TableCell>Product</TableCell>
+                  <TableCell>Data</TableCell>
+                  <TableCell>Produto</TableCell>
                   <TableCell>ISIN</TableCell>
-                  <TableCell>Type</TableCell>
-                  <TableCell align="right">Qty</TableCell>
-                  <TableCell align="right">Price</TableCell>
-                  <TableCell align="right">Amount</TableCell>
-                  <TableCell>Currency</TableCell>
-                  <TableCell align="right">Commission</TableCell>
-                  <TableCell align="right">Amount EUR</TableCell>
+                  <TableCell>TipoOperação</TableCell>
+                  <TableCell align="right">Quantidade</TableCell>
+                  <TableCell align="right">Preço</TableCell>
+                  <TableCell align="right">Montante</TableCell>
+                  <TableCell>Moeda</TableCell>
+                  <TableCell align="right">Comissão</TableCell>
+                  <TableCell align="right">Montante em EUR</TableCell>
                   <TableCell>Order ID</TableCell>
                 </TableRow>
               </TableHead>
@@ -136,10 +133,10 @@ const ProcessedTransactionsPage = () => {
               </TableBody>
             </Table>
           </TableContainer>
-        </Paper>
+        </Box>
       ) : (
         <Typography sx={{ textAlign: 'center', mt: 2 }}>
-          No processed transactions found.
+          Nenhuma transação processada encontrada.
         </Typography>
       )}
 
@@ -149,23 +146,23 @@ const ProcessedTransactionsPage = () => {
         aria-labelledby="alert-dialog-title"
         aria-describedby="alert-dialog-description"
       >
-        <DialogTitle id="alert-dialog-title">{"Confirm Deletion"}</DialogTitle>
+        <DialogTitle id="alert-dialog-title">{"Confirmar exclusão"}</DialogTitle>
         <DialogContent>
           <DialogContentText id="alert-dialog-description">
-            Are you sure you want to delete ALL processed transactions? This action cannot be undone.
+            Tem a certeza de que deseja excluir todas as transações processadas? Esta ação não pode ser revertida.
           </DialogContentText>
           {deleteTransactionsMutation.isError && (
             <Alert severity="error" sx={{ mt: 2 }}>
-              {deleteTransactionsMutation.error.response?.data?.error || deleteTransactionsMutation.error.message || "Failed to delete transactions."}
+              {deleteTransactionsMutation.error.response?.data?.error || deleteTransactionsMutation.error.message || "Falha a excluir as transações."}
             </Alert>
           )}
         </DialogContent>
         <DialogActions>
           <Button onClick={handleCloseDeleteConfirmDialog} color="primary" disabled={deleteTransactionsMutation.isPending}>
-            Cancel
+            Cancelar
           </Button>
           <Button onClick={handleConfirmDeleteAll} color="error" autoFocus disabled={deleteTransactionsMutation.isPending}>
-            {deleteTransactionsMutation.isPending ? <CircularProgress size={24} /> : "Delete All"}
+            {deleteTransactionsMutation.isPending ? <CircularProgress size={24} /> : "Excluir tudo"}
           </Button>
         </DialogActions>
       </Dialog>
