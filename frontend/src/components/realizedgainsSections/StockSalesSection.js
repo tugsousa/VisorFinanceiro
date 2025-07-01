@@ -20,7 +20,8 @@ const columns = [
         headerName: 'Days Held',
         width: 100,
         type: 'number',
-        valueGetter: (params) => calculateDaysHeld(params.row.BuyDate, params.row.SaleDate),
+        // FIX: Updated valueGetter signature from (params) to (_, row)
+        valueGetter: (_, row) => calculateDaysHeld(row.BuyDate, row.SaleDate),
     },
     { field: 'ProductName', headerName: 'Product', flex: 1, minWidth: 200 },
     { field: 'Quantity', headerName: 'Qty', type: 'number', width: 80 },
@@ -39,16 +40,17 @@ const columns = [
         field: 'annualizedReturn',
         headerName: 'Annualized',
         width: 130,
-        valueGetter: (params) => parseFloat(calculateAnnualizedReturnForStocksLocal(params.row)) || 0,
+        // FIX: Updated valueGetter signature from (params) to (_, row)
+        valueGetter: (_, row) => parseFloat(calculateAnnualizedReturnForStocksLocal(row)) || 0,
         renderCell: (params) => (
             <Typography sx={{ color: params.value >= 0 ? 'success.main' : 'error.main' }}>
                 {`${params.value.toFixed(2)}%`}
             </Typography>
         ),
     },
-    { field: 'BuyAmountEUR', headerName: 'Cost Basis (€)', type: 'number', width: 130, valueFormatter: (params) => params.value?.toFixed(2) },
-    { field: 'SaleAmountEUR', headerName: 'Proceeds (€)', type: 'number', width: 130, valueFormatter: (params) => params.value?.toFixed(2) },
-    { field: 'Commission', headerName: 'Commission (€)', type: 'number', width: 120, valueFormatter: (params) => params.value?.toFixed(2) },
+    { field: 'BuyAmountEUR', headerName: 'Cost Basis (€)', type: 'number', width: 130, valueFormatter: (value) => typeof value === 'number' ? value.toFixed(2) : '' },
+    { field: 'SaleAmountEUR', headerName: 'Proceeds (€)', type: 'number', width: 130, valueFormatter: (value) => typeof value === 'number' ? value.toFixed(2) : '' },
+    { field: 'Commission', headerName: 'Commission (€)', type: 'number', width: 120, valueFormatter: (value) => typeof value === 'number' ? value.toFixed(2) : '' },
 ];
 
 export default function StockSalesSection({ stockSalesData, selectedYear }) {

@@ -12,15 +12,18 @@ const columns = [
     headerName: 'Avg. Cost (€)', 
     type: 'number', 
     width: 120, 
-    valueGetter: (params) => params.row.quantity > 0 ? (params.row.buy_amount_eur / params.row.quantity) : 0,
-    valueFormatter: (params) => params.value.toFixed(2),
+    // FIX: Updated valueGetter signature from (params) to (_, row)
+    valueGetter: (_, row) => row.quantity > 0 ? (row.buy_amount_eur / row.quantity) : 0,
+    // FIX: Updated valueFormatter signature from (params) to (value)
+    valueFormatter: (value) => typeof value === 'number' ? value.toFixed(2) : '',
   },
   { 
     field: 'buy_amount_eur', 
     headerName: 'Total Cost (€)', 
     type: 'number', 
     width: 130, 
-    valueFormatter: (params) => params.value.toFixed(2),
+    // FIX: Updated valueFormatter signature from (params) to (value)
+    valueFormatter: (value) => typeof value === 'number' ? value.toFixed(2) : '',
   },
   { field: 'buy_currency', headerName: 'Currency', width: 90 },
 ];

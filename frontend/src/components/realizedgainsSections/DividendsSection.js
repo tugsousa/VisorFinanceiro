@@ -8,9 +8,11 @@ import { getBaseProductName } from '../../utils/chartUtils';
 const columns = [
   { field: 'Date', headerName: 'Date', width: 110 },
   { field: 'ProductName', headerName: 'Product', flex: 1, minWidth: 200 },
-  { field: 'Amount', headerName: 'Amount', type: 'number', width: 120, valueFormatter: (params) => params.value?.toFixed(2) },
+  // FIX: Updated valueFormatter signature
+  { field: 'Amount', headerName: 'Amount', type: 'number', width: 120, valueFormatter: (value) => typeof value === 'number' ? value.toFixed(2) : '' },
   { field: 'Currency', headerName: 'Currency', width: 90 },
-  { field: 'ExchangeRate', headerName: 'Exch. Rate', type: 'number', width: 120, valueFormatter: (params) => params.value?.toFixed(4) },
+  // FIX: Updated valueFormatter signature
+  { field: 'ExchangeRate', headerName: 'Exch. Rate', type: 'number', width: 120, valueFormatter: (value) => typeof value === 'number' ? value.toFixed(4) : '' },
   {
     field: 'AmountEUR',
     headerName: 'Amount (€)',

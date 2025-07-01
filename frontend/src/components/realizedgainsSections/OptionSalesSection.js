@@ -20,7 +20,8 @@ const columns = [
         headerName: 'Days Held',
         width: 100,
         type: 'number',
-        valueGetter: (params) => calculateDaysHeld(params.row.open_date, params.row.close_date),
+        // FIX: Updated valueGetter signature
+        valueGetter: (_, row) => calculateDaysHeld(row.open_date, row.close_date),
     },
     { field: 'product_name', headerName: 'Product', flex: 1, minWidth: 200 },
     { field: 'quantity', headerName: 'Qty', type: 'number', width: 80 },
@@ -39,16 +40,17 @@ const columns = [
         field: 'annualizedReturn',
         headerName: 'Annualized',
         width: 130,
-        valueGetter: (params) => parseFloat(calculateAnnualizedReturnForOptionsLocal(params.row)) || 0,
+        // FIX: Updated valueGetter signature
+        valueGetter: (_, row) => parseFloat(calculateAnnualizedReturnForOptionsLocal(row)) || 0,
         renderCell: (params) => (
             <Typography sx={{ color: params.value >= 0 ? 'success.main' : 'error.main' }}>
                 {`${params.value.toFixed(2)}%`}
             </Typography>
         ),
     },
-    { field: 'open_amount_eur', headerName: 'Open Amt (€)', type: 'number', width: 130, valueFormatter: (params) => params.value?.toFixed(2) },
-    { field: 'close_amount_eur', headerName: 'Close Amt (€)', type: 'number', width: 130, valueFormatter: (params) => params.value?.toFixed(2) },
-    { field: 'commission', headerName: 'Commission (€)', type: 'number', width: 120, valueFormatter: (params) => params.value?.toFixed(2) },
+    { field: 'open_amount_eur', headerName: 'Open Amt (€)', type: 'number', width: 130, valueFormatter: (value) => typeof value === 'number' ? value.toFixed(2) : '' },
+    { field: 'close_amount_eur', headerName: 'Close Amt (€)', type: 'number', width: 130, valueFormatter: (value) => typeof value === 'number' ? value.toFixed(2) : '' },
+    { field: 'commission', headerName: 'Commission (€)', type: 'number', width: 120, valueFormatter: (value) => typeof value === 'number' ? value.toFixed(2) : '' },
 ];
 
 export default function OptionSalesSection({ optionSalesData, selectedYear }) {
