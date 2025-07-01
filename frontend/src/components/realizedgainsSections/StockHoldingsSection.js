@@ -1,59 +1,59 @@
-// frontend/src/components/dashboardSections/StockHoldingsSection.js
 import React from 'react';
-import {
-  Typography, Paper, Table, TableBody, TableCell,
-  TableContainer, TableHead, TableRow
-} from '@mui/material';
+import { Typography, Paper, Box } from '@mui/material';
+import { DataGrid } from '@mui/x-data-grid';
 
-export default function StockHoldingsSection({ holdingsData, selectedYear }) {
+const columns = [
+  { field: 'product_name', headerName: 'Product', flex: 1, minWidth: 200 },
+  { field: 'isin', headerName: 'ISIN', width: 130 },
+  { field: 'buy_date', headerName: 'Buy Date', width: 110 },
+  { field: 'quantity', headerName: 'Qty', type: 'number', width: 80, align: 'right' },
+  { 
+    field: 'averageCostEUR', 
+    headerName: 'Avg. Cost (€)', 
+    type: 'number', 
+    width: 120, 
+    valueGetter: (params) => params.row.quantity > 0 ? (params.row.buy_amount_eur / params.row.quantity) : 0,
+    valueFormatter: (params) => params.value.toFixed(2),
+  },
+  { 
+    field: 'buy_amount_eur', 
+    headerName: 'Total Cost (€)', 
+    type: 'number', 
+    width: 130, 
+    valueFormatter: (params) => params.value.toFixed(2),
+  },
+  { field: 'buy_currency', headerName: 'Currency', width: 90 },
+];
+
+export default function StockHoldingsSection({ holdingsData }) {
   if (!holdingsData || holdingsData.length === 0) {
     return (
-      <Paper elevation={0} sx={{ p: 2, mb: 3 , border: 'none'}}>
-        {/* Title Removed */}
-        <Typography>No stock holdings data to display{selectedYear !== 'all' ? ` for ${selectedYear}` : ''}.</Typography>
+      <Paper elevation={0} sx={{ p: 2, mb: 3, border: 'none' }}>
+        <Typography>No stock holdings data to display.</Typography>
       </Paper>
     );
   }
 
-  // Calculate average cost and total cost if not already done or to ensure consistent formatting
-  const processedHoldings = holdingsData.map(stock => ({
-    ...stock,
-    averageCostEUR: stock.quantity > 0 && stock.buy_amount_eur !== undefined ? (stock.buy_amount_eur / stock.quantity) : 0,
-    totalCostEUR: stock.buy_amount_eur !== undefined ? stock.buy_amount_eur : 0,
+  const rows = holdingsData.map((holding, index) => ({
+    id: `${holding.isin}-${holding.buy_date}-${index}`,
+    ...holding,
   }));
 
-
   return (
-    <Paper elevation={0} sx={{ p: 2, mb: 3 , border: 'none'}}>
-      {/* Title removed */}
-      <TableContainer sx={{ maxHeight: 400 }}>
-        <Table stickyHeader size="small">
-          <TableHead>
-            <TableRow>
-              <TableCell>Product Name</TableCell>
-              <TableCell>ISIN</TableCell>
-              <TableCell>Buy Date</TableCell>
-              <TableCell align="right">Quantity</TableCell>
-              <TableCell align="right">Avg. Cost (EUR)</TableCell>
-              <TableCell align="right">Total Cost (EUR)</TableCell>
-              <TableCell>Currency</TableCell>
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {processedHoldings.map((holding, index) => (
-              <TableRow hover key={`${holding.isin}-${holding.buy_date}-${index}`}>
-                <TableCell>{holding.product_name}</TableCell>
-                <TableCell>{holding.isin}</TableCell>
-                <TableCell>{holding.buy_date}</TableCell>
-                <TableCell align="right">{holding.quantity}</TableCell>
-                <TableCell align="right">{holding.averageCostEUR.toFixed(2)}</TableCell>
-                <TableCell align="right">{holding.totalCostEUR.toFixed(2)}</TableCell>
-                <TableCell>{holding.buy_currency}</TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </TableContainer>
+    <Paper elevation={0} sx={{ p: 2, mb: 3, border: 'none' }}>
+      <Typography variant="h6" sx={{ mb: 2 }}>Stock Holdings</Typography>
+      <Box sx={{ height: 400, width: '100%' }}>
+        <DataGrid
+          rows={rows}
+          columns={columns}
+          initialState={{
+            pagination: { paginationModel: { pageSize: 10 } },
+            sorting: { sortModel: [{ field: 'buy_amount_eur', sort: 'desc' }] },
+          }}
+          pageSizeOptions={[10, 25, 50]}
+          disableRowSelectionOnClick
+        />
+      </Box>
     </Paper>
   );
 }
