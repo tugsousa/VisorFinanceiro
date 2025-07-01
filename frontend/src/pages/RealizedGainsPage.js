@@ -1,3 +1,6 @@
+// frontend/src/pages/RealizedGainsPage.js
+
+// ... (imports remain the same, including PLContributionChart)
 import React, { useState, useEffect } from 'react';
 import {
   Typography, Box, FormControl, InputLabel, Select, MenuItem,
@@ -15,6 +18,8 @@ import OptionSalesSection from '../components/realizedgainsSections/OptionSalesS
 import DividendsSection from '../components/realizedgainsSections/DividendsSection';
 import OverallPLChart from '../components/realizedgainsSections/OverallPLChart';
 import HoldingsAllocationChart from '../components/realizedgainsSections/HoldingsAllocationChart';
+import PLContributionChart from '../components/realizedgainsSections/PLContributionChart';
+
 
 const isDataEmpty = (data) => {
   if (!data) return true;
@@ -39,7 +44,7 @@ export default function RealizedGainsPage() {
     derivedDividendTaxSummary,
     availableYears,
     holdingsChartData,
-    isLoading, // This is the key state from react-query
+    isLoading, 
     isError,
     error,
   } = useRealizedGains(token, selectedYear);
@@ -55,19 +60,14 @@ export default function RealizedGainsPage() {
   const handleYearChange = (event) => setSelectedYear(event.target.value);
   const handleTabChange = (event, newValue) => setCurrentTab(newValue);
 
-  // *** THE CORE FIX IS HERE ***
-  // We explicitly handle the loading state first.
   if (isLoading) {
     return <CircularProgress sx={{ display: 'block', margin: 'auto', mt: 4 }} />;
   }
 
-  // Then handle the error state.
   if (isError) {
     return <Alert severity="error" sx={{ m: 2 }}>{error?.message || UI_TEXT.errorLoadingData}</Alert>;
   }
   
-  // Only after confirming loading is done and there's no error,
-  // we check if the final data is empty.
   if (isDataEmpty(allData)) {
     return (
       <Box sx={{ p: 3, textAlign: 'center', mt: 4 }}>
@@ -77,33 +77,41 @@ export default function RealizedGainsPage() {
     );
   }
 
-  // If we reach here, it means isLoading is false, isError is false, and data is not empty.
   return (
     <Box sx={{ p: { xs: 1, sm: 2, md: 3 } }}>
-      <Typography variant="h4" component="h1" gutterBottom>
-        Portfolio Analysis
-      </Typography>
-
-      <Grid container spacing={2} sx={{ mb: 3, alignItems: 'center' }}>
-        <Grid item>
-          <FormControl sx={{ minWidth: 150 }} size="small">
-            <InputLabel id="year-select-label">Year</InputLabel>
-            <Select
-              labelId="year-select-label"
-              value={selectedYear}
-              label="Year"
-              onChange={handleYearChange}
-              disabled={availableYears.length <= 1}
-            >
-              {availableYears.map(year => (
-                <MenuItem key={year} value={year}>
-                  {year === ALL_YEARS_OPTION ? 'All Years' : year}
-                </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
-        </Grid>
-      </Grid>
+      <Box sx={{ 
+        display: 'flex', 
+        justifyContent: 'space-between', 
+        alignItems: { xs: 'flex-start', sm: 'center' }, 
+        flexDirection: { xs: 'column', sm: 'row' },
+        mb: 3 
+      }}>
+        <Typography variant="h4" component="h1" sx={{ mb: { xs: 2, sm: 0 } }}>
+          Portfolio Analysis
+        </Typography>
+        <FormControl 
+          sx={{ 
+            minWidth: 150,
+            width: { xs: '100%', sm: 'auto' } 
+          }} 
+          size="small"
+        >
+          <InputLabel id="year-select-label">Year</InputLabel>
+          <Select
+            labelId="year-select-label"
+            value={selectedYear}
+            label="Year"
+            onChange={handleYearChange}
+            disabled={availableYears.length <= 1}
+          >
+            {availableYears.map(year => (
+              <MenuItem key={year} value={year}>
+                {year === ALL_YEARS_OPTION ? 'All Years' : year}
+              </MenuItem>
+            ))}
+          </Select>
+        </FormControl>
+      </Box>
       
       <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 3 }}>
         <Tabs value={currentTab} onChange={handleTabChange} aria-label="portfolio analysis sections" variant="scrollable" scrollButtons="auto">
@@ -148,10 +156,15 @@ export default function RealizedGainsPage() {
               </Paper>
           </Grid>
           <Grid item xs={12} lg={7}>
-             {/* You can add another summary chart here, e.g., a Line chart of P/L over time */}
-              <Paper elevation={1} sx={{ p: 2, height: 400, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                 <Typography color="text.secondary">Additional Chart Area</Typography>
-              </Paper>
+            <Paper elevation={1} sx={{ p: 2, height: 400 }}>
+               <PLContributionChart 
+                  stockSaleDetails={allData.StockSaleDetails || []}
+                  optionSaleDetails={allData.OptionSaleDetails || []}
+                  dividendTaxResultForChart={derivedDividendTaxSummary}
+                  // --- PASS THE PROP ---
+                  selectedYear={selectedYear}
+               />
+            </Paper>
           </Grid>
         </Grid>
       )}

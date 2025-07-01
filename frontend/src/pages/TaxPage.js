@@ -64,7 +64,6 @@ export default function TaxPage() {
 
   const [selectedYear, setSelectedYear] = useState(NO_YEAR_SELECTED);
 
-  // Derive availableYears directly from the API data using useMemo
   const availableYears = useMemo(() => {
     if (!taxApiData) return [];
     const dateAccessors = {
@@ -84,8 +83,6 @@ export default function TaxPage() {
       .sort((a, b) => b.localeCompare(a));
   }, [taxApiData]);
 
-  // This useEffect now has a single, clear responsibility: to set the default selected year
-  // once the available years are calculated. This is a valid use of useEffect.
   useEffect(() => {
     if (availableYears.length > 0) {
       const currentSystemYear = new Date().getFullYear();
@@ -93,14 +90,13 @@ export default function TaxPage() {
       if (availableYears.includes(targetDefaultYearStr)) {
         setSelectedYear(targetDefaultYearStr);
       } else {
-        setSelectedYear(availableYears[0]); // Default to the most recent year in the data
+        setSelectedYear(availableYears[0]);
       }
     } else if (!queryLoading) {
       setSelectedYear(NO_YEAR_SELECTED);
     }
   }, [availableYears, queryLoading]);
 
-  // Derive filtered data for the selected year using useMemo
   const { stockSaleDetails, optionSaleDetails, dividendTaxReportRows, groupedOptionData } = useMemo(() => {
     const year = selectedYear;
     if (year === NO_YEAR_SELECTED || !taxApiData) {
@@ -147,7 +143,6 @@ export default function TaxPage() {
     };
   }, [selectedYear, taxApiData]);
 
-
   const loading = queryLoading || (token && !taxApiData && !apiError);
 
   const handleYearChange = (event) => {
@@ -188,38 +183,47 @@ export default function TaxPage() {
     return <Alert severity="error" sx={{ m: 2 }}>{apiError}</Alert>;
   }
 
-  // The rest of the JSX remains the same, but it will now use the memoized values
-  // like `stockSaleDetails`, `optionTotals`, etc.
   return (
     <Box sx={{ p: { xs: 1, sm: 2 } }}>
-      <Typography variant="h4" component="h1" gutterBottom sx={{ mb: 2 }}>
-        Preencher Declaração IRS
-      </Typography>
-      
-      <Grid container spacing={2} sx={{ mb: 3, alignItems: 'center' }}>
-        <Grid item>
-          <FormControl sx={{ minWidth: 150 }} size="small">
-            <InputLabel id="year-select-taxpage-label">Year</InputLabel>
-            <Select
-              labelId="year-select-taxpage-label"
-              value={selectedYear}
-              label="Year"
-              onChange={handleYearChange}
-              disabled={loading || (availableYears.length === 0 && selectedYear === NO_YEAR_SELECTED)}
+      {/* --- START OF CHANGES --- */}
+      <Box sx={{ 
+        display: 'flex', 
+        justifyContent: 'space-between', 
+        alignItems: { xs: 'flex-start', sm: 'center' }, 
+        flexDirection: { xs: 'column', sm: 'row' },
+        mb: 3 
+      }}>
+        <Typography variant="h4" component="h1" sx={{ mb: { xs: 2, sm: 0 } }}>
+          Preencher Declaração IRS
+        </Typography>
+        <FormControl 
+          sx={{ 
+            minWidth: 150,
+            width: { xs: '100%', sm: 'auto' } 
+          }} 
+          size="small"
+        >
+          <InputLabel id="year-select-taxpage-label">Year</InputLabel>
+          <Select
+            labelId="year-select-taxpage-label"
+            value={selectedYear}
+            label="Year"
+            onChange={handleYearChange}
+            disabled={loading || (availableYears.length === 0 && selectedYear === NO_YEAR_SELECTED)}
+          >
+            <MenuItem
+              value={NO_YEAR_SELECTED}
+              disabled={availableYears.length > 0}
             >
-              <MenuItem
-                value={NO_YEAR_SELECTED}
-                disabled={availableYears.length > 0}
-              >
-                {availableYears.length === 0 ? "No Data" : "Select Year"}
-              </MenuItem>
-              {availableYears.map(year => (
-                <MenuItem key={year} value={String(year)}>{year}</MenuItem>
-              ))}
-            </Select>
-          </FormControl>
-        </Grid>
-      </Grid>
+              {availableYears.length === 0 ? "No Data" : "Select Year"}
+            </MenuItem>
+            {availableYears.map(year => (
+              <MenuItem key={year} value={String(year)}>{year}</MenuItem>
+            ))}
+          </Select>
+        </FormControl>
+      </Box>
+      {/* --- END OF CHANGES --- */}
       
       {apiError && (selectedYear !== NO_YEAR_SELECTED || (availableYears.length === 0 && loading)) && (
           <Alert severity="warning" sx={{ mb: 2 }}>{apiError}</Alert>
