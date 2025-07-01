@@ -36,6 +36,7 @@ export const useRealizedGains = (token, selectedYear) => {
     queryFn: apiFetchRealizedGainsData,
     enabled: !!token,
     staleTime: 1000 * 60 * 5, // 5 minutes
+    select: (response) => response.data, // Add this line
   });
 
   // Memoize the derived dividend tax summary
