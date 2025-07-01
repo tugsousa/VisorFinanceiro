@@ -1,27 +1,85 @@
 // frontend/src/pages/ProcessedTransactionsPage.js
-import React, { useState } from 'react'; // Added useState
-import { Typography, Box, Paper, Alert, TableContainer, Table, TableHead, TableRow, TableCell, TableBody, CircularProgress } from '@mui/material';
-import { Button, Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle } from '@mui/material'; // Added Dialog components
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'; // Added useMutation, useQueryClient
-import { apiFetchProcessedTransactions, apiDeleteAllTransactions } from '../api/apiService'; // Added apiDeleteAllTransactions
+import React, { useState } from 'react';
+import { Typography, Box, Paper, Alert, CircularProgress } from '@mui/material';
+import { Button, Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle } from '@mui/material';
+import { DataGrid } from '@mui/x-data-grid';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { apiFetchProcessedTransactions, apiDeleteAllTransactions } from '../api/apiService';
 import { useAuth } from '../context/AuthContext';
 import { UI_TEXT } from '../constants';
+import { parseDateRobust } from '../utils/dateUtils'; // Import the robust date parser
 
 const fetchProcessedTransactions = async () => {
   const response = await apiFetchProcessedTransactions();
-  return response.data || []; // Ensure it returns an array
+  return response.data || [];
 };
 
+// Define columns for the DataGrid outside the component for performance
+const columns = [
+  { 
+    field: 'Date', 
+    headerName: 'Data', 
+    width: 110,
+    type: 'date', // Tell DataGrid this is a date column
+    valueGetter: (value) => parseDateRobust(value), // Convert string to Date object for sorting
+    valueFormatter: (value) => { // Format Date object back to DD-MM-YYYY for display
+      if (!value) return '';
+      const day = String(value.getDate()).padStart(2, '0');
+      const month = String(value.getMonth() + 1).padStart(2, '0');
+      const year = value.getFullYear();
+      return `${day}-${month}-${year}`;
+    }
+  },
+  { field: 'ProductName', headerName: 'Produto', flex: 1, minWidth: 200 },
+  { field: 'ISIN', headerName: 'ISIN', width: 130 },
+  { field: 'OrderType', headerName: 'Tipo Operação', width: 130 },
+  { field: 'Quantity', headerName: 'Qtd.', type: 'number', width: 80, align: 'right', headerAlign: 'right' },
+  { 
+    field: 'Price', 
+    headerName: 'Preço', 
+    type: 'number', 
+    width: 120,
+    align: 'right', headerAlign: 'right',
+    valueFormatter: (value) => typeof value === 'number' ? value.toFixed(4) : ''
+  },
+  { 
+    field: 'Amount', 
+    headerName: 'Montante', 
+    type: 'number', 
+    width: 120,
+    align: 'right', headerAlign: 'right',
+    valueFormatter: (value) => typeof value === 'number' ? value.toFixed(2) : ''
+  },
+  { field: 'Currency', headerName: 'Moeda', width: 90, align: 'center', headerAlign: 'center' },
+  { 
+    field: 'Commission', 
+    headerName: 'Comissão', 
+    type: 'number', 
+    width: 110,
+    align: 'right', headerAlign: 'right',
+    valueFormatter: (value) => typeof value === 'number' ? value.toFixed(2) : ''
+  },
+  { 
+    field: 'AmountEUR', 
+    headerName: 'Montante (€)', 
+    type: 'number', 
+    width: 130,
+    align: 'right', headerAlign: 'right',
+    valueFormatter: (value) => typeof value === 'number' ? value.toFixed(2) : ''
+  },
+  { field: 'OrderID', headerName: 'Order ID', width: 150 },
+];
+
+
 const ProcessedTransactionsPage = () => {
-  const { token, refreshUserDataCheck } = useAuth(); // Get refreshUserDataCheck
-  const queryClient = useQueryClient(); // Get queryClient
+  const { token, refreshUserDataCheck } = useAuth();
+  const queryClient = useQueryClient();
 
   const { 
-    data: processedTransactions = [], // Default to empty array
+    data: processedTransactions = [],
     isLoading: transactionsLoading, 
-    error: transactionsErrorObj, // Rename to avoid conflict with potential error string
+    error: transactionsErrorObj,
     isError: isTransactionsError,
-    // refetch // React Query handles refetching via queryClient.invalidateQueries
   } = useQuery({
     queryKey: ['processedTransactions', token],
     queryFn: fetchProcessedTransactions,
@@ -34,17 +92,14 @@ const ProcessedTransactionsPage = () => {
     mutationFn: apiDeleteAllTransactions,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['processedTransactions', token] });
-      refreshUserDataCheck(); // Update hasInitialData in AuthContext
-      // Potentially invalidate other queries if they depend on transactions
+      refreshUserDataCheck();
       queryClient.invalidateQueries({ queryKey: ['realizedGainsData', token] });
       queryClient.invalidateQueries({ queryKey: ['taxReportData', token] });
-      // TODO: Add a success snackbar or alert here
-      setShowDeleteConfirmDialog(false); // Close dialog on success
+      setShowDeleteConfirmDialog(false);
     },
     onError: (error) => {
-      // TODO: Add an error snackbar or alert here
       console.error("Error deleting transactions:", error);
-      setShowDeleteConfirmDialog(false); // Close dialog on error
+      setShowDeleteConfirmDialog(false);
     },
   });
 
@@ -71,7 +126,6 @@ const ProcessedTransactionsPage = () => {
     );
   }
 
-  // This error is for fetching, mutation will have its own error handling (e.g. snackbar)
   if (transactionsError && !deleteTransactionsMutation.isPending) {
     return <Alert severity="error" sx={{ my: 2, mx: { xs: 2, sm: 3 } }}>{transactionsError}</Alert>;
   }
@@ -95,48 +149,27 @@ const ProcessedTransactionsPage = () => {
         </Box>
       )}
 
-      {(processedTransactions.length > 0 || deleteTransactionsMutation.isPending || transactionsLoading) ? (
-        <Box sx={{ p: { xs: 1, sm: 2 } }}>
-          <TableContainer component={Paper} sx={{ maxHeight: '70vh' }}>
-            <Table stickyHeader size="small" aria-label="processed transactions table">
-              <TableHead>
-                <TableRow>
-                  <TableCell>Data</TableCell>
-                  <TableCell>Produto</TableCell>
-                  <TableCell>ISIN</TableCell>
-                  <TableCell>TipoOperação</TableCell>
-                  <TableCell align="right">Quantidade</TableCell>
-                  <TableCell align="right">Preço</TableCell>
-                  <TableCell align="right">Montante</TableCell>
-                  <TableCell>Moeda</TableCell>
-                  <TableCell align="right">Comissão</TableCell>
-                  <TableCell align="right">Montante em EUR</TableCell>
-                  <TableCell>Order ID</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {processedTransactions.map((transaction) => (
-                  <TableRow hover key={transaction.id || transaction.OrderID}>
-                    <TableCell>{transaction.Date || ''}</TableCell>
-                    <TableCell>{transaction.ProductName || ''}</TableCell>
-                    <TableCell>{transaction.ISIN || ''}</TableCell>
-                    <TableCell>{transaction.OrderType || ''}</TableCell>
-                    <TableCell align="right">{transaction.Quantity}</TableCell>
-                    <TableCell align="right">{transaction.Price?.toFixed(4) || '0.0000'}</TableCell>
-                    <TableCell align="right">{transaction.Amount?.toFixed(2) || '0.00'}</TableCell>
-                    <TableCell>{transaction.Currency || ''}</TableCell>
-                    <TableCell align="right">{transaction.Commission?.toFixed(2) || '0.00'}</TableCell>
-                    <TableCell align="right">{transaction.AmountEUR?.toFixed(2) || '0.00'}</TableCell>
-                    <TableCell>{transaction.OrderID || ''}</TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </TableContainer>
-        </Box>
+      {processedTransactions.length > 0 ? (
+        <Paper sx={{ height: '75vh', width: '100%' }}>
+          <DataGrid
+            rows={processedTransactions}
+            columns={columns}
+            initialState={{
+              pagination: {
+                paginationModel: { pageSize: 50, page: 0 },
+              },
+              sorting: {
+                sortModel: [{ field: 'Date', sort: 'desc' }],
+              },
+            }}
+            pageSizeOptions={[10, 25, 50, 100]}
+            disableRowSelectionOnClick
+            density="compact"
+          />
+        </Paper>
       ) : (
-        <Typography sx={{ textAlign: 'center', mt: 2 }}>
-          Nenhuma transação processada encontrada.
+        <Typography sx={{ textAlign: 'center', mt: 4, fontStyle: 'italic', color: 'text.secondary' }}>
+          {transactionsLoading ? "A carregar..." : "Nenhuma transação processada encontrada."}
         </Typography>
       )}
 
