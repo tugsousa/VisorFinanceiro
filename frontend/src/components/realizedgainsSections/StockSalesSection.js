@@ -1,9 +1,9 @@
 import React, { useMemo } from 'react';
-import { Typography, Paper, Box } from '@mui/material';
+import { Typography, Paper, Box, Grid } from '@mui/material';
 import { DataGrid } from '@mui/x-data-grid';
 import { Bar } from 'react-chartjs-2';
-import { ALL_YEARS_OPTION } from '../../constants';
-import { getYearString, calculateDaysHeld } from '../../utils/dateUtils';
+import { ALL_YEARS_OPTION, MONTH_NAMES_CHART } from '../../constants';
+import { getYearString, getMonthIndex, calculateDaysHeld } from '../../utils/dateUtils';
 import { getBaseProductName } from '../../utils/chartUtils';
 import { calculateAnnualizedReturn } from '../../utils/formatUtils';
 
@@ -20,7 +20,6 @@ const columns = [
         headerName: 'Days Held',
         width: 100,
         type: 'number',
-        // FIX: Updated valueGetter signature from (params) to (_, row)
         valueGetter: (_, row) => calculateDaysHeld(row.BuyDate, row.SaleDate),
     },
     { field: 'ProductName', headerName: 'Product', flex: 1, minWidth: 200 },
@@ -40,7 +39,6 @@ const columns = [
         field: 'annualizedReturn',
         headerName: 'Annualized',
         width: 130,
-        // FIX: Updated valueGetter signature from (params) to (_, row)
         valueGetter: (_, row) => parseFloat(calculateAnnualizedReturnForStocksLocal(row)) || 0,
         renderCell: (params) => (
             <Typography sx={{ color: params.value >= 0 ? 'success.main' : 'error.main' }}>
@@ -54,10 +52,14 @@ const columns = [
 ];
 
 export default function StockSalesSection({ stockSalesData, selectedYear }) {
-    // Chart logic can remain the same
-    const salesChartData = useMemo(() => {
-        if (!stockSalesData || stockSalesData.length === 0) return { labels: [], datasets: [] };
+    const { salesByProductChartData, salesByTimeSeriesChartData } = useMemo(() => {
+        const emptyResult = {
+            salesByProductChartData: { labels: [], datasets: [] },
+            salesByTimeSeriesChartData: { labels: [], datasets: [] },
+        };
+        if (!stockSalesData || stockSalesData.length === 0) return emptyResult;
 
+        // --- P/L by Product Chart Data ---
         const productPLMap = {};
         stockSalesData.forEach(sale => {
             if (sale.Delta != null) {
@@ -76,25 +78,79 @@ export default function StockSalesSection({ stockSalesData, selectedYear }) {
             const othersPL = otherItems.reduce((sum, [, pl]) => sum + pl, 0);
             chartItems.push({ name: 'Others', pl: othersPL });
         }
-
         chartItems.sort((a, b) => a.pl - b.pl);
+        
+        const productChart = {
+            labels: chartItems.map(item => item.name),
+            datasets: [{
+                data: chartItems.map(item => item.pl),
+                backgroundColor: chartItems.map(item => item.pl >= 0 ? 'rgba(75, 192, 192, 0.6)' : 'rgba(255, 99, 132, 0.6)'),
+                borderWidth: 1,
+            }]
+        };
 
-        const labels = chartItems.map(item => item.name);
-        const data = chartItems.map(item => item.pl);
-        const backgroundColors = data.map(pl => pl >= 0 ? 'rgba(75, 192, 192, 0.6)' : 'rgba(255, 99, 132, 0.6)');
+        // --- P/L by Time-Series Chart Data ---
+        let timeSeriesChart;
+        if (selectedYear === ALL_YEARS_OPTION) {
+            const yearlyMap = {};
+            stockSalesData.forEach(sale => {
+                const year = getYearString(sale.SaleDate);
+                if (year && sale.Delta != null) {
+                    yearlyMap[year] = (yearlyMap[year] || 0) + sale.Delta;
+                }
+            });
+            const sortedYears = Object.keys(yearlyMap).sort((a, b) => a.localeCompare(b));
+            timeSeriesChart = {
+                labels: sortedYears,
+                datasets: [{
+                    data: sortedYears.map(year => yearlyMap[year]),
+                    backgroundColor: sortedYears.map(year => (yearlyMap[year] >= 0 ? 'rgba(153, 102, 255, 0.6)' : 'rgba(255, 159, 64, 0.6)')),
+                    borderWidth: 1,
+                }]
+            };
+        } else {
+            const monthlyData = new Array(12).fill(0);
+            stockSalesData.forEach(sale => {
+                const monthIndex = getMonthIndex(sale.SaleDate);
+                if (monthIndex !== null && sale.Delta != null) {
+                    monthlyData[monthIndex] += sale.Delta;
+                }
+            });
+            timeSeriesChart = {
+                labels: MONTH_NAMES_CHART,
+                datasets: [{
+                    data: monthlyData,
+                    backgroundColor: monthlyData.map(pl => (pl >= 0 ? 'rgba(153, 102, 255, 0.6)' : 'rgba(255, 159, 64, 0.6)')),
+                    borderWidth: 1,
+                }]
+            };
+        }
 
-        return { labels, datasets: [{ data, backgroundColor: backgroundColors, borderWidth: 1 }] };
-    }, [stockSalesData]);
+        return { salesByProductChartData: productChart, salesByTimeSeriesChartData: timeSeriesChart };
+    }, [stockSalesData, selectedYear]);
 
-    const salesChartOptions = useMemo(() => ({
+    const salesByProductChartOptions = useMemo(() => ({
         responsive: true, maintainAspectRatio: false,
         plugins: {
             legend: { display: false },
-            title: { display: true, text: `Stock Sales P/L by Product (${(selectedYear === ALL_YEARS_OPTION) ? 'All Years' : selectedYear})` },
+            title: { display: true, text: `P/L by Product` },
             tooltip: { callbacks: { label: (ctx) => `P/L: ${new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(ctx.raw || 0)}` } }
         },
         scales: {
             x: { title: { display: true, text: 'Product' }, ticks: { autoSkip: false, maxRotation: 45, minRotation: 30 } },
+            y: { beginAtZero: false, title: { display: true, text: 'Profit/Loss (€)' } }
+        }
+    }), []);
+    
+    const salesByTimeSeriesChartOptions = useMemo(() => ({
+        responsive: true, maintainAspectRatio: false,
+        plugins: {
+            legend: { display: false },
+            title: { display: true, text: `P/L by ${selectedYear === ALL_YEARS_OPTION ? 'Year' : 'Month'}` },
+            tooltip: { callbacks: { label: (ctx) => `P/L: ${new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(ctx.raw || 0)}` } }
+        },
+        scales: {
+            x: { title: { display: true, text: selectedYear === ALL_YEARS_OPTION ? 'Year' : 'Month' } },
             y: { beginAtZero: false, title: { display: true, text: 'Profit/Loss (€)' } }
         }
     }), [selectedYear]);
@@ -114,12 +170,21 @@ export default function StockSalesSection({ stockSalesData, selectedYear }) {
 
     return (
         <Paper elevation={0} sx={{ p: 2, mb: 3, border: 'none' }}>
-            <Typography variant="h6" sx={{ mb: 2 }}>Stock Sales</Typography>
-            {salesChartData.labels.length > 0 && (
-                <Box sx={{ height: 350, mb: 3 }}>
-                    <Bar data={salesChartData} options={salesChartOptions} />
-                </Box>
-            )}
+            <Typography variant="h6" sx={{ mb: 2 }}>Stock Sales ({selectedYear === ALL_YEARS_OPTION ? 'All Years' : selectedYear})</Typography>
+            
+            <Grid container spacing={3} sx={{ mb: 3 }}>
+                <Grid item xs={12} lg={6}>
+                    <Box sx={{ height: 350 }}>
+                        <Bar data={salesByTimeSeriesChartData} options={salesByTimeSeriesChartOptions} />
+                    </Box>
+                </Grid>
+                <Grid item xs={12} lg={6}>
+                    <Box sx={{ height: 350 }}>
+                        <Bar data={salesByProductChartData} options={salesByProductChartOptions} />
+                    </Box>
+                </Grid>
+            </Grid>
+
             <Box sx={{ height: 600, width: '100%' }}>
                 <DataGrid
                     rows={rows}

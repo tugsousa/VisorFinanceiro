@@ -1,9 +1,10 @@
 import React, { useMemo } from 'react';
-import { Typography, Paper, Box } from '@mui/material';
+import { Typography, Paper, Box, Grid } from '@mui/material';
 import { DataGrid } from '@mui/x-data-grid';
 import { Bar } from 'react-chartjs-2';
-import { ALL_YEARS_OPTION } from '../../constants';
+import { ALL_YEARS_OPTION, MONTH_NAMES_CHART } from '../../constants';
 import { getBaseProductName } from '../../utils/chartUtils';
+import { getYearString, getMonthIndex } from '../../utils/dateUtils';
 
 const columns = [
   { field: 'Date', headerName: 'Date', width: 110 },
@@ -27,12 +28,23 @@ const columns = [
 ];
 
 export default function DividendsSection({ dividendTransactionsData, selectedYear }) {
-  const { relevantDividendTransactions, productChartData } = useMemo(() => {
-    if (!dividendTransactionsData || dividendTransactionsData.length === 0) {
-      return { relevantDividendTransactions: [], productChartData: { labels: [], datasets: [] } };
-    }
-    const relevantTxs = dividendTransactionsData.filter(tx => tx.OrderType?.toLowerCase() === 'dividend');
+  const { relevantDividendTransactions, productChartData, timeSeriesChartData } = useMemo(() => {
+    const emptyResult = { 
+        relevantDividendTransactions: [], 
+        productChartData: { labels: [], datasets: [] }, 
+        timeSeriesChartData: { labels: [], datasets: [] } 
+    };
 
+    if (!dividendTransactionsData || dividendTransactionsData.length === 0) {
+      return emptyResult;
+    }
+    
+    // Filter for gross dividend transactions only
+    const relevantTxs = dividendTransactionsData.filter(tx => tx.OrderType?.toLowerCase() === 'dividend');
+    if(relevantTxs.length === 0) return emptyResult;
+
+
+    // --- 1. Data for Existing Product Chart ---
     const productDividendMap = {};
     relevantTxs.forEach(tx => {
       if (tx.AmountEUR != null) {
@@ -53,32 +65,89 @@ export default function DividendsSection({ dividendTransactionsData, selectedYea
     }
     chartItems.sort((a,b) => a.amount - b.amount);
 
-    const labels = chartItems.map(item => item.name);
-    const data = chartItems.map(item => item.amount);
-
-    const chartData = {
-      labels,
+    const productChart = {
+      labels: chartItems.map(item => item.name),
       datasets: [{
-        data,
+        data: chartItems.map(item => item.amount),
         backgroundColor: 'rgba(75, 192, 192, 0.6)',
         borderColor: 'rgba(75, 192, 192, 1)',
         borderWidth: 1,
       }]
     };
-    return { relevantDividendTransactions: relevantTxs, productChartData: chartData };
-  }, [dividendTransactionsData]);
+    
+    // --- 2. Data for NEW Time-Series Chart ---
+    let timeSeriesChart;
+    if (selectedYear === ALL_YEARS_OPTION) {
+      // Aggregate by year
+      const yearlyMap = {};
+      relevantTxs.forEach(tx => {
+          const year = getYearString(tx.Date);
+          if (year && tx.AmountEUR != null) {
+              yearlyMap[year] = (yearlyMap[year] || 0) + tx.AmountEUR;
+          }
+      });
+      const sortedYears = Object.keys(yearlyMap).sort((a, b) => a.localeCompare(b));
+      timeSeriesChart = {
+          labels: sortedYears,
+          datasets: [{
+              data: sortedYears.map(year => yearlyMap[year]),
+              backgroundColor: 'rgba(153, 102, 255, 0.6)',
+              borderColor: 'rgba(153, 102, 255, 1)',
+              borderWidth: 1,
+          }]
+      };
+    } else {
+      // Aggregate by month for the selected year
+      const monthlyData = new Array(12).fill(0);
+      const yearTxs = relevantTxs.filter(tx => getYearString(tx.Date) === selectedYear);
+      yearTxs.forEach(tx => {
+          const monthIndex = getMonthIndex(tx.Date);
+          if (monthIndex !== null && tx.AmountEUR != null) {
+              monthlyData[monthIndex] += tx.AmountEUR;
+          }
+      });
+      timeSeriesChart = {
+          labels: MONTH_NAMES_CHART,
+          datasets: [{
+              data: monthlyData,
+              backgroundColor: 'rgba(153, 102, 255, 0.6)',
+              borderColor: 'rgba(153, 102, 255, 1)',
+              borderWidth: 1,
+          }]
+      };
+    }
+
+    return { 
+        relevantDividendTransactions: relevantTxs, 
+        productChartData: productChart, 
+        timeSeriesChartData: timeSeriesChart 
+    };
+  }, [dividendTransactionsData, selectedYear]);
   
   const productChartOptions = useMemo(() => ({
       responsive: true, maintainAspectRatio: false,
       plugins: {
           legend: { display: false },
-          title: { display: true, text: `Gross Dividends by Product (${(selectedYear === ALL_YEARS_OPTION) ? 'All Years' : selectedYear})` },
+          title: { display: true, text: `Gross Dividends by Product` },
           tooltip: { callbacks: { label: (ctx) => `${new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(ctx.raw || 0)}` } }
       },
       scales: {
           y: { beginAtZero: true, title: { display: true, text: 'Amount (€)' } },
           x: { title: { display: true, text: 'Product' }, ticks: { autoSkip: false, maxRotation: 45, minRotation: 30 } }
       }
+  }), []);
+
+  const timeSeriesChartOptions = useMemo(() => ({
+    responsive: true, maintainAspectRatio: false,
+    plugins: {
+      legend: { display: false },
+      title: { display: true, text: `Gross Dividends by ${selectedYear === ALL_YEARS_OPTION ? 'Year' : 'Month'}` },
+      tooltip: { callbacks: { label: (ctx) => `${new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(ctx.raw || 0)}` } }
+    },
+    scales: {
+      y: { beginAtZero: true, title: { display: true, text: 'Amount (€)' } },
+      x: { title: { display: true, text: selectedYear === ALL_YEARS_OPTION ? 'Year' : 'Month' } }
+    }
   }), [selectedYear]);
 
   if (dividendTransactionsData.length === 0) {
@@ -96,14 +165,29 @@ export default function DividendsSection({ dividendTransactionsData, selectedYea
   
   return (
     <Paper elevation={0} sx={{ p: 2, mb: 3, border: 'none' }}>
-      <Typography variant="h6" sx={{ mb: 2 }}>Dividends</Typography>
-      {productChartData.labels.length > 0 ? (
-        <Box sx={{ height: 350, mb: 3 }}>
-          <Bar options={productChartOptions} data={productChartData} />
-        </Box>
-      ) : (
-        <Typography sx={{ my: 2, fontStyle: 'italic', color: 'text.secondary' }}>No chartable dividend data for this period.</Typography>
-      )}
+      <Typography variant="h6" sx={{ mb: 2 }}>Dividends ({selectedYear === ALL_YEARS_OPTION ? 'All Years' : selectedYear})</Typography>
+
+      <Grid container spacing={3} sx={{ mb: 3 }}>
+        <Grid item xs={12} lg={6}>
+            <Box sx={{ height: 350 }}>
+                {timeSeriesChartData.labels.length > 0 ? (
+                    <Bar options={timeSeriesChartOptions} data={timeSeriesChartData} />
+                ) : (
+                    <Typography sx={{ my: 2, fontStyle: 'italic', color: 'text.secondary', textAlign: 'center', pt: '25%' }}>No time-series data for this period.</Typography>
+                )}
+            </Box>
+        </Grid>
+        <Grid item xs={12} lg={6}>
+            <Box sx={{ height: 350 }}>
+                {productChartData.labels.length > 0 ? (
+                    <Bar options={productChartOptions} data={productChartData} />
+                ) : (
+                    <Typography sx={{ my: 2, fontStyle: 'italic', color: 'text.secondary', textAlign: 'center', pt: '25%' }}>No product data for this period.</Typography>
+                )}
+            </Box>
+        </Grid>
+      </Grid>
+      
       <Box sx={{ height: 600, width: '100%' }}>
         <DataGrid
           rows={rows}
