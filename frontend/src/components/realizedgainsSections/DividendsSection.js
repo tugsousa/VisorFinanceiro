@@ -91,8 +91,8 @@ export default function DividendsSection({ dividendTransactionsData, selectedYea
           labels: sortedYears,
           datasets: [{
               data: sortedYears.map(year => yearlyMap[year]),
-              backgroundColor: 'rgba(153, 102, 255, 0.6)',
-              borderColor: 'rgba(153, 102, 255, 1)',
+              backgroundColor: 'rgba(75, 192, 192, 0.6)',
+              borderColor: 'rgba(75, 192, 192, 1)',
               borderWidth: 1,
           }]
       };
@@ -110,8 +110,8 @@ export default function DividendsSection({ dividendTransactionsData, selectedYea
           labels: MONTH_NAMES_CHART,
           datasets: [{
               data: monthlyData,
-              backgroundColor: 'rgba(153, 102, 255, 0.6)',
-              borderColor: 'rgba(153, 102, 255, 1)',
+              backgroundColor: 'rgba(75, 192, 192, 0.6)',
+              borderColor: 'rgba(75, 192, 192, 1)',
               borderWidth: 1,
           }]
       };

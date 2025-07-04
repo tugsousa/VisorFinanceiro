@@ -104,7 +104,7 @@ export default function OptionSalesSection({ optionSalesData, selectedYear }) {
                 labels: sortedYears,
                 datasets: [{
                     data: sortedYears.map(year => yearlyMap[year]),
-                    backgroundColor: sortedYears.map(year => (yearlyMap[year] >= 0 ? 'rgba(153, 102, 255, 0.6)' : 'rgba(255, 159, 64, 0.6)')),
+                    backgroundColor: sortedYears.map(year => (yearlyMap[year] >= 0 ? 'rgba(75, 192, 192, 0.6)' : 'rgba(255, 99, 132, 0.6)')),
                     borderWidth: 1,
                 }]
             };
@@ -120,7 +120,7 @@ export default function OptionSalesSection({ optionSalesData, selectedYear }) {
                 labels: MONTH_NAMES_CHART,
                 datasets: [{
                     data: monthlyData,
-                    backgroundColor: monthlyData.map(pl => (pl >= 0 ? 'rgba(153, 102, 255, 0.6)' : 'rgba(255, 159, 64, 0.6)')),
+                    backgroundColor: monthlyData.map(pl => (pl >= 0 ? 'rgba(75, 192, 192, 0.6)' : 'rgba(255, 99, 132, 0.6)')),
                     borderWidth: 1,
                 }]
             };

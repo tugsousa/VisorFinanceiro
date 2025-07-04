@@ -9,9 +9,9 @@ import { formatCurrency } from '../../utils/formatUtils';
 
 // Define consistent colors for each category
 const COLORS = {
-  stocks: 'rgba(75, 192, 192, 0.8)',
-  options: 'rgba(153, 102, 255, 0.8)',
-  dividends: 'rgba(255, 206, 86, 0.8)',
+  stocks: 'rgba(75, 192, 192, 0.85)',     // Teal — to match profit color
+  options: 'rgba(255, 205, 86, 0.85)',    // Soft yellow — gentle contrast
+  dividends: 'rgba(255, 159, 64, 0.85)',  // Muted orange — warm, natural
 };
 
 // NEW: The component now accepts selectedYear
@@ -29,7 +29,7 @@ const PLContributionChart = ({ stockSaleDetails, optionSaleDetails, dividendTaxR
           stockSales: 'SaleDate',
           optionSales: 'close_date',
           DividendTaxResult: null 
-      }).filter(y => y && y !== ALL_YEARS_OPTION && y !== NO_YEAR_SELECTED);
+      }).filter(y => y && y !== ALL_YEARS_OPTION && y !== NO_YEAR_SELECTED).sort((a, b) => Number(a) - Number(b));
 
       if (years.length === 0) return { labels: [], datasets: [] };
 
