@@ -2,25 +2,21 @@
 import React, { useMemo } from 'react';
 import { Box, Typography } from '@mui/material';
 import { Bar } from 'react-chartjs-2';
-// NEW: Import monthly constants and date utils
 import { getYearString, getMonthIndex, extractYearsFromData } from '../../utils/dateUtils';
 import { ALL_YEARS_OPTION, NO_YEAR_SELECTED, MONTH_NAMES_CHART } from '../../constants';
 import { formatCurrency } from '../../utils/formatUtils';
 
-// Define consistent colors for each category
 const COLORS = {
-  stocks: 'rgba(75, 192, 192, 0.85)',     // Teal — to match profit color
-  options: 'rgba(255, 205, 86, 0.85)',    // Soft yellow — gentle contrast
-  dividends: 'rgba(255, 159, 64, 0.85)',  // Muted orange — warm, natural
+  stocks: 'rgba(75, 192, 192, 0.85)',
+  options: 'rgba(255, 205, 86, 0.85)',
+  dividends: 'rgba(255, 159, 64, 0.85)',
 };
 
-// NEW: The component now accepts selectedYear
-const PLContributionChart = ({ stockSaleDetails, optionSaleDetails, dividendTaxResultForChart, selectedYear }) => {
+// --- FIX: Add dividendTransactionsList to the component's props ---
+const PLContributionChart = ({ stockSaleDetails, optionSaleDetails, dividendTaxResultForChart, dividendTransactionsList, selectedYear }) => {
   const chartData = useMemo(() => {
     
-    // --- START: NEW DYNAMIC LOGIC ---
     if (selectedYear === ALL_YEARS_OPTION || selectedYear === NO_YEAR_SELECTED) {
-      // --- LOGIC FOR "ALL YEARS" VIEW ---
       const years = extractYearsFromData({
           stockSales: stockSaleDetails,
           optionSales: optionSaleDetails,
@@ -68,7 +64,7 @@ const PLContributionChart = ({ stockSaleDetails, optionSaleDetails, dividendTaxR
       };
 
     } else {
-      // --- LOGIC FOR SINGLE-YEAR (MONTHLY) VIEW ---
+      // --- FIX: Logic for single-year (monthly) view now includes dividends ---
       const monthlyData = Array(12).fill(null).map(() => ({ stocks: 0, options: 0, dividends: 0 }));
 
       stockSaleDetails.forEach(sale => {
@@ -83,11 +79,17 @@ const PLContributionChart = ({ stockSaleDetails, optionSaleDetails, dividendTaxR
             if (month !== null) monthlyData[month].options += sale.delta;
         }
       });
-      const dividendYearData = dividendTaxResultForChart[selectedYear] || {};
-      Object.values(dividendYearData).forEach(countryData => {
-         // This is yearly data, so we can't break it down monthly from this source.
-         // If you had individual dividend transactions, you could. For now, we omit it from monthly.
-         // Or, for simplicity, we can just not show dividends in the monthly drill-down.
+      
+      // Calculate monthly dividend P/L from the individual transactions list
+      (dividendTransactionsList || []).forEach(tx => {
+        // Double-check year match, though filteredData should already handle this
+        if (getYearString(tx.Date) === selectedYear) {
+            const month = getMonthIndex(tx.Date);
+            if (month !== null && tx.AmountEUR != null) {
+                // Dividend tax transactions are negative, so simple addition calculates the net
+                monthlyData[month].dividends += tx.AmountEUR;
+            }
+        }
       });
 
       return {
@@ -95,13 +97,12 @@ const PLContributionChart = ({ stockSaleDetails, optionSaleDetails, dividendTaxR
           datasets: [
             { label: 'Stocks', data: monthlyData.map(d => d.stocks), backgroundColor: COLORS.stocks },
             { label: 'Options', data: monthlyData.map(d => d.options), backgroundColor: COLORS.options },
-            // Not including dividends as we only have yearly summary for them
+            { label: 'Dividends', data: monthlyData.map(d => d.dividends), backgroundColor: COLORS.dividends },
           ]
       }
     }
-    // --- END: NEW DYNAMIC LOGIC ---
-
-  }, [stockSaleDetails, optionSaleDetails, dividendTaxResultForChart, selectedYear]);
+  // --- FIX: Add dividendTransactionsList to the dependency array ---
+  }, [stockSaleDetails, optionSaleDetails, dividendTaxResultForChart, dividendTransactionsList, selectedYear]);
 
   const chartOptions = useMemo(() => ({
     responsive: true,
@@ -109,7 +110,6 @@ const PLContributionChart = ({ stockSaleDetails, optionSaleDetails, dividendTaxR
     plugins: {
       title: {
         display: true,
-        // NEW: Dynamic title
         text: selectedYear === ALL_YEARS_OPTION 
               ? 'Annual P/L Contribution by Category' 
               : `Monthly P/L Contribution for ${selectedYear}`,
@@ -126,7 +126,6 @@ const PLContributionChart = ({ stockSaleDetails, optionSaleDetails, dividendTaxR
     scales: {
       x: {
         stacked: true,
-        // NEW: Dynamic axis label
         title: { display: true, text: selectedYear === ALL_YEARS_OPTION ? 'Year' : 'Month' },
       },
       y: {
@@ -135,7 +134,7 @@ const PLContributionChart = ({ stockSaleDetails, optionSaleDetails, dividendTaxR
         title: { display: true, text: 'Profit/Loss (€)' },
       },
     },
-  }), [selectedYear]); // NEW: Dependency on selectedYear
+  }), [selectedYear]);
 
   if (!chartData || chartData.labels.length === 0) {
     return (

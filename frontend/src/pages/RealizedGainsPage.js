@@ -1,6 +1,5 @@
 // frontend/src/pages/RealizedGainsPage.js
 
-// ... (imports remain the same, including PLContributionChart)
 import React, { useState, useEffect } from 'react';
 import {
   Typography, Box, FormControl, InputLabel, Select, MenuItem,
@@ -161,7 +160,8 @@ export default function RealizedGainsPage() {
                   stockSaleDetails={allData.StockSaleDetails || []}
                   optionSaleDetails={allData.OptionSaleDetails || []}
                   dividendTaxResultForChart={derivedDividendTaxSummary}
-                  // --- PASS THE PROP ---
+                  // --- FIX: Pass the individual dividend transactions list ---
+                  dividendTransactionsList={filteredData.DividendTransactionsList || []}
                   selectedYear={selectedYear}
                />
             </Paper>
