@@ -69,7 +69,7 @@ export default function StockSalesSection({ stockSalesData, selectedYear }) {
         });
 
         const sortedByAbsolutePL = Object.entries(productPLMap).sort(([, plA], [, plB]) => Math.abs(plB) - Math.abs(plA));
-        const topN = 15;
+        const topN = 9;
         const topItems = sortedByAbsolutePL.slice(0, topN);
         const otherItems = sortedByAbsolutePL.slice(topN);
 

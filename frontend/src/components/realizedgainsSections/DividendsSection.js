@@ -49,7 +49,7 @@ export default function DividendsSection({ dividendTransactionsData, selectedYea
     });
 
     const sortedByAmount = Object.entries(productDividendMap).sort(([, a], [, b]) => b - a);
-    const topN = 15;
+    const topN = 9;
     const topItems = sortedByAmount.slice(0, topN);
     const otherItems = sortedByAmount.slice(topN);
 
