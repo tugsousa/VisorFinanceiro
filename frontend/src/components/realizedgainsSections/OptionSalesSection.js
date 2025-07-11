@@ -4,7 +4,7 @@ import { DataGrid } from '@mui/x-data-grid';
 import { ptPT } from '@mui/x-data-grid/locales';
 import { Bar } from 'react-chartjs-2';
 import { ALL_YEARS_OPTION, MONTH_NAMES_CHART } from '../../constants';
-import { getYearString, getMonthIndex, calculateDaysHeld } from '../../utils/dateUtils';
+import { getYearString, getMonthIndex, calculateDaysHeld, parseDateRobust } from '../../utils/dateUtils';
 import { getBaseProductName } from '../../utils/chartUtils';
 import { calculateAnnualizedReturn } from '../../utils/formatUtils';
 
@@ -14,8 +14,27 @@ const calculateAnnualizedReturnForOptionsLocal = (sale) => {
 };
 
 const columns = [
-    { field: 'close_date', headerName: 'Dt. fecho', width: 110 },
-    { field: 'open_date', headerName: 'Dt. abertura', width: 110 },
+    { 
+      field: 'open_date', 
+      headerName: 'Dt. abertura', 
+      width: 110,
+      type: 'date',
+      valueGetter: (value) => parseDateRobust(value),
+      valueFormatter: (value) => {
+        if (!value) return '';
+        const day = String(value.getDate()).padStart(2, '0');
+        const month = String(value.getMonth() + 1).padStart(2, '0');
+        const year = value.getFullYear();
+        return `${day}-${month}-${year}`;
+      }
+    },
+        { 
+      field: 'close_date', 
+      headerName: 'Dt. fecho', 
+      width: 110,
+      type: 'date',
+      valueGetter: (value) => parseDateRobust(value),
+    },
     {
         field: 'daysHeld',
         headerName: 'Dias em posse',
@@ -74,7 +93,6 @@ export default function OptionSalesSection({ optionSalesData, selectedYear }) {
             }]
         };
         
-        // *** FIX: Apply maxBarThickness to the dataset ***
         const smallDataSetThreshold = 5;
         const maxThickness = 60;
         if (productChart.labels.length > 0 && productChart.labels.length <= smallDataSetThreshold) {
@@ -118,7 +136,6 @@ export default function OptionSalesSection({ optionSalesData, selectedYear }) {
             };
         }
 
-        // *** FIX: Apply maxBarThickness to the dataset ***
         if (timeSeriesChart.labels.length > 0 && timeSeriesChart.labels.length <= smallDataSetThreshold) {
             timeSeriesChart.datasets[0].maxBarThickness = maxThickness;
         }
@@ -187,6 +204,9 @@ export default function OptionSalesSection({ optionSalesData, selectedYear }) {
           columns={columns}
           initialState={{
             pagination: { paginationModel: { pageSize: 10 } },
+            sorting: {
+              sortModel: [{ field: 'open_date', sort: 'desc' }],
+            },
           }}
           pageSizeOptions={[10, 25, 50]}
           disableRowSelectionOnClick

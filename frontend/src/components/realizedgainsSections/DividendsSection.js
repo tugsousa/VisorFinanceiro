@@ -1,14 +1,27 @@
 import React, { useMemo } from 'react';
 import { Typography, Paper, Box, Grid } from '@mui/material';
 import { DataGrid } from '@mui/x-data-grid'; 
-import { ptPT } from '@mui/x-data-grid/locales'; // Add this correct import for the locale
+import { ptPT } from '@mui/x-data-grid/locales';
 import { Bar } from 'react-chartjs-2';
 import { ALL_YEARS_OPTION, MONTH_NAMES_CHART } from '../../constants';
 import { getBaseProductName } from '../../utils/chartUtils';
-import { getYearString, getMonthIndex } from '../../utils/dateUtils';
+import { getYearString, getMonthIndex, parseDateRobust } from '../../utils/dateUtils';
 
 const columns = [
-  { field: 'Date', headerName: 'Data', width: 110 },
+  { 
+    field: 'Date', 
+    headerName: 'Data', 
+    width: 110,
+    type: 'date',
+    valueGetter: (value) => parseDateRobust(value),
+    valueFormatter: (value) => {
+      if (!value) return '';
+      const day = String(value.getDate()).padStart(2, '0');
+      const month = String(value.getMonth() + 1).padStart(2, '0');
+      const year = value.getFullYear();
+      return `${day}-${month}-${year}`;
+    }
+  },
   { field: 'ProductName', headerName: 'Produto', flex: 1, minWidth: 180 },
   { field: 'Amount', headerName: 'Montante', type: 'number', width: 120, align: 'right', headerAlign: 'right', valueFormatter: (value) => typeof value === 'number' ? value.toFixed(2) : '' },
   { field: 'Currency', headerName: 'Moeda', width: 90 },
@@ -69,7 +82,6 @@ export default function DividendsSection({ dividendTransactionsData, selectedYea
       }]
     };
 
-    // *** FIX: Apply maxBarThickness to the dataset ***
     const smallDataSetThreshold = 5;
     const maxThickness = 60;
     if (productChart.labels.length > 0 && productChart.labels.length <= smallDataSetThreshold) {
@@ -115,7 +127,6 @@ export default function DividendsSection({ dividendTransactionsData, selectedYea
       };
     }
 
-    // *** FIX: Apply maxBarThickness to the dataset ***
     if (timeSeriesChart.labels.length > 0 && timeSeriesChart.labels.length <= smallDataSetThreshold) {
         timeSeriesChart.datasets[0].maxBarThickness = maxThickness;
     }
@@ -197,6 +208,9 @@ export default function DividendsSection({ dividendTransactionsData, selectedYea
           columns={columns}
           initialState={{
             pagination: { paginationModel: { pageSize: 10 } },
+            sorting: {
+              sortModel: [{ field: 'Date', sort: 'desc' }],
+            },
           }}
           pageSizeOptions={[10, 25, 50]}
           disableRowSelectionOnClick
