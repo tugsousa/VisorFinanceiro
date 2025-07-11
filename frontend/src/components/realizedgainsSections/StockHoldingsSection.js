@@ -1,6 +1,7 @@
 import React from 'react';
 import { Typography, Paper, Box } from '@mui/material';
 import { DataGrid } from '@mui/x-data-grid';
+import { ptPT } from '@mui/x-data-grid/locales';
 
 const columns = [
   { field: 'product_name', headerName: 'Produto', flex: 1, minWidth: 200 },
@@ -53,6 +54,7 @@ export default function StockHoldingsSection({ holdingsData }) {
           }}
           pageSizeOptions={[10, 25, 50]}
           disableRowSelectionOnClick
+          localeText={ptPT.components.MuiDataGrid.defaultProps.localeText}
         />
       </Box>
     </Paper>
