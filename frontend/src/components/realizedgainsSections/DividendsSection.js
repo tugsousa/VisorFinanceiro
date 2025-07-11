@@ -9,10 +9,8 @@ import { getYearString, getMonthIndex } from '../../utils/dateUtils';
 const columns = [
   { field: 'Date', headerName: 'Date', width: 110 },
   { field: 'ProductName', headerName: 'Product', flex: 1, minWidth: 200 },
-  // FIX: Updated valueFormatter signature
   { field: 'Amount', headerName: 'Amount', type: 'number', width: 120, valueFormatter: (value) => typeof value === 'number' ? value.toFixed(2) : '' },
   { field: 'Currency', headerName: 'Currency', width: 90 },
-  // FIX: Updated valueFormatter signature
   { field: 'ExchangeRate', headerName: 'Exch. Rate', type: 'number', width: 120, valueFormatter: (value) => typeof value === 'number' ? value.toFixed(4) : '' },
   {
     field: 'AmountEUR',
@@ -39,12 +37,9 @@ export default function DividendsSection({ dividendTransactionsData, selectedYea
       return emptyResult;
     }
     
-    // Filter for gross dividend transactions only
     const relevantTxs = dividendTransactionsData.filter(tx => tx.OrderType?.toLowerCase() === 'dividend');
     if(relevantTxs.length === 0) return emptyResult;
 
-
-    // --- 1. Data for Existing Product Chart ---
     const productDividendMap = {};
     relevantTxs.forEach(tx => {
       if (tx.AmountEUR != null) {
@@ -74,11 +69,16 @@ export default function DividendsSection({ dividendTransactionsData, selectedYea
         borderWidth: 1,
       }]
     };
+
+    // *** FIX: Apply maxBarThickness to the dataset ***
+    const smallDataSetThreshold = 5;
+    const maxThickness = 60;
+    if (productChart.labels.length > 0 && productChart.labels.length <= smallDataSetThreshold) {
+        productChart.datasets[0].maxBarThickness = maxThickness;
+    }
     
-    // --- 2. Data for NEW Time-Series Chart ---
     let timeSeriesChart;
     if (selectedYear === ALL_YEARS_OPTION) {
-      // Aggregate by year
       const yearlyMap = {};
       relevantTxs.forEach(tx => {
           const year = getYearString(tx.Date);
@@ -97,7 +97,6 @@ export default function DividendsSection({ dividendTransactionsData, selectedYea
           }]
       };
     } else {
-      // Aggregate by month for the selected year
       const monthlyData = new Array(12).fill(0);
       const yearTxs = relevantTxs.filter(tx => getYearString(tx.Date) === selectedYear);
       yearTxs.forEach(tx => {
@@ -115,6 +114,11 @@ export default function DividendsSection({ dividendTransactionsData, selectedYea
               borderWidth: 1,
           }]
       };
+    }
+
+    // *** FIX: Apply maxBarThickness to the dataset ***
+    if (timeSeriesChart.labels.length > 0 && timeSeriesChart.labels.length <= smallDataSetThreshold) {
+        timeSeriesChart.datasets[0].maxBarThickness = maxThickness;
     }
 
     return { 

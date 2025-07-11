@@ -89,6 +89,13 @@ export default function StockSalesSection({ stockSalesData, selectedYear }) {
             }]
         };
 
+        // *** FIX: Apply maxBarThickness to the dataset ***
+        const smallDataSetThreshold = 5;
+        const maxThickness = 60;
+        if (productChart.labels.length > 0 && productChart.labels.length <= smallDataSetThreshold) {
+            productChart.datasets[0].maxBarThickness = maxThickness;
+        }
+
         // --- P/L by Time-Series Chart Data ---
         let timeSeriesChart;
         if (selectedYear === ALL_YEARS_OPTION) {
@@ -126,9 +133,15 @@ export default function StockSalesSection({ stockSalesData, selectedYear }) {
             };
         }
 
+        // *** FIX: Apply maxBarThickness to the dataset ***
+        if (timeSeriesChart.labels.length > 0 && timeSeriesChart.labels.length <= smallDataSetThreshold) {
+            timeSeriesChart.datasets[0].maxBarThickness = maxThickness;
+        }
+
         return { salesByProductChartData: productChart, salesByTimeSeriesChartData: timeSeriesChart };
     }, [stockSalesData, selectedYear]);
 
+    // Options can be simplified as they no longer depend on the data
     const salesByProductChartOptions = useMemo(() => ({
         responsive: true, maintainAspectRatio: false,
         plugins: {

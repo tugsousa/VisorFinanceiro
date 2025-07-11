@@ -89,6 +89,13 @@ export default function OptionSalesSection({ optionSalesData, selectedYear }) {
             }]
         };
         
+        // *** FIX: Apply maxBarThickness to the dataset ***
+        const smallDataSetThreshold = 5;
+        const maxThickness = 60;
+        if (productChart.labels.length > 0 && productChart.labels.length <= smallDataSetThreshold) {
+            productChart.datasets[0].maxBarThickness = maxThickness;
+        }
+
         // --- P/L by Time-Series Chart Data ---
         let timeSeriesChart;
         if (selectedYear === ALL_YEARS_OPTION) {
@@ -124,6 +131,11 @@ export default function OptionSalesSection({ optionSalesData, selectedYear }) {
                     borderWidth: 1,
                 }]
             };
+        }
+
+        // *** FIX: Apply maxBarThickness to the dataset ***
+        if (timeSeriesChart.labels.length > 0 && timeSeriesChart.labels.length <= smallDataSetThreshold) {
+            timeSeriesChart.datasets[0].maxBarThickness = maxThickness;
         }
 
         return { salesByProductChartData: productChart, salesByTimeSeriesChartData: timeSeriesChart };
