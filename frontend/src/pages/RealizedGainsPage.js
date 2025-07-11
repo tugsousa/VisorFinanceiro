@@ -3,12 +3,18 @@
 import React, { useState, useEffect } from 'react';
 import {
   Typography, Box, FormControl, InputLabel, Select, MenuItem,
-  Paper, CircularProgress, Grid, Alert, Tabs, Tab
+  Paper, CircularProgress, Grid, Alert, Tabs, Tab, Card, CardContent, Divider
 } from '@mui/material';
 import { useAuth } from '../context/AuthContext';
 import { useRealizedGains } from '../hooks/useRealizedGains';
 import { UI_TEXT, ALL_YEARS_OPTION } from '../constants';
 import { formatCurrency } from '../utils/formatUtils';
+
+// Import custom icons for Key Metrics for better visualization
+import ShowChartIcon from '@mui/icons-material/ShowChart'; // for Stocks
+import CandlestickChartIcon from '@mui/icons-material/CandlestickChart'; // for Options
+import AttachMoneyIcon from '@mui/icons-material/AttachMoney'; // for Dividends
+import AccountBalanceWalletIcon from '@mui/icons-material/AccountBalanceWallet'; // for Total
 
 import StockHoldingsSection from '../components/realizedgainsSections/StockHoldingsSection';
 import OptionHoldingsSection from '../components/realizedgainsSections/OptionHoldingsSection';
@@ -30,6 +36,19 @@ const isDataEmpty = (data) => {
     (data.OptionHoldings?.length ?? 0) === 0
   );
 };
+
+// A small component for a single Key Metric for better reusability and cleaner code
+const KeyMetricCard = ({ title, value, icon, color }) => (
+    <Box display="flex" alignItems="center" justifyContent="space-between" py={1.5}>
+        <Box display="flex" alignItems="center">
+            {React.cloneElement(icon, { sx: { mr: 1.5, color: 'text.secondary' } })}
+            <Typography>{title}:</Typography>
+        </Box>
+        <Typography sx={{ fontWeight: 'medium', color: value >= 0 ? 'success.main' : 'error.main' }}>
+            {formatCurrency(value)}
+        </Typography>
+    </Box>
+);
 
 export default function RealizedGainsPage() {
   const { token } = useAuth();
@@ -122,50 +141,59 @@ export default function RealizedGainsPage() {
         </Tabs>
       </Box>
 
-      {/* OVERVIEW TAB */}
+      {/* OVERVIEW TAB - REARRANGED LAYOUT */}
       {currentTab === 'overview' && (
         <Grid container spacing={3}>
-          <Grid item xs={12} lg={4}>
-            <Paper elevation={1} sx={{ p: 2, height: '100%', display: 'flex', flexDirection: 'column' }}>
-              <Typography variant="h6" sx={{ mb: 2 }}>Key Metrics ({selectedYear === ALL_YEARS_OPTION ? 'All Time' : selectedYear})</Typography>
-              <Box flexGrow={1}>
-                <Box display="flex" justifyContent="space-between" mb={1}><Typography>Stocks P/L:</Typography><Typography sx={{ fontWeight: 'medium', color: summaryPLs.stockPL >= 0 ? 'success.main' : 'error.main' }}>{formatCurrency(summaryPLs.stockPL)}</Typography></Box>
-                <Box display="flex" justifyContent="space-between" mb={1}><Typography>Options P/L:</Typography><Typography sx={{ fontWeight: 'medium', color: summaryPLs.optionPL >= 0 ? 'success.main' : 'error.main' }}>{formatCurrency(summaryPLs.optionPL)}</Typography></Box>
-                <Box display="flex" justifyContent="space-between" mb={1}><Typography>Dividends Net:</Typography><Typography sx={{ fontWeight: 'medium', color: summaryPLs.dividendPL >= 0 ? 'success.main' : 'error.main' }}>{formatCurrency(summaryPLs.dividendPL)}</Typography></Box>
-              </Box>
-              <Box borderTop={1} borderColor="divider" mt={2} pt={2} display="flex" justifyContent="space-between">
-                <Typography variant="h6" sx={{fontWeight:'bold'}}>Total P/L:</Typography>
-                <Typography variant="h6" sx={{ fontWeight: 'bold', color: summaryPLs.totalPL >= 0 ? 'success.main' : 'error.main' }}>{formatCurrency(summaryPLs.totalPL)}</Typography>
-              </Box>
-            </Paper>
-          </Grid>
-          <Grid item xs={12} lg={8}>
-            <Paper elevation={1} sx={{ p: 2, height: 400 }}>
-              <OverallPLChart
-                stockSaleDetails={allData.StockSaleDetails || []}
-                optionSaleDetails={allData.OptionSaleDetails || []}
-                dividendTaxResultForChart={derivedDividendTaxSummary}
-                selectedYear={selectedYear}
-              />
-            </Paper>
-          </Grid>
-           <Grid item xs={12} lg={5}>
-              <Paper elevation={1} sx={{ p: 2, height: 400 }}>
-                  <HoldingsAllocationChart chartData={holdingsChartData} />
-              </Paper>
-          </Grid>
-          <Grid item xs={12} lg={7}>
-            <Paper elevation={1} sx={{ p: 2, height: 400 }}>
-               <PLContributionChart 
-                  stockSaleDetails={allData.StockSaleDetails || []}
-                  optionSaleDetails={allData.OptionSaleDetails || []}
-                  dividendTaxResultForChart={derivedDividendTaxSummary}
-                  // --- FIX: Pass the individual dividend transactions list ---
-                  dividendTransactionsList={filteredData.DividendTransactionsList || []}
-                  selectedYear={selectedYear}
-               />
-            </Paper>
-          </Grid>
+            {/* --- TOP ROW --- */}
+            {/* MODIFICATION: Adjusted lg props for sizing and positioning */}
+            <Grid item xs={12} md={5} lg={5}>
+                <Paper elevation={0} sx={{ p: 2, height: '100%', display: 'flex', flexDirection: 'column', border: 'none' }}>
+                    <CardContent>
+                        <Typography variant="h6" sx={{ mb: 1 }}>Key Metrics ({selectedYear === ALL_YEARS_OPTION ? 'All Time' : selectedYear})</Typography>
+                        <KeyMetricCard title="Stocks P/L" value={summaryPLs.stockPL} icon={<ShowChartIcon />} />
+                        <KeyMetricCard title="Options P/L" value={summaryPLs.optionPL} icon={<CandlestickChartIcon />} />
+                        <KeyMetricCard title="Dividends Net" value={summaryPLs.dividendPL} icon={<AttachMoneyIcon />} />
+                        <Divider sx={{ my: 1 }} />
+                        <Box display="flex" alignItems="center" justifyContent="space-between" pt={1.5}>
+                            <Box display="flex" alignItems="center">
+                                <AccountBalanceWalletIcon sx={{ mr: 1.5, color: 'text.secondary' }} />
+                                <Typography variant="h6" sx={{fontWeight:'bold'}}>Total P/L:</Typography>
+                            </Box>
+                            <Typography variant="h6" sx={{ fontWeight: 'bold', color: summaryPLs.totalPL >= 0 ? 'success.main' : 'error.main' }}>
+                                {formatCurrency(summaryPLs.totalPL)}
+                            </Typography>
+                        </Box>
+                    </CardContent>
+                </Paper>
+            </Grid>
+            <Grid item xs={12} md={7} lg={6}>
+                <Paper elevation={0} sx={{ p: 2, height: 400, border: 'none' }}>
+                    <HoldingsAllocationChart chartData={holdingsChartData} />
+                </Paper>
+            </Grid>
+
+            {/* --- BOTTOM ROW --- */}
+            <Grid item xs={12} lg={6}>
+                <Paper elevation={0} sx={{ p: 2, height: 400, border: 'none' }}>
+                    <OverallPLChart
+                        stockSaleDetails={allData.StockSaleDetails || []}
+                        optionSaleDetails={allData.OptionSaleDetails || []}
+                        dividendTaxResultForChart={derivedDividendTaxSummary}
+                        selectedYear={selectedYear}
+                    />
+                </Paper>
+            </Grid>
+            <Grid item xs={12} lg={6}>
+                <Paper elevation={0} sx={{ p: 2, height: 400, border: 'none' }}>
+                    <PLContributionChart 
+                        stockSaleDetails={allData.StockSaleDetails || []}
+                        optionSaleDetails={allData.OptionSaleDetails || []}
+                        dividendTaxResultForChart={derivedDividendTaxSummary}
+                        dividendTransactionsList={filteredData.DividendTransactionsList || []}
+                        selectedYear={selectedYear}
+                    />
+                </Paper>
+            </Grid>
         </Grid>
       )}
 

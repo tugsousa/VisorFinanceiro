@@ -38,9 +38,9 @@ export default function Layout({ children }) {
 
   const navItems = [
     { title: 'Carregar Transações', to: '/upload' },
-    { title: 'Ganhos', to: '/realizedgains' },
+    { title: 'Visão Geral', to: '/realizedgains' },
     { title: 'IRS', to: '/tax' },
-    { title: 'Transações', to: '/transactions' },
+    { title: 'Dados', to: '/transactions' },
   ];
 
   return (
