@@ -1,3 +1,5 @@
+// frontend/src/hooks/useRealizedGains.js
+
 import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { apiFetchRealizedGainsData } from '../api/apiService';
@@ -113,18 +115,39 @@ export const useRealizedGains = (token, selectedYear) => {
   
   // Memoize holdings allocation chart data
   const holdingsChartData = useMemo(() => {
-      if (!allData?.StockHoldings?.length) return null;
-      const topN = 7;
-      const sortedHoldings = [...allData.StockHoldings].sort((a, b) => b.buy_amount_eur - a.buy_amount_eur);
-      
-      const labels = sortedHoldings.slice(0, topN).map(h => h.product_name);
-      const data = sortedHoldings.slice(0, topN).map(h => h.buy_amount_eur);
+    if (!allData?.StockHoldings?.length) {
+      return null;
+    }
 
-      if (sortedHoldings.length > topN) {
-          labels.push('Others');
-          data.push(sortedHoldings.slice(topN).reduce((sum, h) => sum + h.buy_amount_eur, 0));
+    // 1. Group holdings by product name and sum their values.
+    const holdingsByProduct = allData.StockHoldings.reduce((acc, holding) => {
+      const productName = holding.product_name || 'Unknown';
+      if (!acc[productName]) {
+        acc[productName] = 0;
       }
-      return { labels, datasets: [{ data }] }; // Colors will be added in component
+      acc[productName] += holding.buy_amount_eur;
+      return acc;
+    }, {});
+
+    // 2. Convert the aggregated object to an array and sort by value.
+    const sortedHoldings = Object.entries(holdingsByProduct)
+      .sort(([, valueA], [, valueB]) => valueB - valueA);
+
+    const topN = 7;
+    const topHoldings = sortedHoldings.slice(0, topN);
+    const otherHoldings = sortedHoldings.slice(topN);
+
+    const labels = topHoldings.map(([productName]) => productName);
+    const data = topHoldings.map(([, value]) => value);
+
+    // 3. If there are other holdings, sum them up into an "Others" category.
+    if (otherHoldings.length > 0) {
+      const othersValue = otherHoldings.reduce((sum, [, value]) => sum + value, 0);
+      labels.push('Others');
+      data.push(othersValue);
+    }
+
+    return { labels, datasets: [{ data }] };
   }, [allData?.StockHoldings]);
 
   return {
