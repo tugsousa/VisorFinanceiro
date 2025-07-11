@@ -109,6 +109,10 @@ func (p *transactionProcessorImpl) Process(rawTransactions []models.RawTransacti
 			continue
 		}
 
+		if orderType == "productchange" {
+			logger.L.Info("Skipping administrative 'Product Change' transaction", "originalOrderID", sanitizedRaw.OrderID)
+			continue
+		}
 		var amount float64
 		if sanitizedRaw.Amount == "" {
 			if orderType == "cashdeposit" {
@@ -220,6 +224,10 @@ func (p *transactionProcessorImpl) Process(rawTransactions []models.RawTransacti
 func parseDescription(description string) (orderType string, quantity int, price float64, isin string, name string, err error) {
 	desc := strings.ReplaceAll(description, "\u00A0", " ")
 	desc = strings.TrimSpace(desc)
+
+	if strings.Contains(strings.ToLower(desc), "mudança de produto") {
+		return "productchange", 0, 0, "", "Product Change Event", nil
+	}
 
 	if desc == "Depósito" || strings.EqualFold(desc, "flatex Deposit") {
 		return "cashdeposit", 0, 0, "", "Cash Deposit", nil

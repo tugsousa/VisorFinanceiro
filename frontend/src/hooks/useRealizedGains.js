@@ -4,7 +4,7 @@ import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { apiFetchRealizedGainsData } from '../api/apiService';
 import { ALL_YEARS_OPTION, NO_YEAR_SELECTED } from '../constants';
-import { getYearString, extractYearsFromData } from '../utils/dateUtils';
+import { getYearString, extractYearsFromData, parseDateRobust } from '../utils/dateUtils';
 
 // Helper to process dividend transactions into a summary map
 const processTransactionsToDividendSummary = (transactions) => {
@@ -38,7 +38,7 @@ export const useRealizedGains = (token, selectedYear) => {
     queryFn: apiFetchRealizedGainsData,
     enabled: !!token,
     staleTime: 1000 * 60 * 5, // 5 minutes
-    select: (response) => response.data, // Add this line
+    select: (response) => response.data,
   });
 
   // Memoize the derived dividend tax summary
@@ -115,39 +115,65 @@ export const useRealizedGains = (token, selectedYear) => {
   
   // Memoize holdings allocation chart data
   const holdingsChartData = useMemo(() => {
-    if (!allData?.StockHoldings?.length) {
+    const stockHoldings = allData?.StockHoldings;
+    if (!stockHoldings || stockHoldings.length === 0) {
       return null;
     }
 
-    // 1. Group holdings by product name and sum their values.
-    const holdingsByProduct = allData.StockHoldings.reduce((acc, holding) => {
-      const productName = holding.product_name || 'Unknown';
-      if (!acc[productName]) {
-        acc[productName] = 0;
+    // 1. Group holdings by ISIN. For each ISIN, store the total value,
+    //    the latest date, and the name associated with that latest date.
+    const holdingsByIsin = stockHoldings.reduce((acc, holding) => {
+      const { isin, product_name, buy_amount_eur, buy_date } = holding;
+      if (!isin) return acc; // Skip any holdings that might lack an ISIN
+
+      // If this is the first time we see this ISIN, initialize it.
+      if (!acc[isin]) {
+        acc[isin] = {
+          totalValue: 0,
+          latestName: product_name,
+          // Use the robust date parser to handle dates correctly
+          latestDate: parseDateRobust(buy_date) || new Date(0),
+        };
       }
-      acc[productName] += holding.buy_amount_eur;
+
+      // Add the holding's value to the total for this ISIN.
+      acc[isin].totalValue += buy_amount_eur;
+
+      // Check if the current holding is more recent than the one we have stored.
+      const currentDate = parseDateRobust(buy_date);
+      if (currentDate && currentDate > acc[isin].latestDate) {
+        // If it is, update the latest date and the name.
+        acc[isin].latestDate = currentDate;
+        acc[isin].latestName = product_name;
+      }
+
       return acc;
     }, {});
 
-    // 2. Convert the aggregated object to an array and sort by value.
-    const sortedHoldings = Object.entries(holdingsByProduct)
-      .sort(([, valueA], [, valueB]) => valueB - valueA);
+    // 2. Convert the aggregated object into an array for sorting.
+    const aggregatedHoldings = Object.values(holdingsByIsin);
+
+    // 3. Sort by the absolute total value to find the largest holdings.
+    //    Note: We use Math.abs because buy_amount_eur is negative.
+    aggregatedHoldings.sort((a, b) => Math.abs(b.totalValue) - Math.abs(a.totalValue));
 
     const topN = 7;
-    const topHoldings = sortedHoldings.slice(0, topN);
-    const otherHoldings = sortedHoldings.slice(topN);
+    const topHoldings = aggregatedHoldings.slice(0, topN);
+    const otherHoldings = aggregatedHoldings.slice(topN);
 
-    const labels = topHoldings.map(([productName]) => productName);
-    const data = topHoldings.map(([, value]) => value);
+    // 4. Use the LATEST name for the label and the absolute value for the chart data.
+    const labels = topHoldings.map(item => item.latestName);
+    const data = topHoldings.map(item => Math.abs(item.totalValue));
 
-    // 3. If there are other holdings, sum them up into an "Others" category.
+    // 5. If there are other smaller holdings, sum them into an "Others" category.
     if (otherHoldings.length > 0) {
-      const othersValue = otherHoldings.reduce((sum, [, value]) => sum + value, 0);
+      const othersValue = otherHoldings.reduce((sum, item) => sum + Math.abs(item.totalValue), 0);
       labels.push('Others');
       data.push(othersValue);
     }
 
     return { labels, datasets: [{ data }] };
+
   }, [allData?.StockHoldings]);
 
   return {
