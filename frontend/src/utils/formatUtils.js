@@ -6,7 +6,8 @@
  * @returns {string} The formatted currency string.
  */
 export const formatCurrency = (value) => {
-  return new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(value || 0);
+  // Alterado de 'de-DE' para 'pt-PT' para usar o formato de moeda português.
+  return new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(value || 0);
 };
 
 /**
