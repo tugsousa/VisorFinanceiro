@@ -124,7 +124,7 @@ export default function RealizedGainsPage() {
           >
             {availableYears.map(year => (
               <MenuItem key={year} value={year}>
-                {year === ALL_YEARS_OPTION ? 'Todos' : year}
+                {year === ALL_YEARS_OPTION ? 'Total' : year}
               </MenuItem>
             ))}
           </Select>
