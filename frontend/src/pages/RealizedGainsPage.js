@@ -145,7 +145,6 @@ export default function RealizedGainsPage() {
       {currentTab === 'overview' && (
         <Grid container spacing={3}>
             {/* --- TOP ROW --- */}
-            {/* MODIFICATION: Adjusted lg props for sizing and positioning */}
             <Grid item xs={12} md={5} lg={5}>
                 <Paper elevation={0} sx={{ p: 2, height: '100%', display: 'flex', flexDirection: 'column', border: 'none' }}>
                     <CardContent>
@@ -167,7 +166,7 @@ export default function RealizedGainsPage() {
                 </Paper>
             </Grid>
             <Grid item xs={12} md={7} lg={7}>
-                <Paper elevation={0} sx={{ p: 2, height: 400, border: 'none' }}>
+                <Paper elevation={0} sx={{ p: 2, height: 280, border: 'none' }}>
                     <HoldingsAllocationChart chartData={holdingsChartData} />
                 </Paper>
             </Grid>
