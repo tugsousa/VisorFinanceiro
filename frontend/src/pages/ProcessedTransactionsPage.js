@@ -3,6 +3,7 @@ import React, { useState } from 'react';
 import { Typography, Box, Paper, Alert, CircularProgress } from '@mui/material';
 import { Button, Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle } from '@mui/material';
 import { DataGrid } from '@mui/x-data-grid';
+import { ptPT } from '@mui/x-data-grid/locales';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiFetchProcessedTransactions, apiDeleteAllTransactions } from '../api/apiService';
 import { useAuth } from '../context/AuthContext';
@@ -165,6 +166,7 @@ const ProcessedTransactionsPage = () => {
             pageSizeOptions={[10, 25, 50, 100]}
             disableRowSelectionOnClick
             density="compact"
+            localeText={ptPT.components.MuiDataGrid.defaultProps.localeText}
           />
         </Paper>
       ) : (
