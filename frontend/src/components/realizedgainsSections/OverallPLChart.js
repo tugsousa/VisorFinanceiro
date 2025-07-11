@@ -159,18 +159,16 @@ const OverallPLChart = ({ stockSaleDetails, optionSaleDetails, dividendTaxResult
 
   if (!chartData || chartData.datasets.length === 0 || !chartData.datasets.some(ds => ds.data && ds.data.length > 0 && ds.data.some(d => d !== undefined))) {
     return (
-      <Paper elevation={0} sx={{ p: 2, mb: 3, border: 'none', textAlign: 'center' }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
         <Typography variant="body2" color="text.secondary">No P/L data to display for the selected period.</Typography>
-      </Paper>
+      </Box>
     );
   }
 
   return (
-    <Paper elevation={0} sx={{ p: 2, mb: 3, border: 'none' }}>
-      <Box sx={{ height: 350 }}>
-        <Bar data={chartData} options={chartOptions} />
-      </Box>
-    </Paper>
+    <Box sx={{ height: '100%', width: '100%' }}>
+      <Bar data={chartData} options={chartOptions} />
+    </Box>
   );
 };
 

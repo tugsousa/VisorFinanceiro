@@ -166,7 +166,7 @@ export default function RealizedGainsPage() {
                     </CardContent>
                 </Paper>
             </Grid>
-            <Grid item xs={12} md={7} lg={6}>
+            <Grid item xs={12} md={7} lg={7}>
                 <Paper elevation={0} sx={{ p: 2, height: 400, border: 'none' }}>
                     <HoldingsAllocationChart chartData={holdingsChartData} />
                 </Paper>

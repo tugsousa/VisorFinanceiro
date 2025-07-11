@@ -144,7 +144,11 @@ const PLContributionChart = ({ stockSaleDetails, optionSaleDetails, dividendTaxR
     );
   }
 
-  return <Bar options={chartOptions} data={chartData} />;
+  return (
+    <Box sx={{ height: '100%', width: '100%' }}>
+      <Bar options={chartOptions} data={chartData} />
+    </Box>
+  );
 };
 
 export default PLContributionChart;
