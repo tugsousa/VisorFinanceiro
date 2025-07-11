@@ -9,11 +9,11 @@ import { formatCurrency } from '../../utils/formatUtils';
 ChartJS.register(ArcElement, Tooltip, Legend, Title);
 
 /**
- * Função auxiliar que quebra uma string em várias linhas para caber numa largura máxima.
- * @param {CanvasRenderingContext2D} ctx - O contexto do canvas para medir o texto.
- * @param {string} text - O texto a ser quebrado.
- * @param {number} maxWidth - A largura máxima em píxeis.
- * @returns {string[]} Um array de strings, onde cada string é uma linha.
+ * Helper function to wrap text into multiple lines to fit within a max width.
+ * @param {CanvasRenderingContext2D} ctx - The canvas context for measuring text.
+ * @param {string} text - The text to be wrapped.
+ * @param {number} maxWidth - The maximum width in pixels.
+ * @returns {string[]} An array of strings, where each string is a line.
  */
 const wrapText = (ctx, text, maxWidth) => {
   if (!text) return [];
@@ -37,7 +37,7 @@ const wrapText = (ctx, text, maxWidth) => {
 };
 
 
-// Plugin personalizado para desenhar texto no centro do gráfico de rosca
+// Custom plugin to draw text in the center of the doughnut chart
 const centerTextPlugin = {
   id: 'centerTextPlugin',
   beforeDraw(chart, args, options) {
@@ -54,13 +54,14 @@ const centerTextPlugin = {
     ctx.textBaseline = 'middle';
 
     if (hoveredData) {
-      // --- CÁLCULO ROBUSTO DA LARGURA MÁXIMA ---
+      // --- ROBUST MAX WIDTH CALCULATION ---
       const chartSize = Math.min(chart.width, chart.height);
       const cutoutPercentage = parseFloat(chart.options.cutout) / 100;
       const holeDiameter = chartSize * cutoutPercentage;
-      const maxWidth = holeDiameter * 0.9; // Usa 90% do diâmetro para uma margem segura
+      // THE FIX: Reduced the multiplier from 0.9 to 0.8 for more aggressive wrapping
+      const maxWidth = holeDiameter * 0.8; 
 
-      // --- Lógica de Quebra de Linha e Posicionamento Vertical ---
+      // --- LINE WRAPPING & VERTICAL POSITIONING LOGIC ---
       const labelLineHeight = 18;
       const valueFontSize = 24;
       const percentageFontSize = 16;
@@ -76,26 +77,26 @@ const centerTextPlugin = {
       
       let currentY = centerY - (totalBlockHeight / 2) + (labelLineHeight / 2);
 
-      // 1. Desenha as linhas do nome do produto
+      // 1. Draw the product name lines
       lines.forEach(line => {
         ctx.fillText(line, centerX, currentY);
         currentY += labelLineHeight;
       });
 
-      // 2. Desenha o valor
+      // 2. Draw the value
       currentY += valueMarginTop;
       ctx.font = `bold ${valueFontSize}px sans-serif`;
       ctx.fillStyle = '#111';
       ctx.fillText(formatCurrency(hoveredData.value), centerX, currentY);
       
-      // 3. Desenha a percentagem
+      // 3. Draw the percentage
       currentY += (valueFontSize / 2) + percentageMarginTop + (percentageFontSize / 2);
       ctx.font = `${percentageFontSize}px sans-serif`;
       ctx.fillStyle = '#666';
       ctx.fillText(hoveredData.percentage, centerX, currentY);
 
     } else {
-      // Desenho por defeito (valor total)
+      // Default display (total value)
       ctx.font = '16px sans-serif';
       ctx.fillStyle = '#666';
       ctx.fillText('Valor Total do Portefólio', centerX, centerY - 15);
@@ -108,7 +109,7 @@ const centerTextPlugin = {
   }
 };
 
-// Função auxiliar para desvanecer uma cor (torná-la mais transparente)
+// Helper function to fade a color (make it more transparent)
 const fadeColor = (colorString, alpha = 0.3) => {
     if (typeof colorString !== 'string') return 'rgba(200, 200, 200, 0.3)';
     let parts = colorString.match(/(\w+)\(([^)]+)\)/);
@@ -198,7 +199,7 @@ export default function HoldingsAllocationChart({ chartData }) {
                 display: false,
             },
             title: {
-                display: true,
+                display: false,
                 text: 'Composição do Portefólio (€)',
             },
             tooltip: {
