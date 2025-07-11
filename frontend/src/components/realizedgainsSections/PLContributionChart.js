@@ -57,9 +57,9 @@ const PLContributionChart = ({ stockSaleDetails, optionSaleDetails, dividendTaxR
       return {
         labels: years,
         datasets: [
-          { label: 'Stocks', data: years.map(year => yearlyData[year].stocks), backgroundColor: COLORS.stocks },
-          { label: 'Options', data: years.map(year => yearlyData[year].options), backgroundColor: COLORS.options },
-          { label: 'Dividends', data: years.map(year => yearlyData[year].dividends), backgroundColor: COLORS.dividends },
+          { label: 'Acções', data: years.map(year => yearlyData[year].stocks), backgroundColor: COLORS.stocks },
+          { label: 'Opções', data: years.map(year => yearlyData[year].options), backgroundColor: COLORS.options },
+          { label: 'Dividendos', data: years.map(year => yearlyData[year].dividends), backgroundColor: COLORS.dividends },
         ],
       };
 
@@ -95,9 +95,9 @@ const PLContributionChart = ({ stockSaleDetails, optionSaleDetails, dividendTaxR
       return {
           labels: MONTH_NAMES_CHART,
           datasets: [
-            { label: 'Stocks', data: monthlyData.map(d => d.stocks), backgroundColor: COLORS.stocks },
-            { label: 'Options', data: monthlyData.map(d => d.options), backgroundColor: COLORS.options },
-            { label: 'Dividends', data: monthlyData.map(d => d.dividends), backgroundColor: COLORS.dividends },
+            { label: 'Acções', data: monthlyData.map(d => d.stocks), backgroundColor: COLORS.stocks },
+            { label: 'Opções', data: monthlyData.map(d => d.options), backgroundColor: COLORS.options },
+            { label: 'Dividendos', data: monthlyData.map(d => d.dividends), backgroundColor: COLORS.dividends },
           ]
       }
     }
@@ -111,8 +111,8 @@ const PLContributionChart = ({ stockSaleDetails, optionSaleDetails, dividendTaxR
       title: {
         display: true,
         text: selectedYear === ALL_YEARS_OPTION 
-              ? 'Annual P/L Contribution by Category' 
-              : `Monthly P/L Contribution for ${selectedYear}`,
+              ? 'Contribuição Anual de Lucro/Prejuízo por Categoria' 
+              : `ontribuição Mensal de Lucro/Prejuízo para ${selectedYear}`,
       },
       tooltip: {
         callbacks: {
@@ -126,12 +126,12 @@ const PLContributionChart = ({ stockSaleDetails, optionSaleDetails, dividendTaxR
     scales: {
       x: {
         stacked: true,
-        title: { display: true, text: selectedYear === ALL_YEARS_OPTION ? 'Year' : 'Month' },
+        title: { display: true, text: selectedYear === ALL_YEARS_OPTION ? 'Ano' : 'Mês' },
       },
       y: {
         stacked: true,
         beginAtZero: false,
-        title: { display: true, text: 'Profit/Loss (€)' },
+        title: { display: true, text: 'Lucro/Prejuízo (€)' },
       },
     },
   }), [selectedYear]);
@@ -139,7 +139,7 @@ const PLContributionChart = ({ stockSaleDetails, optionSaleDetails, dividendTaxR
   if (!chartData || chartData.labels.length === 0) {
     return (
         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%'}}>
-            <Typography color="text.secondary">No data for P/L Contribution Chart.</Typography>
+            <Typography color="text.secondary">Sem dados para o gráfico de contribuição de lucro/prejuízo.</Typography>
         </Box>
     );
   }

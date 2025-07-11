@@ -1,26 +1,25 @@
 import React, { useMemo } from 'react';
 import { Typography, Paper, Box, Grid } from '@mui/material';
-import { DataGrid } from '@mui/x-data-grid';
+import { DataGrid } from '@mui/x-data-grid'; 
+import { ptPT } from '@mui/x-data-grid/locales'; // Add this correct import for the locale
 import { Bar } from 'react-chartjs-2';
 import { ALL_YEARS_OPTION, MONTH_NAMES_CHART } from '../../constants';
 import { getBaseProductName } from '../../utils/chartUtils';
 import { getYearString, getMonthIndex } from '../../utils/dateUtils';
 
 const columns = [
-  { field: 'Date', headerName: 'Date', width: 110 },
-  { field: 'ProductName', headerName: 'Product', flex: 1, minWidth: 200 },
-  { field: 'Amount', headerName: 'Amount', type: 'number', width: 120, valueFormatter: (value) => typeof value === 'number' ? value.toFixed(2) : '' },
-  { field: 'Currency', headerName: 'Currency', width: 90 },
-  { field: 'ExchangeRate', headerName: 'Exch. Rate', type: 'number', width: 120, valueFormatter: (value) => typeof value === 'number' ? value.toFixed(4) : '' },
-  {
-    field: 'AmountEUR',
-    headerName: 'Amount (€)',
-    type: 'number',
-    width: 130,
+  { field: 'Date', headerName: 'Data', width: 110 },
+  { field: 'ProductName', headerName: 'Produto', flex: 1, minWidth: 180 },
+  { field: 'Amount', headerName: 'Montante', type: 'number', width: 120, align: 'right', headerAlign: 'right', valueFormatter: (value) => typeof value === 'number' ? value.toFixed(2) : '' },
+  { field: 'Currency', headerName: 'Moeda', width: 90 },
+  { field: 'ExchangeRate', headerName: 'Taxa de câmbio', type: 'number', width: 120, align: 'right', headerAlign: 'right', valueFormatter: (value) => typeof value === 'number' ? value.toFixed(4) : '' },
+  { field: 'AmountEUR', headerName: 'Montante (€)', type: 'number', width: 130,
+    headerAlign: 'right',
+    align: 'right',
     renderCell: (params) => (
-      <Typography sx={{ color: params.value >= 0 ? 'success.main' : 'error.main' }}>
+      <Box sx={{ color: params.value >= 0 ? 'success.main' : 'error.main' }}>
         {params.value?.toFixed(2)}
-      </Typography>
+      </Box>
     ),
   },
 ];
@@ -132,12 +131,12 @@ export default function DividendsSection({ dividendTransactionsData, selectedYea
       responsive: true, maintainAspectRatio: false,
       plugins: {
           legend: { display: false },
-          title: { display: true, text: `Gross Dividends by Product` },
+          title: { display: true, text: `Dividendo por produto` },
           tooltip: { callbacks: { label: (ctx) => `${new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(ctx.raw || 0)}` } }
       },
       scales: {
-          y: { beginAtZero: true, title: { display: true, text: 'Amount (€)' } },
-          x: { title: { display: true, text: 'Product' }, ticks: { autoSkip: false, maxRotation: 45, minRotation: 30 } }
+          y: { beginAtZero: true, title: { display: true, text: 'Montante (€)' } },
+          x: { title: { display: true, text: 'Produto' }, ticks: { autoSkip: false, maxRotation: 45, minRotation: 30 } }
       }
   }), []);
 
@@ -145,19 +144,19 @@ export default function DividendsSection({ dividendTransactionsData, selectedYea
     responsive: true, maintainAspectRatio: false,
     plugins: {
       legend: { display: false },
-      title: { display: true, text: `Gross Dividends by ${selectedYear === ALL_YEARS_OPTION ? 'Year' : 'Month'}` },
+      title: { display: true, text: `Dividendo por ${selectedYear === ALL_YEARS_OPTION ? 'ano' : 'mês'}` },
       tooltip: { callbacks: { label: (ctx) => `${new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(ctx.raw || 0)}` } }
     },
     scales: {
-      y: { beginAtZero: true, title: { display: true, text: 'Amount (€)' } },
-      x: { title: { display: true, text: selectedYear === ALL_YEARS_OPTION ? 'Year' : 'Month' } }
+      y: { beginAtZero: true, title: { display: true, text: 'Montante (€)' } },
+      x: { title: { display: true, text: selectedYear === ALL_YEARS_OPTION ? 'Ano' : 'Mês' } }
     }
   }), [selectedYear]);
 
   if (dividendTransactionsData.length === 0) {
     return (
       <Paper elevation={0} sx={{ p: 2, mb: 3, border: 'none' }}>
-        <Typography>No dividend data {(selectedYear === ALL_YEARS_OPTION) ? 'available' : `for ${selectedYear}`}.</Typography>
+        <Typography>Não existe informação de dividendos {(selectedYear === ALL_YEARS_OPTION) ? 'available' : `for ${selectedYear}`}.</Typography>
       </Paper>
     );
   }
@@ -169,7 +168,6 @@ export default function DividendsSection({ dividendTransactionsData, selectedYea
   
   return (
     <Paper elevation={0} sx={{ p: 2, mb: 3, border: 'none' }}>
-      <Typography variant="h6" sx={{ mb: 2 }}>Dividends ({selectedYear === ALL_YEARS_OPTION ? 'All Years' : selectedYear})</Typography>
 
       <Grid container spacing={3} sx={{ mb: 3 }}>
         <Grid item xs={12} lg={6}>
@@ -177,7 +175,7 @@ export default function DividendsSection({ dividendTransactionsData, selectedYea
                 {timeSeriesChartData.labels.length > 0 ? (
                     <Bar options={timeSeriesChartOptions} data={timeSeriesChartData} />
                 ) : (
-                    <Typography sx={{ my: 2, fontStyle: 'italic', color: 'text.secondary', textAlign: 'center', pt: '25%' }}>No time-series data for this period.</Typography>
+                    <Typography sx={{ my: 2, fontStyle: 'italic', color: 'text.secondary', textAlign: 'center', pt: '25%' }}>Não há dados para este período.</Typography>
                 )}
             </Box>
         </Grid>
@@ -186,13 +184,14 @@ export default function DividendsSection({ dividendTransactionsData, selectedYea
                 {productChartData.labels.length > 0 ? (
                     <Bar options={productChartOptions} data={productChartData} />
                 ) : (
-                    <Typography sx={{ my: 2, fontStyle: 'italic', color: 'text.secondary', textAlign: 'center', pt: '25%' }}>No product data for this period.</Typography>
+                    <Typography sx={{ my: 2, fontStyle: 'italic', color: 'text.secondary', textAlign: 'center', pt: '25%' }}>Não há dados para este período.</Typography>
                 )}
             </Box>
         </Grid>
       </Grid>
       
-      <Box sx={{ height: 600, width: '100%' }}>
+      
+<Box sx={{ maxHeight: 600, width: '100%' }}>
         <DataGrid
           rows={rows}
           columns={columns}
@@ -201,8 +200,12 @@ export default function DividendsSection({ dividendTransactionsData, selectedYea
           }}
           pageSizeOptions={[10, 25, 50]}
           disableRowSelectionOnClick
+          autoHeight
+          localeText={ptPT.components.MuiDataGrid.defaultProps.localeText}
         />
       </Box>
+
+    
     </Paper>
   );
 }

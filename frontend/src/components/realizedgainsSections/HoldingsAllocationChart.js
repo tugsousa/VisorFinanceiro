@@ -10,7 +10,7 @@ export default function HoldingsAllocationChart({ chartData }) {
     if (!chartData || !chartData.datasets || chartData.datasets[0].data.length === 0) {
         return (
             <Paper elevation={0} sx={{ p: 2, display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', border: 'none' }}>
-                <Typography color="text.secondary">No holdings data for chart.</Typography>
+                <Typography color="text.secondary">Sem dados de posições para o gráfico.</Typography>
             </Paper>
         );
     }
@@ -34,7 +34,7 @@ export default function HoldingsAllocationChart({ chartData }) {
             },
             title: {
                 display: true,
-                text: 'Stock Holdings by Value (€)',
+                text: 'Composição do Portefólio (€)',
             },
             tooltip: {
                 callbacks: {

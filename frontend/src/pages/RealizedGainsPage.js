@@ -89,8 +89,8 @@ export default function RealizedGainsPage() {
   if (isDataEmpty(allData)) {
     return (
       <Box sx={{ p: 3, textAlign: 'center', mt: 4 }}>
-        <Typography variant="h5" gutterBottom>Portfolio Analysis</Typography>
-        <Typography>No data available. Please upload a transaction file first.</Typography>
+        <Typography variant="h5" gutterBottom>Análise de Portefólio</Typography>
+        <Typography>Sem dados disponíveis. Por favor, carregue primeiro um ficheiro de transações.</Typography>
       </Box>
     );
   }
@@ -105,7 +105,7 @@ export default function RealizedGainsPage() {
         mb: 3 
       }}>
         <Typography variant="h4" component="h1" sx={{ mb: { xs: 2, sm: 0 } }}>
-          Portfolio Analysis
+          Análise de Portefólio
         </Typography>
         <FormControl 
           sx={{ 
@@ -114,17 +114,17 @@ export default function RealizedGainsPage() {
           }} 
           size="small"
         >
-          <InputLabel id="year-select-label">Year</InputLabel>
+          <InputLabel id="year-select-label">Ano</InputLabel>
           <Select
             labelId="year-select-label"
             value={selectedYear}
-            label="Year"
+            label="Ano"
             onChange={handleYearChange}
             disabled={availableYears.length <= 1}
           >
             {availableYears.map(year => (
               <MenuItem key={year} value={year}>
-                {year === ALL_YEARS_OPTION ? 'All Years' : year}
+                {year === ALL_YEARS_OPTION ? 'Todos' : year}
               </MenuItem>
             ))}
           </Select>
@@ -133,11 +133,11 @@ export default function RealizedGainsPage() {
       
       <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 3 }}>
         <Tabs value={currentTab} onChange={handleTabChange} aria-label="portfolio analysis sections" variant="scrollable" scrollButtons="auto">
-          <Tab label="Overview" value="overview" />
-          <Tab label="Holdings" value="holdings" />
-          <Tab label="Stock Sales P/L" value="stock-sales" />
-          <Tab label="Option Sales P/L" value="option-sales" />
-          <Tab label="Dividends" value="dividends" />
+          <Tab label="Visão Geral" value="overview" />
+          <Tab label="Ativos" value="holdings" />
+          <Tab label="Vendas de Ações" value="stock-sales" />
+          <Tab label="Vendas de Opções" value="option-sales" />
+          <Tab label="Dividendos" value="dividends" />
         </Tabs>
       </Box>
 
@@ -149,15 +149,15 @@ export default function RealizedGainsPage() {
             <Grid item xs={12} md={5} lg={5}>
                 <Paper elevation={0} sx={{ p: 2, height: '100%', display: 'flex', flexDirection: 'column', border: 'none' }}>
                     <CardContent>
-                        <Typography variant="h6" sx={{ mb: 1 }}>Key Metrics ({selectedYear === ALL_YEARS_OPTION ? 'All Time' : selectedYear})</Typography>
-                        <KeyMetricCard title="Stocks P/L" value={summaryPLs.stockPL} icon={<ShowChartIcon />} />
-                        <KeyMetricCard title="Options P/L" value={summaryPLs.optionPL} icon={<CandlestickChartIcon />} />
-                        <KeyMetricCard title="Dividends Net" value={summaryPLs.dividendPL} icon={<AttachMoneyIcon />} />
+                        <Typography variant="h6" sx={{ mb: 1 }}>Métricas Principais ({selectedYear === ALL_YEARS_OPTION ? 'Acumulado' : selectedYear})</Typography>
+                        <KeyMetricCard title="L/P de Ações" value={summaryPLs.stockPL} icon={<ShowChartIcon />} />
+                        <KeyMetricCard title="L/P de Oplões" value={summaryPLs.optionPL} icon={<CandlestickChartIcon />} />
+                        <KeyMetricCard title="Dividendos" value={summaryPLs.dividendPL} icon={<AttachMoneyIcon />} />
                         <Divider sx={{ my: 1 }} />
                         <Box display="flex" alignItems="center" justifyContent="space-between" pt={1.5}>
                             <Box display="flex" alignItems="center">
                                 <AccountBalanceWalletIcon sx={{ mr: 1.5, color: 'text.secondary' }} />
-                                <Typography variant="h6" sx={{fontWeight:'bold'}}>Total P/L:</Typography>
+                                <Typography variant="h6" sx={{fontWeight:'bold'}}>Total L/P:</Typography>
                             </Box>
                             <Typography variant="h6" sx={{ fontWeight: 'bold', color: summaryPLs.totalPL >= 0 ? 'success.main' : 'error.main' }}>
                                 {formatCurrency(summaryPLs.totalPL)}

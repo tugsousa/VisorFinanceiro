@@ -71,9 +71,9 @@ const OverallPLChart = ({ stockSaleDetails, optionSaleDetails, dividendTaxResult
         if (!singleYearData) return { labels: [], datasets: []};
 
         return {
-            labels: ['Stocks P/L', 'Options P/L', 'Dividends Net'],
+            labels: ['L/P de Ações', 'L/P de Opções', 'Dividendos'],
             datasets: [{
-                label: `P/L for ${selectedYear}`, // This label might not be shown if legend.display is false
+                label: `L/P para ${selectedYear}`, // This label might not be shown if legend.display is false
                 data: [singleYearData.stocks, singleYearData.options, singleYearData.dividends],
                 backgroundColor: [
                     singleYearData.stocks >= 0 ? POSITIVE_COLOR_BG : NEGATIVE_COLOR_BG,
@@ -98,7 +98,7 @@ const OverallPLChart = ({ stockSaleDetails, optionSaleDetails, dividendTaxResult
     return {
       labels: sortedYears,
       datasets: [{
-        label: 'Total P/L (Stocks, Options, Dividends)',
+        label: 'Lucro/Prejuízo Total (Ações, Opções, Dividendos)',
         data: totalNetPLPerYear,
         backgroundColor: backgroundColors,
         borderColor: borderColors,
@@ -118,8 +118,8 @@ const OverallPLChart = ({ stockSaleDetails, optionSaleDetails, dividendTaxResult
       title: {
         display: true,
         text: selectedYear === ALL_YEARS_OPTION || selectedYear === ''
-            ? 'Overall P/L per Year (Stocks, Options, Dividends)'
-            : `P/L Breakdown for ${selectedYear}`
+            ? 'Lucro/Prejuízo Global por Ano (Ações, Opções, Dividendos)'
+            : `Detalhe de L/P para ${selectedYear}`
       },
       tooltip: {
         callbacks: {
@@ -147,12 +147,12 @@ const OverallPLChart = ({ stockSaleDetails, optionSaleDetails, dividendTaxResult
       x: {
         title: {
             display: true,
-            text: selectedYear === ALL_YEARS_OPTION || selectedYear === '' ? 'Year' : 'Category'
+            text: selectedYear === ALL_YEARS_OPTION || selectedYear === '' ? 'Ano' : 'Categoria'
         }
       },
       y: {
         beginAtZero: false, // Allow negative axis for losses
-        title: { display: true, text: 'Profit/Loss (€)' }
+        title: { display: true, text: 'Lucro/Prejuízo (€)' }
       },
     },
   }), [selectedYear]);
@@ -160,7 +160,7 @@ const OverallPLChart = ({ stockSaleDetails, optionSaleDetails, dividendTaxResult
   if (!chartData || chartData.datasets.length === 0 || !chartData.datasets.some(ds => ds.data && ds.data.length > 0 && ds.data.some(d => d !== undefined))) {
     return (
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
-        <Typography variant="body2" color="text.secondary">No P/L data to display for the selected period.</Typography>
+        <Typography variant="body2" color="text.secondary">Sem dados de lucro/prejuízo para mostrar no período selecionado.</Typography>
       </Box>
     );
   }

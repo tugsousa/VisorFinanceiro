@@ -3,11 +3,11 @@ import { Typography, Paper, Box } from '@mui/material';
 import { DataGrid } from '@mui/x-data-grid';
 
 const columns = [
-    { field: 'product_name', headerName: 'Product', flex: 1, minWidth: 200 },
-    { field: 'open_date', headerName: 'Open Date', width: 110 },
+    { field: 'product_name', headerName: 'Produto', flex: 1, minWidth: 200 },
+    { field: 'open_date', headerName: 'Dt. abertura', width: 110 },
     { 
         field: 'quantity', 
-        headerName: 'Qty', 
+        headerName: 'Qtd', 
         type: 'number', 
         width: 80,
         renderCell: (params) => (
@@ -16,16 +16,16 @@ const columns = [
             </Typography>
         ),
     },
-    { field: 'open_price', headerName: 'Open Price', type: 'number', width: 120, valueFormatter: (params) => params.value.toFixed(4) },
-    { field: 'open_amount_eur', headerName: 'Value (€)', type: 'number', width: 130, valueFormatter: (params) => params.value.toFixed(2) },
-    { field: 'open_currency', headerName: 'Currency', width: 90 },
+    { field: 'open_price', headerName: 'Preço abertura', type: 'number', width: 120, valueFormatter: (params) => params.value.toFixed(4) },
+    { field: 'open_amount_eur', headerName: 'Montante (€)', type: 'number', width: 130, valueFormatter: (params) => params.value.toFixed(2) },
+    { field: 'open_currency', headerName: 'Moeda', width: 90 },
 ];
 
 export default function OptionHoldingsSection({ holdingsData }) {
   if (!holdingsData || holdingsData.length === 0) {
     return (
       <Paper elevation={0} sx={{ p: 2, mb: 3, border: 'none' }}>
-        <Typography>No option holdings data to display.</Typography>
+        <Typography>Sem dados de posições em opções para mostrar.</Typography>
       </Paper>
     );
   }
@@ -37,7 +37,7 @@ export default function OptionHoldingsSection({ holdingsData }) {
 
   return (
     <Paper elevation={0} sx={{ p: 2, mb: 3, border: 'none' }}>
-      <Typography variant="h6" sx={{ mb: 2 }}>Option Holdings</Typography>
+      <Typography variant="h6" sx={{ mb: 2 }}>Posições em Opções</Typography>
       <Box sx={{ height: 400, width: '100%' }}>
         <DataGrid
           rows={rows}

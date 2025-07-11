@@ -1,6 +1,7 @@
 import React, { useMemo } from 'react';
 import { Typography, Paper, Box, Grid } from '@mui/material';
 import { DataGrid } from '@mui/x-data-grid';
+import { ptPT } from '@mui/x-data-grid/locales';
 import { Bar } from 'react-chartjs-2';
 import { ALL_YEARS_OPTION, MONTH_NAMES_CHART } from '../../constants';
 import { getYearString, getMonthIndex, calculateDaysHeld } from '../../utils/dateUtils';
@@ -13,42 +14,26 @@ const calculateAnnualizedReturnForStocksLocal = (sale) => {
 };
 
 const columns = [
-    { field: 'SaleDate', headerName: 'Sale Date', width: 110 },
-    { field: 'BuyDate', headerName: 'Buy Date', width: 110 },
+    { field: 'SaleDate', headerName: 'Dt. fecho', width: 110 },
+    { field: 'BuyDate', headerName: 'Dt. abertura', width: 110 },
     {
         field: 'daysHeld',
-        headerName: 'Days Held',
+        headerName: 'Dias em posse',
         width: 100,
         type: 'number',
         valueGetter: (_, row) => calculateDaysHeld(row.BuyDate, row.SaleDate),
     },
-    { field: 'ProductName', headerName: 'Product', flex: 1, minWidth: 200 },
-    { field: 'Quantity', headerName: 'Qty', type: 'number', width: 80 },
-    {
-        field: 'Delta',
-        headerName: 'P/L (€)',
-        type: 'number',
-        width: 120,
+    { field: 'ProductName', headerName: 'Produto', flex: 1, minWidth: 200 },
+    { field: 'Quantity', headerName: 'Qtd', type: 'number', width: 80 },
+    { field: 'BuyAmountEUR', headerName: 'Mont. abertura (€)', type: 'number', width: 130, valueFormatter: (value) => typeof value === 'number' ? value.toFixed(2) : '' },
+    { field: 'SaleAmountEUR', headerName: 'Mont. fecho (€)', type: 'number', width: 130, valueFormatter: (value) => typeof value === 'number' ? value.toFixed(2) : '' },
+    { field: 'Delta', headerName: 'L/P (€)', type: 'number', width: 120, headerAlign: 'right', align: 'right',
         renderCell: (params) => (
-            <Typography sx={{ color: params.value >= 0 ? 'success.main' : 'error.main' }}>
+            <Box sx={{ color: params.value >= 0 ? 'success.main' : 'error.main' }}>
                 {params.value?.toFixed(2)}
-            </Typography>
+            </Box>
         ),
     },
-    {
-        field: 'annualizedReturn',
-        headerName: 'Annualized',
-        width: 130,
-        valueGetter: (_, row) => parseFloat(calculateAnnualizedReturnForStocksLocal(row)) || 0,
-        renderCell: (params) => (
-            <Typography sx={{ color: params.value >= 0 ? 'success.main' : 'error.main' }}>
-                {`${params.value.toFixed(2)}%`}
-            </Typography>
-        ),
-    },
-    { field: 'BuyAmountEUR', headerName: 'Cost Basis (€)', type: 'number', width: 130, valueFormatter: (value) => typeof value === 'number' ? value.toFixed(2) : '' },
-    { field: 'SaleAmountEUR', headerName: 'Proceeds (€)', type: 'number', width: 130, valueFormatter: (value) => typeof value === 'number' ? value.toFixed(2) : '' },
-    { field: 'Commission', headerName: 'Commission (€)', type: 'number', width: 120, valueFormatter: (value) => typeof value === 'number' ? value.toFixed(2) : '' },
 ];
 
 export default function StockSalesSection({ stockSalesData, selectedYear }) {
@@ -76,7 +61,7 @@ export default function StockSalesSection({ stockSalesData, selectedYear }) {
         const chartItems = topItems.map(([name, pl]) => ({ name, pl }));
         if (otherItems.length > 0) {
             const othersPL = otherItems.reduce((sum, [, pl]) => sum + pl, 0);
-            chartItems.push({ name: 'Others', pl: othersPL });
+            chartItems.push({ name: 'Outros', pl: othersPL });
         }
         chartItems.sort((a, b) => a.pl - b.pl);
         
@@ -146,12 +131,12 @@ export default function StockSalesSection({ stockSalesData, selectedYear }) {
         responsive: true, maintainAspectRatio: false,
         plugins: {
             legend: { display: false },
-            title: { display: true, text: `P/L by Product` },
-            tooltip: { callbacks: { label: (ctx) => `P/L: ${new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(ctx.raw || 0)}` } }
+            title: { display: true, text: `L/P por Produto` },
+            tooltip: { callbacks: { label: (ctx) => `L/P: ${new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(ctx.raw || 0)}` } }
         },
         scales: {
-            x: { title: { display: true, text: 'Product' }, ticks: { autoSkip: false, maxRotation: 45, minRotation: 30 } },
-            y: { beginAtZero: false, title: { display: true, text: 'Profit/Loss (€)' } }
+            x: { title: { display: true, text: 'Produto' }, ticks: { autoSkip: false, maxRotation: 45, minRotation: 30 } },
+            y: { beginAtZero: false, title: { display: true, text: 'Lucro/Prejuízo (€)' } }
         }
     }), []);
     
@@ -159,19 +144,19 @@ export default function StockSalesSection({ stockSalesData, selectedYear }) {
         responsive: true, maintainAspectRatio: false,
         plugins: {
             legend: { display: false },
-            title: { display: true, text: `P/L by ${selectedYear === ALL_YEARS_OPTION ? 'Year' : 'Month'}` },
-            tooltip: { callbacks: { label: (ctx) => `P/L: ${new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(ctx.raw || 0)}` } }
+            title: { display: true, text: `L/P por ${selectedYear === ALL_YEARS_OPTION ? 'ano' : 'mês'}` },
+            tooltip: { callbacks: { label: (ctx) => `L/P: ${new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(ctx.raw || 0)}` } }
         },
         scales: {
-            x: { title: { display: true, text: selectedYear === ALL_YEARS_OPTION ? 'Year' : 'Month' } },
-            y: { beginAtZero: false, title: { display: true, text: 'Profit/Loss (€)' } }
+            x: { title: { display: true, text: selectedYear === ALL_YEARS_OPTION ? 'Ano' : 'Mês' } },
+            y: { beginAtZero: false, title: { display: true, text: 'Lucro/Prejuízo (€)' } }
         }
     }), [selectedYear]);
 
     if (!stockSalesData || stockSalesData.length === 0) {
         return (
             <Paper elevation={0} sx={{ p: 2, mb: 3, border: 'none' }}>
-                <Typography>No stock sales data {(selectedYear === ALL_YEARS_OPTION) ? 'available' : `for ${selectedYear}`}.</Typography>
+                <Typography>Sem dados de vendas de ações {(selectedYear === ALL_YEARS_OPTION) ? 'disponivel' : `para ${selectedYear}`}.</Typography>
             </Paper>
         );
     }
@@ -183,8 +168,7 @@ export default function StockSalesSection({ stockSalesData, selectedYear }) {
 
     return (
         <Paper elevation={0} sx={{ p: 2, mb: 3, border: 'none' }}>
-            <Typography variant="h6" sx={{ mb: 2 }}>Stock Sales ({selectedYear === ALL_YEARS_OPTION ? 'All Years' : selectedYear})</Typography>
-            
+
             <Grid container spacing={3} sx={{ mb: 3 }}>
                 <Grid item xs={12} lg={6}>
                     <Box sx={{ height: 350 }}>
@@ -198,17 +182,19 @@ export default function StockSalesSection({ stockSalesData, selectedYear }) {
                 </Grid>
             </Grid>
 
-            <Box sx={{ height: 600, width: '100%' }}>
-                <DataGrid
-                    rows={rows}
-                    columns={columns}
-                    initialState={{
-                        pagination: { paginationModel: { pageSize: 10 } },
-                    }}
-                    pageSizeOptions={[10, 25, 50]}
-                    disableRowSelectionOnClick
-                />
-            </Box>
+      <Box sx={{ maxHeight: 600, width: '100%' }}>
+        <DataGrid
+          rows={rows}
+          columns={columns}
+          initialState={{
+            pagination: { paginationModel: { pageSize: 10 } },
+          }}
+          pageSizeOptions={[10, 25, 50]}
+          disableRowSelectionOnClick
+          autoHeight
+          localeText={ptPT.components.MuiDataGrid.defaultProps.localeText}
+        />
+      </Box>
         </Paper>
     );
 }
