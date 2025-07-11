@@ -112,7 +112,7 @@ const PLContributionChart = ({ stockSaleDetails, optionSaleDetails, dividendTaxR
         display: true,
         text: selectedYear === ALL_YEARS_OPTION 
               ? 'Contribuição Anual de Lucro/Prejuízo por Categoria' 
-              : `ontribuição Mensal de Lucro/Prejuízo para ${selectedYear}`,
+              : `Contribuição Mensal de Lucro/Prejuízo para ${selectedYear}`,
       },
       tooltip: {
         callbacks: {

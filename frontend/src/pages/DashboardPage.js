@@ -10,10 +10,10 @@ import { useAuth } from '../context/AuthContext';
 import { Link as RouterLink } from 'react-router-dom';
 
 const dashboardItems = [
-  { title: "Upload Transactions", to: "/upload", icon: <UploadIcon fontSize="large" />, description: "Upload your latest transaction CSV file." },
-  { title: "View Realized Gains", to: "/realizedgains", icon: <RealizedGainsIcon fontSize="large" />, description: "Analyze your portfolio's performance and P/L." },
-  { title: "Generate Tax Report", to: "/tax", icon: <TaxIcon fontSize="large" />, description: "Prepare data for your annual tax declaration." },
-  { title: "Browse Transactions", to: "/transactions", icon: <TableViewIcon fontSize="large" />, description: "View all processed transaction records." },
+  { title: "Carregar Transacções", to: "/upload", icon: <UploadIcon fontSize="large" />, description: "Carregue o seu ficheiro CSV com as transacções mais recentes." },
+  { title: "Consultar Mais-Valias Realizadas", to: "/realizedgains", icon: <RealizedGainsIcon fontSize="large" />, description: "Analise o desempenho do seu portefólio e os seus resultados (P/L)." },
+  { title: "Gerar Relatório Fiscal", to: "/tax", icon: <TaxIcon fontSize="large" />, description: "Prepare os dados para a sua declaração anual de impostos." },
+  { title: "Consultar Transacções", to: "/transactions", icon: <TableViewIcon fontSize="large" />, description: "Ver todas as transacções já processadas." },
 ];
 
 const DashboardPage = () => {
@@ -22,10 +22,10 @@ const DashboardPage = () => {
     return (
         <Box sx={{ p: { xs: 2, sm: 3 } }}>
             <Typography variant="h4" component="h1" gutterBottom>
-                Welcome, {user?.username || 'User'}!
+                Bem-vindo, {user?.username || 'User'}!
             </Typography>
             <Typography variant="subtitle1" color="text.secondary" sx={{ mb: 4 }}>
-                What would you like to do today?
+                O que gostaria de fazer hoje?
             </Typography>
             <Grid container spacing={3}>
                 {dashboardItems.map((item) => (

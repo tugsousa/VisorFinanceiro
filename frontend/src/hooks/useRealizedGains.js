@@ -120,29 +120,25 @@ export const useRealizedGains = (token, selectedYear) => {
       return null;
     }
 
-    // 1. Group holdings by ISIN. For each ISIN, store the total value,
-    //    the latest date, and the name associated with that latest date.
     const holdingsByIsin = stockHoldings.reduce((acc, holding) => {
-      const { isin, product_name, buy_amount_eur, buy_date } = holding;
-      if (!isin) return acc; // Skip any holdings that might lack an ISIN
+      // *** THE FIX IS HERE ***
+      const { isin, product_name, quantity, buyPrice, buy_date } = holding;
+      if (!isin) return acc;
 
-      // If this is the first time we see this ISIN, initialize it.
       if (!acc[isin]) {
         acc[isin] = {
           totalValue: 0,
           latestName: product_name,
-          // Use the robust date parser to handle dates correctly
           latestDate: parseDateRobust(buy_date) || new Date(0),
         };
       }
+      
+      // Correctly calculate the current value of this specific lot
+      const currentLotValue = (quantity || 0) * (buyPrice || 0);
+      acc[isin].totalValue += currentLotValue;
 
-      // Add the holding's value to the total for this ISIN.
-      acc[isin].totalValue += buy_amount_eur;
-
-      // Check if the current holding is more recent than the one we have stored.
       const currentDate = parseDateRobust(buy_date);
       if (currentDate && currentDate > acc[isin].latestDate) {
-        // If it is, update the latest date and the name.
         acc[isin].latestDate = currentDate;
         acc[isin].latestName = product_name;
       }
@@ -150,22 +146,18 @@ export const useRealizedGains = (token, selectedYear) => {
       return acc;
     }, {});
 
-    // 2. Convert the aggregated object into an array for sorting.
     const aggregatedHoldings = Object.values(holdingsByIsin);
-
-    // 3. Sort by the absolute total value to find the largest holdings.
-    //    Note: We use Math.abs because buy_amount_eur is negative.
+    
+    // Sort by the absolute total value
     aggregatedHoldings.sort((a, b) => Math.abs(b.totalValue) - Math.abs(a.totalValue));
 
     const topN = 7;
     const topHoldings = aggregatedHoldings.slice(0, topN);
     const otherHoldings = aggregatedHoldings.slice(topN);
 
-    // 4. Use the LATEST name for the label and the absolute value for the chart data.
     const labels = topHoldings.map(item => item.latestName);
     const data = topHoldings.map(item => Math.abs(item.totalValue));
 
-    // 5. If there are other smaller holdings, sum them into an "Others" category.
     if (otherHoldings.length > 0) {
       const othersValue = otherHoldings.reduce((sum, item) => sum + Math.abs(item.totalValue), 0);
       labels.push('Others');

@@ -151,7 +151,7 @@ export default function RealizedGainsPage() {
                     <CardContent>
                         <Typography variant="h6" sx={{ mb: 1 }}>Métricas Principais ({selectedYear === ALL_YEARS_OPTION ? 'Acumulado' : selectedYear})</Typography>
                         <KeyMetricCard title="L/P de Ações" value={summaryPLs.stockPL} icon={<ShowChartIcon />} />
-                        <KeyMetricCard title="L/P de Oplões" value={summaryPLs.optionPL} icon={<CandlestickChartIcon />} />
+                        <KeyMetricCard title="L/P de Opções" value={summaryPLs.optionPL} icon={<CandlestickChartIcon />} />
                         <KeyMetricCard title="Dividendos" value={summaryPLs.dividendPL} icon={<AttachMoneyIcon />} />
                         <Divider sx={{ my: 1 }} />
                         <Box display="flex" alignItems="center" justifyContent="space-between" pt={1.5}>

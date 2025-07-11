@@ -210,7 +210,7 @@ export default function StockSalesSection({ stockSalesData, selectedYear }) {
           }}
           pageSizeOptions={[10, 25, 50]}
           disableRowSelectionOnClick
-          autoHeight
+          sx={{ height: 'auto' }}
           localeText={ptPT.components.MuiDataGrid.defaultProps.localeText}
         />
       </Box>
