@@ -8,7 +8,13 @@ import { parseDateRobust } from '../../utils/dateUtils';
 const detailedColumns = [
   { field: 'product_name', headerName: 'Produto', flex: 1, minWidth: 200 },
   { field: 'isin', headerName: 'ISIN', width: 130 },
-  { field: 'buy_date', headerName: 'Dt. compra', width: 110 },
+  { 
+    field: 'buy_date', 
+    headerName: 'Dt. compra', 
+    width: 110,
+    type: 'date',
+    valueGetter: (value) => parseDateRobust(value),
+  },
   { field: 'quantity', headerName: 'Qtd', type: 'number', width: 80, align: 'right', headerAlign: 'right' },
   {
     field: 'buyPrice',
@@ -61,21 +67,19 @@ const groupedColumns = [
 
 
 export default function StockHoldingsSection({ holdingsData }) {
-  const [viewMode, setViewMode] = useState('detailed'); // 'detailed' or 'grouped'
+  const [viewMode, setViewMode] = useState('grouped'); // 'detailed' or 'grouped'
 
   const handleViewChange = (event, newViewMode) => {
-    // Prevent unselecting all buttons
     if (newViewMode !== null) {
       setViewMode(newViewMode);
     }
   };
 
-  // Memoize the calculation for grouped data
   const groupedData = useMemo(() => {
     if (!holdingsData) return [];
 
     const groupedByIsin = holdingsData.reduce((acc, holding) => {
-      const { isin, product_name, quantity, buyPrice, buy_date } = holding;
+      const { isin, product_name, quantity, buy_amount_eur, buy_date } = holding;
       if (!isin) return acc;
 
       if (!acc[isin]) {
@@ -89,13 +93,8 @@ export default function StockHoldingsSection({ holdingsData }) {
       }
 
       acc[isin].quantity += quantity;
-      
-      // *** THE FIX IS HERE ***
-      // Calculate the cost of the REMAINING shares for this lot, not the original total cost.
-      const lotCost = Math.abs(quantity * (buyPrice || 0));
-      acc[isin].totalCostBasisEUR += lotCost;
+      acc[isin].totalCostBasisEUR += Math.abs(buy_amount_eur || 0);
 
-      // Use the product name from the most recent purchase for that ISIN
       const currentBuyDate = parseDateRobust(buy_date);
       if (currentBuyDate && currentBuyDate > acc[isin].latestBuyDate) {
         acc[isin].latestBuyDate = currentBuyDate;
@@ -112,12 +111,11 @@ export default function StockHoldingsSection({ holdingsData }) {
   if (!holdingsData || holdingsData.length === 0) {
     return (
       <Paper elevation={0} sx={{ p: 2, mb: 3, border: 'none' }}>
-        <Typography>Sem dados de posições para mostrar.</Typography>
+        <Typography>Sem dados de posições para mostrar no período selecionado.</Typography>
       </Paper>
     );
   }
 
-  // Prepare rows for each view
   const detailedRows = holdingsData.map((holding, index) => ({
     id: `${holding.isin}-${holding.buy_date}-${index}`,
     ...holding,
@@ -139,11 +137,11 @@ export default function StockHoldingsSection({ holdingsData }) {
           aria-label="Stock holdings view mode"
           size="small"
         >
-          <ToggleButton value="detailed" aria-label="detailed view">
-            Detalhado
-          </ToggleButton>
           <ToggleButton value="grouped" aria-label="grouped view">
             Agrupado
+          </ToggleButton>
+          <ToggleButton value="detailed" aria-label="detailed view">
+            Detalhado
           </ToggleButton>
         </ToggleButtonGroup>
       </Box>
@@ -155,7 +153,7 @@ export default function StockHoldingsSection({ holdingsData }) {
             columns={detailedColumns}
             initialState={{
               pagination: { paginationModel: { pageSize: 10 } },
-              sorting: { sortModel: [{ field: 'buy_amount_eur', sort: 'desc' }] },
+              sorting: { sortModel: [{ field: 'buy_date', sort: 'desc' }] },
             }}
             pageSizeOptions={[10, 25, 50]}
             disableRowSelectionOnClick

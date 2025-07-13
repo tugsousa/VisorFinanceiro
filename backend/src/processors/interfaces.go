@@ -16,7 +16,7 @@ type DividendProcessor interface {
 
 // StockProcessor defines the interface for processing stock transactions.
 type StockProcessor interface {
-	Process(transactions []models.ProcessedTransaction) ([]models.SaleDetail, []models.PurchaseLot)
+	Process(transactions []models.ProcessedTransaction) ([]models.SaleDetail, map[string][]models.PurchaseLot)
 }
 
 // OptionProcessor defines the interface for processing option transactions.

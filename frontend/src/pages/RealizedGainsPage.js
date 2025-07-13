@@ -28,11 +28,17 @@ import PLContributionChart from '../components/realizedgainsSections/PLContribut
 
 const isDataEmpty = (data) => {
   if (!data) return true;
+  
+  // THIS IS THE FIX: Check that data.StockHoldings[year] exists before accessing .length
+  const hasStockHoldings = data.StockHoldings && Object.keys(data.StockHoldings).some(
+    year => data.StockHoldings[year] && data.StockHoldings[year].length > 0
+  );
+
   return (
     (data.StockSaleDetails?.length ?? 0) === 0 &&
     (data.OptionSaleDetails?.length ?? 0) === 0 &&
     (data.DividendTransactionsList?.length ?? 0) === 0 &&
-    (data.StockHoldings?.length ?? 0) === 0 &&
+    !hasStockHoldings &&
     (data.OptionHoldings?.length ?? 0) === 0
   );
 };
@@ -199,8 +205,8 @@ export default function RealizedGainsPage() {
       {/* HOLDINGS TAB */}
       {currentTab === 'holdings' && (
         <>
-          <StockHoldingsSection holdingsData={allData.StockHoldings || []} />
-          <OptionHoldingsSection holdingsData={allData.OptionHoldings || []} />
+          <StockHoldingsSection holdingsData={filteredData.StockHoldings || []} />
+          <OptionHoldingsSection holdingsData={filteredData.OptionHoldings || []} />
         </>
       )}
       

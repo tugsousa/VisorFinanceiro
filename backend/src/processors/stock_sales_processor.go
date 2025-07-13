@@ -2,167 +2,177 @@ package processors
 
 import (
 	"sort"
+	"strconv"
 
 	"github.com/username/taxfolio/backend/src/models"
-	"github.com/username/taxfolio/backend/src/utils" // Import the new utils package
-	// "time" // No longer needed directly if using utils.ParseDate
+	"github.com/username/taxfolio/backend/src/utils"
 )
 
 // stockProcessorImpl implements the StockProcessor interface.
 type stockProcessorImpl struct{}
 
 // NewStockProcessor creates a new instance of StockProcessor.
-func NewStockProcessor() StockProcessor { // Return the interface type
-	return &stockProcessorImpl{} // Return the implementation struct
+func NewStockProcessor() StockProcessor {
+	return &stockProcessorImpl{}
 }
 
-// Process implements the StockProcessor interface.
-func (p *stockProcessorImpl) Process(transactions []models.ProcessedTransaction) ([]models.SaleDetail, []models.PurchaseLot) {
-	// Group transactions by ISIN
-	transactionsByISIN := groupTransactionsByISIN(transactions)
+// Process implements the StockProcessor interface by delegating to the new refined logic.
+func (p *stockProcessorImpl) Process(transactions []models.ProcessedTransaction) ([]models.SaleDetail, map[string][]models.PurchaseLot) {
+	stockTransactions := filterAndSortStockTransactions(transactions)
+	if len(stockTransactions) == 0 {
+		return []models.SaleDetail{}, make(map[string][]models.PurchaseLot)
+	}
+	return calculateSalesAndYearlyHoldings(stockTransactions)
+}
 
-	var stockSaleDetails []models.SaleDetail // Renamed from saleDetails
-	var stockHoldings []models.PurchaseLot   // Renamed from remainingPurchases
+// calculateSalesAndYearlyHoldings processes sorted stock transactions to produce sale details and a map of holdings by year.
+func calculateSalesAndYearlyHoldings(transactions []models.ProcessedTransaction) ([]models.SaleDetail, map[string][]models.PurchaseLot) {
+	saleDetails := []models.SaleDetail{}
+	holdingsByYear := make(map[string][]models.PurchaseLot)
+	openPurchasesByISIN := make(map[string][]*models.ProcessedTransaction)
 
-	for isin, txs := range transactionsByISIN {
-		purchases, sales := separatePurchaseAndSales(txs)
-		sortPurchasesByDate(purchases)
-		sortSalesByDate(sales)
+	if len(transactions) == 0 {
+		return saleDetails, holdingsByYear
+	}
 
-		// Convert purchases to pointers for in-place modification
-		purchasePtrs := make([]*models.ProcessedTransaction, len(purchases))
-		for i := range purchases {
-			purchasePtrs[i] = &purchases[i]
-		}
+	lastProcessedYear := utils.ParseDate(transactions[0].Date).Year()
 
-		for _, sale := range sales {
-			remainingQty := sale.Quantity
-			// totalCommission := sale.Commission // Removed unused variable
+	for _, tx := range transactions {
+		txDate := utils.ParseDate(tx.Date)
+		currentYear := txDate.Year()
 
-			for remainingQty > 0 && len(purchasePtrs) > 0 {
-				currentPurchase := purchasePtrs[0]
-				matchedQty := utils.MinInt(remainingQty, currentPurchase.Quantity) // Use utils.MinInt
+		// --- CORE LOGIC FIX ---
+		// If we cross into a new year, take a snapshot of the previous year's holdings.
+		if currentYear > lastProcessedYear {
+			// Take snapshot for lastProcessedYear
+			snapshot := collectAndCopyHoldings(openPurchasesByISIN)
+			holdingsByYear[strconv.Itoa(lastProcessedYear)] = snapshot
 
-				// Calculate prorated amounts
-				saleRatio := float64(matchedQty) / float64(sale.Quantity)
-				// Corrected: Use OriginalQuantity for accurate proration of the initial cost
-				// Add a check for zero OriginalQuantity to prevent division by zero, although unlikely for purchases.
-				var purchaseRatio float64
-				if currentPurchase.OriginalQuantity > 0 {
-					purchaseRatio = float64(matchedQty) / float64(currentPurchase.OriginalQuantity)
-				} else {
-					// Handle potential edge case or error, though OriginalQuantity should be > 0 for a purchase
-					purchaseRatio = 0 // Or log an error
-				}
-
-				// Calculate unit prices (use original prices, not prorated amounts)
-				salePrice := sale.Price
-				buyPrice := currentPurchase.Price
-
-				// Calculate prorated SALE commission
-				proratedSaleCommission := sale.Commission * saleRatio // Use sale.Commission directly
-
-				// Determine buy commission to add (only for the first sale touching this purchase)
-				buyCommissionToAdd := 0.0
-				if currentPurchase.Commission > 0 {
-					buyCommissionToAdd = currentPurchase.Commission
-					currentPurchase.Commission = 0 // Mark purchase commission as used for subsequent matches
-				}
-
-				// Calculate total commission for this sale detail
-				totalDetailCommission := proratedSaleCommission + buyCommissionToAdd
-
-				// Calculate EUR amounts before creating the struct
-				buyAmountEUR := utils.RoundFloat(currentPurchase.AmountEUR*purchaseRatio, 2)
-				saleAmountEUR := utils.RoundFloat(sale.AmountEUR*saleRatio, 2)
-
-				saleDetail := models.SaleDetail{
-					SaleDate:         sale.Date,
-					BuyDate:          currentPurchase.Date,
-					ProductName:      sale.ProductName,
-					ISIN:             isin,
-					Quantity:         matchedQty,
-					SaleAmount:       sale.Amount * saleRatio, // Keep original precision unless specified
-					SaleCurrency:     sale.Currency,
-					SaleAmountEUR:    saleAmountEUR, // Use pre-calculated value
-					SalePrice:        salePrice,
-					SaleExchangeRate: sale.ExchangeRate,                      // Add sale exchange rate
-					BuyAmount:        currentPurchase.Amount * purchaseRatio, // Keep original precision unless specified
-					BuyCurrency:      currentPurchase.Currency,
-					BuyAmountEUR:     buyAmountEUR,                                    // Use pre-calculated value
-					BuyPrice:         buyPrice,                                        // Use the original unit price
-					BuyExchangeRate:  currentPurchase.ExchangeRate,                    // Add buy exchange rate
-					Commission:       utils.RoundFloat(totalDetailCommission, 2),      // Use the combined commission
-					Delta:            utils.RoundFloat(buyAmountEUR+saleAmountEUR, 2), // Use pre-calculated values
-					CountryCode:      utils.GetCountryCodeString(isin),                // Add country code using the utility function
-				}
-				stockSaleDetails = append(stockSaleDetails, saleDetail) // Appending to renamed variable
-
-				// Update quantities
-				remainingQty -= matchedQty
-				currentPurchase.Quantity -= matchedQty
-
-				// Remove exhausted purchases
-				if currentPurchase.Quantity == 0 {
-					purchasePtrs = purchasePtrs[1:]
-				}
+			// Fill in any gap years with the same snapshot
+			for year := lastProcessedYear + 1; year < currentYear; year++ {
+				holdingsByYear[strconv.Itoa(year)] = snapshot
 			}
 		}
 
-		// Record remaining stock holdings
-		for _, p := range purchasePtrs {
-			if p.Quantity > 0 {
-				stockHoldings = append(stockHoldings, models.PurchaseLot{ // Appending to renamed variable
-					BuyDate:      p.Date,
-					ProductName:  p.ProductName,
-					ISIN:         isin,
-					Quantity:     p.Quantity,
-					BuyAmount:    p.Amount, // Keep original precision unless specified
-					BuyCurrency:  p.Currency,
-					BuyAmountEUR: utils.RoundFloat(p.AmountEUR, 2), // Round to 2 decimal places
-					BuyPrice:     p.Price,                          // Use the original price
+		// Process the current transaction
+		if tx.OrderType == "stockbuy" {
+			purchaseCopy := tx
+			openPurchasesByISIN[tx.ISIN] = append(openPurchasesByISIN[tx.ISIN], &purchaseCopy)
+		} else if tx.OrderType == "stocksale" {
+			remainingQty := tx.Quantity
+			purchaseLots := openPurchasesByISIN[tx.ISIN]
+
+			for remainingQty > 0 && len(purchaseLots) > 0 {
+				currentPurchase := purchaseLots[0]
+				matchedQty := utils.MinInt(remainingQty, currentPurchase.Quantity)
+
+				// Sale Detail calculation
+				saleRatio := float64(matchedQty) / float64(tx.Quantity)
+				var purchaseRatio float64
+				if currentPurchase.OriginalQuantity > 0 {
+					purchaseRatio = float64(matchedQty) / float64(currentPurchase.OriginalQuantity)
+				}
+				buyCommissionToAdd := 0.0
+				if currentPurchase.Commission > 0 {
+					buyCommissionToAdd = currentPurchase.Commission
+					currentPurchase.Commission = 0 // Mark as used
+				}
+				totalDetailCommission := (tx.Commission * saleRatio) + buyCommissionToAdd
+				buyAmountEUR := utils.RoundFloat(currentPurchase.AmountEUR*purchaseRatio, 2)
+				saleAmountEUR := utils.RoundFloat(tx.AmountEUR*saleRatio, 2)
+
+				saleDetails = append(saleDetails, models.SaleDetail{
+					SaleDate:         tx.Date,
+					BuyDate:          currentPurchase.Date,
+					ProductName:      tx.ProductName,
+					ISIN:             tx.ISIN,
+					Quantity:         matchedQty,
+					SaleAmount:       tx.Amount * saleRatio,
+					SaleCurrency:     tx.Currency,
+					SaleAmountEUR:    saleAmountEUR,
+					SalePrice:        tx.Price,
+					SaleExchangeRate: tx.ExchangeRate,
+					BuyAmount:        currentPurchase.Amount * purchaseRatio,
+					BuyCurrency:      currentPurchase.Currency,
+					BuyAmountEUR:     buyAmountEUR,
+					BuyPrice:         currentPurchase.Price,
+					BuyExchangeRate:  currentPurchase.ExchangeRate,
+					Commission:       utils.RoundFloat(totalDetailCommission, 2),
+					Delta:            utils.RoundFloat(buyAmountEUR+saleAmountEUR, 2),
+					CountryCode:      utils.GetCountryCodeString(tx.ISIN),
+				})
+
+				remainingQty -= matchedQty
+				currentPurchase.Quantity -= matchedQty
+				if currentPurchase.Quantity == 0 {
+					purchaseLots = purchaseLots[1:]
+				}
+				openPurchasesByISIN[tx.ISIN] = purchaseLots
+			}
+		}
+
+		// Update the last processed year marker
+		lastProcessedYear = currentYear
+	}
+
+	// After the loop, take one final snapshot for the very last year of transactions
+	finalSnapshot := collectAndCopyHoldings(openPurchasesByISIN)
+	holdingsByYear[strconv.Itoa(lastProcessedYear)] = finalSnapshot
+
+	return saleDetails, holdingsByYear
+}
+
+// collectAndCopyHoldings creates a deep copy of the current state of all purchase lots.
+func collectAndCopyHoldings(holdingsMap map[string][]*models.ProcessedTransaction) []models.PurchaseLot {
+	var snapshot []models.PurchaseLot
+	for _, lots := range holdingsMap {
+		for _, lot := range lots {
+			if lot.Quantity > 0 {
+				// Pro-rate the amount based on remaining quantity
+				var lotAmount, lotAmountEUR float64
+				if lot.OriginalQuantity > 0 {
+					ratio := float64(lot.Quantity) / float64(lot.OriginalQuantity)
+					lotAmount = lot.Amount * ratio
+					lotAmountEUR = lot.AmountEUR * ratio
+				}
+
+				snapshot = append(snapshot, models.PurchaseLot{
+					BuyDate:      lot.Date,
+					ProductName:  lot.ProductName,
+					ISIN:         lot.ISIN,
+					Quantity:     lot.Quantity,
+					BuyAmount:    lotAmount,
+					BuyCurrency:  lot.Currency,
+					BuyAmountEUR: utils.RoundFloat(lotAmountEUR, 2),
+					BuyPrice:     lot.Price,
 				})
 			}
 		}
 	}
-
-	return stockSaleDetails, stockHoldings // Returning renamed variables
+	return snapshot
 }
 
-// Helper functions remain the same as before
-func groupTransactionsByISIN(transactions []models.ProcessedTransaction) map[string][]models.ProcessedTransaction {
-	grouped := make(map[string][]models.ProcessedTransaction)
+// filterAndSortStockTransactions filters for stock-related transactions and sorts them chronologically.
+func filterAndSortStockTransactions(transactions []models.ProcessedTransaction) []models.ProcessedTransaction {
+	var stockTx []models.ProcessedTransaction
 	for _, tx := range transactions {
-		if tx.ISIN == "" {
-			continue
-		}
-		grouped[tx.ISIN] = append(grouped[tx.ISIN], tx)
-	}
-	return grouped
-}
-
-func separatePurchaseAndSales(transactions []models.ProcessedTransaction) (purchases, sales []models.ProcessedTransaction) {
-	for _, tx := range transactions {
-		switch tx.OrderType {
-		case "stockbuy":
-			purchases = append(purchases, tx)
-		case "stocksale":
-			sales = append(sales, tx)
+		if tx.OrderType == "stockbuy" || tx.OrderType == "stocksale" {
+			stockTx = append(stockTx, tx)
 		}
 	}
-	return
-}
-
-func sortPurchasesByDate(purchases []models.ProcessedTransaction) {
-	sort.Slice(purchases, func(i, j int) bool {
-		return utils.ParseDate(purchases[i].Date).Before(utils.ParseDate(purchases[j].Date)) // Use utils.ParseDate
+	sort.Slice(stockTx, func(i, j int) bool {
+		dateI := utils.ParseDate(stockTx[i].Date)
+		dateJ := utils.ParseDate(stockTx[j].Date)
+		if dateI.Equal(dateJ) {
+			if stockTx[i].OrderType == "stocksale" && stockTx[j].OrderType == "stockbuy" {
+				return false
+			}
+			if stockTx[i].OrderType == "stockbuy" && stockTx[j].OrderType == "stocksale" {
+				return true
+			}
+			return stockTx[i].OrderID < stockTx[j].OrderID
+		}
+		return dateI.Before(dateJ)
 	})
+	return stockTx
 }
-
-func sortSalesByDate(sales []models.ProcessedTransaction) {
-	sort.Slice(sales, func(i, j int) bool {
-		return utils.ParseDate(sales[i].Date).Before(utils.ParseDate(sales[j].Date)) // Use utils.ParseDate
-	})
-}
-
-// Removed local helper functions (minInt, parseDate) as they are now in the utils package

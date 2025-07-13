@@ -52,10 +52,13 @@ export const useRealizedGains = (token, selectedYear) => {
   // Memoize the available years from all data sources
   const availableYears = useMemo(() => {
     if (!allData) return [ALL_YEARS_OPTION];
+    
+    const stockHoldingYears = allData.StockHoldings ? Object.keys(allData.StockHoldings) : [];
+
     const dateAccessors = {
       StockSaleDetails: 'SaleDate',
       OptionSaleDetails: 'close_date',
-      DividendTaxResult: null, // To use keys from derived summary
+      DividendTaxResult: null,
     };
     const dataForYearExtraction = {
       StockSaleDetails: allData.StockSaleDetails || [],
@@ -63,8 +66,15 @@ export const useRealizedGains = (token, selectedYear) => {
       DividendTaxResult: derivedDividendTaxSummary || {},
     };
     const yearsFromUtil = extractYearsFromData(dataForYearExtraction, dateAccessors);
-    return [ALL_YEARS_OPTION, ...new Set(yearsFromUtil.filter(y => y && y !== ALL_YEARS_OPTION && y !== NO_YEAR_SELECTED))];
+
+    const allYearsSet = new Set([...yearsFromUtil, ...stockHoldingYears]);
+    const sortedYears = Array.from(allYearsSet)
+      .filter(y => y && y !== ALL_YEARS_OPTION && y !== NO_YEAR_SELECTED)
+      .sort((a, b) => b.localeCompare(a));
+
+    return [ALL_YEARS_OPTION, ...sortedYears];
   }, [allData, derivedDividendTaxSummary]);
+
 
   // Memoize the data filtered by the selected year
   const filteredData = useMemo(() => {
@@ -74,8 +84,18 @@ export const useRealizedGains = (token, selectedYear) => {
     };
     if (!allData) return defaultStructure;
 
+    let holdingsForSelectedPeriod = [];
+    if (allData.StockHoldings) {
+      if (selectedYear === ALL_YEARS_OPTION) {
+        const latestYear = Object.keys(allData.StockHoldings).sort().pop();
+        holdingsForSelectedPeriod = allData.StockHoldings[latestYear] || [];
+      } else {
+        holdingsForSelectedPeriod = allData.StockHoldings[selectedYear] || [];
+      }
+    }
+
     const dataSet = {
-      StockHoldings: allData.StockHoldings || [],
+      StockHoldings: holdingsForSelectedPeriod,
       OptionHoldings: allData.OptionHoldings || [],
       StockSaleDetails: allData.StockSaleDetails || [],
       OptionSaleDetails: allData.OptionSaleDetails || [],
@@ -115,14 +135,14 @@ export const useRealizedGains = (token, selectedYear) => {
   
   // Memoize holdings allocation chart data
   const holdingsChartData = useMemo(() => {
-    const stockHoldings = allData?.StockHoldings;
-    if (!stockHoldings || stockHoldings.length === 0) {
+    const stockHoldingsForChart = filteredData.StockHoldings;
+    
+    if (!stockHoldingsForChart || stockHoldingsForChart.length === 0) {
       return null;
     }
 
-    const holdingsByIsin = stockHoldings.reduce((acc, holding) => {
-      // *** THE FIX IS HERE ***
-      const { isin, product_name, quantity, buyPrice, buy_date } = holding;
+    const holdingsByIsin = stockHoldingsForChart.reduce((acc, holding) => {
+      const { isin, product_name, quantity, buy_amount_eur, buy_date } = holding;
       if (!isin) return acc;
 
       if (!acc[isin]) {
@@ -133,9 +153,7 @@ export const useRealizedGains = (token, selectedYear) => {
         };
       }
       
-      // Correctly calculate the current value of this specific lot
-      const currentLotValue = (quantity || 0) * (buyPrice || 0);
-      acc[isin].totalValue += currentLotValue;
+      acc[isin].totalValue += Math.abs(buy_amount_eur || 0);
 
       const currentDate = parseDateRobust(buy_date);
       if (currentDate && currentDate > acc[isin].latestDate) {
@@ -148,25 +166,24 @@ export const useRealizedGains = (token, selectedYear) => {
 
     const aggregatedHoldings = Object.values(holdingsByIsin);
     
-    // Sort by the absolute total value
-    aggregatedHoldings.sort((a, b) => Math.abs(b.totalValue) - Math.abs(a.totalValue));
+    aggregatedHoldings.sort((a, b) => b.totalValue - a.totalValue);
 
     const topN = 7;
     const topHoldings = aggregatedHoldings.slice(0, topN);
     const otherHoldings = aggregatedHoldings.slice(topN);
 
     const labels = topHoldings.map(item => item.latestName);
-    const data = topHoldings.map(item => Math.abs(item.totalValue));
+    const data = topHoldings.map(item => item.totalValue);
 
     if (otherHoldings.length > 0) {
-      const othersValue = otherHoldings.reduce((sum, item) => sum + Math.abs(item.totalValue), 0);
+      const othersValue = otherHoldings.reduce((sum, item) => sum + item.totalValue, 0);
       labels.push('Others');
       data.push(othersValue);
     }
 
     return { labels, datasets: [{ data }] };
 
-  }, [allData?.StockHoldings]);
+  }, [filteredData.StockHoldings]);
 
   return {
     allData,

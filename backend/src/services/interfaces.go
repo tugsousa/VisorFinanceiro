@@ -11,21 +11,18 @@ import (
 // UploadResult is primarily for the result of a single ProcessUpload call.
 // It contains data derived *only* from the newly uploaded file.
 type UploadResult struct {
-	// These fields reflect the processing of the *current* upload batch.
-	StockSaleDetails         []models.SaleDetail           // Sales from the current upload
-	StockHoldings            []models.PurchaseLot          // Holdings *after* this upload, based on this upload's impact
-	OptionSaleDetails        []models.OptionSaleDetail     // Options sales from this upload
-	OptionHoldings           []models.OptionHolding        // Option holdings *after* this upload
-	CashMovements            []models.CashMovement         // Cash movements in this upload
-	DividendTransactionsList []models.ProcessedTransaction `json:"DividendTransactionsList,omitempty"`
+	StockSaleDetails         []models.SaleDetail             `json:"StockSaleDetails"`
+	StockHoldings            map[string][]models.PurchaseLot `json:"StockHoldings"`
+	OptionSaleDetails        []models.OptionSaleDetail       `json:"OptionSaleDetails"`
+	OptionHoldings           []models.OptionHolding          `json:"OptionHoldings"`
+	CashMovements            []models.CashMovement           `json:"CashMovements"`
+	DividendTransactionsList []models.ProcessedTransaction   `json:"DividendTransactionsList,omitempty"`
 }
 
 // Define common service errors
 var (
 	ErrParsingFailed    = errors.New("csv parsing failed")
 	ErrProcessingFailed = errors.New("transaction processing failed")
-	// ErrValidationFailed is already defined in the validation package
-	// If the service layer needs to wrap it or return it directly, ensure consistency.
 )
 
 // UploadService defines the interface for the core upload processing logic.

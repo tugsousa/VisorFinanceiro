@@ -26,8 +26,6 @@ func NewUploadHandler(service services.UploadService) *UploadHandler {
 	}
 }
 
-// sendJSONError IS REMOVED FROM HERE
-
 func (h *UploadHandler) HandleUpload(w http.ResponseWriter, r *http.Request) {
 	userID, ok := GetUserIDFromContext(r.Context()) // Assumes GetUserIDFromContext is available (it's in user_handler.go)
 	if !ok {
@@ -116,7 +114,8 @@ func (h *UploadHandler) HandleGetRealizedGainsData(w http.ResponseWriter, r *htt
 		realizedgainsData.StockSaleDetails = []models.SaleDetail{}
 	}
 	if realizedgainsData.StockHoldings == nil {
-		realizedgainsData.StockHoldings = []models.PurchaseLot{}
+		// THIS IS THE FIX: Initialize as a map, not a slice.
+		realizedgainsData.StockHoldings = make(map[string][]models.PurchaseLot)
 	}
 	if realizedgainsData.OptionSaleDetails == nil {
 		realizedgainsData.OptionSaleDetails = []models.OptionSaleDetail{}
