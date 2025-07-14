@@ -1,9 +1,8 @@
-// frontend/src/layouts/Layout.js
-
 import React, { useState } from 'react';
-import { Box, AppBar, Toolbar, Typography, IconButton, Tooltip, Avatar, Menu, MenuItem, Divider, Button, Container } from '@mui/material';
+import { Box, AppBar, Toolbar, Typography, IconButton, Tooltip, Avatar, Menu, MenuItem, Divider, Button, Container, Link as MuiLink } from '@mui/material';
 import { Link as RouterLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import CookieConsent from "react-cookie-consent";
 import {
   Person as PersonIcon,
   Settings as SettingsIcon,
@@ -44,12 +43,11 @@ export default function Layout({ children }) {
   ];
 
   return (
-    // The outer Box now just serves as a flex container without a background color
     <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
       <AppBar
         position="fixed"
         sx={{
-          backgroundColor: 'background.paper', // Uses the theme's default paper/white color
+          backgroundColor: 'background.paper',
           color: 'text.primary',
           boxShadow: 'none',
           borderBottom: (theme) => `1px solid ${theme.palette.divider}`,
@@ -59,8 +57,8 @@ export default function Layout({ children }) {
           <Toolbar disableGutters>
             <Box component={RouterLink} to={user ? "/dashboard" : "/"} sx={{ display: 'flex', alignItems: 'center', textDecoration: 'none', flexGrow: 1 }}>
               <AutoGraphIcon sx={{ mr: 1, color: '#178bba' }} />
-              <Typography 
-                variant="h6" 
+              <Typography
+                variant="h6"
                 sx={{
                   fontFamily: "'Poppins', sans-serif",
                   fontWeight: 600,
@@ -147,31 +145,31 @@ export default function Layout({ children }) {
               </>
             ) : (
               <Box>
-                                    <Button
-                    component={RouterLink}
-                    to="/signin"
-                    variant="text"
-                    sx={{
-                      fontFamily: "'Inter', sans-serif",
-                      color: '#4b5563',
-                      fontWeight: 500,
-                      textTransform: 'none',
-                      '&:hover': {
-                        color: '#111827',
-                        backgroundColor: 'transparent',
-                      },
-                    }}
-                  >
-                    Sign in
-                  </Button>
+                <Button
+                  component={RouterLink}
+                  to="/signin"
+                  variant="text"
+                  sx={{
+                    fontFamily: "'Inter', sans-serif",
+                    color: '#4b5563',
+                    fontWeight: 500,
+                    textTransform: 'none',
+                    '&:hover': {
+                      color: '#111827',
+                      backgroundColor: 'transparent',
+                    },
+                  }}
+                >
+                  Sign in
+                </Button>
               </Box>
             )}
           </Toolbar>
         </Container>
       </AppBar>
 
-      <Container 
-        component="main" 
+      <Container
+        component="main"
         maxWidth="lg"
         sx={{
           flexGrow: 1,
@@ -181,6 +179,42 @@ export default function Layout({ children }) {
       >
         {children}
       </Container>
+
+      {/* Footer Section */}
+      <Box component="footer" sx={{ p: 2, mt: 'auto', backgroundColor: 'background.paper', borderTop: (theme) => `1px solid ${theme.palette.divider}` }}>
+        <Container maxWidth="lg">
+          <Typography variant="body2" color="text.secondary" align="center">
+            {'© '}
+            {new Date().getFullYear()}
+            {' Rumo Claro. Todos os direitos reservados.'}
+          </Typography>
+          <Box sx={{ display: 'flex', justifyContent: 'center', gap: 2, mt: 1 }}>
+            <MuiLink component={RouterLink} to="/privacy-policy" variant="body2">
+              Política de Privacidade
+            </MuiLink>
+            <MuiLink component={RouterLink} to="/terms-of-service" variant="body2">
+              Termos de Serviço
+            </MuiLink>
+          </Box>
+        </Container>
+      </Box>
+
+      {/* Cookie Consent Banner */}
+      <CookieConsent
+        location="bottom"
+        buttonText="Compreendi"
+        style={{ background: "#2B373B", fontSize: "14px" }}
+        buttonStyle={{ color: "#4e503b", fontSize: "15px", background: "#f1f1f1", borderRadius: "3px" }}
+        expires={150}
+        enableDeclineButton={false}
+      >
+        Este site utiliza armazenamento local (localStorage) para gerir a sua sessão de autenticação, o que é essencial para o funcionamento do site.{" "}
+        <span style={{ fontSize: "12px", marginLeft: "10px" }}>
+          <MuiLink component={RouterLink} to="/privacy-policy" style={{ color: "white", textDecoration: "underline" }}>
+            Saber mais
+          </MuiLink>
+        </span>
+      </CookieConsent>
     </Box>
   );
 }

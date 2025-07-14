@@ -11,8 +11,10 @@ import VerifyEmailPage from './pages/VerifyEmailPage';
 import RequestPasswordResetPage from './pages/RequestPasswordResetPage';
 import ResetPasswordPage from './pages/ResetPasswordPage';
 import SettingsPage from './pages/SettingsPage';
-import LandingPage from './pages/LandingPage'; // Import new LandingPage
-import DashboardPage from './pages/DashboardPage'; // Import new DashboardPage
+import LandingPage from './pages/LandingPage'; 
+import DashboardPage from './pages/DashboardPage';
+import PrivacyPolicyPage from './pages/PrivacyPolicyPage';
+import TermsOfServicePage from './pages/TermsOfServicePage';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { CircularProgress, Box } from '@mui/material';
 
@@ -77,7 +79,8 @@ function App() {
             <Route path="/verify-email" element={<VerifyEmailPage />} />
             <Route path="/request-password-reset" element={<PublicRoute><RequestPasswordResetPage /></PublicRoute>} />
             <Route path="/reset-password" element={<PublicRoute><ResetPasswordPage /></PublicRoute>} />
-            
+            <Route path="/privacy-policy" element={<PrivacyPolicyPage />} />
+            <Route path="/terms-of-service" element={<TermsOfServicePage />} />
             <Route path="/dashboard" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
             <Route path="/upload" element={<ProtectedRoute><UploadPage /></ProtectedRoute>} />
             <Route path="/realizedgains" element={<ProtectedRoute><RealizedGainsPage /></ProtectedRoute>} />

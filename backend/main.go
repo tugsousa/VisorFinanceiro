@@ -43,7 +43,8 @@ func enableCORS(next http.Handler) http.Handler {
 		origin := r.Header.Get("Origin")
 		// In production, replace "http://localhost:3000" with your actual frontend domain(s).
 		allowedOrigins := map[string]bool{
-			"http://localhost:3000": true,
+			"http://localhost:3000":    true,
+			"https://www.rumoclaro.pt": true,
 			// Add other origins here if needed, e.g., "https://yourdomain.com"
 		}
 
