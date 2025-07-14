@@ -1,3 +1,5 @@
+// frontend/src/layouts/Layout.js
+
 import React, { useState } from 'react';
 import { Box, AppBar, Toolbar, Typography, IconButton, Tooltip, Avatar, Menu, MenuItem, Divider, Button, Container, Link as MuiLink } from '@mui/material';
 import { Link as RouterLink, useNavigate } from 'react-router-dom';
@@ -202,17 +204,26 @@ export default function Layout({ children }) {
       {/* Cookie Consent Banner */}
       <CookieConsent
         location="bottom"
-        buttonText="Compreendi"
+        buttonText="Aceitar"
+        declineButtonText="Rejeitar"
+        enableDeclineButton
+        cookieName="rumoclaro-cookie-consent"
         style={{ background: "#2B373B", fontSize: "14px" }}
         buttonStyle={{ color: "#4e503b", fontSize: "15px", background: "#f1f1f1", borderRadius: "3px" }}
+        declineButtonStyle={{ background: "#7a7a7a", color: "white", fontSize: "15px", borderRadius: "3px" }}
         expires={150}
-        enableDeclineButton={false}
+        onAccept={() => {
+          console.log("Cookie consent accepted.");
+        }}
+        onDecline={() => {
+          console.log("Cookie consent declined.");
+        }}
       >
-        Este site utiliza armazenamento local (localStorage) para gerir a sua sessão de autenticação, o que é essencial para o funcionamento do site.{" "}
+        Este site utiliza armazenamento local (localStorage) que é estritamente necessário para gerir a sua sessão de autenticação. Não usamos cookies para fins de análise ou publicidade.{" "}
         <span style={{ fontSize: "12px", marginLeft: "10px" }}>
           <MuiLink component={RouterLink} to="/privacy-policy" style={{ color: "white", textDecoration: "underline" }}>
             Saber mais
-          </MuiLink>
+          </MuiLink> {/* <-- THIS IS THE CORRECTED LINE */}
         </span>
       </CookieConsent>
     </Box>

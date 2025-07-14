@@ -91,6 +91,35 @@ const PrivacyPolicyPage = () => {
         <Typography variant="body1" paragraph>
           Tem o direito de aceder, corrigir e eliminar os seus dados. Pode eliminar a sua conta e todos os dados associados a qualquer momento através da página de <Link href="/settings">Configurações</Link> da sua conta.
         </Typography>
+        <Typography variant="h6" component="h2" sx={{ mt: 4 }} gutterBottom>
+  8. Cookies e Tecnologias Semelhantes
+</Typography>
+<Typography variant="body1" paragraph>
+  Para o funcionamento do nosso site, utilizamos as seguintes tecnologias de armazenamento no seu navegador, que são estritamente necessárias para fornecer os nossos serviços:
+</Typography>
+<List dense>
+  <ListItem>
+    <ListItemText
+      primary="Armazenamento Local (localStorage)"
+      secondary="Utilizamos o localStorage para guardar os seus tokens de autenticação (`auth_token`, `refresh_token`) de forma segura após o login. Este armazenamento é essencial para manter a sua sessão ativa e segura enquanto navega no site. Sem ele, não seria possível aceder às áreas privadas da sua conta."
+    />
+  </ListItem>
+  <ListItem>
+    <ListItemText
+      primary="Cookie de Consentimento (rumoclaro-cookie-consent)"
+      secondary="Usamos este cookie para lembrar a sua escolha no aviso de cookies. Desta forma, não lhe mostramos o aviso em cada visita. Este cookie não armazena nenhuma informação pessoal."
+    />
+  </ListItem>
+  <ListItem>
+    <ListItemText
+      primary="Cookie Anti-CSRF (_gorilla_csrf)"
+      secondary="Este é um cookie de segurança, essencial para proteger a sua conta e os nossos sistemas contra ataques de Cross-Site Request Forgery. Garante que os pedidos enviados para o nosso servidor são legítimos e originados do nosso site."
+    />
+  </ListItem>
+</List>
+<Typography variant="body1" paragraph>
+  Atualmente, o Rumo Claro **não utiliza** cookies não essenciais, como os de análise (ex: Google Analytics) ou de publicidade. Se no futuro decidirmos usar esses serviços, iremos atualizar esta política e solicitar o seu consentimento explícito através do nosso aviso de cookies.
+</Typography>
         
         <Typography variant="h6" component="h2" sx={{ mt: 4 }} gutterBottom>8. Cookies e Armazenamento Local</Typography>
         <Typography variant="body1" paragraph>
