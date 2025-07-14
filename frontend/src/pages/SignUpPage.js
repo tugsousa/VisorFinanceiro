@@ -5,6 +5,7 @@ import { AuthContext } from '../context/AuthContext';
 import {
   Container, Paper, Box, Typography, TextField, Button, Alert, CircularProgress, Grid, Link
 } from '@mui/material';
+import AuthModal from '../components/auth/AuthModal';
 
 function SignUpPage() {
   const [username, setUsername] = useState('');
@@ -17,8 +18,6 @@ function SignUpPage() {
 
   const { register, isAuthActionLoading } = useContext(AuthContext);
   
-  // A ref to track if a success message has been shown, to prevent error messages
-  // from the context overwriting it if the component doesn't unmount immediately.
   const successShownRef = useRef(false);
 
   const handleSubmit = async (e) => {
@@ -59,43 +58,41 @@ function SignUpPage() {
   const formDisabled = isAuthActionLoading || !!pageSuccessMessage;
 
   return (
-    <Container component="main" maxWidth="xs" sx={{ mt: 4, mb: 4 }}>
-      <Paper elevation={3} sx={{ marginTop: 4, display: 'flex', flexDirection: 'column', alignItems: 'center', padding: { xs: 2, sm: 3 } }}>
-        <Typography component="h1" variant="h5">
-          Sign Up
-        </Typography>
+    <AuthModal>
+      <Typography component="h1" variant="h5">
+        Sign Up
+      </Typography>
 
-        {pageSuccessMessage && (
-          <Alert severity="success" sx={{ width: '100%', mt: 2, mb: 1 }}>
-            {pageSuccessMessage}
-          </Alert>
-        )}
+      {pageSuccessMessage && (
+        <Alert severity="success" sx={{ width: '100%', mt: 2, mb: 1 }}>
+          {pageSuccessMessage}
+        </Alert>
+      )}
 
-        {pageError && !pageSuccessMessage && (
-          <Alert severity="error" sx={{ width: '100%', mt: 2, mb: 1 }}>
-            {pageError}
-          </Alert>
-        )}
+      {pageError && !pageSuccessMessage && (
+        <Alert severity="error" sx={{ width: '100%', mt: 2, mb: 1 }}>
+          {pageError}
+        </Alert>
+      )}
 
-        <Box component="form" onSubmit={handleSubmit} noValidate sx={{ mt: 1, width: '100%' }}>
-          <TextField margin="normal" required fullWidth id="username" label="Username" name="username" autoComplete="username" autoFocus value={username} onChange={(e) => setUsername(e.target.value)} disabled={formDisabled}/>
-          <TextField margin="normal" required fullWidth id="email" label="Email Address" name="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} disabled={formDisabled}/>
-          <TextField margin="normal" required fullWidth name="password" label="Password (min. 6 characters)" type="password" id="password" autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} disabled={formDisabled}/>
-          <TextField margin="normal" required fullWidth name="confirmPassword" label="Confirm Password" type="password" id="confirmPassword" autoComplete="new-password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} disabled={formDisabled}/>
-          
-          <Button type="submit" fullWidth variant="contained" sx={{ mt: 3, mb: 2 }} disabled={formDisabled}>
-            {isAuthActionLoading ? <CircularProgress size={24} color="inherit" /> : 'Sign Up'}
-          </Button>
-          <Grid container justifyContent="flex-end">
-            <Grid item>
-              <Link component={RouterLink} to="/signin" variant="body2">
-                Already have an account? Sign In
-              </Link>
-            </Grid>
+      <Box component="form" onSubmit={handleSubmit} noValidate sx={{ mt: 1, width: '100%' }}>
+        <TextField margin="normal" required fullWidth id="username" label="Username" name="username" autoComplete="username" autoFocus value={username} onChange={(e) => setUsername(e.target.value)} disabled={formDisabled}/>
+        <TextField margin="normal" required fullWidth id="email" label="Email Address" name="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} disabled={formDisabled}/>
+        <TextField margin="normal" required fullWidth name="password" label="Password (min. 6 characters)" type="password" id="password" autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} disabled={formDisabled}/>
+        <TextField margin="normal" required fullWidth name="confirmPassword" label="Confirm Password" type="password" id="confirmPassword" autoComplete="new-password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} disabled={formDisabled}/>
+        
+        <Button type="submit" fullWidth variant="contained" sx={{ mt: 3, mb: 2 }} disabled={formDisabled}>
+          {isAuthActionLoading ? <CircularProgress size={24} color="inherit" /> : 'Sign Up'}
+        </Button>
+        <Grid container justifyContent="flex-end">
+          <Grid item>
+            <Link component={RouterLink} to="/signin" variant="body2">
+              Already have an account? Sign In
+            </Link>
           </Grid>
-        </Box>
-      </Paper>
-    </Container>
+        </Grid>
+      </Box>
+    </AuthModal>
   );
 }
 

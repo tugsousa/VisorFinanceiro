@@ -29,7 +29,8 @@ export default function Layout({ children }) {
   const handleLogout = async () => {
     handleMenuClose();
     await logout();
-    navigate('/signin');
+    // --- CHANGE THIS LINE ---
+    navigate('/'); // Redirect to the landing page instead of /signin
   };
 
   const handleSettings = () => {
