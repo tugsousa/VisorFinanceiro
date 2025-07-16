@@ -129,7 +129,7 @@ func (p *optionProcessorImpl) Process(transactions []models.ProcessedTransaction
 func filterOptionTransactions(transactions []models.ProcessedTransaction) []models.ProcessedTransaction {
 	var options []models.ProcessedTransaction
 	for _, tx := range transactions {
-		if tx.TransactionType == "option" {
+		if strings.ToLower(tx.TransactionType) == "option" {
 			// Ensure quantity is positive for easier matching logic later
 			// The sign of the amount will determine buy/sell direction
 			if tx.Quantity < 0 {
