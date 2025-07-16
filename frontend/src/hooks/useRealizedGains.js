@@ -62,7 +62,7 @@ export const useRealizedGains = (token, selectedYear) => {
     const stockHoldingYears = allData.StockHoldings ? Object.keys(allData.StockHoldings) : [];
 
     const dateAccessors = {
-      StockSaleDetails: 'sale_date', // CORRECTED
+      StockSaleDetails: 'SaleDate', // CORRECTED
       OptionSaleDetails: 'close_date',
       DividendTaxResult: null,
     };
@@ -110,14 +110,14 @@ export const useRealizedGains = (token, selectedYear) => {
     if (selectedYear === ALL_YEARS_OPTION || !selectedYear) return dataSet;
     return {
       ...dataSet,
-      StockSaleDetails: dataSet.StockSaleDetails.filter(s => getYearString(s.sale_date) === selectedYear), // CORRECTED
+      StockSaleDetails: dataSet.StockSaleDetails.filter(s => getYearString(s.SaleDate) === selectedYear), // CORRECTED
       OptionSaleDetails: dataSet.OptionSaleDetails.filter(o => getYearString(o.close_date) === selectedYear),
       DividendTransactionsList: dataSet.DividendTransactionsList.filter(tx => getYearString(tx.date) === selectedYear),
     };
   }, [allData, selectedYear]);
 
   const summaryPLs = useMemo(() => {
-    const stockPL = (filteredData.StockSaleDetails || []).reduce((sum, sale) => sum + (sale.delta || 0), 0); // CORRECTED
+    const stockPL = (filteredData.StockSaleDetails || []).reduce((sum, sale) => sum + (sale.Delta || 0), 0); // CORRECTED
     const optionPL = (filteredData.OptionSaleDetails || []).reduce((sum, sale) => sum + (sale.delta || 0), 0);
     let dividendPL = 0;
 

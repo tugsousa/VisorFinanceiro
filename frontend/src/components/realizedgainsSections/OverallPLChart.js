@@ -26,12 +26,12 @@ const OverallPLChart = ({ stockSaleDetails, optionSaleDetails, dividendTaxResult
     const allYearsInData = new Set();
 
     (stockSaleDetails || []).forEach(sale => {
-      const year = getYearString(sale.sale_date); // CORRECTED
-      if (year && sale.delta != null) { // CORRECTED
+      const year = getYearString(sale.SaleDate); // CORRECTED
+      if (year && sale.Delta != null) { // CORRECTED
         allYearsInData.add(year);
         if (!yearlyPL[year]) yearlyPL[year] = { stocks: 0, options: 0, dividends: 0, total: 0 };
-        yearlyPL[year].stocks += sale.delta; // CORRECTED
-        yearlyPL[year].total += sale.delta; // CORRECTED
+        yearlyPL[year].stocks += sale.Delta; // CORRECTED
+        yearlyPL[year].total += sale.Delta; // CORRECTED
       }
     });
 

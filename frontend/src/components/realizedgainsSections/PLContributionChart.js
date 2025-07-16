@@ -21,7 +21,7 @@ const PLContributionChart = ({ stockSaleDetails, optionSaleDetails, dividendTaxR
           optionSales: optionSaleDetails,
           DividendTaxResult: dividendTaxResultForChart
       }, {
-          stockSales: 'sale_date', // CORRECTED
+          stockSales: 'SaleDate', // CORRECTED
           optionSales: 'close_date',
           DividendTaxResult: null 
       }).filter(y => y && y !== ALL_YEARS_OPTION && y !== NO_YEAR_SELECTED).sort((a, b) => Number(a) - Number(b));
@@ -34,8 +34,8 @@ const PLContributionChart = ({ stockSaleDetails, optionSaleDetails, dividendTaxR
       });
 
       stockSaleDetails.forEach(sale => {
-        const year = getYearString(sale.sale_date); // CORRECTED
-        if (year && yearlyData[year]) yearlyData[year].stocks += sale.delta; // CORRECTED
+        const year = getYearString(sale.SaleDate); // CORRECTED
+        if (year && yearlyData[year]) yearlyData[year].stocks += sale.Delta; // CORRECTED
       });
 
       optionSaleDetails.forEach(sale => {
@@ -66,9 +66,9 @@ const PLContributionChart = ({ stockSaleDetails, optionSaleDetails, dividendTaxR
       const monthlyData = Array(12).fill(null).map(() => ({ stocks: 0, options: 0, dividends: 0 }));
 
       stockSaleDetails.forEach(sale => {
-        if (getYearString(sale.sale_date) === selectedYear) { // CORRECTED
-            const month = getMonthIndex(sale.sale_date); // CORRECTED
-            if (month !== null) monthlyData[month].stocks += sale.delta; // CORRECTED
+        if (getYearString(sale.SaleDate) === selectedYear) { // CORRECTED
+            const month = getMonthIndex(sale.SaleDate); // CORRECTED
+            if (month !== null) monthlyData[month].stocks += sale.Delta; // CORRECTED
         }
       });
       optionSaleDetails.forEach(sale => {
