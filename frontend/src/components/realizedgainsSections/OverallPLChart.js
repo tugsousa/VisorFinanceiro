@@ -14,10 +14,8 @@ const NEGATIVE_COLOR_BG = 'rgba(255, 99, 132, 0.6)'; // Reddish
 const POSITIVE_COLOR_BORDER = 'rgba(75, 192, 192, 1)';
 const NEGATIVE_COLOR_BORDER = 'rgba(255, 99, 132, 1)';
 
-// Updated props: stockSaleDetails, optionSaleDetails, dividendTaxResultForChart
 const OverallPLChart = ({ stockSaleDetails, optionSaleDetails, dividendTaxResultForChart, selectedYear }) => {
   const chartData = useMemo(() => {
-    // Check if any data is present
     if ((!stockSaleDetails || stockSaleDetails.length === 0) &&
         (!optionSaleDetails || optionSaleDetails.length === 0) &&
         (!dividendTaxResultForChart || Object.keys(dividendTaxResultForChart).length === 0)) {
@@ -28,12 +26,12 @@ const OverallPLChart = ({ stockSaleDetails, optionSaleDetails, dividendTaxResult
     const allYearsInData = new Set();
 
     (stockSaleDetails || []).forEach(sale => {
-      const year = getYearString(sale.SaleDate);
-      if (year && sale.Delta != null) {
+      const year = getYearString(sale.sale_date); // CORRECTED
+      if (year && sale.delta != null) { // CORRECTED
         allYearsInData.add(year);
         if (!yearlyPL[year]) yearlyPL[year] = { stocks: 0, options: 0, dividends: 0, total: 0 };
-        yearlyPL[year].stocks += sale.Delta;
-        yearlyPL[year].total += sale.Delta;
+        yearlyPL[year].stocks += sale.delta; // CORRECTED
+        yearlyPL[year].total += sale.delta; // CORRECTED
       }
     });
 
@@ -47,11 +45,10 @@ const OverallPLChart = ({ stockSaleDetails, optionSaleDetails, dividendTaxResult
       }
     });
 
-    // Use the new prop dividendTaxResultForChart
     const dividendData = dividendTaxResultForChart || {};
     Object.entries(dividendData).forEach(([year, countries]) => {
-      if (year) { // Year here is the key from dividendTaxResultForChart, e.g., "2023"
-        allYearsInData.add(year); // Add string year
+      if (year) {
+        allYearsInData.add(year);
         if (!yearlyPL[year]) yearlyPL[year] = { stocks: 0, options: 0, dividends: 0, total: 0 };
         let yearDividendNet = 0;
         Object.values(countries).forEach(countryData => {
@@ -73,7 +70,7 @@ const OverallPLChart = ({ stockSaleDetails, optionSaleDetails, dividendTaxResult
         return {
             labels: ['L/P de Ações', 'L/P de Opções', 'Dividendos'],
             datasets: [{
-                label: `L/P para ${selectedYear}`, // This label might not be shown if legend.display is false
+                label: `L/P para ${selectedYear}`,
                 data: [singleYearData.stocks, singleYearData.options, singleYearData.dividends],
                 backgroundColor: [
                     singleYearData.stocks >= 0 ? POSITIVE_COLOR_BG : NEGATIVE_COLOR_BG,
@@ -90,7 +87,6 @@ const OverallPLChart = ({ stockSaleDetails, optionSaleDetails, dividendTaxResult
         };
     }
 
-    // For ALL_YEARS_OPTION
     const totalNetPLPerYear = sortedYears.map(year => yearlyPL[year]?.total || 0);
     const backgroundColors = totalNetPLPerYear.map(pl => pl >= 0 ? POSITIVE_COLOR_BG : NEGATIVE_COLOR_BG);
     const borderColors = totalNetPLPerYear.map(pl => pl >= 0 ? POSITIVE_COLOR_BORDER : NEGATIVE_COLOR_BORDER);
@@ -112,7 +108,7 @@ const OverallPLChart = ({ stockSaleDetails, optionSaleDetails, dividendTaxResult
     maintainAspectRatio: false,
     plugins: {
       legend: {
-        display: selectedYear === ALL_YEARS_OPTION || selectedYear === '', // Only display legend for "All Years" view
+        display: selectedYear === ALL_YEARS_OPTION || selectedYear === '',
         position: 'top'
       },
       title: {
@@ -126,12 +122,10 @@ const OverallPLChart = ({ stockSaleDetails, optionSaleDetails, dividendTaxResult
           label: (context) => {
             let label = context.dataset.label || context.label || '';
             if (label && (selectedYear === ALL_YEARS_OPTION || selectedYear === '')) {
-                 // For "All Years" view, the dataset label is fine.
             } else if (selectedYear !== ALL_YEARS_OPTION && selectedYear !== ''){
-                 // For specific year view, context.label is 'Stocks P/L', etc.
                  label = context.label || '';
             } else {
-                label = ''; // Default empty if somehow no label
+                label = '';
             }
 
             if (label) {
@@ -151,7 +145,7 @@ const OverallPLChart = ({ stockSaleDetails, optionSaleDetails, dividendTaxResult
         }
       },
       y: {
-        beginAtZero: false, // Allow negative axis for losses
+        beginAtZero: false,
         title: { display: true, text: 'Lucro/Prejuízo (€)' }
       },
     },

@@ -16,22 +16,20 @@ const processTransactionsToDividendSummary = (transactions) => {
   };
 
   transactions.forEach(t => {
-    // Check for the new TransactionType
-    if (t.TransactionType !== 'DIVIDEND') return;
+    if (t.transaction_type !== 'DIVIDEND') return;
 
-    const year = getYearString(t.Date);
+    const year = getYearString(t.date);
     if (!year) return;
 
-    const countryFormattedString = t.CountryCode || 'Unknown';
-    const amount = roundToTwoDecimalPlaces(t.AmountEUR);
+    const countryFormattedString = t.country_code || 'Unknown';
+    const amount = roundToTwoDecimalPlaces(t.amount_eur);
 
     if (!result[year]) result[year] = {};
     if (!result[year][countryFormattedString]) {
       result[year][countryFormattedString] = { gross_amt: 0, taxed_amt: 0 };
     }
 
-    // Use TransactionSubType to differentiate between gross and tax
-    if (t.TransactionSubType === 'TAX') {
+    if (t.transaction_subtype === 'TAX') {
       result[year][countryFormattedString].taxed_amt += amount;
     } else {
       result[year][countryFormattedString].gross_amt += amount;
@@ -51,7 +49,6 @@ export const useRealizedGains = (token, selectedYear) => {
     select: (response) => response.data,
   });
 
-  // Memoize the derived dividend tax summary
   const derivedDividendTaxSummary = useMemo(() => {
     if (allData && allData.DividendTransactionsList) {
       return processTransactionsToDividendSummary(allData.DividendTransactionsList);
@@ -59,14 +56,13 @@ export const useRealizedGains = (token, selectedYear) => {
     return {};
   }, [allData]);
 
-  // Memoize the available years from all data sources
   const availableYears = useMemo(() => {
     if (!allData) return [ALL_YEARS_OPTION];
     
     const stockHoldingYears = allData.StockHoldings ? Object.keys(allData.StockHoldings) : [];
 
     const dateAccessors = {
-      StockSaleDetails: 'SaleDate',
+      StockSaleDetails: 'sale_date', // CORRECTED
       OptionSaleDetails: 'close_date',
       DividendTaxResult: null,
     };
@@ -86,7 +82,6 @@ export const useRealizedGains = (token, selectedYear) => {
   }, [allData, derivedDividendTaxSummary]);
 
 
-  // Memoize the data filtered by the selected year
   const filteredData = useMemo(() => {
     const defaultStructure = {
       StockHoldings: [], OptionHoldings: [], StockSaleDetails: [],
@@ -115,15 +110,14 @@ export const useRealizedGains = (token, selectedYear) => {
     if (selectedYear === ALL_YEARS_OPTION || !selectedYear) return dataSet;
     return {
       ...dataSet,
-      StockSaleDetails: dataSet.StockSaleDetails.filter(s => getYearString(s.SaleDate) === selectedYear),
+      StockSaleDetails: dataSet.StockSaleDetails.filter(s => getYearString(s.sale_date) === selectedYear), // CORRECTED
       OptionSaleDetails: dataSet.OptionSaleDetails.filter(o => getYearString(o.close_date) === selectedYear),
-      DividendTransactionsList: dataSet.DividendTransactionsList.filter(tx => getYearString(tx.Date) === selectedYear),
+      DividendTransactionsList: dataSet.DividendTransactionsList.filter(tx => getYearString(tx.date) === selectedYear),
     };
   }, [allData, selectedYear]);
 
-  // Memoize the summary Profit/Loss calculations
   const summaryPLs = useMemo(() => {
-    const stockPL = (filteredData.StockSaleDetails || []).reduce((sum, sale) => sum + (sale.Delta || 0), 0);
+    const stockPL = (filteredData.StockSaleDetails || []).reduce((sum, sale) => sum + (sale.delta || 0), 0); // CORRECTED
     const optionPL = (filteredData.OptionSaleDetails || []).reduce((sum, sale) => sum + (sale.delta || 0), 0);
     let dividendPL = 0;
 
@@ -143,7 +137,6 @@ export const useRealizedGains = (token, selectedYear) => {
     return { stockPL, optionPL, dividendPL, totalPL };
   }, [filteredData, derivedDividendTaxSummary, selectedYear]);
   
-  // Memoize holdings allocation chart data
   const holdingsChartData = useMemo(() => {
     const stockHoldingsForChart = filteredData.StockHoldings;
     
@@ -152,7 +145,7 @@ export const useRealizedGains = (token, selectedYear) => {
     }
 
     const holdingsByIsin = stockHoldingsForChart.reduce((acc, holding) => {
-      const { isin, product_name, quantity, buy_amount_eur, buy_date } = holding;
+      const { isin, product_name, buy_amount_eur, buy_date } = holding;
       if (!isin) return acc;
 
       if (!acc[isin]) {

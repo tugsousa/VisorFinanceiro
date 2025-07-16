@@ -12,7 +12,6 @@ const COLORS = {
   dividends: 'rgba(255, 159, 64, 0.85)',
 };
 
-// --- FIX: Add dividendTransactionsList to the component's props ---
 const PLContributionChart = ({ stockSaleDetails, optionSaleDetails, dividendTaxResultForChart, dividendTransactionsList, selectedYear }) => {
   const chartData = useMemo(() => {
     
@@ -22,7 +21,7 @@ const PLContributionChart = ({ stockSaleDetails, optionSaleDetails, dividendTaxR
           optionSales: optionSaleDetails,
           DividendTaxResult: dividendTaxResultForChart
       }, {
-          stockSales: 'SaleDate',
+          stockSales: 'sale_date', // CORRECTED
           optionSales: 'close_date',
           DividendTaxResult: null 
       }).filter(y => y && y !== ALL_YEARS_OPTION && y !== NO_YEAR_SELECTED).sort((a, b) => Number(a) - Number(b));
@@ -35,8 +34,8 @@ const PLContributionChart = ({ stockSaleDetails, optionSaleDetails, dividendTaxR
       });
 
       stockSaleDetails.forEach(sale => {
-        const year = getYearString(sale.SaleDate);
-        if (year && yearlyData[year]) yearlyData[year].stocks += sale.Delta;
+        const year = getYearString(sale.sale_date); // CORRECTED
+        if (year && yearlyData[year]) yearlyData[year].stocks += sale.delta; // CORRECTED
       });
 
       optionSaleDetails.forEach(sale => {
@@ -64,13 +63,12 @@ const PLContributionChart = ({ stockSaleDetails, optionSaleDetails, dividendTaxR
       };
 
     } else {
-      // --- FIX: Logic for single-year (monthly) view now includes dividends ---
       const monthlyData = Array(12).fill(null).map(() => ({ stocks: 0, options: 0, dividends: 0 }));
 
       stockSaleDetails.forEach(sale => {
-        if (getYearString(sale.SaleDate) === selectedYear) {
-            const month = getMonthIndex(sale.SaleDate);
-            if (month !== null) monthlyData[month].stocks += sale.Delta;
+        if (getYearString(sale.sale_date) === selectedYear) { // CORRECTED
+            const month = getMonthIndex(sale.sale_date); // CORRECTED
+            if (month !== null) monthlyData[month].stocks += sale.delta; // CORRECTED
         }
       });
       optionSaleDetails.forEach(sale => {
@@ -80,14 +78,11 @@ const PLContributionChart = ({ stockSaleDetails, optionSaleDetails, dividendTaxR
         }
       });
       
-      // Calculate monthly dividend P/L from the individual transactions list
       (dividendTransactionsList || []).forEach(tx => {
-        // Double-check year match, though filteredData should already handle this
-        if (getYearString(tx.Date) === selectedYear) {
-            const month = getMonthIndex(tx.Date);
-            if (month !== null && tx.AmountEUR != null) {
-                // Dividend tax transactions are negative, so simple addition calculates the net
-                monthlyData[month].dividends += tx.AmountEUR;
+        if (getYearString(tx.date) === selectedYear) {
+            const month = getMonthIndex(tx.date);
+            if (month !== null && tx.amount_eur != null) {
+                monthlyData[month].dividends += tx.amount_eur;
             }
         }
       });
@@ -101,7 +96,6 @@ const PLContributionChart = ({ stockSaleDetails, optionSaleDetails, dividendTaxR
           ]
       }
     }
-  // --- FIX: Add dividendTransactionsList to the dependency array ---
   }, [stockSaleDetails, optionSaleDetails, dividendTaxResultForChart, dividendTransactionsList, selectedYear]);
 
   const chartOptions = useMemo(() => ({

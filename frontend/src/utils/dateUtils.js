@@ -114,7 +114,8 @@ export const extractYearsFromData = (data, dateFieldAccessors) => {
   const yearsSet = new Set();
   if (data && dateFieldAccessors) {
     Object.keys(dateFieldAccessors).forEach(dataType => {
-      const items = data[dataType];
+      // Corrected data keys to match the API response
+      const items = data[dataType] || (dataType === 'stockSales' ? data.StockSaleDetails : (dataType === 'optionSales' ? data.OptionSaleDetails : null));
       const accessor = dateFieldAccessors[dataType];
       if (Array.isArray(items)) {
         items.forEach(item => {
@@ -123,7 +124,6 @@ export const extractYearsFromData = (data, dateFieldAccessors) => {
           if (year) yearsSet.add(year);
         });
       } else if (dataType === 'DividendTaxResult' && typeof items === 'object' && items !== null) {
-        // Special handling for DividendTaxResult: { "yearString": { ... } }
         Object.keys(items).forEach(yearStr => {
           const yearNum = parseInt(yearStr, 10);
           if (!isNaN(yearNum)) yearsSet.add(yearNum);
@@ -132,7 +132,6 @@ export const extractYearsFromData = (data, dateFieldAccessors) => {
     });
   }
   const sortedYearNumbers = Array.from(yearsSet).sort((a, b) => b - a); // Descending numbers
-  // Convert year numbers to strings
   const sortedYearStrings = sortedYearNumbers.map(y => String(y));
-  return sortedYearStrings; // Returns an array of year strings, e.g., ['2023', '2022']
+  return sortedYearStrings;
 };
