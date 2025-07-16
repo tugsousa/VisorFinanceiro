@@ -16,27 +16,27 @@ type RawTransaction struct {
 
 // ProcessedTransaction represents a transaction after initial processing and enrichment.
 type ProcessedTransaction struct {
-	ID                 int64  `json:"id,omitempty"` // Add this field for the database primary key
-	Date               string // Use time.Time for dates
-	Source             string // e.g., DEGIRO, IBKR
-	ProductName        string
-	ISIN               string
-	Quantity           int
-	OriginalQuantity   int // Original quantity of the purchase lot before any sales
-	Price              float64
-	TransactionType    string  // e.g., "stock", "option", "comission", "cash", dividend
-	TransactionSubType string  // e.g., call, put, tax, dividend, etf, stk
-	BuySell            string  // e.g., "buy", "sell"
-	Description        string  // Original description from RawTransaction
-	Amount             float64 // Transaction amount in original currency
-	Currency           string  // Original currency (e.g., "USD", "EUR")
-	Commission         float64 // Commission/fees
-	OrderID            string
-	ExchangeRate       float64 // Exchange rate to EUR (if applicable)
-	AmountEUR          float64 // Transaction amount in EUR (calculated)
+	ID                 int64   `json:"id,omitempty"` // Database primary key
+	Date               string  `json:"date"`
+	Source             string  `json:"source"` // e.g., DEGIRO, IBKR
+	ProductName        string  `json:"product_name"`
+	ISIN               string  `json:"isin"`
+	Quantity           int     `json:"quantity"`
+	OriginalQuantity   int     `json:"original_quantity"` // Original quantity of the purchase lot before any sales
+	Price              float64 `json:"price"`
+	TransactionType    string  `json:"transaction_type"`    // e.g., "STOCK", "OPTION", "DIVIDEND", "FEE", "CASH"
+	TransactionSubType string  `json:"transaction_subtype"` // e.g., "CALL", "PUT", "TAX", "DEPOSIT"
+	BuySell            string  `json:"buy_sell"`            // "BUY", "SELL", or empty
+	Description        string  `json:"description"`         // Original description from RawTransaction
+	Amount             float64 `json:"amount"`              // Transaction amount in original currency
+	Currency           string  `json:"currency"`            // Original currency (e.g., "USD", "EUR")
+	Commission         float64 `json:"commission"`          // Commission/fees
+	OrderID            string  `json:"order_id"`
+	ExchangeRate       float64 `json:"exchange_rate"`          // Exchange rate to EUR (if applicable)
+	AmountEUR          float64 `json:"amount_eur"`             // Transaction amount in EUR (calculated)
 	CountryCode        string  `json:"country_code,omitempty"` // Country code derived from ISIN
-	InputString        string
-	HashId             string // generated hash
+	InputString        string  `json:"input_string"`           // The full description string for reference
+	HashId             string  `json:"hash_id"`                // Generated hash for potential duplicate checking
 }
 
 // CashMovement represents a cash deposit or withdrawal

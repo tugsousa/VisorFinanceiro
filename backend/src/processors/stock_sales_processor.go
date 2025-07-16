@@ -8,15 +8,12 @@ import (
 	"github.com/username/taxfolio/backend/src/utils"
 )
 
-// stockProcessorImpl implements the StockProcessor interface.
 type stockProcessorImpl struct{}
 
-// NewStockProcessor creates a new instance of StockProcessor.
 func NewStockProcessor() StockProcessor {
 	return &stockProcessorImpl{}
 }
 
-// Process implements the StockProcessor interface by delegating to the new refined logic.
 func (p *stockProcessorImpl) Process(transactions []models.ProcessedTransaction) ([]models.SaleDetail, map[string][]models.PurchaseLot) {
 	stockTransactions := filterAndSortStockTransactions(transactions)
 	if len(stockTransactions) == 0 {
@@ -25,7 +22,6 @@ func (p *stockProcessorImpl) Process(transactions []models.ProcessedTransaction)
 	return calculateSalesAndYearlyHoldings(stockTransactions)
 }
 
-// calculateSalesAndYearlyHoldings processes sorted stock transactions to produce sale details and a map of holdings by year.
 func calculateSalesAndYearlyHoldings(transactions []models.ProcessedTransaction) ([]models.SaleDetail, map[string][]models.PurchaseLot) {
 	saleDetails := []models.SaleDetail{}
 	holdingsByYear := make(map[string][]models.PurchaseLot)
@@ -41,24 +37,18 @@ func calculateSalesAndYearlyHoldings(transactions []models.ProcessedTransaction)
 		txDate := utils.ParseDate(tx.Date)
 		currentYear := txDate.Year()
 
-		// --- CORE LOGIC FIX ---
-		// If we cross into a new year, take a snapshot of the previous year's holdings.
 		if currentYear > lastProcessedYear {
-			// Take snapshot for lastProcessedYear
 			snapshot := collectAndCopyHoldings(openPurchasesByISIN)
 			holdingsByYear[strconv.Itoa(lastProcessedYear)] = snapshot
-
-			// Fill in any gap years with the same snapshot
 			for year := lastProcessedYear + 1; year < currentYear; year++ {
 				holdingsByYear[strconv.Itoa(year)] = snapshot
 			}
 		}
 
-		// Process the current transaction
-		if tx.TransactionType == "stock" && tx.BuySell == "buy" {
+		if tx.TransactionType == "STOCK" && tx.BuySell == "BUY" {
 			purchaseCopy := tx
 			openPurchasesByISIN[tx.ISIN] = append(openPurchasesByISIN[tx.ISIN], &purchaseCopy)
-		} else if tx.TransactionType == "stock" && tx.BuySell == "sell" {
+		} else if tx.TransactionType == "STOCK" && tx.BuySell == "SELL" {
 			remainingQty := tx.Quantity
 			purchaseLots := openPurchasesByISIN[tx.ISIN]
 
@@ -66,7 +56,6 @@ func calculateSalesAndYearlyHoldings(transactions []models.ProcessedTransaction)
 				currentPurchase := purchaseLots[0]
 				matchedQty := utils.MinInt(remainingQty, currentPurchase.Quantity)
 
-				// Sale Detail calculation
 				saleRatio := float64(matchedQty) / float64(tx.Quantity)
 				var purchaseRatio float64
 				if currentPurchase.OriginalQuantity > 0 {
@@ -75,7 +64,7 @@ func calculateSalesAndYearlyHoldings(transactions []models.ProcessedTransaction)
 				buyCommissionToAdd := 0.0
 				if currentPurchase.Commission > 0 {
 					buyCommissionToAdd = currentPurchase.Commission
-					currentPurchase.Commission = 0 // Mark as used
+					currentPurchase.Commission = 0
 				}
 				totalDetailCommission := (tx.Commission * saleRatio) + buyCommissionToAdd
 				buyAmountEUR := utils.RoundFloat(currentPurchase.AmountEUR*purchaseRatio, 2)
@@ -111,24 +100,20 @@ func calculateSalesAndYearlyHoldings(transactions []models.ProcessedTransaction)
 			}
 		}
 
-		// Update the last processed year marker
 		lastProcessedYear = currentYear
 	}
 
-	// After the loop, take one final snapshot for the very last year of transactions
 	finalSnapshot := collectAndCopyHoldings(openPurchasesByISIN)
 	holdingsByYear[strconv.Itoa(lastProcessedYear)] = finalSnapshot
 
 	return saleDetails, holdingsByYear
 }
 
-// collectAndCopyHoldings creates a deep copy of the current state of all purchase lots.
 func collectAndCopyHoldings(holdingsMap map[string][]*models.ProcessedTransaction) []models.PurchaseLot {
 	var snapshot []models.PurchaseLot
 	for _, lots := range holdingsMap {
 		for _, lot := range lots {
 			if lot.Quantity > 0 {
-				// Pro-rate the amount based on remaining quantity
 				var lotAmount, lotAmountEUR float64
 				if lot.OriginalQuantity > 0 {
 					ratio := float64(lot.Quantity) / float64(lot.OriginalQuantity)
@@ -152,11 +137,10 @@ func collectAndCopyHoldings(holdingsMap map[string][]*models.ProcessedTransactio
 	return snapshot
 }
 
-// filterAndSortStockTransactions filters for stock-related transactions and sorts them chronologically.
 func filterAndSortStockTransactions(transactions []models.ProcessedTransaction) []models.ProcessedTransaction {
 	var stockTx []models.ProcessedTransaction
 	for _, tx := range transactions {
-		if tx.TransactionType == "stock" {
+		if tx.TransactionType == "STOCK" {
 			stockTx = append(stockTx, tx)
 		}
 	}
@@ -164,10 +148,10 @@ func filterAndSortStockTransactions(transactions []models.ProcessedTransaction) 
 		dateI := utils.ParseDate(stockTx[i].Date)
 		dateJ := utils.ParseDate(stockTx[j].Date)
 		if dateI.Equal(dateJ) {
-			if (stockTx[i].TransactionType == "stock" && stockTx[i].BuySell == "sell") && (stockTx[j].TransactionType == "stock" && stockTx[j].BuySell == "buy") {
+			if stockTx[i].BuySell == "SELL" && stockTx[j].BuySell == "BUY" {
 				return false
 			}
-			if (stockTx[i].TransactionType == "stock" && stockTx[i].BuySell == "buy") && (stockTx[j].TransactionType == "stock" && stockTx[j].BuySell == "sell") {
+			if stockTx[i].BuySell == "BUY" && stockTx[j].BuySell == "SELL" {
 				return true
 			}
 			return stockTx[i].OrderID < stockTx[j].OrderID
