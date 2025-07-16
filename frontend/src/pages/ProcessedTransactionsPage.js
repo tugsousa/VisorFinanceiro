@@ -31,9 +31,11 @@ const columns = [
       return `${day}-${month}-${year}`;
     }
   },
+  { field: 'Source', headerName: 'Origem', width: 100 },
   { field: 'ProductName', headerName: 'Produto', flex: 1, minWidth: 200 },
-  { field: 'ISIN', headerName: 'ISIN', width: 130 },
-  { field: 'OrderType', headerName: 'Tipo Operação', width: 130 },
+  { field: 'TransactionType', headerName: 'Tipo', width: 120 },
+  { field: 'TransactionSubType', headerName: 'Subtipo', width: 110 },
+  { field: 'BuySell', headerName: 'Ação', width: 90 },
   { field: 'Quantity', headerName: 'Qtd.', type: 'number', width: 80, align: 'right', headerAlign: 'right' },
   { 
     field: 'Price', 
@@ -42,23 +44,6 @@ const columns = [
     width: 120,
     align: 'right', headerAlign: 'right',
     valueFormatter: (value) => typeof value === 'number' ? value.toFixed(4) : ''
-  },
-  { 
-    field: 'Amount', 
-    headerName: 'Montante', 
-    type: 'number', 
-    width: 120,
-    align: 'right', headerAlign: 'right',
-    valueFormatter: (value) => typeof value === 'number' ? value.toFixed(2) : ''
-  },
-  { field: 'Currency', headerName: 'Moeda', width: 90, align: 'center', headerAlign: 'center' },
-  { 
-    field: 'Commission', 
-    headerName: 'Comissão', 
-    type: 'number', 
-    width: 110,
-    align: 'right', headerAlign: 'right',
-    valueFormatter: (value) => typeof value === 'number' ? value.toFixed(2) : ''
   },
   { 
     field: 'AmountEUR', 

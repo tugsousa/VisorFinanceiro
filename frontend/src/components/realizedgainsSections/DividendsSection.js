@@ -1,3 +1,4 @@
+// frontend/src/components/realizedgainsSections/DividendsSection.js
 import React, { useMemo } from 'react';
 import { Typography, Paper, Box, Grid } from '@mui/material';
 import { DataGrid } from '@mui/x-data-grid'; 
@@ -49,7 +50,10 @@ export default function DividendsSection({ dividendTransactionsData, selectedYea
       return emptyResult;
     }
     
-    const relevantTxs = dividendTransactionsData.filter(tx => tx.OrderType?.toLowerCase() === 'dividend');
+    const relevantTxs = dividendTransactionsData.filter(tx => 
+      tx.TransactionType === 'DIVIDEND' && tx.TransactionSubType !== 'TAX'
+    );
+      
     if(relevantTxs.length === 0) return emptyResult;
 
     const productDividendMap = {};
@@ -164,7 +168,7 @@ export default function DividendsSection({ dividendTransactionsData, selectedYea
     }
   }), [selectedYear]);
 
-  if (dividendTransactionsData.length === 0) {
+  if (relevantDividendTransactions.length === 0) {
     return (
       <Paper elevation={0} sx={{ p: 2, mb: 3, border: 'none' }}>
         <Typography>Não existe informação de dividendos {(selectedYear === ALL_YEARS_OPTION) ? 'available' : `for ${selectedYear}`}.</Typography>
@@ -218,8 +222,6 @@ export default function DividendsSection({ dividendTransactionsData, selectedYea
           localeText={ptPT.components.MuiDataGrid.defaultProps.localeText}
         />
       </Box>
-
-    
     </Paper>
   );
 }

@@ -1,5 +1,4 @@
 // frontend/src/hooks/useRealizedGains.js
-
 import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { apiFetchRealizedGainsData } from '../api/apiService';
@@ -17,20 +16,31 @@ const processTransactionsToDividendSummary = (transactions) => {
   };
 
   transactions.forEach(t => {
-    const transactionType = t.OrderType?.toLowerCase();
-    if (transactionType !== 'dividend' && transactionType !== 'dividendtax') return;
+    // Check for the new TransactionType
+    if (t.TransactionType !== 'DIVIDEND') return;
+
     const year = getYearString(t.Date);
     if (!year) return;
+
     const countryFormattedString = t.CountryCode || 'Unknown';
     const amount = roundToTwoDecimalPlaces(t.AmountEUR);
+
     if (!result[year]) result[year] = {};
-    if (!result[year][countryFormattedString]) result[year][countryFormattedString] = { gross_amt: 0, taxed_amt: 0 };
-    if (transactionType === 'dividend') result[year][countryFormattedString].gross_amt += amount;
-    else if (transactionType === 'dividendtax') result[year][countryFormattedString].taxed_amt += amount;
+    if (!result[year][countryFormattedString]) {
+      result[year][countryFormattedString] = { gross_amt: 0, taxed_amt: 0 };
+    }
+
+    // Use TransactionSubType to differentiate between gross and tax
+    if (t.TransactionSubType === 'TAX') {
+      result[year][countryFormattedString].taxed_amt += amount;
+    } else {
+      result[year][countryFormattedString].gross_amt += amount;
+    }
   });
 
   return result;
 };
+
 
 export const useRealizedGains = (token, selectedYear) => {
   const { data: allData, isLoading, isError, error } = useQuery({
