@@ -113,8 +113,9 @@ func (h *UploadHandler) HandleGetRealizedGainsData(w http.ResponseWriter, r *htt
 	if realizedgainsData.StockSaleDetails == nil {
 		realizedgainsData.StockSaleDetails = []models.SaleDetail{}
 	}
+	// Correctly initialize StockHoldings as an empty map if it's nil
+	// This prevents a null value in the JSON response if there are no holdings.
 	if realizedgainsData.StockHoldings == nil {
-		// THIS IS THE FIX: Initialize as a map, not a slice.
 		realizedgainsData.StockHoldings = make(map[string][]models.PurchaseLot)
 	}
 	if realizedgainsData.OptionSaleDetails == nil {

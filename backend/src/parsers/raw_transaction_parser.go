@@ -90,7 +90,7 @@ func (p *transactionProcessorImpl) Process(rawTransactions []models.RawTransacti
 			Date:               sanitizedRaw.OrderDate,
 			Source:             "DEGIRO", // Hardcoded for now
 			ProductName:        productNameForProcessedTx,
-			ISIN:               sanitizedRaw.ISIN,
+			ISIN:               strings.TrimSpace(sanitizedRaw.ISIN), // <-- THE FIX IS HERE
 			Quantity:           quantity,
 			OriginalQuantity:   quantity,
 			Price:              price,
@@ -118,6 +118,7 @@ func (p *transactionProcessorImpl) Process(rawTransactions []models.RawTransacti
 	return processedTransactions, nil
 }
 
+// NOTE: The rest of the file (parseDescription, validateAndSanitizeRawTransaction) remains the same.
 func parseDescription(description string) (mainType, subType, buySell, productName string, quantity int, price float64, err error) {
 	desc := strings.TrimSpace(strings.ReplaceAll(description, "\u00A0", " "))
 
