@@ -89,7 +89,7 @@ func fetchUserProcessedTransactions(userID int64) ([]models.ProcessedTransaction
 		logger.L.Error("Error iterating over transaction rows from DB", "userID", userID, "error", err)
 		return nil, fmt.Errorf("error iterating over transaction rows for userID %d: %w", userID, err)
 	}
-	logger.L.Debug("Fetched transactions from DB", "userID", userID, "count", len(transactions))
+	logger.L.Info("DB fetch for user complete.", "userID", userID, "totalTransactionCount", len(transactions))
 	return transactions, nil
 }
 
@@ -188,9 +188,6 @@ func (s *uploadServiceImpl) ProcessUpload(fileReader io.Reader, userID int64) (*
 	return result, nil
 }
 
-// All other Get... methods in the service remain the same, as they call `fetchUserProcessedTransactions`
-// which now retrieves the correct data.
-// ... (the rest of the file remains the same)
 func (s *uploadServiceImpl) InvalidateUserCache(userID int64) {
 	keysToDelete := []string{
 		fmt.Sprintf(ckLatestUploadResult, userID),
@@ -239,17 +236,21 @@ func (s *uploadServiceImpl) GetLatestUploadResult(userID int64) (*UploadResult, 
 		return emptyResult, nil
 	}
 
+	logger.L.Info("Processing all fetched transactions for GetLatestUploadResult", "userID", userID, "transactionCount", len(userTransactions))
 	processingStartTime := time.Now()
 	stockSaleDetails, stockHoldings := s.stockProcessor.Process(userTransactions)
 	optionSaleDetails, optionHoldings := s.optionProcessor.Process(userTransactions)
 	cashMovements := s.cashMovementProcessor.Process(userTransactions)
 
 	var dividendTransactionsList []models.ProcessedTransaction
+	var dividendCandidateCount int // LOGGING VARIABLE
 	for _, tx := range userTransactions {
 		if tx.TransactionType == "DIVIDEND" {
+			dividendCandidateCount++
 			dividendTransactionsList = append(dividendTransactionsList, tx)
 		}
 	}
+	logger.L.Info("Dividend filtering complete for GetLatestUploadResult", "userID", userID, "foundDividendTransactions", dividendCandidateCount, "finalListSize", len(dividendTransactionsList))
 	logger.L.Debug("Processing complete for GetLatestUploadResult", "userID", userID, "duration", time.Since(processingStartTime))
 
 	uploadResult := &UploadResult{

@@ -110,6 +110,12 @@ func (h *UploadHandler) HandleGetRealizedGainsData(w http.ResponseWriter, r *htt
 		return
 	}
 
+	if realizedgainsData.DividendTransactionsList != nil {
+		logger.L.Info("Data prepared for response in handler", "userID", userID, "dividendListCount", len(realizedgainsData.DividendTransactionsList))
+	} else {
+		logger.L.Info("Data prepared for response in handler", "userID", userID, "dividendListCount", "nil")
+	}
+
 	if realizedgainsData.StockSaleDetails == nil {
 		realizedgainsData.StockSaleDetails = []models.SaleDetail{}
 	}

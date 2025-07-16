@@ -16,7 +16,7 @@ type UploadResult struct {
 	OptionSaleDetails        []models.OptionSaleDetail       `json:"OptionSaleDetails"`
 	OptionHoldings           []models.OptionHolding          `json:"OptionHoldings"`
 	CashMovements            []models.CashMovement           `json:"CashMovements"`
-	DividendTransactionsList []models.ProcessedTransaction   `json:"DividendTransactionsList,omitempty"`
+	DividendTransactionsList []models.ProcessedTransaction   `json:"DividendTransactionsList"`
 }
 
 // Define common service errors
