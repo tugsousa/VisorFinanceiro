@@ -55,10 +55,10 @@ func calculateSalesAndYearlyHoldings(transactions []models.ProcessedTransaction)
 		}
 
 		// Process the current transaction
-		if tx.OrderType == "stockbuy" {
+		if tx.TransactionType == "stock" && tx.BuySell == "buy" {
 			purchaseCopy := tx
 			openPurchasesByISIN[tx.ISIN] = append(openPurchasesByISIN[tx.ISIN], &purchaseCopy)
-		} else if tx.OrderType == "stocksale" {
+		} else if tx.TransactionType == "stock" && tx.BuySell == "sell" {
 			remainingQty := tx.Quantity
 			purchaseLots := openPurchasesByISIN[tx.ISIN]
 
@@ -156,7 +156,7 @@ func collectAndCopyHoldings(holdingsMap map[string][]*models.ProcessedTransactio
 func filterAndSortStockTransactions(transactions []models.ProcessedTransaction) []models.ProcessedTransaction {
 	var stockTx []models.ProcessedTransaction
 	for _, tx := range transactions {
-		if tx.OrderType == "stockbuy" || tx.OrderType == "stocksale" {
+		if tx.TransactionType == "stock" {
 			stockTx = append(stockTx, tx)
 		}
 	}
@@ -164,10 +164,10 @@ func filterAndSortStockTransactions(transactions []models.ProcessedTransaction) 
 		dateI := utils.ParseDate(stockTx[i].Date)
 		dateJ := utils.ParseDate(stockTx[j].Date)
 		if dateI.Equal(dateJ) {
-			if stockTx[i].OrderType == "stocksale" && stockTx[j].OrderType == "stockbuy" {
+			if (stockTx[i].TransactionType == "stock" && stockTx[i].BuySell == "sell") && (stockTx[j].TransactionType == "stock" && stockTx[j].BuySell == "buy") {
 				return false
 			}
-			if stockTx[i].OrderType == "stockbuy" && stockTx[j].OrderType == "stocksale" {
+			if (stockTx[i].TransactionType == "stock" && stockTx[i].BuySell == "buy") && (stockTx[j].TransactionType == "stock" && stockTx[j].BuySell == "sell") {
 				return true
 			}
 			return stockTx[i].OrderID < stockTx[j].OrderID

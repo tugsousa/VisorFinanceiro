@@ -20,7 +20,7 @@ func (p *cashMovementProcessor) Process(transactions []models.ProcessedTransacti
 
 	for _, tx := range transactions {
 		// Check for cash deposits
-		if strings.ToLower(tx.OrderType) == "cashdeposit" {
+		if strings.ToLower(tx.TransactionType) == "cash" && strings.ToLower(tx.TransactionSubType) == "deposit" {
 			movement := models.CashMovement{
 				Date:     tx.Date,
 				Type:     "deposit", // Currently only handling deposits

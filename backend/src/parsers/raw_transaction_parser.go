@@ -131,20 +131,20 @@ func (p *transactionProcessorImpl) Process(rawTransactions []models.RawTransacti
 
 		if orderType == "cashdeposit" {
 			processed := models.ProcessedTransaction{
-				Date:         sanitizedRaw.ValueDate,
-				ProductName:  parsedName,
-				ISIN:         sanitizedRaw.ISIN,
-				Quantity:     0,
-				Price:        0,
-				OrderType:    orderType,
-				Description:  sanitizedRaw.Description,
-				Amount:       amount,
-				Currency:     sanitizedRaw.Currency,
-				Commission:   0,
-				OrderID:      sanitizedRaw.OrderID,
-				ExchangeRate: 1.0,
-				AmountEUR:    amount,
-				CountryCode:  utils.GetCountryCodeString(sanitizedRaw.ISIN),
+				Date:            sanitizedRaw.ValueDate,
+				ProductName:     parsedName,
+				ISIN:            sanitizedRaw.ISIN,
+				Quantity:        0,
+				Price:           0,
+				TransactionType: orderType,
+				Description:     sanitizedRaw.Description,
+				Amount:          amount,
+				Currency:        sanitizedRaw.Currency,
+				Commission:      0,
+				OrderID:         sanitizedRaw.OrderID,
+				ExchangeRate:    1.0,
+				AmountEUR:       amount,
+				CountryCode:     utils.GetCountryCodeString(sanitizedRaw.ISIN),
 			}
 			processedTransactions = append(processedTransactions, processed)
 			logger.L.Debug("Processed cash deposit", "index", i, "originalOrderID", sanitizedRaw.OrderID, "duration", time.Since(loopStartTime))
@@ -194,22 +194,22 @@ func (p *transactionProcessorImpl) Process(rawTransactions []models.RawTransacti
 		}
 
 		processed := models.ProcessedTransaction{
-			Date:             sanitizedRaw.OrderDate,
-			ProductName:      productNameForProcessedTx,
-			ISIN:             sanitizedRaw.ISIN,
-			Quantity:         quantity,
-			OriginalQuantity: quantity,
-			Price:            price,
-			OrderType:        orderType,
-			TransactionType:  determineTransactionType(orderType),
-			Description:      sanitizedRaw.Description,
-			Amount:           amount,
-			Currency:         sanitizedRaw.Currency,
-			Commission:       commission,
-			OrderID:          sanitizedRaw.OrderID,
-			ExchangeRate:     exchangeRateValue, // Store the rate that was actually used
-			AmountEUR:        amountEUR,
-			CountryCode:      utils.GetCountryCodeString(sanitizedRaw.ISIN),
+			Date:               sanitizedRaw.OrderDate,
+			ProductName:        productNameForProcessedTx,
+			ISIN:               sanitizedRaw.ISIN,
+			Quantity:           quantity,
+			OriginalQuantity:   quantity,
+			Price:              price,
+			TransactionType:    orderType,
+			TransactionSubType: determineTransactionType(orderType),
+			Description:        sanitizedRaw.Description,
+			Amount:             amount,
+			Currency:           sanitizedRaw.Currency,
+			Commission:         commission,
+			OrderID:            sanitizedRaw.OrderID,
+			ExchangeRate:       exchangeRateValue, // Store the rate that was actually used
+			AmountEUR:          amountEUR,
+			CountryCode:        utils.GetCountryCodeString(sanitizedRaw.ISIN),
 		}
 		processedTransactions = append(processedTransactions, processed)
 

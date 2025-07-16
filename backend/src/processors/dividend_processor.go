@@ -24,8 +24,8 @@ func (p *dividendProcessorImpl) Calculate(transactions []models.ProcessedTransac
 	result := make(DividendResult)
 
 	for _, t := range transactions {
-		transactionType := strings.ToLower(t.OrderType)
-		if transactionType != "dividend" && transactionType != "dividendtax" {
+		transactionType := strings.ToLower(t.TransactionType)
+		if transactionType != "dividend" {
 			continue
 		}
 
@@ -65,8 +65,8 @@ func (p *dividendProcessorImpl) CalculateTaxSummary(transactions []models.Proces
 	result := make(models.DividendTaxResult)
 
 	for _, t := range transactions {
-		transactionType := strings.ToLower(t.OrderType)
-		if transactionType != "dividend" && transactionType != "dividendtax" {
+		transactionType := strings.ToLower(t.TransactionType)
+		if transactionType != "dividend" {
 			continue // Skip other transaction types
 		}
 
@@ -97,9 +97,9 @@ func (p *dividendProcessorImpl) CalculateTaxSummary(transactions []models.Proces
 		summary := result[year][countryFormattedString] // This works even if the key doesn't exist yet (returns zero-value struct)
 
 		// Add the amount to the appropriate field
-		if transactionType == "dividend" {
+		if transactionType == "dividend" && t.TransactionSubType != "TAX" {
 			summary.GrossAmt += amount
-		} else if transactionType == "dividendtax" {
+		} else if transactionType == "dividend" && t.TransactionSubType == "TAX" {
 			summary.TaxedAmt += amount // Tax is usually negative, so += works
 		}
 

@@ -16,23 +16,27 @@ type RawTransaction struct {
 
 // ProcessedTransaction represents a transaction after initial processing and enrichment.
 type ProcessedTransaction struct {
-	ID               int64  `json:"id,omitempty"` // Add this field for the database primary key
-	Date             string // Use time.Time for dates
-	ProductName      string
-	ISIN             string
-	Quantity         int
-	OriginalQuantity int // Original quantity of the purchase lot before any sales
-	Price            float64
-	OrderType        string  // e.g., "compra", "venda", "dividendo"
-	TransactionType  string  // e.g., "stock", "option", "comission", "cashCredit"
-	Description      string  // Original description from RawTransaction
-	Amount           float64 // Transaction amount in original currency
-	Currency         string  // Original currency (e.g., "USD", "EUR")
-	Commission       float64 // Commission/fees
-	OrderID          string
-	ExchangeRate     float64 // Exchange rate to EUR (if applicable)
-	AmountEUR        float64 // Transaction amount in EUR (calculated)
-	CountryCode      string  `json:"country_code,omitempty"` // Country code derived from ISIN
+	ID                 int64  `json:"id,omitempty"` // Add this field for the database primary key
+	Date               string // Use time.Time for dates
+	Source             string // e.g., DEGIRO, IBKR
+	ProductName        string
+	ISIN               string
+	Quantity           int
+	OriginalQuantity   int // Original quantity of the purchase lot before any sales
+	Price              float64
+	TransactionType    string  // e.g., "stock", "option", "comission", "cash", dividend
+	TransactionSubType string  // e.g., call, put, tax, dividend, etf, stk
+	BuySell            string  // e.g., "buy", "sell"
+	Description        string  // Original description from RawTransaction
+	Amount             float64 // Transaction amount in original currency
+	Currency           string  // Original currency (e.g., "USD", "EUR")
+	Commission         float64 // Commission/fees
+	OrderID            string
+	ExchangeRate       float64 // Exchange rate to EUR (if applicable)
+	AmountEUR          float64 // Transaction amount in EUR (calculated)
+	CountryCode        string  `json:"country_code,omitempty"` // Country code derived from ISIN
+	InputString        string
+	HashId             string // generated hash
 }
 
 // CashMovement represents a cash deposit or withdrawal

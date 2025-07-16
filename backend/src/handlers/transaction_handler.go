@@ -51,7 +51,7 @@ func (h *TransactionHandler) HandleGetProcessedTransactions(w http.ResponseWrite
 		scanErr := rows.Scan(
 			&tx.ID,
 			&tx.Date, &tx.ProductName, &tx.ISIN, &tx.Quantity, &tx.OriginalQuantity, &tx.Price,
-			&tx.OrderType, &tx.TransactionType, &tx.Description, &tx.Amount, &tx.Currency,
+			&tx.TransactionType, &tx.Description, &tx.Amount, &tx.Currency,
 			&tx.Commission, &tx.OrderID, &tx.ExchangeRate, &tx.AmountEUR, &tx.CountryCode)
 		if scanErr != nil {
 			utils.SendJSONError(w, fmt.Sprintf("Error scanning transaction for userID %d: %v", userID, scanErr), http.StatusInternalServerError) // Use utils.SendJSONError

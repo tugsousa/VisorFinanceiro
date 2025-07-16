@@ -13,7 +13,7 @@ import (
 	"github.com/username/taxfolio/backend/src/database"
 	"github.com/username/taxfolio/backend/src/handlers"
 	"github.com/username/taxfolio/backend/src/logger"
-	_ "github.com/username/taxfolio/backend/src/model" // Implicitly used by handlers
+	_ "github.com/username/taxfolio/backend/src/models" // Implicitly used by handlers
 	"github.com/username/taxfolio/backend/src/parsers"
 	"github.com/username/taxfolio/backend/src/processors"
 	"github.com/username/taxfolio/backend/src/security"

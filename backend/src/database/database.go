@@ -58,13 +58,15 @@ func InitDB(databasePath string) {
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
 		user_id INTEGER NOT NULL,
 		date TEXT NOT NULL,
+		source TEXT NOT NULL,
 		product_name TEXT NOT NULL,
 		isin TEXT,
 		quantity INTEGER,
 		original_quantity INTEGER,
 		price REAL,
-		order_type TEXT,
 		transaction_type TEXT,
+		transaction_subtype TEXT,
+		buy_sell TEXT,
 		description TEXT,
 		amount REAL,
 		currency TEXT,
@@ -73,6 +75,8 @@ func InitDB(databasePath string) {
 		exchange_rate REAL,
 		amount_eur REAL,
 		country_code TEXT,
+		input_string TEXT,
+		hash_id TEXT,
 		FOREIGN KEY(user_id) REFERENCES users(id)
 	);
 	`

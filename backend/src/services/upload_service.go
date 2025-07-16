@@ -84,7 +84,7 @@ func fetchUserProcessedTransactions(userID int64) ([]models.ProcessedTransaction
 		scanErr := rows.Scan(
 			&tx.ID,
 			&tx.Date, &tx.ProductName, &tx.ISIN, &tx.Quantity, &tx.OriginalQuantity, &tx.Price,
-			&tx.OrderType, &tx.TransactionType, &tx.Description, &tx.Amount, &tx.Currency,
+			&tx.TransactionType, &tx.Description, &tx.Amount, &tx.Currency,
 			&tx.Commission, &tx.OrderID, &tx.ExchangeRate, &tx.AmountEUR, &tx.CountryCode)
 		if scanErr != nil {
 			logger.L.Error("Error scanning transaction row from DB", "userID", userID, "error", scanErr)
@@ -168,7 +168,7 @@ func (s *uploadServiceImpl) ProcessUpload(fileReader io.Reader, userID int64) (*
 	for _, tx := range processedTransactions {
 		_, err := stmt.Exec(
 			userID, tx.Date, tx.ProductName, tx.ISIN, tx.Quantity, tx.OriginalQuantity, tx.Price,
-			tx.OrderType, tx.TransactionType, tx.Description, tx.Amount, tx.Currency,
+			tx.TransactionType, tx.Description, tx.Amount, tx.Currency,
 			tx.Commission, tx.OrderID, tx.ExchangeRate, tx.AmountEUR, tx.CountryCode)
 		if err != nil {
 			logger.L.Error("Error inserting transaction into DB", "userID", userID, "orderID", tx.OrderID, "error", err)
@@ -197,8 +197,8 @@ func (s *uploadServiceImpl) ProcessUpload(fileReader io.Reader, userID int64) (*
 
 	var dividendTransactionsList []models.ProcessedTransaction
 	for _, tx := range allUserTransactions {
-		orderTypeLower := strings.ToLower(tx.OrderType)
-		if orderTypeLower == "dividend" || orderTypeLower == "dividendtax" {
+		orderTypeLower := strings.ToLower(tx.TransactionType)
+		if orderTypeLower == "dividend" {
 			dividendTransactionsList = append(dividendTransactionsList, tx)
 		}
 	}
@@ -272,8 +272,8 @@ func (s *uploadServiceImpl) GetLatestUploadResult(userID int64) (*UploadResult, 
 
 	var dividendTransactionsList []models.ProcessedTransaction
 	for _, tx := range userTransactions {
-		orderTypeLower := strings.ToLower(tx.OrderType)
-		if orderTypeLower == "dividend" || orderTypeLower == "dividendtax" {
+		orderTypeLower := strings.ToLower(tx.TransactionType)
+		if orderTypeLower == "dividend" {
 			dividendTransactionsList = append(dividendTransactionsList, tx)
 		}
 	}
@@ -364,8 +364,8 @@ func (s *uploadServiceImpl) GetDividendTransactions(userID int64) ([]models.Proc
 	dividends := []models.ProcessedTransaction{}
 	if len(userTransactions) > 0 {
 		for _, tx := range userTransactions {
-			orderTypeLower := strings.ToLower(tx.OrderType)
-			if orderTypeLower == "dividend" || orderTypeLower == "dividendtax" {
+			orderTypeLower := strings.ToLower(tx.TransactionType)
+			if orderTypeLower == "dividend" {
 				dividends = append(dividends, tx)
 			}
 		}
