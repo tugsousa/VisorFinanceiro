@@ -18,12 +18,12 @@ const fetchProcessedTransactions = async () => {
 // Define columns for the DataGrid outside the component for performance
 const columns = [
   { 
-    field: 'Date', 
+    field: 'date', // Changed from 'Date'
     headerName: 'Data', 
     width: 110,
-    type: 'date', // Tell DataGrid this is a date column
-    valueGetter: (value) => parseDateRobust(value), // Convert string to Date object for sorting
-    valueFormatter: (value) => { // Format Date object back to DD-MM-YYYY for display
+    type: 'date',
+    valueGetter: (value) => parseDateRobust(value),
+    valueFormatter: (value) => {
       if (!value) return '';
       const day = String(value.getDate()).padStart(2, '0');
       const month = String(value.getMonth() + 1).padStart(2, '0');
@@ -31,14 +31,14 @@ const columns = [
       return `${day}-${month}-${year}`;
     }
   },
-  { field: 'Source', headerName: 'Origem', width: 100 },
-  { field: 'ProductName', headerName: 'Produto', flex: 1, minWidth: 200 },
-  { field: 'TransactionType', headerName: 'Tipo', width: 120 },
-  { field: 'TransactionSubType', headerName: 'Subtipo', width: 110 },
-  { field: 'BuySell', headerName: 'Ação', width: 90 },
-  { field: 'Quantity', headerName: 'Qtd.', type: 'number', width: 80, align: 'right', headerAlign: 'right' },
+  { field: 'source', headerName: 'Origem', width: 100 }, // Changed from 'Source'
+  { field: 'product_name', headerName: 'Produto', flex: 1, minWidth: 200 }, // Changed from 'ProductName'
+  { field: 'transaction_type', headerName: 'Tipo', width: 120 }, // Changed from 'TransactionType'
+  { field: 'transaction_subtype', headerName: 'Subtipo', width: 110 }, // Changed from 'TransactionSubType'
+  { field: 'buy_sell', headerName: 'Ação', width: 90 }, // Changed from 'BuySell'
+  { field: 'quantity', headerName: 'Qtd.', type: 'number', width: 80, align: 'right', headerAlign: 'right' }, // Changed from 'Quantity'
   { 
-    field: 'Price', 
+    field: 'price', // Changed from 'Price'
     headerName: 'Preço', 
     type: 'number', 
     width: 120,
@@ -46,14 +46,14 @@ const columns = [
     valueFormatter: (value) => typeof value === 'number' ? value.toFixed(4) : ''
   },
   { 
-    field: 'AmountEUR', 
+    field: 'amount_eur', // Changed from 'AmountEUR'
     headerName: 'Montante (€)', 
     type: 'number', 
     width: 130,
     align: 'right', headerAlign: 'right',
     valueFormatter: (value) => typeof value === 'number' ? value.toFixed(2) : ''
   },
-  { field: 'OrderID', headerName: 'Order ID', width: 150 },
+  { field: 'order_id', headerName: 'Order ID', width: 150 }, // Changed from 'OrderID'
 ];
 
 
