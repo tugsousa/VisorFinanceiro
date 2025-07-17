@@ -12,6 +12,7 @@ import (
 // AllowedClientContentTypes is a map for quick lookup of allowed client-declared MIME types.
 var AllowedClientContentTypes = map[string]bool{
 	"text/csv":                 true,
+	"text/xml":                 true,
 	"application/csv":          true,
 	"application/vnd.ms-excel": true, // Often used for CSV by older Excel
 	"text/plain":               true, // CSVs are often plain text
