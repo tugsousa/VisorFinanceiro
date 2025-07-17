@@ -77,7 +77,8 @@ func InitDB(databasePath string) {
 		country_code TEXT,
 		input_string TEXT,
 		hash_id TEXT,
-		FOREIGN KEY(user_id) REFERENCES users(id)
+		FOREIGN KEY(user_id) REFERENCES users(id),
+		UNIQUE(user_id, hash_id)
 	);
 	`
 

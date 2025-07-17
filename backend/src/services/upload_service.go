@@ -4,6 +4,7 @@ package services
 import (
 	"fmt"
 	"io"
+	"strings"
 	"time"
 
 	"github.com/patrickmn/go-cache"
@@ -100,12 +101,21 @@ func (s *uploadServiceImpl) ProcessUpload(fileReader io.Reader, userID int64, so
 	}
 	defer stmt.Close()
 
+	var duplicatesSkipped int
 	for _, tx := range processedTransactions {
 		_, err := stmt.Exec(
 			userID, tx.Date, tx.Source, tx.ProductName, tx.ISIN, tx.Quantity, tx.OriginalQuantity, tx.Price,
 			tx.TransactionType, tx.TransactionSubType, tx.BuySell, tx.Description, tx.Amount, tx.Currency,
 			tx.Commission, tx.OrderID, tx.ExchangeRate, tx.AmountEUR, tx.CountryCode, tx.InputString, tx.HashId)
 		if err != nil {
+			// Check if the error is a UNIQUE constraint violation
+			if strings.Contains(strings.ToLower(err.Error()), "unique constraint failed") {
+				duplicatesSkipped++
+				logger.L.Debug("Skipping duplicate transaction", "userID", userID, "hash_id", tx.HashId, "orderID", tx.OrderID)
+				continue // Ignore error and continue to the next transaction
+			}
+			// For any other error, rollback and fail the entire upload
+
 			return nil, fmt.Errorf("error inserting processed transaction (OrderID: %s): %w", tx.OrderID, err)
 		}
 	}

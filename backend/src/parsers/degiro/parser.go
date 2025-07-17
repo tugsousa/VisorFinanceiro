@@ -16,8 +16,10 @@ import (
 )
 
 // RawTransaction holds the direct string values from a single row of a DeGiro CSV.
+// Added RawLine to store the full, unprocessed line.
 type RawTransaction struct {
 	OrderDate, OrderTime, ValueDate, Name, ISIN, Description, ExchangeRate, Currency, Amount, OrderID string
+	RawLine                                                                                           string
 }
 
 // DeGiroParser implements the parsers.Parser interface for DeGiro files.
@@ -54,6 +56,8 @@ func (p *DeGiroParser) Parse(file io.Reader) ([]models.CanonicalTransaction, err
 				Name: record[3], ISIN: record[4], Description: record[5],
 				ExchangeRate: record[6], Currency: record[7], Amount: record[8],
 				OrderID: record[11],
+				// Join the record back together to get the full raw line.
+				RawLine: strings.Join(record, ","),
 			})
 		}
 	}
@@ -84,15 +88,16 @@ func (p *DeGiroParser) Parse(file io.Reader) ([]models.CanonicalTransaction, err
 		commission, _ := findCommissionForOrder(raw.OrderID, rawTxs)
 
 		tx := models.CanonicalTransaction{
-			Source:             "degiro",
-			TransactionDate:    date,
-			ProductName:        productName,
-			ISIN:               strings.TrimSpace(raw.ISIN),
-			Quantity:           quantity,
-			Price:              price,
-			Currency:           raw.Currency,
-			OrderID:            raw.OrderID,
-			RawText:            raw.Description,
+			Source:          "degiro",
+			TransactionDate: date,
+			ProductName:     productName,
+			ISIN:            strings.TrimSpace(raw.ISIN),
+			Quantity:        quantity,
+			Price:           price,
+			Currency:        raw.Currency,
+			OrderID:         raw.OrderID,
+			// Use the full line as RawText
+			RawText:            raw.RawLine,
 			SourceAmount:       sourceAmt,
 			Amount:             finalAmount,
 			TransactionType:    txType,

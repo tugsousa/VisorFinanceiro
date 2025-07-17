@@ -144,6 +144,12 @@ func (p *IBKRParser) processTrade(trade Trade) (models.CanonicalTransaction, err
 		finalISIN = trade.ISIN
 	}
 
+	// Construct a comprehensive raw text string for hashing and reference.
+	rawText := fmt.Sprintf("Trade|%s|%s|%s|%s|%s|%f|%f|%f|%s|%f|%s",
+		trade.AssetCategory, trade.IBOrderID, trade.DateTime, trade.Description, trade.BuySell,
+		trade.Quantity, trade.TradePrice, trade.TradeMoney, trade.Currency, trade.IBCommission, trade.Symbol,
+	)
+
 	tx := models.CanonicalTransaction{
 		Source:          "ibkr",
 		TransactionDate: date,
@@ -154,7 +160,7 @@ func (p *IBKRParser) processTrade(trade Trade) (models.CanonicalTransaction, err
 		Commission:      math.Abs(trade.IBCommission),
 		Currency:        trade.Currency,
 		OrderID:         fmt.Sprintf("%s", trade.IBOrderID),
-		RawText:         fmt.Sprintf("%s %f %s @ %f", trade.BuySell, trade.Quantity, trade.Symbol, trade.TradePrice),
+		RawText:         rawText,
 		SourceAmount:    trade.TradeMoney,
 		Amount:          -trade.TradeMoney, // IBKR tradeMoney is positive for BUY (cost), negative for SELL (proceeds). We invert for our model.
 		BuySell:         trade.BuySell,
@@ -183,6 +189,11 @@ func (p *IBKRParser) processDividend(cashTx CashTransaction) (models.CanonicalTr
 		return models.CanonicalTransaction{}, err
 	}
 
+	// Construct a comprehensive raw text string.
+	rawText := fmt.Sprintf("Dividend|%s|%s|%s|%f|%s|%s",
+		cashTx.DateTime, cashTx.Description, cashTx.Symbol, cashTx.Amount, cashTx.Currency, cashTx.ISIN,
+	)
+
 	// Note: IBKR reports do not always separate withholding tax into a distinct transaction.
 	// We are treating the dividend amount as the gross amount received. If tax is withheld,
 	// it might be a negative dividend transaction or require manual adjustment based on full statements.
@@ -194,7 +205,7 @@ func (p *IBKRParser) processDividend(cashTx CashTransaction) (models.CanonicalTr
 		Amount:          cashTx.Amount, // Dividends are positive income.
 		SourceAmount:    cashTx.Amount,
 		Currency:        cashTx.Currency,
-		RawText:         cashTx.Description,
+		RawText:         rawText,
 		TransactionType: "DIVIDEND",
 	}
 	return tx, nil
@@ -207,6 +218,11 @@ func (p *IBKRParser) processCashMovement(cashTx CashTransaction) (models.Canonic
 		return models.CanonicalTransaction{}, err
 	}
 
+	// Construct a comprehensive raw text string.
+	rawText := fmt.Sprintf("CashMovement|%s|%s|%f|%s",
+		cashTx.Type, cashTx.DateTime, cashTx.Amount, cashTx.Currency,
+	)
+
 	tx := models.CanonicalTransaction{
 		Source:          "ibkr",
 		TransactionDate: date,
@@ -214,7 +230,7 @@ func (p *IBKRParser) processCashMovement(cashTx CashTransaction) (models.Canonic
 		Amount:          cashTx.Amount,
 		SourceAmount:    cashTx.Amount,
 		Currency:        cashTx.Currency,
-		RawText:         cashTx.Description,
+		RawText:         rawText,
 		TransactionType: "CASH",
 	}
 
