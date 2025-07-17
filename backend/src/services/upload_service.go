@@ -27,8 +27,7 @@ const (
 )
 
 type uploadServiceImpl struct {
-	csvParser             parsers.CSVParser
-	transactionProcessor  parsers.TransactionProcessor
+	transactionProcessor  *processors.TransactionProcessor
 	dividendProcessor     processors.DividendProcessor
 	stockProcessor        processors.StockProcessor
 	optionProcessor       processors.OptionProcessor
@@ -37,8 +36,7 @@ type uploadServiceImpl struct {
 }
 
 func NewUploadService(
-	csvParser parsers.CSVParser,
-	transactionProcessor parsers.TransactionProcessor,
+	transactionProcessor *processors.TransactionProcessor,
 	dividendProcessor processors.DividendProcessor,
 	stockProcessor processors.StockProcessor,
 	optionProcessor processors.OptionProcessor,
@@ -46,7 +44,6 @@ func NewUploadService(
 	reportCache *cache.Cache,
 ) UploadService {
 	return &uploadServiceImpl{
-		csvParser:             csvParser,
 		transactionProcessor:  transactionProcessor,
 		dividendProcessor:     dividendProcessor,
 		stockProcessor:        stockProcessor,
@@ -56,61 +53,24 @@ func NewUploadService(
 	}
 }
 
-func fetchUserProcessedTransactions(userID int64) ([]models.ProcessedTransaction, error) {
-	logger.L.Debug("Fetching processed transactions from DB", "userID", userID)
-	rows, err := database.DB.Query(`
-		SELECT id, date, source, product_name, isin, quantity, original_quantity, price, 
-		       transaction_type, transaction_subtype, buy_sell, description, amount, currency, commission, 
-		       order_id, exchange_rate, amount_eur, country_code, input_string, hash_id
-		FROM processed_transactions
-		WHERE user_id = ?
-		ORDER BY date ASC, id ASC`, userID)
-
-	if err != nil {
-		logger.L.Error("Error querying transactions from DB", "userID", userID, "error", err)
-		return nil, fmt.Errorf("error querying transactions for userID %d: %w", userID, err)
-	}
-	defer rows.Close()
-
-	var transactions []models.ProcessedTransaction
-	for rows.Next() {
-		var tx models.ProcessedTransaction
-		scanErr := rows.Scan(
-			&tx.ID, &tx.Date, &tx.Source, &tx.ProductName, &tx.ISIN, &tx.Quantity, &tx.OriginalQuantity, &tx.Price,
-			&tx.TransactionType, &tx.TransactionSubType, &tx.BuySell, &tx.Description, &tx.Amount, &tx.Currency,
-			&tx.Commission, &tx.OrderID, &tx.ExchangeRate, &tx.AmountEUR, &tx.CountryCode, &tx.InputString, &tx.HashId)
-		if scanErr != nil {
-			logger.L.Error("Error scanning transaction row from DB", "userID", userID, "error", scanErr)
-			return nil, fmt.Errorf("error scanning transaction row for userID %d: %w", userID, scanErr)
-		}
-		transactions = append(transactions, tx)
-	}
-	if err = rows.Err(); err != nil {
-		logger.L.Error("Error iterating over transaction rows from DB", "userID", userID, "error", err)
-		return nil, fmt.Errorf("error iterating over transaction rows for userID %d: %w", userID, err)
-	}
-	logger.L.Info("DB fetch for user complete.", "userID", userID, "totalTransactionCount", len(transactions))
-	return transactions, nil
-}
-
 func (s *uploadServiceImpl) ProcessUpload(fileReader io.Reader, userID int64) (*UploadResult, error) {
 	overallStartTime := time.Now()
 	logger.L.Info("ProcessUpload START", "userID", userID)
 
-	rawTransactions, err := s.csvParser.Parse(fileReader)
+	// For now, we assume the source is "degiro". This can be a parameter in the future.
+	source := "degiro"
+	parser, err := parsers.GetParser(source)
 	if err != nil {
-		logger.L.Error("Error parsing CSV in service", "userID", userID, "error", err)
-		return nil, fmt.Errorf("%w: %v", ErrParsingFailed, err)
-	}
-	if len(rawTransactions) == 0 {
-		return &UploadResult{}, nil
+		return nil, err
 	}
 
-	processedTransactions, err := s.transactionProcessor.Process(rawTransactions)
+	canonicalTxs, err := parser.Parse(fileReader)
 	if err != nil {
-		logger.L.Error("Error processing raw transactions", "userID", userID, "error", err)
-		return nil, fmt.Errorf("error processing raw transactions for userID %d: %w", userID, err)
+		logger.L.Error("Error parsing file in service", "userID", userID, "error", err)
+		return nil, fmt.Errorf("%w: %v", ErrParsingFailed, err)
 	}
+
+	processedTransactions := s.transactionProcessor.Process(canonicalTxs)
 	if len(processedTransactions) == 0 {
 		return &UploadResult{}, nil
 	}
@@ -188,6 +148,7 @@ func (s *uploadServiceImpl) ProcessUpload(fileReader io.Reader, userID int64) (*
 	return result, nil
 }
 
+// ... the rest of the file (GetLatestUploadResult, InvalidateUserCache, etc.) remains unchanged ...
 func (s *uploadServiceImpl) InvalidateUserCache(userID int64) {
 	keysToDelete := []string{
 		fmt.Sprintf(ckLatestUploadResult, userID),
@@ -388,4 +349,40 @@ func (s *uploadServiceImpl) GetOptionSaleDetails(userID int64) ([]models.OptionS
 	optionSaleDetails, _ := s.optionProcessor.Process(userTransactions)
 	s.reportCache.Set(cacheKey, optionSaleDetails, DefaultCacheExpiration)
 	return optionSaleDetails, nil
+}
+func fetchUserProcessedTransactions(userID int64) ([]models.ProcessedTransaction, error) {
+	logger.L.Debug("Fetching processed transactions from DB", "userID", userID)
+	rows, err := database.DB.Query(`
+		SELECT id, date, source, product_name, isin, quantity, original_quantity, price, 
+		       transaction_type, transaction_subtype, buy_sell, description, amount, currency, commission, 
+		       order_id, exchange_rate, amount_eur, country_code, input_string, hash_id
+		FROM processed_transactions
+		WHERE user_id = ?
+		ORDER BY date ASC, id ASC`, userID)
+
+	if err != nil {
+		logger.L.Error("Error querying transactions from DB", "userID", userID, "error", err)
+		return nil, fmt.Errorf("error querying transactions for userID %d: %w", userID, err)
+	}
+	defer rows.Close()
+
+	var transactions []models.ProcessedTransaction
+	for rows.Next() {
+		var tx models.ProcessedTransaction
+		scanErr := rows.Scan(
+			&tx.ID, &tx.Date, &tx.Source, &tx.ProductName, &tx.ISIN, &tx.Quantity, &tx.OriginalQuantity, &tx.Price,
+			&tx.TransactionType, &tx.TransactionSubType, &tx.BuySell, &tx.Description, &tx.Amount, &tx.Currency,
+			&tx.Commission, &tx.OrderID, &tx.ExchangeRate, &tx.AmountEUR, &tx.CountryCode, &tx.InputString, &tx.HashId)
+		if scanErr != nil {
+			logger.L.Error("Error scanning transaction row from DB", "userID", userID, "error", scanErr)
+			return nil, fmt.Errorf("error scanning transaction row for userID %d: %w", userID, scanErr)
+		}
+		transactions = append(transactions, tx)
+	}
+	if err = rows.Err(); err != nil {
+		logger.L.Error("Error iterating over transaction rows from DB", "userID", userID, "error", err)
+		return nil, fmt.Errorf("error iterating over transaction rows for userID %d: %w", userID, err)
+	}
+	logger.L.Info("DB fetch for user complete.", "userID", userID, "totalTransactionCount", len(transactions))
+	return transactions, nil
 }

@@ -14,7 +14,6 @@ import (
 	"github.com/username/taxfolio/backend/src/handlers"
 	"github.com/username/taxfolio/backend/src/logger"
 	_ "github.com/username/taxfolio/backend/src/models" // Implicitly used by handlers
-	"github.com/username/taxfolio/backend/src/parsers"
 	"github.com/username/taxfolio/backend/src/processors"
 	"github.com/username/taxfolio/backend/src/security"
 	"github.com/username/taxfolio/backend/src/services"
@@ -107,15 +106,14 @@ func main() {
 	// userHandler := handlers.NewUserHandler(authService, emailService, uploadService)
 	userHandler := handlers.NewUserHandler(authService, emailService)
 
-	csvParser := parsers.NewCSVParser()
-	transactionProcessor := parsers.NewTransactionProcessor()
+	transactionProcessor := processors.NewTransactionProcessor()
 	dividendProcessor := processors.NewDividendProcessor()
 	stockProcessor := processors.NewStockProcessor()
 	optionProcessor := processors.NewOptionProcessor()
 	cashMovementProcessor := processors.NewCashMovementProcessor()
 
 	uploadService := services.NewUploadService(
-		csvParser, transactionProcessor, dividendProcessor,
+		transactionProcessor, dividendProcessor,
 		stockProcessor, optionProcessor, cashMovementProcessor,
 		reportCache,
 	)
