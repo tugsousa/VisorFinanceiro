@@ -14,6 +14,7 @@ import (
 	"github.com/username/taxfolio/backend/src/processors"
 )
 
+// Constants remain the same...
 const (
 	ckLatestUploadResult   = "latest_upload_result_user_%d"
 	ckStockSales           = "stock_sales_user_%d"
@@ -27,7 +28,7 @@ const (
 )
 
 type uploadServiceImpl struct {
-	transactionProcessor  *processors.TransactionProcessor
+	transactionProcessor  *processors.TransactionProcessor // Uses the generic processor
 	dividendProcessor     processors.DividendProcessor
 	stockProcessor        processors.StockProcessor
 	optionProcessor       processors.OptionProcessor
@@ -36,7 +37,7 @@ type uploadServiceImpl struct {
 }
 
 func NewUploadService(
-	transactionProcessor *processors.TransactionProcessor,
+	transactionProcessor *processors.TransactionProcessor, // Updated dependency
 	dividendProcessor processors.DividendProcessor,
 	stockProcessor processors.StockProcessor,
 	optionProcessor processors.OptionProcessor,
@@ -57,27 +58,30 @@ func (s *uploadServiceImpl) ProcessUpload(fileReader io.Reader, userID int64) (*
 	overallStartTime := time.Now()
 	logger.L.Info("ProcessUpload START", "userID", userID)
 
-	// For now, we assume the source is "degiro". This can be a parameter in the future.
+	// Step 1: Get the appropriate parser from the factory (assuming "degiro" for now)
 	source := "degiro"
 	parser, err := parsers.GetParser(source)
 	if err != nil {
+		logger.L.Error("Failed to get parser for source", "source", source, "error", err)
 		return nil, err
 	}
 
+	// Step 2: Use the broker-specific parser to get canonical transactions
 	canonicalTxs, err := parser.Parse(fileReader)
 	if err != nil {
 		logger.L.Error("Error parsing file in service", "userID", userID, "error", err)
 		return nil, fmt.Errorf("%w: %v", ErrParsingFailed, err)
 	}
 
+	// Step 3: Use the generic transaction processor to enrich the data
 	processedTransactions := s.transactionProcessor.Process(canonicalTxs)
 	if len(processedTransactions) == 0 {
-		return &UploadResult{}, nil
+		return &UploadResult{}, nil // No processable transactions found
 	}
 
+	// Step 4: Store in database (this logic remains the same)
 	dbTx, err := database.DB.Begin()
 	if err != nil {
-		logger.L.Error("Error beginning DB transaction for ProcessUpload", "userID", userID, "error", err)
 		return nil, fmt.Errorf("error beginning database transaction: %w", err)
 	}
 	committed := false
@@ -94,7 +98,6 @@ func (s *uploadServiceImpl) ProcessUpload(fileReader io.Reader, userID int64) (*
          exchange_rate, amount_eur, country_code, input_string, hash_id)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
 	if err != nil {
-		logger.L.Error("Error preparing DB statement for ProcessUpload", "userID", userID, "error", err)
 		return nil, fmt.Errorf("error preparing insert statement: %w", err)
 	}
 	defer stmt.Close()
@@ -105,20 +108,17 @@ func (s *uploadServiceImpl) ProcessUpload(fileReader io.Reader, userID int64) (*
 			tx.TransactionType, tx.TransactionSubType, tx.BuySell, tx.Description, tx.Amount, tx.Currency,
 			tx.Commission, tx.OrderID, tx.ExchangeRate, tx.AmountEUR, tx.CountryCode, tx.InputString, tx.HashId)
 		if err != nil {
-			logger.L.Error("Error inserting transaction into DB", "userID", userID, "orderID", tx.OrderID, "error", err)
 			return nil, fmt.Errorf("error inserting processed transaction (OrderID: %s): %w", tx.OrderID, err)
 		}
 	}
 
 	if err := dbTx.Commit(); err != nil {
-		logger.L.Error("Error committing DB transaction for ProcessUpload", "userID", userID, "error", err)
 		return nil, fmt.Errorf("error committing processed transactions to database: %w", err)
 	}
 	committed = true
-	logger.L.Info("Successfully stored processed transactions in DB", "userID", userID, "count", len(processedTransactions))
 
+	// Step 5: Invalidate caches and generate results (this logic remains the same)
 	s.InvalidateUserCache(userID)
-
 	allUserTransactions, err := fetchUserProcessedTransactions(userID)
 	if err != nil {
 		return nil, err
@@ -148,7 +148,6 @@ func (s *uploadServiceImpl) ProcessUpload(fileReader io.Reader, userID int64) (*
 	return result, nil
 }
 
-// ... the rest of the file (GetLatestUploadResult, InvalidateUserCache, etc.) remains unchanged ...
 func (s *uploadServiceImpl) InvalidateUserCache(userID int64) {
 	keysToDelete := []string{
 		fmt.Sprintf(ckLatestUploadResult, userID),

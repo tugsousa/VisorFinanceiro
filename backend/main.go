@@ -1,3 +1,4 @@
+// backend/main.go
 package main
 
 import (
@@ -13,7 +14,7 @@ import (
 	"github.com/username/taxfolio/backend/src/database"
 	"github.com/username/taxfolio/backend/src/handlers"
 	"github.com/username/taxfolio/backend/src/logger"
-	_ "github.com/username/taxfolio/backend/src/models" // Implicitly used by handlers
+	_ "github.com/username/taxfolio/backend/src/models"
 	"github.com/username/taxfolio/backend/src/processors"
 	"github.com/username/taxfolio/backend/src/security"
 	"github.com/username/taxfolio/backend/src/services"
@@ -21,6 +22,7 @@ import (
 	"golang.org/x/time/rate"
 )
 
+// ... (rateLimitMiddleware and enableCORS functions remain the same) ...
 var limiter = rate.NewLimiter(rate.Every(100*time.Millisecond), 30) // Example: 10 requests per second, burst 30
 
 func rateLimitMiddleware(next http.Handler) http.Handler {
@@ -68,10 +70,10 @@ func enableCORS(next http.Handler) http.Handler {
 
 func main() {
 	config.LoadConfig()
-	logger.InitLogger(config.Cfg.LogLevel) // Initialize logger first
-	logger.L.Info("Taxfolio backend server starting...")
+	logger.InitLogger(config.Cfg.LogLevel)
+	logger.L.Info("RumoClaro backend server starting...")
 
-	// Critical configuration checks
+	// ... (Config checks, Data loaders, DB init remain the same) ...
 	if config.Cfg.JWTSecret == "" || len(config.Cfg.JWTSecret) < 32 {
 		logger.L.Error("JWT_SECRET configuration invalid. Must be at least 32 bytes.")
 		os.Exit(1)
@@ -84,11 +86,9 @@ func main() {
 	logger.L.Info("Initializing data loaders...")
 	if err := processors.LoadHistoricalRates(config.Cfg.HistoricalDataPath); err != nil {
 		logger.L.Error("Failed to load historical rates", "error", err)
-		// Decide if this is a fatal error. For now, it logs and continues.
 	}
 	if err := utils.InitCountryData(config.Cfg.CountryDataPath); err != nil {
 		logger.L.Error("Failed to load country data", "error", err)
-		// Decide if this is a fatal error.
 	}
 
 	logger.L.Info("Initializing database...", "path", config.Cfg.DatabasePath)
@@ -96,33 +96,41 @@ func main() {
 	logger.L.Info("Database initialized successfully.")
 
 	logger.L.Info("Initializing report cache...")
-	reportCache := cache.New(services.DefaultCacheExpiration, services.CacheCleanupInterval) // Use constants from services
+	reportCache := cache.New(services.DefaultCacheExpiration, services.CacheCleanupInterval)
 	logger.L.Info("Report cache initialized.")
 
 	logger.L.Info("Initializing services and handlers...")
 	authService := security.NewAuthService(config.Cfg.JWTSecret)
-	emailService := services.NewEmailService() // Email service initialization
-	// If UserHandler needs uploadService, inject it here
-	// userHandler := handlers.NewUserHandler(authService, emailService, uploadService)
+	emailService := services.NewEmailService()
 	userHandler := handlers.NewUserHandler(authService, emailService)
 
+	// --- UPDATED INSTANTIATIONS ---
+	// The new generic processor from the `processors` package
 	transactionProcessor := processors.NewTransactionProcessor()
+
+	// The other processors remain the same
 	dividendProcessor := processors.NewDividendProcessor()
 	stockProcessor := processors.NewStockProcessor()
 	optionProcessor := processors.NewOptionProcessor()
 	cashMovementProcessor := processors.NewCashMovementProcessor()
 
+	// Inject the new transactionProcessor into the service
 	uploadService := services.NewUploadService(
-		transactionProcessor, dividendProcessor,
-		stockProcessor, optionProcessor, cashMovementProcessor,
+		transactionProcessor,
+		dividendProcessor,
+		stockProcessor,
+		optionProcessor,
+		cashMovementProcessor,
 		reportCache,
 	)
+	// --- END OF UPDATED INSTANTIATIONS ---
 
 	uploadHandler := handlers.NewUploadHandler(uploadService)
 	portfolioHandler := handlers.NewPortfolioHandler(uploadService)
 	dividendHandler := handlers.NewDividendHandler(uploadService)
 	txHandler := handlers.NewTransactionHandler(uploadService)
 
+	// ... (Routing and server start logic remains the same) ...
 	logger.L.Info("Configuring routes...")
 	rootMux := http.NewServeMux()   // Main muxer for the application
 	apiRouter := http.NewServeMux() // Muxer for /api prefixed routes
@@ -171,23 +179,19 @@ func main() {
 
 	// Root path handler
 	rootMux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		// This specific check ensures that only exact "/" GET requests get the welcome message.
-		// Other paths not starting with "/api/" and not matching "/" will fall through to the NotFound.
 		if r.URL.Path == "/" && r.Method == http.MethodGet {
 			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode(map[string]string{"message": "TAXFOLIO Backend is running"})
+			json.NewEncoder(w).Encode(map[string]string{"message": "RumoClaro Backend is running"})
 			return
 		}
-		// If it's not "/api/" (handled by apiRouter) and not exactly "/", then it's a 404.
 		if !strings.HasPrefix(r.URL.Path, "/api/") {
 			logger.L.Warn("Root level path not found", "method", r.Method, "path", r.URL.Path)
-			http.NotFound(w, r) // This will serve a 404 for paths like /foo or /bar
+			http.NotFound(w, r)
 		}
-		// If it starts with /api/ but doesn't match any apiRouter handlers, apiRouter itself will 404.
 	})
 
 	logger.L.Info("Applying global middleware...")
-	finalHandler := enableCORS(rateLimitMiddleware(rootMux)) // CORS should usually be early, rate limiting after.
+	finalHandler := enableCORS(rateLimitMiddleware(rootMux))
 
 	serverAddr := ":" + config.Cfg.Port
 	server := &http.Server{
@@ -201,7 +205,7 @@ func main() {
 	logger.L.Info("Server starting", "address", serverAddr)
 	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		logger.L.Error("Failed to start server", "error", err)
-		stdlog.Fatalf("Failed to start server: %v", err) // Use stdlog for fatal before logger is fully up or if logger fails
+		stdlog.Fatalf("Failed to start server: %v", err)
 	} else if err == http.ErrServerClosed {
 		logger.L.Info("Server stopped gracefully.")
 	}

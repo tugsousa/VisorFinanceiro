@@ -29,7 +29,9 @@ func NewParser() *DeGiroParser {
 }
 
 // Parse reads a DeGiro CSV file and converts its rows into a slice of CanonicalTransaction.
+// This method now contains the full logic, from reading the CSV to classifying transactions.
 func (p *DeGiroParser) Parse(file io.Reader) ([]models.CanonicalTransaction, error) {
+	// --- CSV Reading Logic (formerly in csv_parser.go) ---
 	reader := csv.NewReader(file)
 	reader.FieldsPerRecord = -1 // Allow variable number of fields per record
 
@@ -38,13 +40,12 @@ func (p *DeGiroParser) Parse(file io.Reader) ([]models.CanonicalTransaction, err
 		return nil, fmt.Errorf("degiro parser: failed to read CSV header: %w", err)
 	}
 
-	// Read all remaining records
-	records, err := reader.ReadAll()
+	records, err := reader.ReadAll() // Read all records at once
 	if err != nil {
 		return nil, fmt.Errorf("degiro parser: failed to read all CSV records: %w", err)
 	}
 
-	// Convert raw records to a structured format for easier processing
+	// --- Raw Transaction Mapping ---
 	var rawTxs []RawTransaction
 	for _, record := range records {
 		if len(record) >= 12 {
@@ -57,6 +58,7 @@ func (p *DeGiroParser) Parse(file io.Reader) ([]models.CanonicalTransaction, err
 		}
 	}
 
+	// --- Canonical Transaction Conversion ---
 	var canonicalTxs []models.CanonicalTransaction
 	for _, raw := range rawTxs {
 		date, err := time.Parse("02-01-2006", raw.OrderDate)
@@ -65,31 +67,20 @@ func (p *DeGiroParser) Parse(file io.Reader) ([]models.CanonicalTransaction, err
 			continue
 		}
 
-		// The parser performs the full classification based on broker-specific text.
 		txType, subType, buySell, productName, quantity, price := classifyDeGiroTransaction(raw)
-
-		// Skip transactions that could not be classified.
 		if txType == "UNKNOWN" {
 			log.Printf("DeGiro Parser: Skipping unknown transaction type for description: '%s'", raw.Description)
 			continue
 		}
 
-		// The raw amount from the file. This is the source of truth for financial value.
 		sourceAmt, _ := strconv.ParseFloat(raw.Amount, 64)
+		finalAmount := sourceAmt // For DeGiro, the sign is authoritative
 
-		// **CORE FIX**: The parser now determines the correctly signed transaction amount.
-		// For DeGiro, the sign in the CSV is authoritative for most transactions.
-		finalAmount := sourceAmt
-
-		// We can add rules here to enforce signs if a source is known to be inconsistent.
-		// For example, ensuring fees are always negative.
-		if txType == "FEE" {
-			finalAmount = -math.Abs(sourceAmt)
-		} else if txType == "DIVIDEND" && subType == "TAX" {
+		// Enforce sign for specific types to be safe
+		if txType == "FEE" || (txType == "DIVIDEND" && subType == "TAX") {
 			finalAmount = -math.Abs(sourceAmt)
 		}
 
-		// Find associated commission for this trade
 		commission, _ := findCommissionForOrder(raw.OrderID, rawTxs)
 
 		tx := models.CanonicalTransaction{
@@ -102,8 +93,8 @@ func (p *DeGiroParser) Parse(file io.Reader) ([]models.CanonicalTransaction, err
 			Currency:           raw.Currency,
 			OrderID:            raw.OrderID,
 			RawText:            raw.Description,
-			SourceAmount:       sourceAmt,   // Keep original amount for reference
-			Amount:             finalAmount, // Use the final, signed amount calculated by the parser
+			SourceAmount:       sourceAmt,
+			Amount:             finalAmount,
 			TransactionType:    txType,
 			TransactionSubType: subType,
 			BuySell:            buySell,
@@ -115,14 +106,13 @@ func (p *DeGiroParser) Parse(file io.Reader) ([]models.CanonicalTransaction, err
 	return canonicalTxs, nil
 }
 
-// classifyDeGiroTransaction interprets the description text to classify a transaction.
+// classifyDeGiroTransaction remains the same as before.
 func classifyDeGiroTransaction(raw RawTransaction) (txType, subType, buySell, productName string, quantity, price float64) {
 	desc := strings.TrimSpace(strings.ReplaceAll(raw.Description, "\u00A0", " "))
 	lowerDesc := strings.ToLower(desc)
 
 	// Handle non-trade types first
 	if strings.Contains(lowerDesc, "dividendo") {
-		// Prefer the product name from the "descritivo" column if available
 		productName = strings.TrimSpace(raw.Name)
 		if strings.Contains(lowerDesc, "imposto sobre dividendo") {
 			return "DIVIDEND", "TAX", "", productName, 0, 0
@@ -146,10 +136,10 @@ func classifyDeGiroTransaction(raw RawTransaction) (txType, subType, buySell, pr
 	stockOrOptionRe := regexp.MustCompile(`(?i)\s*(compra|venda)\s+([\d\s.,]+)\s+(.+?)\s*@([\d,.]+)`)
 	matches := stockOrOptionRe.FindStringSubmatch(desc)
 	if matches == nil {
-		return "UNKNOWN", "", "", "", 0, 0 // Cannot classify
+		return "UNKNOWN", "", "", "", 0, 0
 	}
 
-	// Extract details from regex matches
+	// Extract details
 	buySellRaw := strings.ToLower(matches[1])
 	if buySellRaw == "compra" {
 		buySell = "BUY"
@@ -159,7 +149,6 @@ func classifyDeGiroTransaction(raw RawTransaction) (txType, subType, buySell, pr
 
 	productName = strings.TrimSpace(matches[3])
 
-	// Robustly parse numbers that might use '.' for thousands or ',' for decimals
 	quantityStr := strings.ReplaceAll(strings.ReplaceAll(matches[2], " ", ""), ".", "")
 	quantityStr = strings.ReplaceAll(quantityStr, ",", ".")
 	quantity, _ = strconv.ParseFloat(quantityStr, 64)
@@ -183,7 +172,7 @@ func classifyDeGiroTransaction(raw RawTransaction) (txType, subType, buySell, pr
 	return
 }
 
-// findCommissionForOrder looks for a related commission transaction for a given Order ID.
+// findCommissionForOrder remains the same as before.
 func findCommissionForOrder(orderId string, transactions []RawTransaction) (float64, error) {
 	if orderId == "" {
 		return 0, nil
@@ -191,7 +180,6 @@ func findCommissionForOrder(orderId string, transactions []RawTransaction) (floa
 	var totalCommission float64
 	for _, transaction := range transactions {
 		if transaction.OrderID == orderId && strings.Contains(transaction.Description, "Comissões de transação") {
-			// Commissions are costs, so we take the absolute value
 			amount, err := strconv.ParseFloat(transaction.Amount, 64)
 			if err != nil {
 				return 0, fmt.Errorf("invalid commission amount for transaction %s: %w", transaction.OrderID, err)
