@@ -14,7 +14,6 @@ import (
 	"github.com/username/taxfolio/backend/src/processors"
 )
 
-// Constants remain the same...
 const (
 	ckLatestUploadResult   = "latest_upload_result_user_%d"
 	ckStockSales           = "stock_sales_user_%d"
@@ -28,7 +27,7 @@ const (
 )
 
 type uploadServiceImpl struct {
-	transactionProcessor  *processors.TransactionProcessor // Uses the generic processor
+	transactionProcessor  *processors.TransactionProcessor
 	dividendProcessor     processors.DividendProcessor
 	stockProcessor        processors.StockProcessor
 	optionProcessor       processors.OptionProcessor
@@ -37,7 +36,7 @@ type uploadServiceImpl struct {
 }
 
 func NewUploadService(
-	transactionProcessor *processors.TransactionProcessor, // Updated dependency
+	transactionProcessor *processors.TransactionProcessor,
 	dividendProcessor processors.DividendProcessor,
 	stockProcessor processors.StockProcessor,
 	optionProcessor processors.OptionProcessor,
@@ -54,22 +53,21 @@ func NewUploadService(
 	}
 }
 
-func (s *uploadServiceImpl) ProcessUpload(fileReader io.Reader, userID int64) (*UploadResult, error) {
+func (s *uploadServiceImpl) ProcessUpload(fileReader io.Reader, userID int64, source string) (*UploadResult, error) {
 	overallStartTime := time.Now()
-	logger.L.Info("ProcessUpload START", "userID", userID)
+	logger.L.Info("ProcessUpload START", "userID", userID, "source", source)
 
-	// Step 1: Get the appropriate parser from the factory (assuming "degiro" for now)
-	source := "degiro"
+	// Step 1: Get the appropriate parser from the factory
 	parser, err := parsers.GetParser(source)
 	if err != nil {
 		logger.L.Error("Failed to get parser for source", "source", source, "error", err)
-		return nil, err
+		return nil, fmt.Errorf("%w: %v", ErrParsingFailed, err)
 	}
 
 	// Step 2: Use the broker-specific parser to get canonical transactions
 	canonicalTxs, err := parser.Parse(fileReader)
 	if err != nil {
-		logger.L.Error("Error parsing file in service", "userID", userID, "error", err)
+		logger.L.Error("Error parsing file in service", "userID", userID, "source", source, "error", err)
 		return nil, fmt.Errorf("%w: %v", ErrParsingFailed, err)
 	}
 
@@ -79,7 +77,7 @@ func (s *uploadServiceImpl) ProcessUpload(fileReader io.Reader, userID int64) (*
 		return &UploadResult{}, nil // No processable transactions found
 	}
 
-	// Step 4: Store in database (this logic remains the same)
+	// Step 4: Store in database
 	dbTx, err := database.DB.Begin()
 	if err != nil {
 		return nil, fmt.Errorf("error beginning database transaction: %w", err)
@@ -117,7 +115,7 @@ func (s *uploadServiceImpl) ProcessUpload(fileReader io.Reader, userID int64) (*
 	}
 	committed = true
 
-	// Step 5: Invalidate caches and generate results (this logic remains the same)
+	// Step 5: Invalidate caches and generate results
 	s.InvalidateUserCache(userID)
 	allUserTransactions, err := fetchUserProcessedTransactions(userID)
 	if err != nil {
@@ -203,7 +201,7 @@ func (s *uploadServiceImpl) GetLatestUploadResult(userID int64) (*UploadResult, 
 	cashMovements := s.cashMovementProcessor.Process(userTransactions)
 
 	var dividendTransactionsList []models.ProcessedTransaction
-	var dividendCandidateCount int // LOGGING VARIABLE
+	var dividendCandidateCount int
 	for _, tx := range userTransactions {
 		if tx.TransactionType == "DIVIDEND" {
 			dividendCandidateCount++
@@ -349,6 +347,7 @@ func (s *uploadServiceImpl) GetOptionSaleDetails(userID int64) ([]models.OptionS
 	s.reportCache.Set(cacheKey, optionSaleDetails, DefaultCacheExpiration)
 	return optionSaleDetails, nil
 }
+
 func fetchUserProcessedTransactions(userID int64) ([]models.ProcessedTransaction, error) {
 	logger.L.Debug("Fetching processed transactions from DB", "userID", userID)
 	rows, err := database.DB.Query(`
