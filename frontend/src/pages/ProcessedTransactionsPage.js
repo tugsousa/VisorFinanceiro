@@ -18,7 +18,7 @@ const fetchProcessedTransactions = async () => {
 // Define columns for the DataGrid outside the component for performance
 const columns = [
   { 
-    field: 'date', // Changed from 'Date'
+    field: 'date',
     headerName: 'Data', 
     width: 110,
     type: 'date',
@@ -31,29 +31,45 @@ const columns = [
       return `${day}-${month}-${year}`;
     }
   },
-  { field: 'source', headerName: 'Origem', width: 100 }, // Changed from 'Source'
-  { field: 'product_name', headerName: 'Produto', flex: 1, minWidth: 200 }, // Changed from 'ProductName'
-  { field: 'transaction_type', headerName: 'Tipo', width: 120 }, // Changed from 'TransactionType'
-  { field: 'transaction_subtype', headerName: 'Subtipo', width: 110 }, // Changed from 'TransactionSubType'
-  { field: 'buy_sell', headerName: 'Ação', width: 90 }, // Changed from 'BuySell'
-  { field: 'quantity', headerName: 'Qtd.', type: 'number', width: 80, align: 'right', headerAlign: 'right' }, // Changed from 'Quantity'
+  { field: 'source', headerName: 'Origem', width: 90 },
+  { field: 'product_name', headerName: 'Produto', flex: 1, minWidth: 200 },
+  { field: 'transaction_type', headerName: 'Tipo', width: 110 },
+    { field: 'transaction_subtype', headerName: 'Subtipo', width: 110 }, // Changed from 'TransactionSubType'
+  { field: 'buy_sell', headerName: 'Ação', width: 90 },
+  { field: 'quantity', headerName: 'Qtd.', type: 'number', width: 80, align: 'right', headerAlign: 'right' },
   { 
-    field: 'price', // Changed from 'Price'
+    field: 'price',
     headerName: 'Preço', 
     type: 'number', 
-    width: 120,
+    width: 110,
     align: 'right', headerAlign: 'right',
     valueFormatter: (value) => typeof value === 'number' ? value.toFixed(4) : ''
   },
   { 
-    field: 'amount_eur', // Changed from 'AmountEUR'
+    field: 'amount',
+    headerName: 'Montante (Orig.)', 
+    type: 'number', 
+    width: 130,
+    align: 'right', headerAlign: 'right',
+    valueFormatter: (value) => typeof value === 'number' ? value.toFixed(2) : ''
+  },
+  { field: 'currency', headerName: 'Moeda', width: 80 },
+  { 
+    field: 'exchange_rate',
+    headerName: 'Câmbio', 
+    type: 'number', 
+    width: 100,
+    align: 'right', headerAlign: 'right',
+    valueFormatter: (value) => typeof value === 'number' ? value.toFixed(4) : ''
+  },
+  { 
+    field: 'amount_eur',
     headerName: 'Montante (€)', 
     type: 'number', 
     width: 130,
     align: 'right', headerAlign: 'right',
     valueFormatter: (value) => typeof value === 'number' ? value.toFixed(2) : ''
   },
-  { field: 'order_id', headerName: 'Order ID', width: 150 }, // Changed from 'OrderID'
 ];
 
 
@@ -136,22 +152,24 @@ const ProcessedTransactionsPage = () => {
       )}
 
       {processedTransactions.length > 0 ? (
-        <Paper sx={{ height: '75vh', width: '100%' }}>
+        <Paper sx={{ width: '100%' }}>
           <DataGrid
             rows={processedTransactions}
             columns={columns}
+            autoHeight
             initialState={{
               pagination: {
                 paginationModel: { pageSize: 50, page: 0 },
               },
               sorting: {
-                sortModel: [{ field: 'Date', sort: 'desc' }],
+                sortModel: [{ field: 'date', sort: 'desc' }],
               },
             }}
             pageSizeOptions={[10, 25, 50, 100]}
             disableRowSelectionOnClick
             density="compact"
             localeText={ptPT.components.MuiDataGrid.defaultProps.localeText}
+            sx={{ maxHeight: '75vh' }}
           />
         </Paper>
       ) : (

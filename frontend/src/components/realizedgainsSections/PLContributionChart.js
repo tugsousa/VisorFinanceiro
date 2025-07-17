@@ -15,6 +15,9 @@ const COLORS = {
 const PLContributionChart = ({ stockSaleDetails, optionSaleDetails, dividendTaxResultForChart, dividendTransactionsList, selectedYear }) => {
   const chartData = useMemo(() => {
     
+    const maxThickness = 60;
+    const smallDataSetThreshold = 5;
+
     if (selectedYear === ALL_YEARS_OPTION || selectedYear === NO_YEAR_SELECTED) {
       const years = extractYearsFromData({
           stockSales: stockSaleDetails,
@@ -52,14 +55,22 @@ const PLContributionChart = ({ stockSaleDetails, optionSaleDetails, dividendTaxR
           yearlyData[year].dividends += yearDividendNet;
         }
       });
+
+      const datasets = [
+        { label: 'Acções', data: years.map(year => yearlyData[year].stocks), backgroundColor: COLORS.stocks },
+        { label: 'Opções', data: years.map(year => yearlyData[year].options), backgroundColor: COLORS.options },
+        { label: 'Dividendos', data: years.map(year => yearlyData[year].dividends), backgroundColor: COLORS.dividends },
+      ];
       
+      if (years.length > 0 && years.length <= smallDataSetThreshold) {
+          datasets.forEach(ds => {
+              ds.maxBarThickness = maxThickness;
+          });
+      }
+
       return {
         labels: years,
-        datasets: [
-          { label: 'Acções', data: years.map(year => yearlyData[year].stocks), backgroundColor: COLORS.stocks },
-          { label: 'Opções', data: years.map(year => yearlyData[year].options), backgroundColor: COLORS.options },
-          { label: 'Dividendos', data: years.map(year => yearlyData[year].dividends), backgroundColor: COLORS.dividends },
-        ],
+        datasets: datasets,
       };
 
     } else {

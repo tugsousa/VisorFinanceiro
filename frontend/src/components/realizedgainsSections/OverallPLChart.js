@@ -63,27 +63,33 @@ const OverallPLChart = ({ stockSaleDetails, optionSaleDetails, dividendTaxResult
 
     if (sortedYears.length === 0) return { labels: [], datasets: []};
 
+    const maxThickness = 60;
+    const smallDataSetThreshold = 5;
+
     if (selectedYear !== ALL_YEARS_OPTION && selectedYear !== '') {
         const singleYearData = yearlyPL[selectedYear];
         if (!singleYearData) return { labels: [], datasets: []};
 
+        const dataset = {
+            label: `L/P para ${selectedYear}`,
+            data: [singleYearData.stocks, singleYearData.options, singleYearData.dividends],
+            backgroundColor: [
+                singleYearData.stocks >= 0 ? POSITIVE_COLOR_BG : NEGATIVE_COLOR_BG,
+                singleYearData.options >= 0 ? POSITIVE_COLOR_BG : NEGATIVE_COLOR_BG,
+                singleYearData.dividends >= 0 ? POSITIVE_COLOR_BG : NEGATIVE_COLOR_BG,
+            ],
+            borderColor: [
+                singleYearData.stocks >= 0 ? POSITIVE_COLOR_BORDER : NEGATIVE_COLOR_BORDER,
+                singleYearData.options >= 0 ? POSITIVE_COLOR_BORDER : NEGATIVE_COLOR_BORDER,
+                singleYearData.dividends >= 0 ? POSITIVE_COLOR_BORDER : NEGATIVE_COLOR_BORDER,
+            ],
+            borderWidth: 1,
+            maxBarThickness: maxThickness,
+        };
+        
         return {
             labels: ['L/P de Ações', 'L/P de Opções', 'Dividendos'],
-            datasets: [{
-                label: `L/P para ${selectedYear}`,
-                data: [singleYearData.stocks, singleYearData.options, singleYearData.dividends],
-                backgroundColor: [
-                    singleYearData.stocks >= 0 ? POSITIVE_COLOR_BG : NEGATIVE_COLOR_BG,
-                    singleYearData.options >= 0 ? POSITIVE_COLOR_BG : NEGATIVE_COLOR_BG,
-                    singleYearData.dividends >= 0 ? POSITIVE_COLOR_BG : NEGATIVE_COLOR_BG,
-                ],
-                borderColor: [
-                    singleYearData.stocks >= 0 ? POSITIVE_COLOR_BORDER : NEGATIVE_COLOR_BORDER,
-                    singleYearData.options >= 0 ? POSITIVE_COLOR_BORDER : NEGATIVE_COLOR_BORDER,
-                    singleYearData.dividends >= 0 ? POSITIVE_COLOR_BORDER : NEGATIVE_COLOR_BORDER,
-                ],
-                borderWidth: 1,
-            }]
+            datasets: [dataset]
         };
     }
 
@@ -91,15 +97,21 @@ const OverallPLChart = ({ stockSaleDetails, optionSaleDetails, dividendTaxResult
     const backgroundColors = totalNetPLPerYear.map(pl => pl >= 0 ? POSITIVE_COLOR_BG : NEGATIVE_COLOR_BG);
     const borderColors = totalNetPLPerYear.map(pl => pl >= 0 ? POSITIVE_COLOR_BORDER : NEGATIVE_COLOR_BORDER);
 
+    const yearlyDataset = {
+      label: 'Lucro/Prejuízo Total (Ações, Opções, Dividendos)',
+      data: totalNetPLPerYear,
+      backgroundColor: backgroundColors,
+      borderColor: borderColors,
+      borderWidth: 1,
+    };
+
+    if (sortedYears.length > 0 && sortedYears.length <= smallDataSetThreshold) {
+      yearlyDataset.maxBarThickness = maxThickness;
+    }
+
     return {
       labels: sortedYears,
-      datasets: [{
-        label: 'Lucro/Prejuízo Total (Ações, Opções, Dividendos)',
-        data: totalNetPLPerYear,
-        backgroundColor: backgroundColors,
-        borderColor: borderColors,
-        borderWidth: 1,
-      }]
+      datasets: [yearlyDataset]
     };
   }, [stockSaleDetails, optionSaleDetails, dividendTaxResultForChart, selectedYear]);
 
