@@ -40,13 +40,13 @@ func (p *optionProcessorImpl) Process(transactions []models.ProcessedTransaction
 
 		for i := range txs {
 			currentTx := &txs[i]
-			// Determine buy/sell based on Description field
-			isBuy := strings.Contains(strings.ToLower(currentTx.Description), "compra")
-			isSell := strings.Contains(strings.ToLower(currentTx.Description), "venda")
+			// Determine buy/sell based on the standardized BuySell field
+			isBuy := strings.ToUpper(currentTx.BuySell) == "BUY"
+			isSell := strings.ToUpper(currentTx.BuySell) == "SELL"
 
 			// Add a check for ambiguity or missing keyword
 			if isBuy == isSell { // Either both true (unlikely) or both false
-				log.Printf("Warning: Ambiguous or missing buy/sell keyword ('Compra'/'Venda') in option description for OrderID %s: '%s'. Skipping transaction.", currentTx.OrderID, currentTx.Description)
+				log.Printf("Warning: Ambiguous or missing Buy/Sell field for OrderID %s: '%s'. Skipping transaction.", currentTx.OrderID, currentTx.BuySell)
 				continue // Skip this transaction
 			}
 

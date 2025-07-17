@@ -122,9 +122,6 @@ func classifyDeGiroTransaction(raw RawTransaction) (txType, subType, buySell, pr
 	if strings.EqualFold(lowerDesc, "depósito") || strings.Contains(lowerDesc, "flatex deposit") {
 		return "CASH", "DEPOSIT", "", "Cash Deposit", 0, 0
 	}
-	if strings.Contains(lowerDesc, "degiro cash sweep transfer") {
-		return "CASH", "SWEEP", "", "Cash Sweep Transfer", 0, 0
-	}
 	if strings.Contains(lowerDesc, "comissões de transação") || strings.Contains(lowerDesc, "custo de conectividade") {
 		return "FEE", "", "", "Brokerage Fee", 0, 0
 	}

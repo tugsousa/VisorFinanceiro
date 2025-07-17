@@ -36,6 +36,7 @@ type Trade struct {
 	Description          string  `xml:"description,attr"`
 	Conid                string  `xml:"conid,attr"`
 	ISIN                 string  `xml:"isin,attr"`
+	UnderlyingSecurityID string  `xml:"underlyingSecurityID,attr"`
 	Multiplier           float64 `xml:"multiplier,attr"`
 	DateTime             string  `xml:"dateTime,attr"`
 	TradeDate            string  `xml:"tradeDate,attr"`
@@ -136,11 +137,18 @@ func (p *IBKRParser) processTrade(trade Trade) (models.CanonicalTransaction, err
 		return models.CanonicalTransaction{}, err
 	}
 
+	var finalISIN string
+	if trade.AssetCategory == "OPT" && trade.UnderlyingSecurityID != "" {
+		finalISIN = trade.UnderlyingSecurityID
+	} else {
+		finalISIN = trade.ISIN
+	}
+
 	tx := models.CanonicalTransaction{
 		Source:          "ibkr",
 		TransactionDate: date,
 		ProductName:     trade.Description,
-		ISIN:            trade.ISIN,
+		ISIN:            finalISIN,
 		Quantity:        math.Abs(trade.Quantity),
 		Price:           trade.TradePrice,
 		Commission:      math.Abs(trade.IBCommission),
