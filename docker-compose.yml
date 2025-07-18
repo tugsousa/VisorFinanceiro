@@ -18,7 +18,7 @@ services:
     restart: unless-stopped
     ports:
       # Map port 3000 on your local machine to port 80 in the container (where Nginx listens)
-      - "3000:80"
+      - "80:80"
     depends_on:
       - backend
 
