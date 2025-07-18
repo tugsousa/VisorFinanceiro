@@ -105,7 +105,7 @@ func LoadConfig() {
 	Cfg = &AppConfig{
 		JWTSecret:          jwtSecret,
 		Port:               getEnv("PORT", "8080"),
-		DatabasePath:       getEnv("DATABASE_PATH", "./taxfolio.db"),
+		DatabasePath:       getEnv("DATABASE_PATH", "./rumoclaro.db"),
 		LogLevel:           getEnv("LOG_LEVEL", "info"),
 		CSRFAuthKey:        []byte(csrfAuthKeyStr),
 		HistoricalDataPath: getEnv("HISTORICAL_DATA_PATH", "data/historicalExchangeRate.json"),
@@ -125,7 +125,7 @@ func LoadConfig() {
 		MailgunPrivateAPIKey: getEnv("MAILGUN_PRIVATE_API_KEY", ""),
 
 		SenderEmail: getEnv("SENDER_EMAIL", "noreply@example.com"),
-		SenderName:  getEnv("SENDER_NAME", "Taxfolio App"),
+		SenderName:  getEnv("SENDER_NAME", "Rumoclaro App"),
 
 		VerificationEmailBaseURL: getEnv("VERIFICATION_EMAIL_BASE_URL", "http://localhost:3000/verify-email"),
 		VerificationTokenExpiry:  verificationTokenExpiry,

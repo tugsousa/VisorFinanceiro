@@ -1,0 +1,19 @@
+rumoclaro.pt {
+    # Caddy will automatically provision and renew a Let's Encrypt SSL certificate for your domain.
+    # It will also automatically redirect all HTTP traffic to HTTPS.
+
+    # Reverse proxy requests for the API to the backend service.
+    # The 'backend' name comes from your docker-compose.yml service name.
+    reverse_proxy /api/* backend:8080
+
+    # Serve the static files from the React build.
+    # The 'handle_path' directive strips the matched path prefix before looking for the file.
+    # This is useful if your file server root is different from the request path structure.
+    handle_path /* {
+        root * /usr/share/caddy
+        # If a requested file is not found, fall back to index.html.
+        # This is essential for single-page applications like React to handle routing.
+        try_files {path} /index.html
+        file_server
+    }
+}

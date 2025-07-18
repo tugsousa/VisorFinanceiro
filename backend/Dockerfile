@@ -16,8 +16,8 @@ COPY . .
 
 # Build the Go app. 
 # CGO_ENABLED=0 is important for creating a statically linked binary that can run in a minimal image like Alpine.
-# -o taxfolio-backend creates an executable with a specific name.
-RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o taxfolio-backend .
+# -o rumoclaro-backend creates an executable with a specific name.
+RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o rumoclaro-backend .
 
 # ---
 
@@ -34,11 +34,11 @@ WORKDIR /app
 COPY data ./data
 
 # Copy the pre-built binary from the "builder" stage
-COPY --from=builder /app/taxfolio-backend .
+COPY --from=builder /app/rumoclaro-backend .
 
 # The database will be stored in a volume, but if you want to initialize it
 # in a specific directory inside the container, you can create it here.
-# For example, if DATABASE_PATH will be /app/data/taxfolio.db
+# For example, if DATABASE_PATH will be /app/data/rumoclaro.db
 RUN mkdir -p /app/data
 
 # --- Important Change: Change ownership of the app directory ---
@@ -53,4 +53,4 @@ USER appuser
 EXPOSE 8080
 
 # Command to run the executable
-CMD ["./taxfolio-backend"]
+CMD ["./rumoclaro-backend"]

@@ -1,27 +1,47 @@
+# docker-compose.yml
+# This file defines the services, networks, and volumes for your application.
+# It now uses Caddy for automatic HTTPS and as a reverse proxy.
+
 services:
+  # The Backend Go Application
+  # This service runs your API. It is not exposed directly to the internet.
   backend:
     build: ./backend
-    container_name: taxfolio-backend-container
+    container_name: rumoclaro-backend-container
     restart: unless-stopped
     env_file:
       - .env # Load environment variables from a .env file in the root
     volumes:
-      # Use a named volume to persist the SQLite database
-      # Mounts the volume at /app/data inside the container
-      - taxfolio-db:/app/data
-    # We don't need to expose ports to the host, as Nginx will proxy to it
-    # on the internal Docker network.
+      # Use a named volume to persist the SQLite database.
+      # This ensures your data is not lost when the container is recreated.
+      - rumoclaro-db:/app/data
 
-  frontend-proxy:
-    build: ./frontend
-    container_name: taxfolio-frontend-container
+  # The Caddy Web Server
+  # This service replaces Nginx. It serves the frontend React app and acts as a
+  # reverse proxy for the backend. It handles SSL termination automatically.
+  caddy:
+    # The build context is the 'caddy' directory where the Caddy Dockerfile is located.
+    # That Dockerfile is responsible for building the React app and putting it into the Caddy image.
+    build: ./caddy
+    container_name: rumoclaro-caddy-container
     restart: unless-stopped
     ports:
-      # Map port 3000 on your local machine to port 80 in the container (where Nginx listens)
+      # Port 80 is required by Caddy for the ACME HTTP-01 challenge to get SSL certificates
+      # from Let's Encrypt. Caddy also uses it to automatically redirect all HTTP traffic to HTTPS.
       - "80:80"
+      # Port 443 is the standard port for HTTPS traffic. This is where your users will connect.
+      - "443:443"
+    volumes:
+      # This named volume is critical. It persists Caddy's SSL certificates and other state,
+      # preventing you from hitting Let's Encrypt rate limits on restarts.
+      - caddy_data:/data
     depends_on:
+      # This ensures the backend container is started before the Caddy container.
       - backend
 
+# Named volumes are managed by Docker and are the preferred way to persist data.
 volumes:
-  # Define the named volume for the database
-  taxfolio-db:
+  # Volume for the backend's SQLite database
+  rumoclaro-db:
+  # Volume for Caddy's SSL certificates and configuration
+  caddy_data:
