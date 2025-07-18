@@ -2,11 +2,11 @@
 import React, { useState, useCallback, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { apiUploadFile } from '../api/apiService';
-import { ALLOWED_FILE_TYPES, MAX_FILE_SIZE_BYTES, MAX_FILE_SIZE_MB, UI_TEXT } from '../constants';
+import { MAX_FILE_SIZE_BYTES, MAX_FILE_SIZE_MB, UI_TEXT } from '../constants';
 import { Typography, Box, Button, LinearProgress, Paper, Alert, Chip } from '@mui/material';
 import { styled } from '@mui/material/styles';
 import { useQueryClient } from '@tanstack/react-query';
-import { UploadFile as UploadFileIcon, CheckCircleOutline as CheckCircleIcon, ErrorOutline as ErrorIcon, Check as CheckIcon } from '@mui/icons-material';
+import { UploadFile as UploadFileIcon, CheckCircleOutline as CheckCircleIcon, ErrorOutline as ErrorIcon } from '@mui/icons-material';
 
 const UploadDropzone = styled(Box)(({ theme, isDragActive }) => ({
     display: 'flex',
@@ -29,7 +29,6 @@ const UploadPage = () => {
     const queryClient = useQueryClient();
 
     const [selectedFile, setSelectedFile] = useState(null);
-    // --- REMOVED --- No longer need selectedBroker state here.
     const [uploadProgress, setUploadProgress] = useState(0);
     const [uploadStatus, setUploadStatus] = useState('idle');
     const [fileError, setFileError] = useState(null);
@@ -41,49 +40,36 @@ const UploadPage = () => {
         setUploadProgress(0);
         setUploadStatus('idle');
         setFileError(null);
+        if(fileInputRef.current) {
+            fileInputRef.current.value = "";
+        }
     };
-
-    const handleFileValidation = useCallback((file) => {
-        if (!file) return false;
-        if (![...ALLOWED_FILE_TYPES, 'text/xml', 'application/xml'].includes(file.type)) {
-            setFileError(`Tipo de ficheiro inválido. Por favor, carregue um ficheiro CSV (Degiro) ou XML (IBKR).`);
-            return false;
-        }
-        if (file.size > MAX_FILE_SIZE_BYTES) {
-            setFileError(`O tamanho do ficheiro excede o limite de ${MAX_FILE_SIZE_MB}MB.`);
-            return false;
-        }
-        return true;
-    }, []);
-
-    const handleFileChange = useCallback((files) => {
+    
+    const handleFileSelected = useCallback(async (file) => {
         resetState();
-        const file = files?.[0];
-        if (handleFileValidation(file)) {
-            setSelectedFile(file);
-        }
-    }, [handleFileValidation]);
+        if (!file) return;
 
-    const handleDragEnter = (e) => { e.preventDefault(); e.stopPropagation(); setIsDragActive(true); };
-    const handleDragLeave = (e) => { e.preventDefault(); e.stopPropagation(); setIsDragActive(false); };
-    const handleDragOver = (e) => { e.preventDefault(); e.stopPropagation(); };
-    const handleDrop = (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        setIsDragActive(false);
-        handleFileChange(e.dataTransfer.files);
-    };
+        const fileName = file.name.toLowerCase();
+        const isCsv = fileName.endsWith('.csv');
+        const isXml = fileName.endsWith('.xml');
 
-    // --- MODIFIED --- handleUpload now accepts brokerType as an argument
-    const handleUpload = async (brokerType) => {
-        if (!selectedFile || !token) {
-            setFileError(UI_TEXT.userNotAuthenticated);
+        if (!isCsv && !isXml) {
+            setFileError('Tipo de ficheiro inválido. Por favor, carregue um ficheiro .csv (Degiro) ou .xml (IBKR).');
+            setUploadStatus('error');
             return;
         }
 
+        if (file.size > MAX_FILE_SIZE_BYTES) {
+            setFileError(`O tamanho do ficheiro excede o limite de ${MAX_FILE_SIZE_MB}MB.`);
+            setUploadStatus('error');
+            return;
+        }
+
+        setSelectedFile(file);
+        
+        const brokerType = isCsv ? 'degiro' : 'ibkr';
         const formData = new FormData();
-        formData.append('file', selectedFile);
-        // --- MODIFIED --- Use the brokerType argument here
+        formData.append('file', file);
         formData.append('source', brokerType);
 
         try {
@@ -105,6 +91,27 @@ const UploadPage = () => {
             setUploadStatus('error');
             setFileError(err.response?.data?.error || err.message || 'Falha no carregamento. Por favor tente de novo.');
         }
+    }, [token, queryClient, refreshUserDataCheck]);
+
+
+    const handleDragEnter = (e) => { e.preventDefault(); e.stopPropagation(); setIsDragActive(true); };
+    const handleDragLeave = (e) => { e.preventDefault(); e.stopPropagation(); setIsDragActive(false); };
+    const handleDragOver = (e) => { e.preventDefault(); e.stopPropagation(); };
+    
+    const handleDrop = useCallback((e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setIsDragActive(false);
+        if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+            handleFileSelected(e.dataTransfer.files[0]);
+            e.dataTransfer.clearData();
+        }
+    }, [handleFileSelected]);
+
+    const handleFileInputChange = (e) => {
+        if (e.target.files && e.target.files.length > 0) {
+            handleFileSelected(e.target.files[0]);
+        }
     };
 
     return (
@@ -113,13 +120,12 @@ const UploadPage = () => {
                 Carregar Transações
             </Typography>
             <Typography variant="body1" color="text.secondary" align="center" sx={{ mb: 4 }}>
-                Arraste e solte o seu ficheiro de transações abaixo para começar.
+                Arraste e solte o seu ficheiro de transações abaixo para começar o processamento automático.
             </Typography>
 
             <Paper elevation={0} sx={{ p: { xs: 2, sm: 3 }, border: '1px solid', borderColor: 'divider' }}>
 
-                {/* --- UI STATE 1: Initial Drop Zone View --- */}
-                {!selectedFile && uploadStatus === 'idle' && (
+                {uploadStatus === 'idle' && (
                     <UploadDropzone
                         isDragActive={isDragActive}
                         onDragEnter={handleDragEnter}
@@ -132,8 +138,8 @@ const UploadPage = () => {
                             ref={fileInputRef}
                             type="file"
                             hidden
-                            onChange={(e) => handleFileChange(e.target.files)}
-                            accept={[...ALLOWED_FILE_TYPES, '.xml'].join(',')}
+                            onChange={handleFileInputChange}
+                            accept=".csv,.xml"
                         />
                         <UploadFileIcon sx={{ fontSize: 50, mb: 2 }} />
                         <Typography variant="h6">Arraste e solte o seu ficheiro aqui</Typography>
@@ -142,40 +148,9 @@ const UploadPage = () => {
                     </UploadDropzone>
                 )}
                 
-                {fileError && uploadStatus === 'idle' && (
-                    <Alert severity="error" sx={{ mt: 2 }}>{fileError}</Alert>
-                )}
-
-                {/* --- UI STATE 2: File Selected, Awaiting Broker Choice --- */}
-                {selectedFile && uploadStatus === 'idle' && (
-                    <Box sx={{ textAlign: 'center' }}>
-                        <Typography variant="h6" sx={{ mb: 2 }}>Ficheiro Selecionado</Typography>
-                        <Chip
-                            icon={<CheckIcon />}
-                            label={`${selectedFile.name} (${(selectedFile.size / 1024).toFixed(1)} KB)`}
-                            color="info"
-                            sx={{ p: 2, fontSize: '1rem', mb: 3 }}
-                        />
-                        <Typography variant="body1" sx={{ mb: 2 }}>Como devemos processar este ficheiro?</Typography>
-                        <Box sx={{ display: 'flex', justifyContent: 'center', gap: 2, flexWrap: 'wrap' }}>
-                            <Button variant="contained" size="large" onClick={() => handleUpload('degiro')}>
-                                Processar como DEGIRO
-                            </Button>
-                            <Button variant="contained" size="large" onClick={() => handleUpload('ibkr')}>
-                                Processar como IBKR
-                            </Button>
-                        </Box>
-                        <Button variant="text" onClick={resetState} sx={{ mt: 3 }}>
-                          Cancelar
-                        </Button>
-                    </Box>
-                )}
-
-
-                {/* --- UI STATE 3: Uploading/Success/Error --- */}
                 {uploadStatus === 'uploading' && (
                     <Box sx={{ textAlign: 'center' }}>
-                        <Typography variant="h6" sx={{ mb: 2 }}>A carregar...</Typography>
+                        <Typography variant="h6" sx={{ mb: 2 }}>A carregar {selectedFile?.name}...</Typography>
                         <LinearProgress variant="determinate" value={uploadProgress} sx={{ height: 10, borderRadius: 5 }} />
                         <Typography variant="body1" sx={{ mt: 1 }}>{uploadProgress}%</Typography>
                     </Box>
