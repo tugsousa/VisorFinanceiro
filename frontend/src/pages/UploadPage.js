@@ -104,7 +104,7 @@ const UploadPage = () => {
         setIsDragActive(false);
         if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
             handleFileSelected(e.dataTransfer.files[0]);
-            e.dataTransfer.clearData();
+            //e.dataTransfer.clearData();
         }
     }, [handleFileSelected]);
 
