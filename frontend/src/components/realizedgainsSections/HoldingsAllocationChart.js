@@ -1,12 +1,49 @@
-// frontend/src/components/realizedgainsSections/HoldingsAllocationChart.js
 import React, { useState, useMemo } from 'react';
 import { Doughnut } from 'react-chartjs-2';
 import { Chart as ChartJS, ArcElement, Tooltip, Legend, Title } from 'chart.js';
-import { generateColorPalette } from '../../utils/chartUtils';
 import { Paper, Typography } from '@mui/material';
 import { formatCurrency } from '../../utils/formatUtils';
 
 ChartJS.register(ArcElement, Tooltip, Legend, Title);
+
+/**
+ * Modern and professional color palettes for the chart.
+ */
+const modernPalettes = {
+  // A palette with various shades of green for a fresh, modern look
+  greenTones: [
+    '#004d40', // Dark Teal
+    '#00796b', // Medium Teal
+    '#4DB6AC', // Light Teal
+    '#2E7D32', // Dark Green
+    '#66BB6A', // Medium Green
+    '#AED581'  // Light Green
+  ],
+  // A palette with cool and professional tones
+  coolTones: [
+    '#1C2833', '#2E4053', '#AAB7B8', '#D5DBDB', '#F4F6F6'
+  ],
+  // A palette with a mix of vibrant and muted colors
+  vibrantAndMuted: [
+    '#056875', '#50C2E5', '#C9495E', '#D46600', '#1F3A93', '#27AE60', '#F1C40F'
+  ]
+};
+
+/**
+ * Generates a color palette of a specified length.
+ * @param {number} count - The number of colors needed.
+ * @param {string} paletteName - The name of the palette to use.
+ * @returns {string[]} An array of color strings.
+ */
+const generateColorPalette = (count, paletteName = 'greenTones') => {
+  const selectedPalette = modernPalettes[paletteName] || modernPalettes.greenTones;
+  const palette = [];
+  for (let i = 0; i < count; i++) {
+    palette.push(selectedPalette[i % selectedPalette.length]);
+  }
+  return palette;
+};
+
 
 /**
  * Helper function to wrap text into multiple lines to fit within a max width.
@@ -17,7 +54,7 @@ ChartJS.register(ArcElement, Tooltip, Legend, Title);
  */
 const wrapText = (ctx, text, maxWidth) => {
   if (!text) return [];
-  
+
   const words = text.split(' ');
   const lines = [];
   let currentLine = words[0] || '';
@@ -59,7 +96,7 @@ const centerTextPlugin = {
       const cutoutPercentage = parseFloat(chart.options.cutout) / 100;
       const holeDiameter = chartSize * cutoutPercentage;
       // THE FIX: Reduced the multiplier from 0.9 to 0.8 for more aggressive wrapping
-      const maxWidth = holeDiameter * 0.8; 
+      const maxWidth = holeDiameter * 0.8;
 
       // --- LINE WRAPPING & VERTICAL POSITIONING LOGIC ---
       const labelLineHeight = 18;
@@ -67,14 +104,14 @@ const centerTextPlugin = {
       const percentageFontSize = 16;
       const valueMarginTop = 10;
       const percentageMarginTop = 8;
-      
+
       ctx.font = '16px sans-serif';
       ctx.fillStyle = '#333';
       const lines = wrapText(ctx, hoveredData.label, maxWidth);
-      
+
       const labelBlockHeight = lines.length * labelLineHeight;
       const totalBlockHeight = labelBlockHeight + valueMarginTop + valueFontSize + percentageMarginTop + percentageFontSize;
-      
+
       let currentY = centerY - (totalBlockHeight / 2) + (labelLineHeight / 2);
 
       // 1. Draw the product name lines
@@ -88,7 +125,7 @@ const centerTextPlugin = {
       ctx.font = `bold ${valueFontSize}px sans-serif`;
       ctx.fillStyle = '#111';
       ctx.fillText(formatCurrency(hoveredData.value), centerX, currentY);
-      
+
       // 3. Draw the percentage
       currentY += (valueFontSize / 2) + percentageMarginTop + (percentageFontSize / 2);
       ctx.font = `${percentageFontSize}px sans-serif`;
@@ -111,19 +148,16 @@ const centerTextPlugin = {
 
 // Helper function to fade a color (make it more transparent)
 const fadeColor = (colorString, alpha = 0.3) => {
-    if (typeof colorString !== 'string') return 'rgba(200, 200, 200, 0.3)';
-    let parts = colorString.match(/(\w+)\(([^)]+)\)/);
-    if (!parts) return 'rgba(200, 200, 200, 0.3)';
-    let type = parts[1];
-    let values = parts[2].split(',').map(s => s.trim());
-    if (type.startsWith('hsl') || type.startsWith('rgb')) {
-        const typeWithAlpha = type.startsWith('hsl') ? 'hsla' : 'rgba';
-        if (values.length === 3) values.push(alpha);
-        else if (values.length === 4) values[3] = alpha;
-        return `${typeWithAlpha}(${values.join(', ')})`;
-    }
-    return colorString;
+    if (typeof colorString !== 'string' || !colorString.startsWith('#')) return 'rgba(200, 200, 200, 0.3)';
+
+    const hex = colorString.slice(1);
+    const r = parseInt(hex.substring(0, 2), 16);
+    const g = parseInt(hex.substring(2, 4), 16);
+    const b = parseInt(hex.substring(4, 6), 16);
+
+    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 };
+
 
 export default function HoldingsAllocationChart({ chartData }) {
     const [hoveredIndex, setHoveredIndex] = useState(null);
@@ -137,12 +171,14 @@ export default function HoldingsAllocationChart({ chartData }) {
 
     const baseColors = useMemo(() => {
         const dataLength = chartData?.datasets?.[0]?.data?.length ?? 0;
-        return generateColorPalette(dataLength, 'background');
+        // Using the new 'greenTones' palette by default
+        return generateColorPalette(dataLength, 'greenTones');
     }, [chartData]);
 
     const baseBorderColors = useMemo(() => {
         const dataLength = chartData?.datasets?.[0]?.data?.length ?? 0;
-        return generateColorPalette(dataLength, 'border');
+        // Using the new 'greenTones' palette by default
+        return generateColorPalette(dataLength, 'greenTones');
     }, [chartData]);
 
     const dynamicBackgroundColors = useMemo(() => {
@@ -158,7 +194,7 @@ export default function HoldingsAllocationChart({ chartData }) {
             index === hoveredIndex ? color : fadeColor(color, 0.3)
         );
     }, [hoveredIndex, baseBorderColors]);
-    
+
     const hoveredData = useMemo(() => {
         if (hoveredIndex !== null && totalValue > 0 && chartData?.datasets?.[0]?.data[hoveredIndex] !== undefined) {
             const value = chartData.datasets[0].data[hoveredIndex];
@@ -179,7 +215,7 @@ export default function HoldingsAllocationChart({ chartData }) {
             </Paper>
         );
     }
-    
+
     const dataWithColors = {
         ...chartData,
         datasets: chartData.datasets.map(dataset => ({
@@ -189,7 +225,7 @@ export default function HoldingsAllocationChart({ chartData }) {
             borderWidth: 1,
         }))
     };
-    
+
     const options = {
         responsive: true,
         maintainAspectRatio: false,
@@ -219,5 +255,9 @@ export default function HoldingsAllocationChart({ chartData }) {
         },
     };
 
-    return <Doughnut data={dataWithColors} options={options} plugins={[centerTextPlugin]} />;
+    return (
+      <div style={{ width: '300px', height: '300px' }}>
+        <Doughnut data={dataWithColors} options={options} plugins={[centerTextPlugin]} />
+      </div>
+    );
 }

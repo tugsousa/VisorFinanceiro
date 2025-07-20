@@ -67,7 +67,7 @@ export default function Layout({ children }) {
                   color: '#6a6a62',
                 }}
               >
-                Rumo Claro
+                RumoClaro
               </Typography>
             </Box>
 
