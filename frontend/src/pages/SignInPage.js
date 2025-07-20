@@ -3,30 +3,28 @@ import React, { useState, useContext, useEffect } from 'react';
 import { useNavigate, Link as RouterLink } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
 import {
-  Container, Paper, Box, Typography, TextField, Button, Alert, CircularProgress, Grid, Link
+  Box, Typography, TextField, Button, Alert, CircularProgress, Grid, Link, Divider
 } from '@mui/material';
 import AuthModal from '../components/auth/AuthModal';
+import GoogleIcon from '@mui/icons-material/Google';
 
 function SignInPage() {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [localError, setLocalError] = useState('');
   const [localSuccess, setLocalSuccess] = useState(false);
-  const { login, loading: authLoading, authError: contextAuthError } = useContext(AuthContext);
+  const { login, isAuthActionLoading, authError: contextAuthError } = useContext(AuthContext);
 
   useEffect(() => {
     if (contextAuthError) {
-        setLocalError(contextAuthError);
+      setLocalError(contextAuthError);
     }
   }, [contextAuthError]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
-    if (!authLoading) {
-        setLocalError('');
-        setLocalSuccess(false);
-    }
+    setLocalError('');
+    setLocalSuccess(false);
 
     try {
       await login(username, password);
@@ -38,75 +36,106 @@ function SignInPage() {
     }
   };
 
+  const handleGoogleSignIn = () => {
+    // Google Sign-In functionality will be added later
+    console.log("Google Sign-In clicked");
+  };
+
   return (
     <AuthModal>
-      <Typography component="h1" variant="h5">
-        Sign In
-      </Typography>
-      
-      {localError && (
-        <Alert severity="error" sx={{ width: '100%', mt: 2, mb: 1 }}>
-          {localError}
-        </Alert>
-      )}
-      
-      {localSuccess && !localError && (
-        <Alert severity="success" sx={{ width: '100%', mt: 2, mb: 1 }}>
-          Login successful! Redirecting...
-        </Alert>
-      )}
-      
-      <Box component="form" onSubmit={handleSubmit} noValidate sx={{ mt: 1, width: '100%' }}>
-        <TextField
-          margin="normal"
-          required
-          fullWidth
-          id="username"
-          label="Username"
-          name="username"
-          autoComplete="username"
-          autoFocus
-          value={username}
-          onChange={(e) => setUsername(e.target.value)}
-          disabled={authLoading || (localSuccess && !localError)}
-        />
-        <TextField
-          margin="normal"
-          required
-          fullWidth
-          name="password"
-          label="Password"
-          type="password"
-          id="password"
-          autoComplete="current-password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          disabled={authLoading || (localSuccess && !localError)}
-        />
-        <Button
-          type="submit"
-          fullWidth
-          variant="contained"
-          sx={{ mt: 3, mb: 2 }}
-          disabled={authLoading || (localSuccess && !localError)}
-        >
-          {authLoading ? <CircularProgress size={24} color="inherit" /> : 'Sign In'}
-        </Button>
-        <Grid container>
-          <Grid item xs>
-            <Link component={RouterLink} to="/request-password-reset" variant="body2">
-              Forgot password?
+      <Box sx={{ width: '100%', textAlign: 'left' }}>
+        <Typography component="h1" variant="h5" sx={{ fontWeight: 'bold' }}>
+          Bem-vindo a Rumo Claro
+        </Typography>
+        <Typography variant="body2" color="text.secondary" sx={{ mt: 1, mb: 2 }}>
+          Entre com a sua conta local ou crie uma conta.
+        </Typography>
+        <Link component={RouterLink} to="/signup" variant="body1" sx={{ mb: 3, display: 'block',textDecoration: 'none' }}>
+          Criar uma conta
+        </Link>
+
+        {localError && (
+          <Alert severity="error" sx={{ width: '100%', mt: 2, mb: 1 }}>
+            {localError}
+          </Alert>
+        )}
+
+        {localSuccess && !localError && (
+          <Alert severity="success" sx={{ width: '100%', mt: 2, mb: 1 }}>
+            Login com sucesso! A redirecionar...
+          </Alert>
+        )}
+
+        <Box component="form" onSubmit={handleSubmit} noValidate sx={{ mt: 1, width: '100%' }}>
+          
+          <Typography variant="subtitle2" sx={{ fontWeight: 500, mb: 0.5 }}>Email</Typography>
+          <TextField
+            required
+            fullWidth
+            id="email"
+            name="email"
+            autoComplete="email"
+            autoFocus
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+            disabled={isAuthActionLoading || (localSuccess && !localError)}
+          />
+
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mt: 2 }}>
+            <Typography variant="subtitle2" sx={{ fontWeight: 500 }}>Senha</Typography>
+            <Link component={RouterLink} to="/request-password-reset" variant="body2" sx={{ textDecoration: 'none' }}>
+              Esqueceu a sua senha?
             </Link>
-          </Grid>
-          <Grid item>
-            <Link component={RouterLink} to="/signup" variant="body2">
-              {"Don't have an account? Sign Up"}
-            </Link>
-          </Grid>
-        </Grid>
+          </Box>
+          <TextField
+            sx={{ mt: 0.5 }}
+            required
+            fullWidth
+            name="password"
+            type="password"
+            id="password"
+            autoComplete="current-password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            disabled={isAuthActionLoading || (localSuccess && !localError)}
+          />
+          
+          <Button
+            type="submit"
+            variant="contained"
+            sx={{ 
+              mt: 3, 
+              mb: 2, 
+              backgroundColor: '#3699FF;',
+              '&:hover': {
+                backgroundColor: '#3699FF;'
+              },
+              textTransform: 'none',
+              px: 4
+            }}
+            disabled={isAuthActionLoading || (localSuccess && !localError)}
+          >
+            {isAuthActionLoading ? <CircularProgress size={24} color="inherit" /> : 'Entrar'}
+          </Button>
+
+          <Divider sx={{ my: 2 }} />
+
+          <Button
+              variant="outlined"
+              startIcon={<GoogleIcon />}
+              onClick={handleGoogleSignIn}
+              sx={{ 
+                textTransform: 'none', 
+                color: 'text.secondary',
+                borderColor: 'grey.400'
+              }}
+          >
+              Entrar com o Google
+          </Button>
+        </Box>
       </Box>
     </AuthModal>
   );
 }
 
- export default SignInPage;
+export default SignInPage;
