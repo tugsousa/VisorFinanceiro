@@ -63,7 +63,6 @@ export default function Layout({ children }) {
               <Typography
                 variant="h6"
                 sx={{
-                  fontFamily: "'Poppins', sans-serif",
                   fontWeight: 600,
                   color: '#6a6a62',
                 }}
@@ -77,7 +76,6 @@ export default function Layout({ children }) {
                 <Box sx={{ display: { xs: 'none', sm: 'block' } }}>
                   {navItems.map((item) => (
                     <Button key={item.title} component={RouterLink} to={item.to} sx={{
-                      fontFamily: "'Inter', sans-serif",
                       color: '#4b5563',
                       textTransform: 'none',
                       fontWeight: 500,
@@ -153,7 +151,6 @@ export default function Layout({ children }) {
                   to="/signin"
                   variant="text"
                   sx={{
-                    fontFamily: "'Inter', sans-serif",
                     color: '#4b5563',
                     fontWeight: 500,
                     textTransform: 'none',

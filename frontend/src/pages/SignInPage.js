@@ -45,10 +45,10 @@ function SignInPage() {
     <AuthModal>
       <Box sx={{ width: '100%', textAlign: 'left' }}>
         <Typography component="h1" variant="h5" sx={{ fontWeight: 'bold' }}>
-          Bem-vindo a Rumo Claro
+          Bem-vindo a RumoClaro
         </Typography>
         <Typography variant="body2" color="text.secondary" sx={{ mt: 1, mb: 2 }}>
-          Entre com a sua conta local ou crie uma conta.
+          Entre com a sua conta local ou através da sua conta Google.
         </Typography>
         <Link component={RouterLink} to="/signup" variant="body1" sx={{ mb: 3, display: 'block',textDecoration: 'none' }}>
           Criar uma conta
