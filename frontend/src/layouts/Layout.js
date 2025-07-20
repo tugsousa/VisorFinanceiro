@@ -160,7 +160,7 @@ export default function Layout({ children }) {
                     },
                   }}
                 >
-                  Sign in
+                  Entrar
                 </Button>
               </Box>
             )}
