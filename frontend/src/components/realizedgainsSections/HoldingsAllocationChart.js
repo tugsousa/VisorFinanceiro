@@ -223,37 +223,38 @@ export default function HoldingsAllocationChart({ chartData }) {
             backgroundColor: dynamicBackgroundColors,
             borderColor: dynamicBorderColors,
             borderWidth: 1,
+            borderRadius: 2,
         }))
     };
 
     const options = {
-        responsive: true,
-        maintainAspectRatio: false,
-        cutout: '70%',
-        plugins: {
-            legend: {
-                display: false,
-            },
-            title: {
-                display: false,
-                text: 'Composição do Portefólio (€)',
-            },
-            tooltip: {
-                enabled: false,
-            },
-            centerTextPlugin: {
-                totalValue,
-                hoveredData,
-            }
-        },
-        onHover: (event, chartElement) => {
-            if (chartElement.length > 0) {
-                setHoveredIndex(chartElement[0].index);
-            } else {
-                setHoveredIndex(null);
-            }
-        },
-    };
+  responsive: true,
+  maintainAspectRatio: false,
+  cutout: '70%',
+  hoverOffset: 12,
+  plugins: {
+    legend: {
+      display: false,
+    },
+    tooltip: {
+      enabled: false,
+    },
+    title: {
+      display: false,
+    },
+    centerTextPlugin: {
+      totalValue,
+      hoveredData,
+    }
+  },
+  layout: {
+    padding: 8,
+  },
+  animation: {
+    animateRotate: true,
+    animateScale: true,
+  },
+};
 
     return (
       <div style={{ width: '300px', height: '300px' }}>
