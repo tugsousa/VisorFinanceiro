@@ -2,11 +2,14 @@
 package services
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	htmltemplate "html/template"
 	"log/slog"
 	"net/smtp"
 	"strings"
+	texttemplate "text/template"
 	"time"
 
 	"github.com/mailgun/mailgun-go/v4"
@@ -14,11 +17,41 @@ import (
 	"github.com/username/taxfolio/backend/src/logger"
 )
 
+// EmailData holds the dynamic data for an email template.
+type EmailData struct {
+	Username string
+	Link     string
+	Expiry   string
+}
+
+// EmailTemplate defines the structure for an email template.
+type EmailTemplate struct {
+	Subject  string
+	TextBody string
+	HTMLBody string
+}
+
+// Email templates are now centralized.
+var emailTemplates = map[string]EmailTemplate{
+	"verification": {
+		Subject:  "Confirme o seu endereço de e-mail para o RumoClaro",
+		TextBody: `Olá {{.Username}}, Bem-vindo ao RumoClaro! Por favor, confirme o seu endereço de e-mail clicando no link abaixo: {{.Link}} Se não criou uma conta com este endereço de e-mail, por favor ignore esta mensagem. Obrigado, A equipa do RumoClaro`,
+		HTMLBody: `<html><body style="font-family: Arial, sans-serif; line-height: 1.6;"><p>Olá {{.Username}},</p><p>Bem-vindo ao RumoClaro! Por favor, confirme o seu endereço de e-mail clicando no link abaixo:</p><p><a href="{{.Link}}" target="_blank" style="color: #1a73e8; text-decoration: none; font-weight: bold; padding: 10px 15px; border: 1px solid #1a73e8; border-radius: 4px; background-color: #e8f0fe;">Confirmar endereço de e-mail</a></p><p>Se o botão acima não funcionar, pode copiar e colar o seguinte URL na barra de endereços do seu navegador.</p><p><a href="{{.Link}}" target="_blank" style="color: #1a73e8;">{{.Link}}</a></p><p>Se não criou uma conta com este endereço de e-mail, por favor ignore este e-mail.</p><p>Obrigado,<br>A equipa do RumoClaro</p></body></html>`,
+	},
+	"passwordReset": {
+		Subject:  "Pedido de redefinição da palavra-passe para o RumoClaro",
+		TextBody: `Olá {{.Username}}, Recebemos um pedido para repor a palavra-passe da sua conta RumoClaro. Por favor, clique no seguinte link para repor a sua palavra-passe: {{.Link}} Se não pediu a reposição da palavra-passe, por favor ignore este e-mail. Este link expira em {{.Expiry}}. Obrigado, A equipa do RumoClaro`,
+		HTMLBody: `<html><body style="font-family: Arial, sans-serif; line-height: 1.6;"><p>Olá {{.Username}},</p><p>Recebemos um pedido para repor a palavra-passe da sua conta RumoClaro. Por favor, clique no seguinte link para repor a sua palavra-passe:</p><p><a href="{{.Link}}" target="_blank" style="color: #1a73e8; text-decoration: none; font-weight: bold; padding: 10px 15px; border: 1px solid #1a73e8; border-radius: 4px; background-color: #e8f0fe;">Redefinir palavra-passe</a></p><p>Se o botão acima não funcionar, copie e cole este link no seu navegador:</p><p><a href="{{.Link}}" target="_blank" style="color: #1a73e8;">{{.Link}}</a></p><p>Se não solicitou esta reposição, por favor ignore este e-mail. Este link irá expirar dentro de {{.Expiry}}.</p><p>Obrigado,<br>A equipa do RumoClaro</p></body></html>`,
+	},
+}
+
+// EmailService defines the interface for sending emails.
 type EmailService interface {
 	SendVerificationEmail(toEmail, username, token string) error
 	SendPasswordResetEmail(toEmail, username, token string) error
 }
 
+// NewEmailService initializes the email service based on the configuration.
 func NewEmailService() EmailService {
 	if config.Cfg == nil {
 		slog.Error("Configuration (config.Cfg) is nil. Email service will default to mock.")
@@ -31,28 +64,21 @@ func NewEmailService() EmailService {
 	switch provider {
 	case "mailgun":
 		if config.Cfg.MailgunDomain == "" || config.Cfg.MailgunPrivateAPIKey == "" || config.Cfg.SenderEmail == "" {
-			logger.L.Warn("Mailgun configuration incomplete (Domain, API Key, or SenderEmail missing). Falling back to MockEmailService.")
-			return &MockEmailService{
-				VerificationEmailBaseURL: config.Cfg.VerificationEmailBaseURL, // Pass config even to mock
-				PasswordResetBaseURL:     config.Cfg.PasswordResetBaseURL,
-			}
+			logger.L.Warn("Mailgun configuration incomplete. Falling back to MockEmailService.")
+			return &MockEmailService{}
 		}
 		mg := mailgun.NewMailgun(config.Cfg.MailgunDomain, config.Cfg.MailgunPrivateAPIKey)
-		logger.L.Info("Mailgun client initialized", "domain", config.Cfg.MailgunDomain)
 		return &MailgunEmailService{
 			mg:                       mg,
 			senderEmail:              config.Cfg.SenderEmail,
 			senderName:               config.Cfg.SenderName,
 			verificationEmailBaseURL: config.Cfg.VerificationEmailBaseURL,
-			PasswordResetBaseURL:     config.Cfg.PasswordResetBaseURL, // Corrected field name
+			passwordResetBaseURL:     config.Cfg.PasswordResetBaseURL,
 		}
 	case "smtp":
 		if config.Cfg.SMTPServer == "" || config.Cfg.SMTPUser == "" || config.Cfg.SMTPPassword == "" || config.Cfg.SenderEmail == "" {
 			logger.L.Warn("SMTP configuration incomplete. Falling back to MockEmailService.")
-			return &MockEmailService{
-				VerificationEmailBaseURL: config.Cfg.VerificationEmailBaseURL,
-				PasswordResetBaseURL:     config.Cfg.PasswordResetBaseURL,
-			}
+			return &MockEmailService{}
 		}
 		return &SMTPEmailService{
 			SMTPServer:               config.Cfg.SMTPServer,
@@ -65,13 +91,11 @@ func NewEmailService() EmailService {
 		}
 	default:
 		logger.L.Info("Defaulting to MockEmailService.")
-		return &MockEmailService{
-			VerificationEmailBaseURL: config.Cfg.VerificationEmailBaseURL,
-			PasswordResetBaseURL:     config.Cfg.PasswordResetBaseURL,
-		}
+		return &MockEmailService{}
 	}
 }
 
+// SMTPEmailService sends emails using SMTP.
 type SMTPEmailService struct {
 	SMTPServer               string
 	SMTPPort                 int
@@ -82,12 +106,10 @@ type SMTPEmailService struct {
 	PasswordResetBaseURL     string
 }
 
-func (s *SMTPEmailService) SendVerificationEmail(toEmail, username, token string) error {
+// The `send` method for SMTP is now internal to the SMTPEmailService
+func (s *SMTPEmailService) send(toEmail, subject, body string) error {
 	from := s.SenderEmail
 	to := []string{toEmail}
-	subject := "Verify Your Email Address for Taxfolio (SMTP)"
-	verificationLink := fmt.Sprintf("%s?token=%s", s.VerificationEmailBaseURL, token)
-	body := fmt.Sprintf(`Hi %s, Please verify your email by clicking this link: %s Thanks, The Taxfolio Team (via SMTP)`, username, verificationLink)
 
 	header := make(map[string]string)
 	header["From"] = from
@@ -95,188 +117,167 @@ func (s *SMTPEmailService) SendVerificationEmail(toEmail, username, token string
 	header["Subject"] = subject
 	header["MIME-version"] = "1.0"
 	header["Content-Type"] = "text/plain; charset=\"UTF-8\""
-	message := ""
+
+	var message string
 	for k, v := range header {
 		message += fmt.Sprintf("%s: %s\r\n", k, v)
 	}
 	message += "\r\n" + body
+
 	auth := smtp.PlainAuth("", s.SMTPUser, s.SMTPPassword, s.SMTPServer)
 	addr := fmt.Sprintf("%s:%d", s.SMTPServer, s.SMTPPort)
 	err := smtp.SendMail(addr, auth, from, to, []byte(message))
 	if err != nil {
-		logger.L.Error("Failed to send verification email via SMTP", "error", err, "to", toEmail)
-		return fmt.Errorf("failed to send verification email via SMTP: %w", err)
+		logger.L.Error("Failed to send email via SMTP", "error", err, "to", toEmail)
+		return fmt.Errorf("failed to send email via SMTP: %w", err)
 	}
+	return nil
+}
+
+func (s *SMTPEmailService) SendVerificationEmail(toEmail, username, token string) error {
+	template := emailTemplates["verification"]
+	verificationLink := fmt.Sprintf("%s?token=%s", s.VerificationEmailBaseURL, token)
+	data := EmailData{Username: username, Link: verificationLink}
+
+	tmpl, err := texttemplate.New("verificationText").Parse(template.TextBody)
+	if err != nil {
+		return fmt.Errorf("failed to parse verification text template: %w", err)
+	}
+
+	var body bytes.Buffer
+	if err := tmpl.Execute(&body, data); err != nil {
+		return fmt.Errorf("failed to execute verification text template: %w", err)
+	}
+
+	if err := s.send(toEmail, template.Subject, body.String()); err != nil {
+		return err
+	}
+
 	logger.L.Info("Verification email sent successfully via SMTP", "to", toEmail)
 	return nil
 }
 
 func (s *SMTPEmailService) SendPasswordResetEmail(toEmail, username, token string) error {
-	from := s.SenderEmail
-	to := []string{toEmail}
-	subject := "Password Reset Request for Taxfolio (SMTP)"
+	template := emailTemplates["passwordReset"]
 	resetLink := fmt.Sprintf("%s?token=%s", s.PasswordResetBaseURL, token)
-	body := fmt.Sprintf(`Hi %s,
-
-    You requested a password reset for your Taxfolio account.
-    Please click the following link to reset your password:
-    %s
-
-    If you did not request a password reset, please ignore this email. This link will expire in %s.
-
-    Thanks,
-    The Taxfolio Team (via SMTP)`, username, resetLink, config.Cfg.PasswordResetTokenExpiry.String())
-
-	header := make(map[string]string)
-	header["From"] = from
-	header["To"] = toEmail
-	header["Subject"] = subject
-	header["MIME-version"] = "1.0"
-	header["Content-Type"] = "text/plain; charset=\"UTF-8\""
-	message := ""
-	for k, v := range header {
-		message += fmt.Sprintf("%s: %s\r\n", k, v)
+	data := EmailData{
+		Username: username,
+		Link:     resetLink,
+		Expiry:   config.Cfg.PasswordResetTokenExpiry.String(),
 	}
-	message += "\r\n" + body
-	auth := smtp.PlainAuth("", s.SMTPUser, s.SMTPPassword, s.SMTPServer)
-	addr := fmt.Sprintf("%s:%d", s.SMTPServer, s.SMTPPort)
-	err := smtp.SendMail(addr, auth, from, to, []byte(message))
+
+	tmpl, err := texttemplate.New("passwordResetText").Parse(template.TextBody)
 	if err != nil {
-		logger.L.Error("Failed to send password reset email via SMTP", "error", err, "to", toEmail)
-		return fmt.Errorf("failed to send password reset email via SMTP: %w", err)
+		return fmt.Errorf("failed to parse password reset text template: %w", err)
+	}
+
+	var body bytes.Buffer
+	if err := tmpl.Execute(&body, data); err != nil {
+		return fmt.Errorf("failed to execute password reset text template: %w", err)
+	}
+
+	if err := s.send(toEmail, template.Subject, body.String()); err != nil {
+		return err
 	}
 	logger.L.Info("Password reset email sent successfully via SMTP", "to", toEmail)
 	return nil
 }
 
+// MailgunEmailService sends emails using Mailgun.
 type MailgunEmailService struct {
 	mg                       mailgun.Mailgun
 	senderEmail              string
 	senderName               string
 	verificationEmailBaseURL string
-	PasswordResetBaseURL     string // Corrected: Uppercase P
+	passwordResetBaseURL     string
+}
+
+// The `send` method for Mailgun is now internal to the MailgunEmailService
+func (s *MailgunEmailService) send(toEmail, subject, textBody, htmlBody string) error {
+	from := fmt.Sprintf("%s <%s>", s.senderName, s.senderEmail)
+	message := s.mg.NewMessage(from, subject, textBody, toEmail)
+	message.SetHtml(htmlBody)
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*20)
+	defer cancel()
+
+	resp, id, err := s.mg.Send(ctx, message)
+	if err != nil {
+		logger.L.Error("Failed to send email via Mailgun", "error", err, "to", toEmail, "mailgunResp", resp, "mailgunId", id)
+		return fmt.Errorf("mailgun send failed: %w. Response: %s", err, resp)
+	}
+	logger.L.Info("Email sent successfully via Mailgun", "to", toEmail, "id", id, "mailgunResp", resp)
+	return nil
+}
+
+// parseTemplates is a helper function to parse both text and HTML templates
+func parseTemplates(template EmailTemplate, data EmailData) (string, string, error) {
+	var textBody, htmlBody bytes.Buffer
+
+	// Parse text template
+	textTmpl, err := texttemplate.New("text").Parse(template.TextBody)
+	if err != nil {
+		return "", "", fmt.Errorf("failed to parse text template: %w", err)
+	}
+	if err := textTmpl.Execute(&textBody, data); err != nil {
+		return "", "", fmt.Errorf("failed to execute text template: %w", err)
+	}
+
+	// Parse HTML template
+	htmlTmpl, err := htmltemplate.New("html").Parse(template.HTMLBody)
+	if err != nil {
+		return "", "", fmt.Errorf("failed to parse html template: %w", err)
+	}
+	if err := htmlTmpl.Execute(&htmlBody, data); err != nil {
+		return "", "", fmt.Errorf("failed to execute html template: %w", err)
+	}
+
+	return textBody.String(), htmlBody.String(), nil
 }
 
 func (s *MailgunEmailService) SendVerificationEmail(toEmail, username, token string) error {
-	from := fmt.Sprintf("%s <%s>", s.senderName, s.senderEmail)
-	subject := "Verify Your Email Address for Taxfolio"
-	recipient := toEmail
-
+	template := emailTemplates["verification"]
 	verificationLink := fmt.Sprintf("%s?token=%s", s.verificationEmailBaseURL, token)
+	data := EmailData{Username: username, Link: verificationLink}
 
-	plainTextBody := fmt.Sprintf(`Hi %s,
-
-Welcome to Taxfolio! Please verify your email address by clicking the link below:
-%s
-
-If you did not create an account using this email address, please ignore this email.
-
-Thanks,
-The Taxfolio Team`, username, verificationLink)
-
-	htmlBody := fmt.Sprintf(`
-	<html>
-		<body style="font-family: Arial, sans-serif; line-height: 1.6;">
-			<p>Hi %s,</p>
-			<p>Welcome to Taxfolio! Please verify your email address by clicking the link below:</p>
-			<p><a href="%s" target="_blank" style="color: #1a73e8; text-decoration: none; font-weight: bold; padding: 10px 15px; border: 1px solid #1a73e8; border-radius: 4px; background-color: #e8f0fe;">Verify Email Address</a></p>
-			<p>If the button above doesn't work, you can copy and paste the following URL into your browser's address bar:</p>
-			<p><a href="%s" target="_blank" style="color: #1a73e8;">%s</a></p>
-			<p>If you did not create an account using this email address, please ignore this email.</p>
-			<p>Thanks,<br>The Taxfolio Team</p>
-		</body>
-	</html>`, username, verificationLink, verificationLink, verificationLink)
-
-	message := s.mg.NewMessage(from, subject, plainTextBody, recipient)
-	message.SetHtml(htmlBody)
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*20)
-	defer cancel()
-	resp, id, err := s.mg.Send(ctx, message)
+	textBody, htmlBody, err := parseTemplates(template, data)
 	if err != nil {
-		logger.L.Error("Failed to send verification email via Mailgun", "error", err, "to", toEmail, "mailgunResp", resp, "mailgunId", id)
-		return fmt.Errorf("mailgun send failed: %w. Response: %s", err, resp)
+		return err
 	}
-	logger.L.Info("Verification email sent successfully via Mailgun", "to", toEmail, "id", id, "mailgunResp", resp)
-	return nil
+
+	return s.send(toEmail, template.Subject, textBody, htmlBody)
 }
 
 func (s *MailgunEmailService) SendPasswordResetEmail(toEmail, username, token string) error {
-	from := fmt.Sprintf("%s <%s>", s.senderName, s.senderEmail)
-	subject := "Password Reset Request for Taxfolio"
-	recipient := toEmail
-
-	resetLink := fmt.Sprintf("%s?token=%s", s.PasswordResetBaseURL, token) // Access with uppercase P
-
-	plainTextBody := fmt.Sprintf(`Hi %s,
-
-    You requested a password reset for your Taxfolio account.
-    Please click the following link to reset your password:
-    %s
-
-    If you did not request a password reset, please ignore this email. This link will expire in %s.
-
-    Thanks,
-    The Taxfolio Team`, username, resetLink, config.Cfg.PasswordResetTokenExpiry.String())
-
-	htmlBody := fmt.Sprintf(`
-	<html>
-		<body style="font-family: Arial, sans-serif; line-height: 1.6;">
-			<p>Hi %s,</p>
-			<p>You requested a password reset for your Taxfolio account. Please click the button below to reset your password:</p>
-			<p><a href="%s" target="_blank" style="color: #1a73e8; text-decoration: none; font-weight: bold; padding: 10px 15px; border: 1px solid #1a73e8; border-radius: 4px; background-color: #e8f0fe;">Reset Password</a></p>
-			<p>If the button above doesn't work, copy and paste this link into your browser:</p>
-			<p><a href="%s" target="_blank" style="color: #1a73e8;">%s</a></p>
-			<p>If you did not request this reset, please ignore this email. This link will expire in %s.</p>
-			<p>Thanks,<br>The Taxfolio Team</p>
-		</body>
-	</html>`, username, resetLink, resetLink, resetLink, config.Cfg.PasswordResetTokenExpiry.String())
-
-	message := s.mg.NewMessage(from, subject, plainTextBody, recipient)
-	message.SetHtml(htmlBody)
-	message.AddTag("password-reset")
-
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*20)
-	defer cancel()
-
-	resp, id, err := s.mg.Send(ctx, message)
-	if err != nil {
-		logger.L.Error("Failed to send password reset email via Mailgun", "error", err, "to", toEmail, "mailgunResp", resp, "mailgunId", id)
-		return fmt.Errorf("mailgun send failed for password reset: %w. Response: %s", err, resp)
+	template := emailTemplates["passwordReset"]
+	resetLink := fmt.Sprintf("%s?token=%s", s.passwordResetBaseURL, token)
+	data := EmailData{
+		Username: username,
+		Link:     resetLink,
+		Expiry:   config.Cfg.PasswordResetTokenExpiry.String(),
 	}
 
-	logger.L.Info("Password reset email sent successfully via Mailgun", "to", toEmail, "id", id, "mailgunResp", resp)
-	return nil
+	textBody, htmlBody, err := parseTemplates(template, data)
+	if err != nil {
+		return err
+	}
+
+	return s.send(toEmail, template.Subject, textBody, htmlBody)
 }
 
-type MockEmailService struct {
-	VerificationEmailBaseURL string
-	PasswordResetBaseURL     string
-}
+// MockEmailService is a mock implementation of EmailService for testing.
+type MockEmailService struct{}
 
 func (m *MockEmailService) SendVerificationEmail(toEmail, username, token string) error {
-	verificationLink := "MOCK_VERIFICATION_LINK_NOT_CONFIGURED_IN_MOCK_STRUCT"
-	if m.VerificationEmailBaseURL != "" {
-		verificationLink = fmt.Sprintf("%s?token=%s", m.VerificationEmailBaseURL, token)
-	} else if config.Cfg != nil && config.Cfg.VerificationEmailBaseURL != "" {
-		verificationLink = fmt.Sprintf("%s?token=%s", config.Cfg.VerificationEmailBaseURL, token)
-	}
+	verificationLink := fmt.Sprintf("%s?token=%s", config.Cfg.VerificationEmailBaseURL, token)
 	logMsg := "MockEmailService: Would send verification email."
 	logger.L.Info(logMsg, "to", toEmail, "username", username, "verificationLink", verificationLink)
 	return nil
 }
 
 func (m *MockEmailService) SendPasswordResetEmail(toEmail, username, token string) error {
-	resetLink := "MOCK_PASSWORD_RESET_LINK_NOT_CONFIGURED_IN_MOCK_STRUCT"
-	expiry := "an hour (default)"
-	if m.PasswordResetBaseURL != "" {
-		resetLink = fmt.Sprintf("%s?token=%s", m.PasswordResetBaseURL, token)
-	} else if config.Cfg != nil && config.Cfg.PasswordResetBaseURL != "" {
-		resetLink = fmt.Sprintf("%s?token=%s", config.Cfg.PasswordResetBaseURL, token)
-	}
-	if config.Cfg != nil {
-		expiry = config.Cfg.PasswordResetTokenExpiry.String()
-	}
-
+	resetLink := fmt.Sprintf("%s?token=%s", config.Cfg.PasswordResetBaseURL, token)
+	expiry := config.Cfg.PasswordResetTokenExpiry.String()
 	logMsg := "MockEmailService: Would send password reset email."
 	logger.L.Info(logMsg, "to", toEmail, "username", username, "resetLink", resetLink, "expiresIn", expiry)
 	return nil
