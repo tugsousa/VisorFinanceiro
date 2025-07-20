@@ -66,6 +66,10 @@ func (h *UserHandler) RegisterUserHandler(w http.ResponseWriter, r *http.Request
 	credentials.Email = strings.ToLower(strings.TrimSpace(credentials.Email))
 	credentials.Password = strings.TrimSpace(credentials.Password)
 
+	if credentials.Username == "" && strings.Contains(credentials.Email, "@") {
+		credentials.Username = strings.Split(credentials.Email, "@")[0]
+	}
+
 	if credentials.Username == "" || credentials.Email == "" || credentials.Password == "" {
 		sendJSONError(w, "Username, email, and password are required", http.StatusBadRequest)
 		return
@@ -196,7 +200,7 @@ func (h *UserHandler) LoginUserHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var credentials struct {
-		Username string `json:"username"`
+		Email    string `json:"email"`
 		Password string `json:"password"`
 	}
 
@@ -206,22 +210,26 @@ func (h *UserHandler) LoginUserHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	logger.L.Info("Login attempt", "username", credentials.Username)
-	user, err := model.GetUserByUsername(database.DB, credentials.Username)
+	credentials.Email = strings.ToLower(strings.TrimSpace(credentials.Email))
+
+	logger.L.Info("Login attempt", "email", credentials.Email)
+	user, err := model.GetUserByEmail(database.DB, credentials.Email)
 	if err != nil {
-		logger.L.Warn("User lookup failed for login", "username", credentials.Username, "error", err)
-		sendJSONError(w, "Invalid username or password", http.StatusUnauthorized)
+		logger.L.Warn("User lookup by email failed for login", "email", credentials.Email, "error", err)
+		sendJSONError(w, "Invalid email or password", http.StatusUnauthorized)
 		return
 	}
 
 	if err := user.CheckPassword(credentials.Password); err != nil {
-		logger.L.Warn("Password check failed for login", "username", credentials.Username, "error", err)
-		sendJSONError(w, "Invalid username or password", http.StatusUnauthorized)
+		// CORRECTED THIS LINE
+		logger.L.Warn("Password check failed for login", "email", credentials.Email, "error", err)
+		sendJSONError(w, "Invalid email or password", http.StatusUnauthorized)
 		return
 	}
 
 	if !user.IsEmailVerified {
-		logger.L.Warn("Login attempt failed: email not verified", "username", credentials.Username, "userID", user.ID)
+		// AND CORRECTED THIS LINE
+		logger.L.Warn("Login attempt failed: email not verified", "email", credentials.Email, "userID", user.ID)
 		sendJSONError(w, "Email not verified. Please check your email for the verification link.", http.StatusForbidden)
 		return
 	}

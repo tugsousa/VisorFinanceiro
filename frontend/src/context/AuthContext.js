@@ -206,7 +206,7 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  const login = async (username, password) => {
+  const login = async (email, password) => {
     setIsAuthActionLoading(true);
     setCheckingData(true); // Login will involve checking data
     setAuthError(null);
@@ -216,7 +216,7 @@ export const AuthProvider = ({ children }) => {
          if (!getApiServiceCsrfToken()) throw new Error("CSRF token could not be obtained for login.");
       }
 
-      const response = await apiLogin(username, password);
+      const response = await apiLogin(email, password);
       const data = response.data;
 
       if (!data.access_token || !data.refresh_token || !data.user) {

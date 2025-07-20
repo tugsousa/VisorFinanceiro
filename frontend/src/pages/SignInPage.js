@@ -9,7 +9,7 @@ import AuthModal from '../components/auth/AuthModal';
 import GoogleIcon from '@mui/icons-material/Google';
 
 function SignInPage() {
-  const [username, setUsername] = useState('');
+  const [email, setemail] = useState('');
   const [password, setPassword] = useState('');
   const [localError, setLocalError] = useState('');
   const [localSuccess, setLocalSuccess] = useState(false);
@@ -27,7 +27,7 @@ function SignInPage() {
     setLocalSuccess(false);
 
     try {
-      await login(username, password);
+      await login(email, password);
       setLocalSuccess(true);
     } catch (err) {
       const errorMessage = err.message || 'An unexpected error occurred during login.';
@@ -76,8 +76,8 @@ function SignInPage() {
             name="email"
             autoComplete="email"
             autoFocus
-            value={username}
-            onChange={(e) => setUsername(e.target.value)}
+            value={email}
+            onChange={(e) => setemail(e.target.value)}
             disabled={isAuthActionLoading || (localSuccess && !localError)}
           />
 

@@ -179,9 +179,9 @@
       }
     );
 
-    export const apiLogin = (username, password) => {
-      return apiClient.post(API_ENDPOINTS.AUTH_LOGIN, { username, password });
-    };
+export const apiLogin = (email, password) => {
+  return apiClient.post(API_ENDPOINTS.AUTH_LOGIN, { email, password });
+};
 
     export const apiRegister = (username, email, password) => {
       return apiClient.post(API_ENDPOINTS.AUTH_REGISTER, { username, email, password });
