@@ -3,7 +3,7 @@ import React, { useState, useContext, useRef } from 'react';
 import { Link as RouterLink } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
 import {
-  Container, Paper, Box, Typography, TextField, Button, Alert, CircularProgress, Grid, Link
+  Box, Typography, TextField, Button, Alert, Link, Divider
 } from '@mui/material';
 import AuthModal from '../components/auth/AuthModal';
 
@@ -15,9 +15,7 @@ function SignUpPage() {
   
   const [pageError, setPageError] = useState('');
   const [pageSuccessMessage, setPageSuccessMessage] = useState('');
-
   const { register, isAuthActionLoading } = useContext(AuthContext);
-  
   const successShownRef = useRef(false);
 
   const handleSubmit = async (e) => {
@@ -27,70 +25,120 @@ function SignUpPage() {
     successShownRef.current = false;
 
     let clientValidationError = '';
-    if (!username.trim()) clientValidationError = 'Username is required.';
-    else if (!email.trim()) clientValidationError = 'Email is required.';
-    else if (!/\S+@\S+\.\S+/.test(email)) clientValidationError = 'Please enter a valid email address.';
-    else if (!password) clientValidationError = 'Password is required.';
-    else if (password.length < 6) clientValidationError = 'Password must be at least 6 characters long.';
-    else if (password !== confirmPassword) clientValidationError = 'Passwords do not match.';
+    if (!email.trim()) clientValidationError = 'Email é obrigatório.';
+    else if (!/\S+@\S+\.\S+/.test(email)) clientValidationError = 'Email inválido.';
+    else if (!password) clientValidationError = 'Senha é obrigatória.';
+    else if (password.length < 6) clientValidationError = 'A senha deve ter pelo menos 6 caracteres.';
+    else if (password !== confirmPassword) clientValidationError = 'As senhas não coincidem.';
 
     if (clientValidationError) {
       setPageError(clientValidationError);
       return;
     }
 
-    const handleRegistrationSuccess = (result) => {
-      const successMsg = result.message || 'Registration successful! Please check your email to verify your account.';
-      setPageSuccessMessage(successMsg);
+    const onSuccess = (result) => {
+      setPageSuccessMessage(result.message || 'Conta criada com sucesso. Verifique o seu email.');
       successShownRef.current = true;
       setPageError('');
     };
 
-    const handleRegistrationError = (err) => {
-      const errorMessage = err.message || 'Registration failed. Please try again.';
-      setPageError(errorMessage);
+    const onError = (err) => {
+      setPageError(err.message || 'Erro ao criar conta. Tente novamente.');
       setPageSuccessMessage('');
     };
 
-    await register(username, email, password, handleRegistrationSuccess, handleRegistrationError);
+    await register(username, email, password, onSuccess, onError);
   };
 
   const formDisabled = isAuthActionLoading || !!pageSuccessMessage;
 
   return (
     <AuthModal>
-      <Typography component="h1" variant="h5">
-        Sign Up
-      </Typography>
+      <Box sx={{ width: '100%', maxWidth: 400 }}>
+        <Typography component="h1" variant="h5" sx={{ fontWeight: 'bold' }}>
+          Bem-vindo a RumoClaro
+        </Typography>
+        <Typography variant="body2" color="text.secondary" sx={{ mt: 1, mb: 3 }}>
+          Crie uma conta para começar a usar a RumoClaro.
+        </Typography>
 
-      {pageSuccessMessage && (
-        <Alert severity="success" sx={{ width: '100%', mt: 2, mb: 1 }}>
-          {pageSuccessMessage}
-        </Alert>
-      )}
+        {pageSuccessMessage && (
+          <Alert severity="success" sx={{ mb: 2 }}>
+            {pageSuccessMessage}
+          </Alert>
+        )}
+        {pageError && (
+          <Alert severity="error" sx={{ mb: 2 }}>
+            {pageError}
+          </Alert>
+        )}
 
-      {pageError && !pageSuccessMessage && (
-        <Alert severity="error" sx={{ width: '100%', mt: 2, mb: 1 }}>
-          {pageError}
-        </Alert>
-      )}
+        <Box component="form" onSubmit={handleSubmit} noValidate>
 
-      <Box component="form" onSubmit={handleSubmit} noValidate sx={{ mt: 1, width: '100%' }}>
-        <TextField margin="normal" required fullWidth id="username" label="Username" name="username" autoComplete="username" autoFocus value={username} onChange={(e) => setUsername(e.target.value)} disabled={formDisabled}/>
-        <TextField margin="normal" required fullWidth id="email" label="Email Address" name="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} disabled={formDisabled}/>
-        <TextField margin="normal" required fullWidth name="password" label="Password (min. 6 characters)" type="password" id="password" autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} disabled={formDisabled}/>
-        <TextField margin="normal" required fullWidth name="confirmPassword" label="Confirm Password" type="password" id="confirmPassword" autoComplete="new-password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} disabled={formDisabled}/>
-        
-        <Button type="submit" fullWidth variant="contained" sx={{ mt: 3, mb: 2 }} disabled={formDisabled}>
-          {isAuthActionLoading ? <CircularProgress size={24} color="inherit" /> : 'Sign Up'}
-        </Button>
-        <Grid container justifyContent="flex-end">
-          <Grid item>
-            <Link component={RouterLink} to="/signin" variant="body2">
-              Already have an account? Sign In
+          <Typography variant="subtitle2" sx={{ fontWeight: 500, mt: 2 }}>Email</Typography>
+          <TextField
+            fullWidth
+            margin="dense"
+            id="email"
+            name="email"
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            disabled={formDisabled}
+          />
+
+          <Typography variant="subtitle2" sx={{ fontWeight: 500, mt: 2 }}>Senha</Typography>
+          <TextField
+            fullWidth
+            margin="dense"
+            id="password"
+            name="password"
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            disabled={formDisabled}
+          />
+
+          <Typography variant="subtitle2" sx={{ fontWeight: 500, mt: 2 }}>Confirmar Senha</Typography>
+          <TextField
+            fullWidth
+            margin="dense"
+            id="confirmPassword"
+            name="confirmPassword"
+            type="password"
+            value={confirmPassword}
+            onChange={(e) => setConfirmPassword(e.target.value)}
+            disabled={formDisabled}
+          />
+
+      <Button
+        type="submit"
+        variant="contained"
+        sx={{
+          mt: 3,
+          mb: 2,
+          textTransform: 'none',
+          backgroundColor: '#3699FF',
+          '&:hover': {
+            backgroundColor: '#2680d6',
+          },
+          py: 1.5,
+          px: 4
+        }}
+        disabled={formDisabled}
+      >
+        Criar conta
+      </Button>
+
+          <Divider sx={{ my: 2 }} />
+
+          <Typography variant="body2" align="center">
+            Já tem uma conta?{' '}
+            <Link component={RouterLink} to="/signin" underline="hover">
+              Iniciar sessão
             </Link>
-          </Grid>
-        </Grid>
+          </Typography>
+        </Box>
       </Box>
     </AuthModal>
   );
