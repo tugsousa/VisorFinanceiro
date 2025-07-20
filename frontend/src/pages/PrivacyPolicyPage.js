@@ -1,141 +1,116 @@
 import React from 'react';
-import { Container, Box, Typography, List, ListItem, ListItemText, Link } from '@mui/material';
+import { Container, Box, Typography, List, ListItem, ListItemText, Link as MuiLink, Paper } from '@mui/material';
+import { Link as RouterLink } from 'react-router-dom';
+
+// Um componente de secção reutilizável para manter o estilo consistente
+const Section = ({ title, number, children }) => (
+  <Box component="section" sx={{ my: 4 }}>
+    <Typography variant="h5" component="h2" gutterBottom>
+      {number}. {title}
+    </Typography>
+    {children}
+  </Box>
+);
 
 const PrivacyPolicyPage = () => {
   return (
-    <Container maxWidth="md" sx={{ py: 4 }}>
-      <Typography variant="h4" component="h1" gutterBottom>
+    <Container maxWidth="md" sx={{ py: { xs: 3, sm: 5 } }}>
+      <Typography variant="h4" component="h1" gutterBottom align="center">
         Política de Privacidade
       </Typography>
-      <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-        Última atualização: 14 de Julho de 2025
+      <Typography variant="body2" color="text.secondary" gutterBottom align="center" sx={{ mb: 4 }}>
+        Última atualização: 20 de Julho de 2025
       </Typography>
 
-      <Box sx={{ my: 3 }}>
-        <Typography variant="h6" component="h2" gutterBottom>1. Introdução</Typography>
+      <Section title="O Nosso Compromisso" number={1}>
         <Typography variant="body1" paragraph>
-          Bem-vindo ao Rumo Claro. A sua privacidade é de extrema importância para nós. Esta Política de Privacidade explica como recolhemos, usamos, partilhamos e protegemos a sua informação pessoal quando utiliza o nosso website e serviços.
+          O Rumo Claro é uma ferramenta concebida para o ajudar a gerir o seu portefólio de investimentos e a simplificar as suas obrigações fiscais. A sua privacidade e a segurança dos seus dados são a nossa máxima prioridade. Esta página descreve as nossas políticas relativas à recolha, utilização e proteção das suas informações. Ao utilizar o nosso Serviço, concorda com as práticas descritas nesta política.
         </Typography>
+      </Section>
 
-        <Typography variant="h6" component="h2" sx={{ mt: 4 }} gutterBottom>2. Que Dados Recolhemos</Typography>
+      <Section title="Recolha e Utilização de Dados" number={2}>
         <Typography variant="body1" paragraph>
-          Recolhemos vários tipos de informação para fornecer e melhorar o nosso serviço para si:
+          Para fornecer as funcionalidades do Rumo Claro, recolhemos dois tipos de informação:
         </Typography>
-        <List dense>
+        <List dense sx={{ pl: 2, mb: 2 }}>
           <ListItem>
             <ListItemText
-              primary="Dados Fornecidos pelo Utilizador"
-              secondary="Quando se regista, recolhemos o seu nome de utilizador e endereço de e-mail."
+              primary={<strong>Dados da Conta</strong>}
+              secondary="Ao criar a sua conta, recolhemos o seu nome de utilizador, e-mail e país. Estes dados são armazenados de forma permanente no seu perfil para gerir o seu acesso."
             />
           </ListItem>
           <ListItem>
             <ListItemText
-              primary="Dados Carregados pelo Utilizador"
-              secondary="Recolhemos os dados financeiros contidos nos ficheiros CSV que carrega, como nomes de produtos, ISINs, quantidades, preços, datas e outros detalhes de transações."
-            />
-          </ListItem>
-          <ListItem>
-            <ListItemText
-              primary="Dados Recolhidos Automaticamente"
-              secondary="Para fins de segurança e para gerir a sua sessão, recolhemos automaticamente o seu endereço de IP e informações do seu navegador (User-Agent) quando faz login."
+              primary={<strong>Dados Financeiros</strong>}
+              secondary="Para que a plataforma funcione, é necessário que carregue os seus extratos de transações (ficheiros CSV ou XML). Estes dados, que incluem detalhes como ativos, datas, quantidades e valores, são processados e armazenados de forma segura na sua conta pessoal."
             />
           </ListItem>
         </List>
-
-        <Typography variant="h6" component="h2" sx={{ mt: 4 }} gutterBottom>3. Como Usamos os Seus Dados</Typography>
         <Typography variant="body1" paragraph>
-          Utilizamos a informação que recolhemos para os seguintes fins:
+          O armazenamento persistente dos seus dados financeiros é o que nos permite oferecer-lhe funcionalidades avançadas, como um dashboard interativo, análise histórica do seu desempenho e a consulta de todas as suas transações a qualquer momento, sem necessidade de carregar os ficheiros repetidamente.
         </Typography>
-        <List dense>
-          <ListItem>
-            <ListItemText primary="Para fornecer e manter o nosso serviço, incluindo a autenticação e gestão da sua conta." />
-          </ListItem>
-          <ListItem>
-            <ListItemText primary="Para processar os seus ficheiros de transações e gerar os seus relatórios de portefólio, mais-valias e resumos fiscais." />
-          </ListItem>
-          <ListItem>
-            <ListItemText primary="Para comunicar consigo, enviando e-mails transacionais essenciais, como verificação de e-mail e redefinição de senha." />
-          </ListItem>
-          <ListItem>
-            <ListItemText primary="Para garantir a segurança da sua conta e do nosso serviço." />
-          </ListItem>
-        </List>
+      </Section>
 
-        <Typography variant="h6" component="h2" sx={{ mt: 4 }} gutterBottom>4. Partilha de Dados com Terceiros</Typography>
+      <Section title="Retenção e Controlo dos Seus Dados" number={3}>
         <Typography variant="body1" paragraph>
-          Não vendemos os seus dados pessoais. No entanto, partilhamos informação com os seguintes prestadores de serviços para operar a nossa plataforma:
+          Acreditamos que deve ter controlo total sobre a sua informação.
         </Typography>
-        <List dense>
+
+          <Typography variant="body1">
+            A qualquer momento, pode <strong>eliminar todas as suas transações</strong> através da página <MuiLink component={RouterLink} to="/transactions">Dados</MuiLink>. Se desejar <strong>encerrar permanentemente a sua conta</strong>, pode fazê-lo na página de <MuiLink component={RouterLink} to="/settings">Configurações</MuiLink>. Esta ação é irreversível e eliminará imediatamente todos os seus dados (de conta e financeiros) da nossa plataforma.
+          </Typography>
+
+      </Section>
+
+      <Section title="Partilha de Dados com Terceiros" number={4}>
+        <Typography variant="body1" paragraph>
+          <strong>Não vendemos os seus dados pessoais.</strong> Para operar a nossa plataforma, recorremos a prestadores de serviços essenciais que processam dados em nosso nome, sob estritas obrigações de segurança e confidencialidade:
+        </Typography>
+        <List dense sx={{ pl: 2 }}>
           <ListItem>
-            <ListItemText primary="Fornecedor de Hosting (Ex: Hetzner, DigitalOcean): Onde o nosso servidor e base de dados estão alojados." />
+            <ListItemText primary={<strong>Alojamento Web (Hetzner)</strong>} secondary="A nossa aplicação e a sua base de dados estão alojadas em servidores seguros na Alemanha." />
           </ListItem>
           <ListItem>
-            <ListItemText primary="Cloudflare, Inc.: Para fornecer segurança (WAF, CDN) e gestão de DNS." />
+            <ListItemText primary={<strong>Segurança e Desempenho (Cloudflare)</strong>} secondary="O tráfego entre o seu navegador e os nossos servidores é protegido e acelerado pela Cloudflare." />
           </ListItem>
           <ListItem>
-            <ListItemText primary="Mailgun Technologies, Inc.: Para enviar os e-mails transacionais necessários para a gestão da sua conta." />
+            <ListItemText primary={<strong>Envio de E-mails (Amazon SES)</strong>} secondary="Utilizamos este serviço para enviar e-mails essenciais, como a verificação de conta e recuperação de senha." />
           </ListItem>
         </List>
+      </Section>
 
-        <Typography variant="h6" component="h2" sx={{ mt: 4 }} gutterBottom>5. Segurança dos Dados</Typography>
+      <Section title="Cookies e Armazenamento Local" number={5}>
         <Typography variant="body1" paragraph>
-          A segurança dos seus dados é uma prioridade. Usamos encriptação de senhas (bcrypt), comunicação segura via SSL/TLS (fornecida pela Cloudflare), e proteção contra ataques CSRF para proteger a sua informação.
+          O nosso Serviço não utiliza cookies para fins de rastreamento ou publicidade. Usamos as seguintes tecnologias estritamente necessárias:
         </Typography>
+        <List dense sx={{ pl: 2 }}>
+          <ListItem>
+            <ListItemText primary={<strong>Armazenamento Local (localStorage)</strong>} secondary="Para guardar os seus tokens de autenticação e manter a sua sessão segura." />
+          </ListItem>
+          <ListItem>
+            <ListItemText primary={<strong>Cookies Essenciais</strong>} secondary="Utilizamos um cookie para gerir o seu consentimento de cookies e outro para proteger a sua conta contra ataques (CSRF)." />
+          </ListItem>
+        </List>
+      </Section>
 
-        <Typography variant="h6" component="h2" sx={{ mt: 4 }} gutterBottom>6. Retenção de Dados</Typography>
+      <Section title="Segurança" number={6}>
         <Typography variant="body1" paragraph>
-          Manteremos os seus dados pessoais apenas pelo tempo necessário para os fins estabelecidos nesta política. Se eliminar a sua conta, todos os seus dados pessoais e financeiros associados serão permanentemente removidos da nossa base de dados.
+          Levamos a sua confiança a sério e implementamos medidas de segurança robustas para proteger os seus dados, incluindo encriptação de senhas e comunicação segura (HTTPS). No entanto, nenhum método de transmissão pela Internet é 100% infalível. Ao dar-lhe o controlo total para eliminar os seus dados a qualquer momento, capacitamo-lo a gerir o seu próprio risco.
         </Typography>
+      </Section>
 
-        <Typography variant="h6" component="h2" sx={{ mt: 4 }} gutterBottom>7. Os Seus Direitos (GDPR)</Typography>
+      <Section title="Alterações a esta Política" number={7}>
         <Typography variant="body1" paragraph>
-          Tem o direito de aceder, corrigir e eliminar os seus dados. Pode eliminar a sua conta e todos os dados associados a qualquer momento através da página de <Link href="/settings">Configurações</Link> da sua conta.
+          Podemos atualizar esta Política de Privacidade periodicamente. Notificá-lo-emos de quaisquer alterações, publicando a nova versão nesta página.
         </Typography>
-        <Typography variant="h6" component="h2" sx={{ mt: 4 }} gutterBottom>
-  8. Cookies e Tecnologias Semelhantes
-</Typography>
-<Typography variant="body1" paragraph>
-  Para o funcionamento do nosso site, utilizamos as seguintes tecnologias de armazenamento no seu navegador, que são estritamente necessárias para fornecer os nossos serviços:
-</Typography>
-<List dense>
-  <ListItem>
-    <ListItemText
-      primary="Armazenamento Local (localStorage)"
-      secondary="Utilizamos o localStorage para guardar os seus tokens de autenticação (`auth_token`, `refresh_token`) de forma segura após o login. Este armazenamento é essencial para manter a sua sessão ativa e segura enquanto navega no site. Sem ele, não seria possível aceder às áreas privadas da sua conta."
-    />
-  </ListItem>
-  <ListItem>
-    <ListItemText
-      primary="Cookie de Consentimento (rumoclaro-cookie-consent)"
-      secondary="Usamos este cookie para lembrar a sua escolha no aviso de cookies. Desta forma, não lhe mostramos o aviso em cada visita. Este cookie não armazena nenhuma informação pessoal."
-    />
-  </ListItem>
-  <ListItem>
-    <ListItemText
-      primary="Cookie Anti-CSRF (_gorilla_csrf)"
-      secondary="Este é um cookie de segurança, essencial para proteger a sua conta e os nossos sistemas contra ataques de Cross-Site Request Forgery. Garante que os pedidos enviados para o nosso servidor são legítimos e originados do nosso site."
-    />
-  </ListItem>
-</List>
-<Typography variant="body1" paragraph>
-  Atualmente, o Rumo Claro **não utiliza** cookies não essenciais, como os de análise (ex: Google Analytics) ou de publicidade. Se no futuro decidirmos usar esses serviços, iremos atualizar esta política e solicitar o seu consentimento explícito através do nosso aviso de cookies.
-</Typography>
-        
-        <Typography variant="h6" component="h2" sx={{ mt: 4 }} gutterBottom>8. Cookies e Armazenamento Local</Typography>
+      </Section>
+      
+      <Section title="Contacto" number={8}>
         <Typography variant="body1" paragraph>
-          Não utilizamos cookies de rastreamento. Utilizamos o armazenamento local (localStorage) do seu navegador para guardar o seu token de autenticação, o que é estritamente necessário para manter a sua sessão segura e permitir que navegue no site como um utilizador autenticado.
+          Se tiver alguma questão sobre a nossa Política de Privacidade, contacte-nos através do e-mail: <MuiLink href="mailto:geral@rumoclaro.pt">geral@rumoclaro.pt</MuiLink>.
         </Typography>
+      </Section>
 
-        <Typography variant="h6" component="h2" sx={{ mt: 4 }} gutterBottom>9. Alterações a esta Política</Typography>
-        <Typography variant="body1" paragraph>
-          Podemos atualizar a nossa Política de Privacidade de tempos em tempos. Iremos notificá-lo de quaisquer alterações, publicando a nova Política de Privacidade nesta página.
-        </Typography>
-
-        <Typography variant="h6" component="h2" sx={{ mt: 4 }} gutterBottom>10. Contacte-nos</Typography>
-        <Typography variant="body1" paragraph>
-          Se tiver alguma questão sobre esta Política de Privacidade, por favor contacte-nos através de: <Link href="mailto:seu-email-de-suporte@rumoclaro.pt">seu-email-de-suporte@rumoclaro.pt</Link>.
-        </Typography>
-      </Box>
     </Container>
   );
 };

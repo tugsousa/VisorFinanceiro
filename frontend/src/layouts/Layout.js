@@ -198,6 +198,9 @@ export default function Layout({ children }) {
             <MuiLink component={RouterLink} to="/terms-of-service" variant="body2">
               Termos de Serviço
             </MuiLink>
+            <Typography variant="body2" color="text.secondary">
+              Contacto: geral@rumoclaro.pt
+            </Typography>
           </Box>
         </Container>
       </Box>
@@ -224,7 +227,7 @@ export default function Layout({ children }) {
         <span style={{ fontSize: "12px", marginLeft: "10px" }}>
           <MuiLink component={RouterLink} to="/privacy-policy" style={{ color: "white", textDecoration: "underline" }}>
             Saber mais
-          </MuiLink> {/* <-- THIS IS THE CORRECTED LINE */}
+          </MuiLink>
         </span>
       </CookieConsent>
     </Box>
