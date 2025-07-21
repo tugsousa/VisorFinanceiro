@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import { Box, Typography, List, ListItem, ListItemText, Divider, Modal, IconButton } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
 
-// The GuideStep component is updated to handle layout and image clicks.
 const GuideStep = ({ number, title, text, imageUrls, onImageClick }) => (
   <ListItem sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', my: 2 }}>
     <Box>
@@ -19,14 +18,14 @@ const GuideStep = ({ number, title, text, imageUrls, onImageClick }) => (
             component="img"
             src={url}
             alt={`Passo ${number}, imagem ${index + 1}`}
-            onClick={() => onImageClick(url)} // Triggers the modal
+            onClick={() => onImageClick(url)}
             sx={{
               maxWidth: { xs: '80%', sm: '350px' },
               width: 'auto',
               height: 'auto',
               borderRadius: 1,
               boxShadow: 3,
-              cursor: 'pointer', // Indicates it's clickable
+              cursor: 'pointer',
               transition: 'transform 0.2s ease-in-out',
               '&:hover': {
                 transform: 'scale(1.03)',
@@ -40,7 +39,6 @@ const GuideStep = ({ number, title, text, imageUrls, onImageClick }) => (
   </ListItem>
 );
 
-// Style for the image modal container
 const imageModalStyle = {
   position: 'absolute',
   top: '50%',
@@ -55,7 +53,6 @@ const imageModalStyle = {
 };
 
 const IBKRGuidePage = () => {
-  // State to manage which image is currently expanded in the modal
   const [selectedImage, setSelectedImage] = useState(null);
   const isImageModalOpen = Boolean(selectedImage);
 
@@ -70,42 +67,42 @@ const IBKRGuidePage = () => {
   return (
     <Box>
       <Typography variant="h4" component="h1" gutterBottom align="center" id="ibkr-guide-title">
-        Guia: Gerar Relatório na Interactive Brokers (IBKR)
+        Guia: Como gerar o relatório na Interactive Brokers
       </Typography>
       <Typography variant="body1" color="text.secondary" align="center" sx={{ mb: 3 }} id="ibkr-guide-description">
-        Para carregar as suas transações na RumoClaro, siga estes passos para criar e descarregar o ficheiro "Flex Query" no formato correto.
+        Segue estes passos para criar e descarregar o ficheiro no formato correcto.
       </Typography>
       <Divider />
 
       <List>
         <GuideStep
           number="1"
-          title="Aceder às Flex Queries"
-          text="No menu principal da sua conta IBKR, navegue até Performance & Reports e depois clique em Flex Queries."
+          title="Ir às Flex Queries"
+          text="No menu principal da tua conta IBKR, vai a Performance & Reports e depois clica em Flex Queries."
           imageUrls={["/IBKR_guide_1flexqueries.png"]}
           onImageClick={handleImageClick}
         />
         <Divider component="li" />
         <GuideStep
           number="2"
-          title="Criar uma Nova Query"
-          text="Na secção 'Activity Flex Query', clique no botão Create (ícone de +)."
+          title="Criar nova query"
+          text="Na secção 'Activity Flex Query', clica no botão Create (ícone de +)."
           imageUrls={["/IBKR_guide_2flexqueriesCreate.png"]}
           onImageClick={handleImageClick}
         />
         <Divider component="li" />
         <GuideStep
           number="3"
-          title="Configurar a Query"
+          title="Preencher os detalhes"
           text={<>
-            Abrirá uma nova janela para configurar a sua query. Siga estes pontos:
+            Vai abrir uma nova janela onde podes configurar a tua query. Faz assim:
             <ul>
-                <li><strong>Query Name:</strong> Dê um nome à sua query para a poder identificar facilmente (ex: "RumoClaro").</li>
-                <li><strong>Sections:</strong> Clique para adicionar secções: <strong>Cash Transactions</strong>, <strong>Open Positions</strong>, e <strong>Trades</strong>.</li>
-                <li><strong>Delivery Configuration:</strong> Configure para ter <strong>Models: All</strong> e <strong>Format: XML</strong>.</li>
-                <li><strong>General Configuration:</strong> Pode deixar os valores por defeito, como mostrado na imagem (ex: Date Format: yyyyMMdd).</li>
+              <li><strong>Query Name:</strong> Dá um nome à query para a encontrares facilmente (por exemplo: "RumoClaro").</li>
+              <li><strong>Sections:</strong> Adiciona estas secções: <strong>Cash Transactions</strong>, <strong>Open Positions</strong> e <strong>Trades</strong>.</li>
+              <li><strong>Delivery Configuration:</strong> Escolhe <strong>Models: All</strong> e <strong>Format: XML</strong>.</li>
+              <li><strong>General Configuration:</strong> Podes deixar como está.</li>
             </ul>
-            Depois de configurar, clique em <strong>Save</strong>.
+            Quando terminares, clica em <strong>Save</strong>.
           </>}
           imageUrls={[
             "/IBKR_guide_3deliveryconfig.png",
@@ -116,50 +113,48 @@ const IBKRGuidePage = () => {
         <Divider component="li" />
         <GuideStep
           number="4"
-          title="Executar a Query e Descarregar"
-          text="A sua nova query aparecerá na lista. Para gerar o relatório, clique no ícone de 'play' (▶) ao lado do nome. Na janela que aparece, selecione o Período (Period) que deseja exportar e confirme que o Formato (Format) está como XML. Clique em Run para descarregar o ficheiro."
+          title="Correr a query e fazer download"
+          text="A tua nova query vai aparecer na lista. Para gerar o relatório, clica no ícone de 'play' (▶) ao lado do nome. Na janela que aparece, escolhe o período que queres exportar e confirma que o formato está em XML. Depois, clica em Run para fazer o download do ficheiro."
           imageUrls={["/IBKR_guide_5run.png"]}
           onImageClick={handleImageClick}
         />
         <Divider component="li" />
         <GuideStep
           number="5"
-          title="Carregar na RumoClaro"
-          text="Excelente! Agora que tem o seu ficheiro XML, regresse à página de Upload na RumoClaro e carregue o documento que acabou de descarregar para que possamos processar as suas transações."
+          title="Enviar para a RumoClaro"
+          text="Boa! Agora que já tens o ficheiro XML, volta à página de upload da RumoClaro e envia o documento que descarregaste. Vamos tratar das tuas transações por ti."
         />
       </List>
 
-      {/* The Modal for viewing the clicked image */}
       <Modal
         open={isImageModalOpen}
         onClose={handleCloseImageModal}
         aria-labelledby="image-modal-title"
         aria-describedby="image-modal-description"
         sx={{
-            // Add a backdrop filter for a nicer effect
-            backdropFilter: 'blur(4px)',
+          backdropFilter: 'blur(4px)',
         }}
       >
         <Box sx={imageModalStyle}>
-           <IconButton
-              aria-label="close image"
-              onClick={handleCloseImageModal}
-              sx={{
-                position: 'absolute',
-                top: 10,
-                right: 10,
-                color: 'white',
-                backgroundColor: 'rgba(0, 0, 0, 0.5)',
-                '&:hover': {
-                    backgroundColor: 'rgba(0, 0, 0, 0.8)',
-                }
-              }}
-            >
-              <CloseIcon />
-            </IconButton>
+          <IconButton
+            aria-label="Fechar imagem"
+            onClick={handleCloseImageModal}
+            sx={{
+              position: 'absolute',
+              top: 10,
+              right: 10,
+              color: 'white',
+              backgroundColor: 'rgba(0, 0, 0, 0.5)',
+              '&:hover': {
+                backgroundColor: 'rgba(0, 0, 0, 0.8)',
+              }
+            }}
+          >
+            <CloseIcon />
+          </IconButton>
           <img
             src={selectedImage}
-            alt="Expanded guide step"
+            alt="Imagem do guia ampliada"
             style={{
               maxWidth: '90vw',
               maxHeight: '90vh',
