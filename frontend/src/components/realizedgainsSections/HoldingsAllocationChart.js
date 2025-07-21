@@ -9,23 +9,35 @@ ChartJS.register(ArcElement, Tooltip, Legend, Title);
 const modernPalettes = {
   greenTones: [
     '#004d40', '#00796b', '#4DB6AC', '#2E7D32', '#66BB6A', '#AED581'
-  ],
-  coolTones: [
-    '#1C2833', '#2E4053', '#AAB7B8', '#D5DBDB', '#F4F6F6'
-  ],
-  vibrantAndMuted: [
-    '#056875', '#50C2E5', '#C9495E', '#D46600', '#1F3A93', '#27AE60', '#F1C40F'
   ]
 };
 
-const generateColorPalette = (count, paletteName = 'greenTones') => {
-  const selectedPalette = modernPalettes[paletteName] || modernPalettes.greenTones;
+const generateColorPalette = (count) => {
+  if (count === 0) return [];
+
   const palette = [];
+  // Base color in HSL (Hue, Saturation, Lightness) format.
+  // Hue for green is around 120. We'll start there.
+  const baseHue = 145; 
+  const saturation = 60;
+  // We'll vary the lightness to get different shades
+  const startLightness = 25; // Darker green
+  const endLightness = 85;   // Lighter green
+  
+  // Calculate the step for lightness variation
+  const lightnessStep = (endLightness - startLightness) / (count > 1 ? count - 1 : 1);
+
   for (let i = 0; i < count; i++) {
-    palette.push(selectedPalette[i % selectedPalette.length]);
+    const lightness = startLightness + (i * lightnessStep);
+    // Use HSL color format which is easy to manipulate
+    palette.push(`hsl(${baseHue}, ${saturation}%, ${lightness}%)`);
   }
+
+  // The generated palette goes from darker to lighter greens. 
+  // You could reverse it if you prefer:
+  // return palette.reverse();
   return palette;
-};
+}
 
 const wrapText = (ctx, text, maxWidth) => {
   if (!text) return [];
