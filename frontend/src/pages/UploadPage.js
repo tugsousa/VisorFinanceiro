@@ -2,11 +2,12 @@
 import React, { useState, useCallback, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { apiUploadFile } from '../api/apiService';
-import { MAX_FILE_SIZE_BYTES, MAX_FILE_SIZE_MB, UI_TEXT } from '../constants';
-import { Typography, Box, Button, LinearProgress, Paper, Alert, Chip } from '@mui/material';
+import { MAX_FILE_SIZE_BYTES, MAX_FILE_SIZE_MB } from '../constants';
+import { Typography, Box, Button, LinearProgress, Paper, Alert, Modal, IconButton, Link as MuiLink } from '@mui/material';
 import { styled } from '@mui/material/styles';
 import { useQueryClient } from '@tanstack/react-query';
-import { UploadFile as UploadFileIcon, CheckCircleOutline as CheckCircleIcon, ErrorOutline as ErrorIcon } from '@mui/icons-material';
+import { UploadFile as UploadFileIcon, CheckCircleOutline as CheckCircleIcon, ErrorOutline as ErrorIcon, Close as CloseIcon } from '@mui/icons-material';
+import IBKRGuidePage from './IBKRGuidePage'; // Import the new guide component
 
 const UploadDropzone = styled(Box)(({ theme, isDragActive }) => ({
     display: 'flex',
@@ -24,6 +25,22 @@ const UploadDropzone = styled(Box)(({ theme, isDragActive }) => ({
     minHeight: 200,
 }));
 
+// Style for the modal content
+const modalStyle = {
+  position: 'absolute',
+  top: '50%',
+  left: '50%',
+  transform: 'translate(-50%, -50%)',
+  width: { xs: '95%', md: '70%' },
+  maxWidth: 900,
+  bgcolor: 'background.paper',
+  boxShadow: 24,
+  p: 4,
+  borderRadius: 2,
+  maxHeight: '90vh',
+  overflowY: 'auto'
+};
+
 const UploadPage = () => {
     const { token, refreshUserDataCheck } = useAuth();
     const queryClient = useQueryClient();
@@ -34,6 +51,11 @@ const UploadPage = () => {
     const [fileError, setFileError] = useState(null);
     const [isDragActive, setIsDragActive] = useState(false);
     const fileInputRef = useRef(null);
+    
+    // State to control the guide modal
+    const [isGuideOpen, setIsGuideOpen] = useState(false);
+    const handleOpenGuide = () => setIsGuideOpen(true);
+    const handleCloseGuide = () => setIsGuideOpen(false);
 
     const resetState = () => {
         setSelectedFile(null);
@@ -93,7 +115,6 @@ const UploadPage = () => {
         }
     }, [token, queryClient, refreshUserDataCheck]);
 
-
     const handleDragEnter = (e) => { e.preventDefault(); e.stopPropagation(); setIsDragActive(true); };
     const handleDragLeave = (e) => { e.preventDefault(); e.stopPropagation(); setIsDragActive(false); };
     const handleDragOver = (e) => { e.preventDefault(); e.stopPropagation(); };
@@ -104,7 +125,6 @@ const UploadPage = () => {
         setIsDragActive(false);
         if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
             handleFileSelected(e.dataTransfer.files[0]);
-            //e.dataTransfer.clearData();
         }
     }, [handleFileSelected]);
 
@@ -119,8 +139,13 @@ const UploadPage = () => {
             <Typography variant="h4" component="h1" gutterBottom align="center">
                 Carregar Transações
             </Typography>
-            <Typography variant="body1" color="text.secondary" align="center" sx={{ mb: 4 }}>
+            <Typography variant="body1" color="text.secondary" align="center" sx={{ mb: 1 }}>
                 Arraste e solte o seu ficheiro de transações abaixo para começar o processamento automático.
+            </Typography>
+            <Typography align="center" sx={{ mb: 4 }}>
+                <MuiLink component="button" variant="body2" onClick={handleOpenGuide}>
+                    Não sabe como obter o ficheiro da IBKR? Clique aqui para ver o guia.
+                </MuiLink>
             </Typography>
 
             <Paper elevation={0} sx={{ p: { xs: 2, sm: 3 }, border: '1px solid', borderColor: 'divider' }}>
@@ -173,8 +198,31 @@ const UploadPage = () => {
                         <Button variant="outlined" onClick={resetState}>Tente novamente</Button>
                     </Box>
                 )}
-
             </Paper>
+
+            {/* Modal for the IBKR Guide */}
+            <Modal
+                open={isGuideOpen}
+                onClose={handleCloseGuide}
+                aria-labelledby="ibkr-guide-title"
+                aria-describedby="ibkr-guide-description"
+            >
+                <Box sx={modalStyle}>
+                    <IconButton
+                        aria-label="close"
+                        onClick={handleCloseGuide}
+                        sx={{
+                            position: 'absolute',
+                            right: 12,
+                            top: 12,
+                            color: (theme) => theme.palette.grey[500],
+                        }}
+                    >
+                        <CloseIcon />
+                    </IconButton>
+                    <IBKRGuidePage />
+                </Box>
+            </Modal>
         </Box>
     );
 };
