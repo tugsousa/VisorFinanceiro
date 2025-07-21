@@ -166,48 +166,69 @@ export default function RealizedGainsPage() {
         <Tab label="Dividendos" value="dividends" />
       </Tabs>
 
-      {/* VISÃO GERAL */}
+   {/* VISÃO GERAL */}
       {currentTab === 'overview' && (
-        <Grid container spacing={4}>
-          {/* Key Metrics Cards */}
-          <Grid item xs={12} md={6} lg={5}>
-            <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
-              <KeyMetricCard title="L/P de Ações" value={summaryPLs.stockPL} icon={<ShowChartIcon />} />
-              <KeyMetricCard title="L/P de Opções" value={summaryPLs.optionPL} icon={<CandlestickChartIcon />} />
-              <KeyMetricCard title="Dividendos" value={summaryPLs.dividendPL} icon={<AttachMoneyIcon />} />
-              <KeyMetricCard title="Total L/P" value={summaryPLs.totalPL} icon={<AccountBalanceWalletIcon />} />
-            </Box>
+        <Grid container spacing={3}>
+
+          {/* --- LEFT COLUMN --- */}
+          {/* This grid item is a container for the stacked items on the left */}
+          <Grid item xs={12} lg={5} container spacing={3} alignContent="flex-start">
+            
+            {/* Item 1 in Left Column: Key Metrics */}
+            <Grid item xs={12}>
+                <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
+                  <KeyMetricCard title="L/P de Ações" value={summaryPLs.stockPL} icon={<ShowChartIcon />} />
+                  <KeyMetricCard title="L/P de Opções" value={summaryPLs.optionPL} icon={<CandlestickChartIcon />} />
+                  <KeyMetricCard title="Dividendos" value={summaryPLs.dividendPL} icon={<AttachMoneyIcon />} />
+                  <KeyMetricCard title="Total L/P" value={summaryPLs.totalPL} icon={<AccountBalanceWalletIcon />} />
+                </Box>
+            </Grid>
+
+            {/* Item 2 in Left Column: Holdings Doughnut Chart */}
+            <Grid item xs={12}>
+              <Paper elevation={0} sx={{
+                p: 3,
+                height: 400, // A stable height prevents layout bugs
+                borderRadius: 3,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center'
+              }}>
+                <HoldingsAllocationChart chartData={holdingsChartData} />
+              </Paper>
+            </Grid>
           </Grid>
 
-          {/* Holdings Allocation Chart */}
-          <Grid item xs={12} md={6} lg={7}>
-            <Paper elevation={0} sx={{ p: 3, height: 320, borderRadius: 3 }}>
-              <HoldingsAllocationChart chartData={holdingsChartData} />
-            </Paper>
+          {/* --- RIGHT COLUMN --- */}
+          {/* This grid item is a container for the stacked bar charts on the right */}
+          <Grid item xs={12} lg={7} container spacing={3} alignContent="flex-start">
+            
+            {/* Item 1 in Right Column: Overall P/L Chart */}
+            <Grid item xs={12}>
+              <Paper elevation={0} sx={{ p: 2, height: 350, borderRadius: 3 }}>
+                <OverallPLChart
+                  stockSaleDetails={allData.StockSaleDetails || []}
+                  optionSaleDetails={allData.OptionSaleDetails || []}
+                  dividendTaxResultForChart={derivedDividendTaxSummary}
+                  selectedYear={selectedYear}
+                />
+              </Paper>
+            </Grid>
+
+            {/* Item 2 in Right Column: P/L Contribution Chart */}
+            <Grid item xs={12}>
+              <Paper elevation={0} sx={{ p: 2, height: 350, borderRadius: 3 }}>
+                <PLContributionChart 
+                  stockSaleDetails={allData.StockSaleDetails || []}
+                  optionSaleDetails={allData.OptionSaleDetails || []}
+                  dividendTaxResultForChart={derivedDividendTaxSummary}
+                  dividendTransactionsList={filteredData.DividendTransactionsList || []}
+                  selectedYear={selectedYear}
+                />
+              </Paper>
+            </Grid>
           </Grid>
 
-          {/* Charts de PL */}
-          <Grid item xs={12} lg={6}>
-            <Paper elevation={0} sx={{ p: 3, height: 420, borderRadius: 3 }}>
-              <OverallPLChart
-                stockSaleDetails={allData.StockSaleDetails || []}
-                optionSaleDetails={allData.OptionSaleDetails || []}
-                dividendTaxResultForChart={derivedDividendTaxSummary}
-                selectedYear={selectedYear}
-              />
-            </Paper>
-          </Grid>
-          <Grid item xs={12} lg={6}>
-            <Paper elevation={0} sx={{ p: 3, height: 420, borderRadius: 3 }}>
-              <PLContributionChart 
-                stockSaleDetails={allData.StockSaleDetails || []}
-                optionSaleDetails={allData.OptionSaleDetails || []}
-                dividendTaxResultForChart={derivedDividendTaxSummary}
-                dividendTransactionsList={filteredData.DividendTransactionsList || []}
-                selectedYear={selectedYear}
-              />
-            </Paper>
-          </Grid>
         </Grid>
       )}
 

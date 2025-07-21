@@ -200,8 +200,8 @@ export default function HoldingsAllocationChart({ chartData }) {
         animation: { animateRotate: true, animateScale: true },
     };
 
-    return (
-      <div style={{ position: 'relative', width: '280px', height: '280px', margin: 'auto' }}>
+   return (
+      <div style={{ position: 'relative', width: '100%', height: '100%', minHeight: '280px', margin: 'auto' }}>
         <Doughnut data={dataWithColors} options={options} plugins={[centerTextPlugin]} />
       </div>
     );
