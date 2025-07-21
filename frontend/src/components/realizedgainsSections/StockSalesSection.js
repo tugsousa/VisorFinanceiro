@@ -1,3 +1,4 @@
+// frontend/src/components/realizedgainsSections/StockSalesSection.js
 import React, { useMemo } from 'react';
 import { Typography, Paper, Box, Grid } from '@mui/material';
 import { DataGrid } from '@mui/x-data-grid';
@@ -6,7 +7,7 @@ import { Bar } from 'react-chartjs-2';
 import { ALL_YEARS_OPTION, MONTH_NAMES_CHART } from '../../constants';
 import { getYearString, getMonthIndex, calculateDaysHeld, parseDateRobust } from '../../utils/dateUtils';
 import { getBaseProductName } from '../../utils/chartUtils';
-import { calculateAnnualizedReturn } from '../../utils/formatUtils';
+import { formatCurrency, calculateAnnualizedReturn } from '../../utils/formatUtils';
 
 const calculateAnnualizedReturnForStocksLocal = (sale) => {
     const daysHeld = calculateDaysHeld(sale.BuyDate, sale.SaleDate);
@@ -14,9 +15,9 @@ const calculateAnnualizedReturnForStocksLocal = (sale) => {
 };
 
 const columns = [
-    { 
-      field: 'BuyDate', 
-      headerName: 'Dt. abertura', 
+    {
+      field: 'BuyDate',
+      headerName: 'Dt. abertura',
       width: 110,
       type: 'date',
       valueGetter: (value) => parseDateRobust(value),
@@ -28,9 +29,9 @@ const columns = [
         return `${day}-${month}-${year}`;
       }
     },
-        { 
-      field: 'SaleDate', 
-      headerName: 'Dt. fecho', 
+        {
+      field: 'SaleDate',
+      headerName: 'Dt. fecho',
       width: 110,
       type: 'date',
       valueGetter: (value) => parseDateRobust(value),
@@ -83,21 +84,18 @@ export default function StockSalesSection({ stockSalesData, selectedYear }) {
             chartItems.push({ name: 'Outros', pl: othersPL });
         }
         chartItems.sort((a, b) => a.pl - b.pl);
-        
+
         const productChart = {
             labels: chartItems.map(item => item.name),
             datasets: [{
                 data: chartItems.map(item => item.pl),
-                backgroundColor: chartItems.map(item => item.pl >= 0 ? 'rgba(75, 192, 192, 0.6)' : 'rgba(255, 99, 132, 0.6)'),
+                backgroundColor: chartItems.map(item => item.pl >= 0 ? 'rgba(88, 151, 92, 1)' : 'rgba(210, 91, 91, 1)'),
+                borderColor: chartItems.map(item => item.pl >= 0 ? 'rgba(37, 98, 40, 1)' : 'rgba(210, 42, 42, 1)'),
                 borderWidth: 1,
+                borderRadius: 4,
+                hoverBorderWidth: 2,
             }]
         };
-
-        const smallDataSetThreshold = 5;
-        const maxThickness = 60;
-        if (productChart.labels.length > 0 && productChart.labels.length <= smallDataSetThreshold) {
-            productChart.datasets[0].maxBarThickness = maxThickness;
-        }
 
         // --- P/L by Time-Series Chart Data ---
         let timeSeriesChart;
@@ -114,8 +112,11 @@ export default function StockSalesSection({ stockSalesData, selectedYear }) {
                 labels: sortedYears,
                 datasets: [{
                     data: sortedYears.map(year => yearlyMap[year]),
-                    backgroundColor: sortedYears.map(year => (yearlyMap[year] >= 0 ? 'rgba(75, 192, 192, 0.6)' : 'rgba(255, 99, 132, 0.6)')),
+                    backgroundColor: sortedYears.map(year => (yearlyMap[year] >= 0 ? 'rgba(88, 151, 92, 1)' : 'rgba(210, 91, 91, 1)')),
+                    borderColor: sortedYears.map(year => (yearlyMap[year] >= 0 ? 'rgba(37, 98, 40, 1)' : 'rgba(210, 42, 42, 1)')),
                     borderWidth: 1,
+                    borderRadius: 4,
+                    hoverBorderWidth: 2,
                 }]
             };
         } else {
@@ -130,14 +131,13 @@ export default function StockSalesSection({ stockSalesData, selectedYear }) {
                 labels: MONTH_NAMES_CHART,
                 datasets: [{
                     data: monthlyData,
-                    backgroundColor: monthlyData.map(pl => (pl >= 0 ? 'rgba(75, 192, 192, 0.6)' : 'rgba(255, 99, 132, 0.6)')),
+                    backgroundColor: monthlyData.map(pl => (pl >= 0 ? 'rgba(88, 151, 92, 1)' : 'rgba(210, 91, 91, 1)')),
+                    borderColor: monthlyData.map(pl => (pl >= 0 ? 'rgba(37, 98, 40, 1)' : 'rgba(210, 42, 42, 1)')),
                     borderWidth: 1,
+                    borderRadius: 4,
+                    hoverBorderWidth: 2,
                 }]
             };
-        }
-
-        if (timeSeriesChart.labels.length > 0 && timeSeriesChart.labels.length <= smallDataSetThreshold) {
-            timeSeriesChart.datasets[0].maxBarThickness = maxThickness;
         }
 
         return { salesByProductChartData: productChart, salesByTimeSeriesChartData: timeSeriesChart };
@@ -147,25 +147,70 @@ export default function StockSalesSection({ stockSalesData, selectedYear }) {
         responsive: true, maintainAspectRatio: false,
         plugins: {
             legend: { display: false },
-            title: { display: true, text: `L/P por Produto` },
-            tooltip: { callbacks: { label: (ctx) => `L/P: ${new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(ctx.raw || 0)}` } }
+            title: {
+                display: true,
+                text: `L/P por Produto`,
+                font: { size: 16, weight: '600' },
+                padding: { top: 10, bottom: 20 },
+            },
+            tooltip: {
+                backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                titleFont: { size: 14, weight: 'bold' },
+                bodyFont: { size: 12 },
+                padding: 12,
+                cornerRadius: 6,
+                displayColors: false,
+                callbacks: {
+                    label: (ctx) => `L/P: ${formatCurrency(ctx.raw || 0)}`
+                }
+            }
         },
         scales: {
-            x: { title: { display: true, text: 'Produto' }, ticks: { autoSkip: false, maxRotation: 45, minRotation: 30 } },
-            y: { beginAtZero: false, title: { display: true, text: 'Lucro/Prejuízo (€)' } }
+            x: {
+                grid: { display: false },
+                title: { display: true, text: 'Produto' },
+                ticks: { autoSkip: false, maxRotation: 45, minRotation: 30 }
+            },
+            y: {
+                beginAtZero: false,
+                grid: { color: '#e0e0e0', borderDash: [2, 4] },
+                title: { display: true, text: 'Lucro/Prejuízo (€)' }
+            }
         }
     }), []);
-    
+
     const salesByTimeSeriesChartOptions = useMemo(() => ({
         responsive: true, maintainAspectRatio: false,
         plugins: {
             legend: { display: false },
-            title: { display: true, text: `L/P por ${selectedYear === ALL_YEARS_OPTION ? 'ano' : 'mês'}` },
-            tooltip: { callbacks: { label: (ctx) => `L/P: ${new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(ctx.raw || 0)}` } }
+            title: {
+                display: true,
+                text: `L/P por ${selectedYear === ALL_YEARS_OPTION ? 'ano' : 'mês'}`,
+                font: { size: 16, weight: '600' },
+                padding: { top: 10, bottom: 20 },
+            },
+            tooltip: {
+                backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                titleFont: { size: 14, weight: 'bold' },
+                bodyFont: { size: 12 },
+                padding: 12,
+                cornerRadius: 6,
+                displayColors: false,
+                callbacks: {
+                    label: (ctx) => `L/P: ${formatCurrency(ctx.raw || 0)}`
+                }
+            }
         },
         scales: {
-            x: { title: { display: true, text: selectedYear === ALL_YEARS_OPTION ? 'Ano' : 'Mês' } },
-            y: { beginAtZero: false, title: { display: true, text: 'Lucro/Prejuízo (€)' } }
+            x: {
+                grid: { display: false },
+                title: { display: true, text: selectedYear === ALL_YEARS_OPTION ? 'Ano' : 'Mês' }
+            },
+            y: {
+                beginAtZero: false,
+                grid: { color: '#e0e0e0', borderDash: [2, 4] },
+                title: { display: true, text: 'Lucro/Prejuízo (€)' }
+            }
         }
     }), [selectedYear]);
 
@@ -176,7 +221,7 @@ export default function StockSalesSection({ stockSalesData, selectedYear }) {
             </Paper>
         );
     }
-    
+
     const rows = stockSalesData.map((sale, index) => ({
         id: `${sale.ISIN}-${sale.SaleDate}-${index}`,
         ...sale
@@ -187,14 +232,14 @@ export default function StockSalesSection({ stockSalesData, selectedYear }) {
 
             <Grid container spacing={3} sx={{ mb: 3 }}>
                 <Grid item xs={12} lg={6}>
-                    <Box sx={{ height: 350 }}>
+                    <Paper elevation={0} sx={{ p: 2, height: 350, borderRadius: 3 }}>
                         <Bar data={salesByTimeSeriesChartData} options={salesByTimeSeriesChartOptions} />
-                    </Box>
+                    </Paper>
                 </Grid>
                 <Grid item xs={12} lg={6}>
-                    <Box sx={{ height: 350 }}>
+                    <Paper elevation={0} sx={{ p: 2, height: 350, borderRadius: 3 }}>
                         <Bar data={salesByProductChartData} options={salesByProductChartOptions} />
-                    </Box>
+                    </Paper>
                 </Grid>
             </Grid>
 

@@ -7,6 +7,7 @@ import { Bar } from 'react-chartjs-2';
 import { ALL_YEARS_OPTION, MONTH_NAMES_CHART } from '../../constants';
 import { getBaseProductName } from '../../utils/chartUtils';
 import { getYearString, getMonthIndex, parseDateRobust } from '../../utils/dateUtils';
+import { formatCurrency } from '../../utils/formatUtils';
 
 const columns = [
   {
@@ -57,6 +58,9 @@ export default function DividendsSection({ dividendTransactionsData, selectedYea
 
     if (relevantTxs.length === 0) return emptyResult;
 
+    const maxThickness = 60;
+    const smallDataSetThreshold = 5;
+
     const productDividendMap = {};
     relevantTxs.forEach(tx => {
       if (tx.amount_eur != null) {
@@ -81,14 +85,14 @@ export default function DividendsSection({ dividendTransactionsData, selectedYea
       labels: chartItems.map(item => item.name),
       datasets: [{
         data: chartItems.map(item => item.amount),
-        backgroundColor: 'rgba(75, 192, 192, 0.6)',
-        borderColor: 'rgba(75, 192, 192, 1)',
+        backgroundColor: 'rgba(88, 151, 92, 1)',
+        borderColor: 'rgba(37, 98, 40, 1)',
         borderWidth: 1,
+        borderRadius: 4,
+        hoverBorderWidth: 2,
       }]
     };
 
-    const smallDataSetThreshold = 5;
-    const maxThickness = 60;
     if (productChart.labels.length > 0 && productChart.labels.length <= smallDataSetThreshold) {
       productChart.datasets[0].maxBarThickness = maxThickness;
     }
@@ -107,9 +111,11 @@ export default function DividendsSection({ dividendTransactionsData, selectedYea
         labels: sortedYears,
         datasets: [{
           data: sortedYears.map(year => yearlyMap[year]),
-          backgroundColor: 'rgba(75, 192, 192, 0.6)',
-          borderColor: 'rgba(75, 192, 192, 1)',
+          backgroundColor: 'rgba(88, 151, 92, 1)',
+          borderColor: 'rgba(37, 98, 40, 1)',
           borderWidth: 1,
+          borderRadius: 4,
+          hoverBorderWidth: 2,
         }]
       };
     } else {
@@ -125,9 +131,11 @@ export default function DividendsSection({ dividendTransactionsData, selectedYea
         labels: MONTH_NAMES_CHART,
         datasets: [{
           data: monthlyData,
-          backgroundColor: 'rgba(75, 192, 192, 0.6)',
-          borderColor: 'rgba(75, 192, 192, 1)',
+          backgroundColor: 'rgba(88, 151, 92, 1)',
+          borderColor: 'rgba(37, 98, 40, 1)',
           borderWidth: 1,
+          borderRadius: 4,
+          hoverBorderWidth: 2,
         }]
       };
     }
@@ -147,12 +155,35 @@ export default function DividendsSection({ dividendTransactionsData, selectedYea
     responsive: true, maintainAspectRatio: false,
     plugins: {
       legend: { display: false },
-      title: { display: true, text: `Dividendo por produto` },
-      tooltip: { callbacks: { label: (ctx) => `${new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(ctx.raw || 0)}` } }
+      title: {
+        display: true,
+        text: `Dividendo por produto`,
+        font: { size: 16, weight: '600' },
+        padding: { top: 10, bottom: 20 },
+      },
+      tooltip: {
+        backgroundColor: 'rgba(0, 0, 0, 0.8)',
+        titleFont: { size: 14, weight: 'bold' },
+        bodyFont: { size: 12 },
+        padding: 12,
+        cornerRadius: 6,
+        displayColors: false,
+        callbacks: {
+          label: (ctx) => `${formatCurrency(ctx.raw || 0)}`
+        }
+      }
     },
     scales: {
-      y: { beginAtZero: true, title: { display: true, text: 'Montante (€)' } },
-      x: { title: { display: true, text: 'Produto' }, ticks: { autoSkip: false, maxRotation: 45, minRotation: 30 } }
+      y: {
+        beginAtZero: true,
+        grid: { color: '#e0e0e0', borderDash: [2, 4] },
+        title: { display: true, text: 'Montante (€)' }
+      },
+      x: {
+        grid: { display: false },
+        title: { display: true, text: 'Produto' },
+        ticks: { autoSkip: false, maxRotation: 45, minRotation: 30 }
+      }
     }
   }), []);
 
@@ -160,12 +191,34 @@ export default function DividendsSection({ dividendTransactionsData, selectedYea
     responsive: true, maintainAspectRatio: false,
     plugins: {
       legend: { display: false },
-      title: { display: true, text: `Dividendo por ${selectedYear === ALL_YEARS_OPTION ? 'ano' : 'mês'}` },
-      tooltip: { callbacks: { label: (ctx) => `${new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(ctx.raw || 0)}` } }
+      title: {
+        display: true,
+        text: `Dividendo por ${selectedYear === ALL_YEARS_OPTION ? 'ano' : 'mês'}`,
+        font: { size: 16, weight: '600' },
+        padding: { top: 10, bottom: 20 },
+      },
+      tooltip: {
+        backgroundColor: 'rgba(0, 0, 0, 0.8)',
+        titleFont: { size: 14, weight: 'bold' },
+        bodyFont: { size: 12 },
+        padding: 12,
+        cornerRadius: 6,
+        displayColors: false,
+        callbacks: {
+          label: (ctx) => `${formatCurrency(ctx.raw || 0)}`
+        }
+      }
     },
     scales: {
-      y: { beginAtZero: true, title: { display: true, text: 'Montante (€)' } },
-      x: { title: { display: true, text: selectedYear === ALL_YEARS_OPTION ? 'Ano' : 'Mês' } }
+      y: {
+        beginAtZero: true,
+        grid: { color: '#e0e0e0', borderDash: [2, 4] },
+        title: { display: true, text: 'Montante (€)' }
+      },
+      x: {
+        grid: { display: false },
+        title: { display: true, text: selectedYear === ALL_YEARS_OPTION ? 'Ano' : 'Mês' }
+      }
     }
   }), [selectedYear]);
 
@@ -187,22 +240,22 @@ export default function DividendsSection({ dividendTransactionsData, selectedYea
 
       <Grid container spacing={3} sx={{ mb: 3 }}>
         <Grid item xs={12} lg={6}>
-          <Box sx={{ height: 350 }}>
-            {timeSeriesChartData.labels.length > 0 ? (
-              <Bar options={timeSeriesChartOptions} data={timeSeriesChartData} />
-            ) : (
-              <Typography sx={{ my: 2, fontStyle: 'italic', color: 'text.secondary', textAlign: 'center', pt: '25%' }}>Não há dados para este período.</Typography>
-            )}
-          </Box>
+            <Paper elevation={0} sx={{ p: 2, height: 350, borderRadius: 3 }}>
+              {timeSeriesChartData.labels.length > 0 ? (
+                <Bar options={timeSeriesChartOptions} data={timeSeriesChartData} />
+              ) : (
+                <Typography sx={{ my: 2, fontStyle: 'italic', color: 'text.secondary', textAlign: 'center', pt: '25%' }}>Não há dados para este período.</Typography>
+              )}
+            </Paper>
         </Grid>
         <Grid item xs={12} lg={6}>
-          <Box sx={{ height: 350 }}>
+          <Paper elevation={0} sx={{ p: 2, height: 350, borderRadius: 3 }}>
             {productChartData.labels.length > 0 ? (
               <Bar options={productChartOptions} data={productChartData} />
             ) : (
               <Typography sx={{ my: 2, fontStyle: 'italic', color: 'text.secondary', textAlign: 'center', pt: '25%' }}>Não há dados para este período.</Typography>
             )}
-          </Box>
+          </Paper>
         </Grid>
       </Grid>
 

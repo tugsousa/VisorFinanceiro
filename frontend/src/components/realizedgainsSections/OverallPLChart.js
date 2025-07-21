@@ -66,11 +66,12 @@ const OverallPLChart = ({ stockSaleDetails, optionSaleDetails, dividendTaxResult
     const sortedYears = Array.from(allYearsInData).sort((a, b) => a.localeCompare(b));
     if (sortedYears.length === 0) return { chartData: { labels: [], datasets: [] }, yearlyPLDataForTooltip: {} };
 
+    const maxThickness = 60;
+    const smallDataSetThreshold = 5;
+
     const generateDataset = (data) => ({
       data: data,
-      // CHANGE THIS: Replace the gradient with a solid color
       backgroundColor: context => context.raw >= 0 ? 'rgba(88, 151, 92, 1)' : 'rgba(210, 91, 91, 1)',
-      // CHANGE THIS: Use matching solid border colors
       borderColor: context => context.raw >= 0 ? 'rgba(37, 98, 40, 1)' : 'rgba(210, 42, 42, 1)',
       borderWidth: 1,
       borderRadius: 4,
@@ -80,10 +81,17 @@ const OverallPLChart = ({ stockSaleDetails, optionSaleDetails, dividendTaxResult
     if (selectedYear !== ALL_YEARS_OPTION && selectedYear !== '') {
       const singleYearData = yearlyPL[selectedYear];
       if (!singleYearData) return { chartData: { labels: [], datasets: [] }, yearlyPLDataForTooltip: {} };
+      
+      const labels = ['L/P de Ações', 'L/P de Opções', 'Dividendos'];
       const dataset = generateDataset([singleYearData.stocks, singleYearData.options, singleYearData.dividends]);
       dataset.label = `L/P para ${selectedYear}`;
+
+      if (labels.length <= smallDataSetThreshold) {
+        dataset.maxBarThickness = maxThickness;
+      }
+      
       return {
-        chartData: { labels: ['L/P de Ações', 'L/P de Opções', 'Dividendos'], datasets: [dataset] },
+        chartData: { labels: labels, datasets: [dataset] },
         yearlyPLDataForTooltip: yearlyPL,
       };
     }
@@ -91,6 +99,11 @@ const OverallPLChart = ({ stockSaleDetails, optionSaleDetails, dividendTaxResult
     const totalNetPLPerYear = sortedYears.map(year => yearlyPL[year]?.total || 0);
     const yearlyDataset = generateDataset(totalNetPLPerYear);
     yearlyDataset.label = 'Lucro/Prejuízo Total';
+
+    if (sortedYears.length > 0 && sortedYears.length <= smallDataSetThreshold) {
+        yearlyDataset.maxBarThickness = maxThickness;
+    }
+
     return {
       chartData: { labels: sortedYears, datasets: [yearlyDataset] },
       yearlyPLDataForTooltip: yearlyPL,

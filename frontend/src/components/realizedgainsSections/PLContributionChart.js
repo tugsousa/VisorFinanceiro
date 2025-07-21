@@ -64,6 +64,10 @@ const createDataset = (label, data, color, borderColor) => ({
 
 const PLContributionChart = ({ stockSaleDetails, optionSaleDetails, dividendTaxResultForChart, dividendTransactionsList, selectedYear }) => {
   const chartData = useMemo(() => {
+    const maxThickness = 60;
+    const smallDataSetThreshold = 5;
+    let finalChartData;
+
     if (selectedYear === ALL_YEARS_OPTION || selectedYear === NO_YEAR_SELECTED) {
       const years = extractYearsFromData({ stockSales: stockSaleDetails, optionSales: optionSaleDetails, DividendTaxResult: dividendTaxResultForChart }, { stockSales: 'SaleDate', optionSales: 'close_date', DividendTaxResult: null }).filter(y => y && y !== ALL_YEARS_OPTION && y !== NO_YEAR_SELECTED).sort((a, b) => Number(a) - Number(b));
       if (years.length === 0) return { labels: [], datasets: [] };
@@ -74,7 +78,7 @@ const PLContributionChart = ({ stockSaleDetails, optionSaleDetails, dividendTaxR
       optionSaleDetails.forEach(sale => { const year = getYearString(sale.close_date); if (year && yearlyData[year]) yearlyData[year].options += sale.delta; });
       Object.entries(dividendTaxResultForChart).forEach(([year, countries]) => { if (yearlyData[year]) { let net = 0; Object.values(countries).forEach(d => { net += (d.gross_amt || 0) + (d.taxed_amt || 0); }); yearlyData[year].dividends += net; } });
 
-      return {
+      finalChartData = {
         labels: years,
         datasets: [
           createDataset('Acções', years.map(year => yearlyData[year].stocks), COLORS.stocks, BORDER_COLORS.stocks),
@@ -88,7 +92,7 @@ const PLContributionChart = ({ stockSaleDetails, optionSaleDetails, dividendTaxR
       optionSaleDetails.forEach(sale => { if (getYearString(sale.close_date) === selectedYear) { const month = getMonthIndex(sale.close_date); if (month !== null) monthlyData[month].options += sale.delta; } });
       (dividendTransactionsList || []).forEach(tx => { if (getYearString(tx.date) === selectedYear) { const month = getMonthIndex(tx.date); if (month !== null && tx.amount_eur != null) monthlyData[month].dividends += tx.amount_eur; } });
 
-      return {
+      finalChartData = {
         labels: MONTH_NAMES_CHART,
         datasets: [
           createDataset('Acções', monthlyData.map(d => d.stocks), COLORS.stocks, BORDER_COLORS.stocks),
@@ -97,6 +101,15 @@ const PLContributionChart = ({ stockSaleDetails, optionSaleDetails, dividendTaxR
         ]
       };
     }
+
+    if (finalChartData.labels.length > 0 && finalChartData.labels.length <= smallDataSetThreshold) {
+        finalChartData.datasets.forEach(dataset => {
+            dataset.maxBarThickness = maxThickness;
+        });
+    }
+
+    return finalChartData;
+
   }, [stockSaleDetails, optionSaleDetails, dividendTaxResultForChart, dividendTransactionsList, selectedYear]);
 
   const chartOptions = useMemo(() => ({
