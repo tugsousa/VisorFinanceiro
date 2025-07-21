@@ -13,11 +13,13 @@ ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend)
 const createGradient = (ctx, chartArea, isPositive) => {
   const gradient = ctx.createLinearGradient(0, chartArea.bottom, 0, chartArea.top);
   if (isPositive) {
-    gradient.addColorStop(0, 'rgba(75, 192, 192, 0.4)');
-    gradient.addColorStop(1, 'rgba(75, 192, 192, 0.8)');
+    // Use a sophisticated green gradient
+    gradient.addColorStop(0, 'rgba(46, 204, 113, 0.4)');
+    gradient.addColorStop(1, 'rgba(39, 174, 96, 0.8)');
   } else {
-    gradient.addColorStop(0, 'rgba(255, 99, 132, 0.4)');
-    gradient.addColorStop(1, 'rgba(255, 99, 132, 0.8)');
+    // Use a more muted, professional red gradient
+    gradient.addColorStop(0, 'rgba(231, 76, 60, 0.4)');
+    gradient.addColorStop(1, 'rgba(192, 57, 43, 0.8)');
   }
   return gradient;
 };
@@ -66,13 +68,10 @@ const OverallPLChart = ({ stockSaleDetails, optionSaleDetails, dividendTaxResult
 
     const generateDataset = (data) => ({
       data: data,
-      backgroundColor: context => {
-        const { ctx, chartArea } = context.chart;
-        if (!chartArea) return 'rgba(0,0,0,0.1)';
-        const isPositive = context.raw >= 0;
-        return createGradient(ctx, chartArea, isPositive);
-      },
-      borderColor: context => context.raw >= 0 ? 'rgba(75, 192, 192, 1)' : 'rgba(255, 99, 132, 1)',
+      // CHANGE THIS: Replace the gradient with a solid color
+      backgroundColor: context => context.raw >= 0 ? 'rgba(88, 151, 92, 1)' : 'rgba(210, 91, 91, 1)',
+      // CHANGE THIS: Use matching solid border colors
+      borderColor: context => context.raw >= 0 ? 'rgba(37, 98, 40, 1)' : 'rgba(210, 42, 42, 1)',
       borderWidth: 1,
       borderRadius: 4,
       hoverBorderWidth: 2,

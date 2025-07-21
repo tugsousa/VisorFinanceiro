@@ -6,16 +6,17 @@ import { getYearString, getMonthIndex, extractYearsFromData } from '../../utils/
 import { ALL_YEARS_OPTION, NO_YEAR_SELECTED, MONTH_NAMES_CHART } from '../../constants';
 import { formatCurrency } from '../../utils/formatUtils';
 
+
 const COLORS = {
-  stocks: 'rgba(75, 192, 192, 0.85)',
-  options: 'rgba(255, 205, 86, 0.85)',
-  dividends: 'rgba(255, 159, 64, 0.85)',
+  stocks: 'rgba(46, 125, 50, 0.85)',    // '#2E7D32' - Classic Green
+  options: 'rgba(0, 121, 107, 0.85)',    // '#00796b' - Rich Teal
+  dividends: 'rgba(141, 209, 144, 0.85)', // '#66BB6A' - Lighter Green
 };
 
 const BORDER_COLORS = {
-    stocks: 'rgba(65, 182, 182, 1)',
-    options: 'rgba(245, 195, 76, 1)',
-    dividends: 'rgba(245, 149, 54, 1)',
+    stocks: 'rgba(46, 125, 50, 1)',
+    options: 'rgba(0, 121, 107, 1)',
+    dividends: 'rgba(141, 209, 144, 1)',
 };
 
 // Helper function to create a dataset with the smart borderRadius logic
