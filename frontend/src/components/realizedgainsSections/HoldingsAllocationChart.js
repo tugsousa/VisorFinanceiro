@@ -9,6 +9,12 @@ ChartJS.register(ArcElement, Tooltip, Legend, Title);
 const modernPalettes = {
   greenTones: [
     '#004d40', '#00796b', '#4DB6AC', '#2E7D32', '#66BB6A', '#AED581'
+  ],
+  coolTones: [
+    '#1C2833', '#2E4053', '#AAB7B8', '#D5DBDB', '#F4F6F6'
+  ],
+  vibrantAndMuted: [
+    '#056875', '#50C2E5', '#C9495E', '#D46600', '#1F3A93', '#27AE60', '#F1C40F'
   ]
 };
 
@@ -16,28 +22,20 @@ const generateColorPalette = (count) => {
   if (count === 0) return [];
 
   const palette = [];
-  // Base color in HSL (Hue, Saturation, Lightness) format.
-  // Hue for green is around 120. We'll start there.
   const baseHue = 145; 
   const saturation = 60;
-  // We'll vary the lightness to get different shades
-  const startLightness = 25; // Darker green
-  const endLightness = 85;   // Lighter green
+  const startLightness = 25; 
+  const endLightness = 85;   
   
-  // Calculate the step for lightness variation
   const lightnessStep = (endLightness - startLightness) / (count > 1 ? count - 1 : 1);
 
   for (let i = 0; i < count; i++) {
     const lightness = startLightness + (i * lightnessStep);
-    // Use HSL color format which is easy to manipulate
     palette.push(`hsl(${baseHue}, ${saturation}%, ${lightness}%)`);
   }
 
-  // The generated palette goes from darker to lighter greens. 
-  // You could reverse it if you prefer:
-  // return palette.reverse();
   return palette;
-}
+};
 
 const wrapText = (ctx, text, maxWidth) => {
   if (!text) return [];
@@ -58,7 +56,6 @@ const wrapText = (ctx, text, maxWidth) => {
   return lines;
 };
 
-// --- MODIFICATION IS HERE ---
 const fontFamily = 'Poppins, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif';
 
 const centerTextPlugin = {
@@ -86,7 +83,7 @@ const centerTextPlugin = {
       const valueMarginTop = 10;
       const percentageMarginTop = 8;
 
-      ctx.font = `500 13px ${fontFamily}`; // Use Poppins with medium weight
+      ctx.font = `500 13px ${fontFamily}`;
       ctx.fillStyle = '#333';
       const lines = wrapText(ctx, hoveredData.label, maxWidth);
       const labelBlockHeight = lines.length * labelLineHeight;
@@ -99,20 +96,20 @@ const centerTextPlugin = {
       });
 
       currentY += valueMarginTop;
-      ctx.font = `bold ${valueFontSize}px ${fontFamily}`; // Use Poppins
+      ctx.font = `bold ${valueFontSize}px ${fontFamily}`;
       ctx.fillStyle = '#111';
       ctx.fillText(formatCurrency(hoveredData.value), centerX, currentY);
 
       currentY += (valueFontSize / 2) + percentageMarginTop + (percentageFontSize / 2);
-      ctx.font = `16px ${fontFamily}`; // Use Poppins
+      ctx.font = `16px ${fontFamily}`;
       ctx.fillStyle = '#666';
       ctx.fillText(hoveredData.percentage, centerX, currentY);
     } else {
-      ctx.font = `500 13px ${fontFamily}`; // Use Poppins with medium weight
+      ctx.font = `500 13px ${fontFamily}`;
       ctx.fillStyle = '#666';
       ctx.fillText('Valor Total do Portefólio', centerX, centerY - 15);
       
-      ctx.font = `bold 18px ${fontFamily}`; // Use Poppins
+      ctx.font = `bold 18px ${fontFamily}`;
       ctx.fillStyle = '#111';
       ctx.fillText(formatCurrency(totalValue), centerX, centerY + 15);
     }
@@ -121,12 +118,9 @@ const centerTextPlugin = {
 };
 
 const fadeColor = (colorString, alpha = 0.3) => {
-    if (typeof colorString !== 'string' || !colorString.startsWith('#')) return 'rgba(200, 200, 200, 0.3)';
-    const hex = colorString.slice(1);
-    const r = parseInt(hex.substring(0, 2), 16);
-    const g = parseInt(hex.substring(2, 4), 16);
-    const b = parseInt(hex.substring(4, 6), 16);
-    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+    if (typeof colorString !== 'string' || !colorString.startsWith('hsl')) return 'rgba(200, 200, 200, 0.3)';
+    // Convert hsl(h, s%, l%) to hsla(h, s%, l%, a)
+    return colorString.replace('hsl', 'hsla').replace(')', `, ${alpha})`);
 };
 
 export default function HoldingsAllocationChart({ chartData }) {
@@ -141,7 +135,7 @@ export default function HoldingsAllocationChart({ chartData }) {
 
     const baseColors = useMemo(() => {
         const dataLength = chartData?.datasets?.[0]?.data?.length ?? 0;
-        return generateColorPalette(dataLength, 'greenTones');
+        return generateColorPalette(dataLength);
     }, [chartData]);
 
     const dynamicBackgroundColors = useMemo(() => {
@@ -195,13 +189,19 @@ export default function HoldingsAllocationChart({ chartData }) {
         maintainAspectRatio: false,
         cutout: '70%',
         hoverOffset: 12,
+        // --- MODIFICATION START ---
         onHover: (event, activeElements) => {
+            // We only care about setting the active index here.
+            // Resetting is handled by the onMouseLeave on the container.
             if (activeElements && activeElements.length > 0) {
-                setHoveredIndex(activeElements[0].index);
-            } else {
-                setHoveredIndex(null);
+                const newIndex = activeElements[0].index;
+                // Only update state if the index has actually changed to prevent unnecessary re-renders
+                if (newIndex !== hoveredIndex) {
+                    setHoveredIndex(newIndex);
+                }
             }
         },
+        // --- MODIFICATION END ---
         plugins: {
             legend: { display: false },
             tooltip: { enabled: false },
@@ -213,7 +213,14 @@ export default function HoldingsAllocationChart({ chartData }) {
     };
 
    return (
-      <div style={{ position: 'relative', width: '100%', height: '100%', minHeight: '280px', margin: 'auto' }}>
+      // --- MODIFICATION START ---
+      // This div wrapper is the key. Its onMouseLeave will reliably
+      // reset the hover state when the cursor leaves the chart area.
+      <div 
+        onMouseLeave={() => setHoveredIndex(null)}
+        style={{ position: 'relative', width: '100%', height: '100%', minHeight: '280px', margin: 'auto' }}
+      >
+      {/* --- MODIFICATION END --- */}
         <Doughnut data={dataWithColors} options={options} plugins={[centerTextPlugin]} />
       </div>
     );
