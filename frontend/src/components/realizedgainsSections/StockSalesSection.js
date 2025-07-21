@@ -64,6 +64,9 @@ export default function StockSalesSection({ stockSalesData, selectedYear }) {
         };
         if (!stockSalesData || stockSalesData.length === 0) return emptyResult;
 
+        const maxThickness = 60;
+        const smallDataSetThreshold = 5;
+
         // --- P/L by Product Chart Data ---
         const productPLMap = {};
         stockSalesData.forEach(sale => {
@@ -96,6 +99,10 @@ export default function StockSalesSection({ stockSalesData, selectedYear }) {
                 hoverBorderWidth: 2,
             }]
         };
+
+        if (productChart.labels.length > 0 && productChart.labels.length <= smallDataSetThreshold) {
+            productChart.datasets[0].maxBarThickness = maxThickness;
+        }
 
         // --- P/L by Time-Series Chart Data ---
         let timeSeriesChart;
@@ -138,6 +145,10 @@ export default function StockSalesSection({ stockSalesData, selectedYear }) {
                     hoverBorderWidth: 2,
                 }]
             };
+        }
+
+        if (timeSeriesChart.labels.length > 0 && timeSeriesChart.labels.length <= smallDataSetThreshold) {
+            timeSeriesChart.datasets[0].maxBarThickness = maxThickness;
         }
 
         return { salesByProductChartData: productChart, salesByTimeSeriesChartData: timeSeriesChart };
