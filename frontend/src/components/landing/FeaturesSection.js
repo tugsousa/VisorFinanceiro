@@ -1,0 +1,80 @@
+// frontend/src/components/landing/FeaturesSection.js
+import React from 'react';
+import { Box, Container, Grid, Typography } from '@mui/material';
+import ShowChartIcon from '@mui/icons-material/ShowChart';
+import ReceiptLongIcon from '@mui/icons-material/ReceiptLong';
+import TableViewIcon from '@mui/icons-material/TableView';
+import AttachMoneyIcon from '@mui/icons-material/AttachMoney';
+
+const Feature = ({ icon, title, text, imageName }) => (
+  <Grid item xs={12} md={6} sx={{ mb: 4 }}>
+    <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 2 }}>
+      <Box sx={{ color: 'primary.main' }}>{icon}</Box>
+      <Box>
+        <Typography variant="h6" component="h3" sx={{ fontWeight: '600', mb: 1 }}>
+          {title}
+        </Typography>
+        <Typography color="text.secondary">
+          {text}
+        </Typography>
+      </Box>
+    </Box>
+    <Box
+      sx={{
+        height: 180,
+        bgcolor: 'grey.200',
+        borderRadius: 2,
+        mt: 2,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        border: '1px solid',
+        borderColor: 'grey.300'
+      }}
+    >
+      <Typography color="text.secondary">
+        {/* TODO: Substitua por um screenshot da funcionalidade.
+            Exemplo: <img src={`/images/${imageName}`} alt={title} style={{ width: '100%', borderRadius: '8px' }} /> */}
+        {`Screenshot para: ${title}`}
+      </Typography>
+    </Box>
+  </Grid>
+);
+
+const FeaturesSection = () => {
+  return (
+    <Container maxWidth="lg" sx={{ py: { xs: 4, md: 8 } }}>
+      <Typography variant="h4" component="h2" align="center" sx={{ fontWeight: 'bold', mb: 6 }}>
+        Tudo o que Precisa num Só Lugar
+      </Typography>
+      <Grid container spacing={4}>
+        <Feature
+          icon={<ShowChartIcon fontSize="large" />}
+          title="Dashboard de Desempenho"
+          text="Veja o seu lucro/prejuízo total, analise a contribuição de ações, opções e dividendos, e compreenda a alocação do seu portfólio."
+          imageName="feature-dashboard.png" // TODO: Crie esta imagem
+        />
+        <Feature
+          icon={<ReceiptLongIcon fontSize="large" />}
+          title="Preparação para o IRS (Anexo J)"
+          text="Geramos automaticamente as tabelas para o Anexo J, com os dados de mais-valias e dividendos, para facilitar o preenchimento da sua declaração."
+          imageName="feature-taxpage.png" // TODO: Crie esta imagem
+        />
+        <Feature
+          icon={<TableViewIcon fontSize="large" />}
+          title="Análise Detalhada de Vendas"
+          text="Consulte cada venda com o cálculo FIFO (First-In, First-Out) aplicado automaticamente para determinar as mais e menos-valias."
+          imageName="feature-sales.png" // TODO: Crie esta imagem
+        />
+        <Feature
+          icon={<AttachMoneyIcon fontSize="large" />}
+          title="Gestão de Dividendos"
+          text="Acompanhe todos os dividendos recebidos, organizados por ano e país, com a distinção entre o valor bruto e o imposto retido na fonte."
+          imageName="feature-dividends.png" // TODO: Crie esta imagem
+        />
+      </Grid>
+    </Container>
+  );
+};
+
+export default FeaturesSection;

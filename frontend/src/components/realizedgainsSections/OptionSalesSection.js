@@ -98,7 +98,9 @@ export default function OptionSalesSection({ optionSalesData, selectedYear }) {
                 hoverBorderWidth: 2,
             }]
         };
-
+        if (productChart.labels.length > 0 && productChart.labels.length <= smallDataSetThreshold) {
+            productChart.datasets[0].maxBarThickness = maxThickness;
+        }
         // --- P/L by Time-Series Chart Data ---
         let timeSeriesChart;
         if (selectedYear === ALL_YEARS_OPTION) {
