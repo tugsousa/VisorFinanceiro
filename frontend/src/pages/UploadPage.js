@@ -7,7 +7,8 @@ import { Typography, Box, Button, LinearProgress, Paper, Alert, Modal, IconButto
 import { styled } from '@mui/material/styles';
 import { useQueryClient } from '@tanstack/react-query';
 import { UploadFile as UploadFileIcon, CheckCircleOutline as CheckCircleIcon, ErrorOutline as ErrorIcon, Close as CloseIcon } from '@mui/icons-material';
-import IBKRGuidePage from './IBKRGuidePage'; // Import the new guide component
+import IBKRGuidePage from './IBKRGuidePage';
+import DEGIROGuidePage from './DEGIROGuidePage'; // Importar o novo guia
 
 const UploadDropzone = styled(Box)(({ theme, isDragActive }) => ({
     display: 'flex',
@@ -25,7 +26,6 @@ const UploadDropzone = styled(Box)(({ theme, isDragActive }) => ({
     minHeight: 200,
 }));
 
-// Style for the modal content
 const modalStyle = {
   position: 'absolute',
   top: '50%',
@@ -52,10 +52,10 @@ const UploadPage = () => {
     const [isDragActive, setIsDragActive] = useState(false);
     const fileInputRef = useRef(null);
     
-    // State to control the guide modal
-    const [isGuideOpen, setIsGuideOpen] = useState(false);
-    const handleOpenGuide = () => setIsGuideOpen(true);
-    const handleCloseGuide = () => setIsGuideOpen(false);
+    // Estado para controlar qual guia é mostrado
+    const [guideModal, setGuideModal] = useState(null); // pode ser 'degiro', 'ibkr' ou null
+    const handleOpenGuide = (broker) => setGuideModal(broker);
+    const handleCloseGuide = () => setGuideModal(null);
 
     const resetState = () => {
         setSelectedFile(null);
@@ -142,14 +142,20 @@ const UploadPage = () => {
             <Typography variant="body1" color="text.secondary" align="center" sx={{ mb: 1 }}>
                 Arraste e solte o seu ficheiro de transações abaixo para começar o processamento automático.
             </Typography>
+            {/* Links para os guias */}
             <Typography align="center" sx={{ mb: 4 }}>
-                <MuiLink component="button" variant="body2" onClick={handleOpenGuide}>
-                    Não sabe como obter o ficheiro da IBKR? Clique aqui para ver o guia.
+                Não sabes como obter o ficheiro? Segue o guia para a{' '}
+                <MuiLink component="button" variant="body2" onClick={() => handleOpenGuide('degiro')}>
+                    Degiro
                 </MuiLink>
+                {' '}ou para a{' '}
+                <MuiLink component="button" variant="body2" onClick={() => handleOpenGuide('ibkr')}>
+                    Interactive Brokers
+                </MuiLink>
+                .
             </Typography>
 
             <Paper elevation={0} sx={{ p: { xs: 2, sm: 3 }, border: '1px solid', borderColor: 'divider' }}>
-
                 {uploadStatus === 'idle' && (
                     <UploadDropzone
                         isDragActive={isDragActive}
@@ -200,12 +206,12 @@ const UploadPage = () => {
                 )}
             </Paper>
 
-            {/* Modal for the IBKR Guide */}
+            {/* Modal para os guias */}
             <Modal
-                open={isGuideOpen}
+                open={guideModal !== null}
                 onClose={handleCloseGuide}
-                aria-labelledby="ibkr-guide-title"
-                aria-describedby="ibkr-guide-description"
+                aria-labelledby="guide-modal-title"
+                aria-describedby="guide-modal-description"
             >
                 <Box sx={modalStyle}>
                     <IconButton
@@ -220,7 +226,8 @@ const UploadPage = () => {
                     >
                         <CloseIcon />
                     </IconButton>
-                    <IBKRGuidePage />
+                    {guideModal === 'degiro' && <DEGIROGuidePage />}
+                    {guideModal === 'ibkr' && <IBKRGuidePage />}
                 </Box>
             </Modal>
         </Box>
