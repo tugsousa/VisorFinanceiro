@@ -101,7 +101,7 @@ const IBKRGuidePage = () => {
             Abrirá uma nova janela para configurar a sua query. Siga estes pontos:
             <ul>
                 <li><strong>Query Name:</strong> Dê um nome à sua query para a poder identificar facilmente (ex: "RumoClaro").</li>
-                <li><strong>Sections:</strong> Clique para adicionar secções. Certifique-se de que seleciona, no mínimo: <strong>Cash Transactions</strong>, <strong>Open Positions</strong>, e <strong>Trades</strong>.</li>
+                <li><strong>Sections:</strong> Clique para adicionar secções: <strong>Cash Transactions</strong>, <strong>Open Positions</strong>, e <strong>Trades</strong>.</li>
                 <li><strong>Delivery Configuration:</strong> Configure para ter <strong>Models: All</strong> e <strong>Format: XML</strong>.</li>
                 <li><strong>General Configuration:</strong> Pode deixar os valores por defeito, como mostrado na imagem (ex: Date Format: yyyyMMdd).</li>
             </ul>
