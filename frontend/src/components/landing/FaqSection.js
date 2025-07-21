@@ -25,20 +25,20 @@ const FaqSection = () => {
       </Typography>
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
         <FaqItem
-          question="O Rumo Claro tem algum custo?"
-          answer="De momento, o Rumo Claro é totalmente gratuito. Estamos a focar-nos em construir a melhor ferramenta possível para a comunidade de investidores em Portugal."
+          question="O RumoClaro tem algum custo?"
+          answer="De momento, o RumoClaro é totalmente gratuito. Estamos focados em construir a melhor ferramenta possível para a comunidade de investidores em Portugal."
         />
         <FaqItem
           question="Que corretoras são suportadas?"
-          answer="Atualmente, suportamos os formatos de extrato de transações da DEGIRO (ficheiro .csv) e da Interactive Brokers (relatório Flex Query em .xml). Planeamos adicionar mais corretoras no futuro."
+          answer="De momento, suportamos a DEGIRO e a Interactive Brokers, mas queremos adicionar mais corretoras em breve."
         />
         <FaqItem
           question="A taxa de câmbio usada é a oficial da Autoridade Tributária?"
-          answer="Utilizamos as taxas de câmbio históricas diárias fornecidas pelo Banco Central Europeu (BCE). Embora sejam uma referência fiável, podem existir ligeiras diferenças em relação às taxas específicas usadas pela AT. A plataforma serve como um forte auxílio, mas a responsabilidade final da verificação dos valores é sua."
+          answer="Usamos as taxas de câmbio históricas diárias do Banco Central Europeu (BCE). Embora sejam uma referência fiável, podem haver pequenas diferenças em relação às taxas que a AT utiliza. A plataforma é um ótimo apoio, mas a responsabilidade final de verificar os valores é tua."
         />
          <FaqItem
           question="Os meus dados financeiros estão seguros?"
-          answer="Sim. A sua privacidade é a nossa prioridade. Todos os seus dados são armazenados de forma segura e nunca são partilhados. Além disso, você tem controlo total para eliminar todas as suas informações da plataforma a qualquer momento."
+          answer="Sim. A tua privacidade é a nossa prioridade. Todos os teus dados são guardados de forma segura e nunca são partilhados. Além disso, tens controlo total para eliminar todas as tuas informações da plataforma a qualquer momento."
         />
       </Box>
     </Container>

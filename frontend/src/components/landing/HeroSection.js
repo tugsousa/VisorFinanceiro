@@ -15,10 +15,10 @@ const HeroSection = () => {
             variant="h3"
             sx={{ fontWeight: 'bold', mb: 2 }}
           >
-            Simplifique os seus impostos e gira o seu portfólio com clareza.
+            Simplifica os teus impostos e gere o teu portfólio com clareza.
           </Typography>
           <Typography variant="h6" color="text.secondary" sx={{ mb: 4 }}>
-            O RumoClaro transforma os extratos complexos do teu Broker em relatórios visuais e dados prontos a usar na tua declaração de IRS. Poupe tempo, reduza erros e toma o controlo dos teus investimentos.
+            O RumoClaro transforma os extratos complexos do teu broker em relatórios visuais e dados prontos a utilizar na tua declaração de IRS. Poupa tempo, evita erros e assume o controlo dos teus investimentos.
           </Typography>
           <Button
             component={RouterLink}

@@ -51,25 +51,25 @@ const FeaturesSection = () => {
         <Feature
           icon={<ShowChartIcon fontSize="large" />}
           title="Dashboard de Desempenho"
-          text="Veja o seu lucro/prejuízo total, analise a contribuição de ações, opções e dividendos, e compreenda a alocação do seu portfólio."
+          text="Vê o teu lucro/prejuízo total, analisa a contribuição das ações, opções e dividendos, e percebe a alocação do teu portfólio."
           imageName="feature-dashboard.png" // TODO: Crie esta imagem
         />
         <Feature
           icon={<ReceiptLongIcon fontSize="large" />}
-          title="Preparação para o IRS (Anexo J)"
-          text="Geramos automaticamente as tabelas para o Anexo J, com os dados de mais-valias e dividendos, para facilitar o preenchimento da sua declaração."
+          title="Organiza o teu IRS"
+          text="Geramos automaticamente as tabelas que tens de preencher, com os dados de mais-valias, para facilitar o preenchimento da tua declaração."
           imageName="feature-taxpage.png" // TODO: Crie esta imagem
         />
         <Feature
           icon={<TableViewIcon fontSize="large" />}
           title="Análise Detalhada de Vendas"
-          text="Consulte cada venda com o cálculo FIFO (First-In, First-Out) aplicado automaticamente para determinar as mais e menos-valias."
+          text="Consulta cada venda com o cálculo FIFO (First-In, First-Out) aplicado automaticamente para determinar as mais e menos-valias."
           imageName="feature-sales.png" // TODO: Crie esta imagem
         />
         <Feature
           icon={<AttachMoneyIcon fontSize="large" />}
           title="Gestão de Dividendos"
-          text="Acompanhe todos os dividendos recebidos, organizados por ano e país, com a distinção entre o valor bruto e o imposto retido na fonte."
+          text="Acompanha todos os dividendos recebidos, organizados por ano e país, com a distinção entre o valor bruto e o imposto retido na fonte."
           imageName="feature-dividends.png" // TODO: Crie esta imagem
         />
       </Grid>

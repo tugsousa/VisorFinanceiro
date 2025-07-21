@@ -9,10 +9,10 @@ const FinalCTASection = () => {
     <Box sx={{ py: { xs: 4, md: 8 }, textAlign: 'center' }}>
       <Container maxWidth="md">
         <Typography variant="h4" component="h2" sx={{ fontWeight: 'bold', mb: 2 }}>
-          Pronto para ter um Rumo Claro nos seus investimentos?
+          Pronto para ter um RumoClaro nos teus investimentos?
         </Typography>
         <Typography variant="h6" color="text.secondary" sx={{ mb: 4 }}>
-          Crie a sua conta gratuita e junte-se a outros investidores que já simplificaram a sua vida financeira e fiscal.
+          Cria a tua conta gratuita e junta-te a outros investidores que já simplificaram a vida financeira e fiscal.
         </Typography>
         <Button
           component={RouterLink}

@@ -43,20 +43,20 @@ const HowItWorksSection = () => {
       <Grid container spacing={5}>
         <Step
           number="1"
-          title="Carregue o seu Ficheiro"
-          text="Exporte o seu extrato de transações da DEGIRO (.csv) ou Interactive Brokers (.xml) e carregue-o na nossa plataforma segura."
+          title="Carrega o teu ficheiro"
+          text="Exporta o extrato do teu broker (por exemplo, DEGIRO ou Interactive Brokers) e carrega-o na nossa plataforma segura."
           imageName="screenshot-upload-page.png" // TODO: Crie e adicione esta imagem
         />
         <Step
           number="2"
           title="Análise Automática"
-          text="O Rumo Claro processa instantaneamente as suas transações, aplicando as taxas de câmbio históricas corretas."
+          text="O RumoClaro processa instantaneamente as tuas transações, aplicando as taxas de câmbio históricas corretas."
           imageName="icon-processing.png" // TODO: Crie e adicione esta imagem/ícone
         />
         <Step
           number="3"
-          title="Visualize e Decida"
-          text="Explore os dashboards interativos para perceber o seu desempenho e prepare os dados para o seu IRS."
+          title="Visualiza e Decide"
+          text="Explora os dashboards interativos para perceberes o teu desempenho e preparares os dados para o teu IRS."
           imageName="screenshot-realizedgains-page.png" // TODO: Crie e adicione esta imagem
         />
       </Grid>

@@ -18,26 +18,26 @@ const TrustSection = () => {
     <Box sx={{ bgcolor: 'grey.100', py: { xs: 4, md: 8 } }}>
       <Container maxWidth="lg">
         <Typography variant="h4" component="h2" align="center" sx={{ fontWeight: 'bold', mb: 2 }}>
-          A Sua Privacidade é a Nossa Prioridade
+          A tua privacidade é a nossa prioridade
         </Typography>
         <Typography variant="h6" align="center" color="text.secondary" sx={{ mb: 6 }}>
-          Compreendemos a sensibilidade dos seus dados. No Rumo Claro, levamos a segurança muito a sério.
+          Sabemos que os teus dados são sensíveis. No RumoClaro, levamos a segurança muito a sério.
         </Typography>
         <Grid container spacing={4}>
           <TrustPoint
             icon={<DeleteForeverIcon fontSize="inherit" />}
             title="Controlo Total"
-            text="Você está no controlo. Pode eliminar todas as suas transações ou a sua conta inteira a qualquer momento, de forma permanente."
+            text="Estás no controlo. Podes eliminar todas as tuas transações ou mesmo a tua conta inteira a qualquer momento, de forma permanente."
           />
           <TrustPoint
             icon={<DoNotDisturbOnIcon fontSize="inherit" />}
             title="Sem Venda de Dados"
-            text="Nunca vendemos ou partilhamos os seus dados pessoais ou financeiros com terceiros para fins de marketing."
+            text="Nunca vendemos nem partilhamos os teus dados pessoais ou financeiros com terceiros para fins de marketing."
           />
           <TrustPoint
             icon={<LockIcon fontSize="inherit" />}
             title="Comunicação Segura"
-            text="Toda a comunicação entre o seu navegador e os nossos servidores é encriptada com HTTPS para proteger a sua informação."
+            text="Toda a comunicação entre o teu navegador e os nossos servidores é encriptada com HTTPS para proteger a tua informação."
           />
         </Grid>
       </Container>
