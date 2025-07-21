@@ -9,12 +9,6 @@ ChartJS.register(ArcElement, Tooltip, Legend, Title);
 const modernPalettes = {
   greenTones: [
     '#004d40', '#00796b', '#4DB6AC', '#2E7D32', '#66BB6A', '#AED581'
-  ],
-  coolTones: [
-    '#1C2833', '#2E4053', '#AAB7B8', '#D5DBDB', '#F4F6F6'
-  ],
-  vibrantAndMuted: [
-    '#056875', '#50C2E5', '#C9495E', '#D46600', '#1F3A93', '#27AE60', '#F1C40F'
   ]
 };
 

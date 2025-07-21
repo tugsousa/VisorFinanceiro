@@ -8,9 +8,9 @@ import { formatCurrency } from '../../utils/formatUtils';
 
 
 const COLORS = {
-  stocks: 'rgba(46, 125, 50, 0.85)',    // '#2E7D32' - Classic Green
-  options: 'rgba(0, 121, 107, 0.85)',    // '#00796b' - Rich Teal
-  dividends: 'rgba(141, 209, 144, 0.85)', // '#66BB6A' - Lighter Green
+  stocks: 'rgba(46, 125, 50, 0.9)',    // '#2E7D32' - Classic Green
+  options: 'rgba(0, 121, 107, 0.9)',    // '#00796b' - Rich Teal
+  dividends: 'rgba(141, 209, 144, 0.9)', // '#66BB6A' - Lighter Green
 };
 
 const BORDER_COLORS = {
