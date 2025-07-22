@@ -33,9 +33,9 @@ const Feature = ({ icon, title, text, imageName }) => (
       }}
     >
       <Typography color="text.secondary">
-        {/* TODO: Substitua por um screenshot da funcionalidade.
-            Exemplo: <img src={`/images/${imageName}`} alt={title} style={{ width: '100%', borderRadius: '8px' }} /> */}
-        {`Screenshot para: ${title}`}
+        {
+            <img src={`/images/${imageName}`} alt={title} style={{ width: '100%', borderRadius: '8px' }} />
+        }
       </Typography>
     </Box>
   </Grid>

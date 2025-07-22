@@ -203,7 +203,7 @@ export default function TaxPage() {
           }} 
           size="small"
         >
-          <InputLabel id="year-select-taxpage-label">Year</InputLabel>
+          <InputLabel id="year-select-taxpage-label">Ano</InputLabel>
           <Select
             labelId="year-select-taxpage-label"
             value={selectedYear}
