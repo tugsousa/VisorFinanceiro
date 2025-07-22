@@ -18,6 +18,7 @@ import TermsOfServicePage from './pages/TermsOfServicePage';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { CircularProgress, Box } from '@mui/material';
 
+
 const HomePage = () => {
     const { user, isInitialAuthLoading } = useAuth();
     if (isInitialAuthLoading) {

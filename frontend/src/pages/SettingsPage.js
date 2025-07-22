@@ -119,54 +119,62 @@ function SettingsPage() {
            <Alert severity="success" sx={{ mb: 2 }}>{changePasswordSuccess}</Alert>
         )}
         <Box component="form" onSubmit={handleSubmitChangePassword} noValidate>
-          <Grid container spacing={2}>
-            <Grid item xs={12}>
-              <TextField
-                required
-                fullWidth
-                name="currentPassword"
-                label="Senha atual"
-                type="password"
-                value={currentPassword}
-                onChange={(e) => setCurrentPassword(e.target.value)}
-                disabled={changePasswordMutation.isPending}
-                autoComplete="current-password"
-              />
-            </Grid>
-            <Grid item xs={12}>
-              <TextField
-                required
-                fullWidth
-                name="newPassword"
-                label="Nova Senha (min. 6 characters)"
-                type="password"
-                value={newPassword}
-                onChange={(e) => setNewPassword(e.target.value)}
-                disabled={changePasswordMutation.isPending}
-                autoComplete="new-password"
-              />
-            </Grid>
-            <Grid item xs={12}>
-              <TextField
-                required
-                fullWidth
-                name="confirmNewPassword"
-                label="Confirmação da nova senha"
-                type="password"
-                value={confirmNewPassword}
-                onChange={(e) => setConfirmNewPassword(e.target.value)}
-                disabled={changePasswordMutation.isPending}
-                autoComplete="new-password"
-              />
-            </Grid>
-          </Grid>
+          <Typography variant="subtitle2" sx={{ fontWeight: 500, mt: 2 }}>Senha atual</Typography>
+          <TextField
+            required
+            fullWidth
+            margin="dense"
+            name="currentPassword"
+            type="password"
+            value={currentPassword}
+            onChange={(e) => setCurrentPassword(e.target.value)}
+            disabled={changePasswordMutation.isPending}
+            autoComplete="current-password"
+          />
+
+          <Typography variant="subtitle2" sx={{ fontWeight: 500, mt: 2 }}>Nova Senha</Typography>
+          <TextField
+            required
+            fullWidth
+            margin="dense"
+            name="newPassword"
+           // helperText="A senha deve ter pelo menos 6 caracteres."
+            type="password"
+            value={newPassword}
+            onChange={(e) => setNewPassword(e.target.value)}
+            disabled={changePasswordMutation.isPending}
+            autoComplete="new-password"
+          />
+
+          <Typography variant="subtitle2" sx={{ fontWeight: 500, mt: 2 }}>Confirmação da nova senha</Typography>
+          <TextField
+            required
+            fullWidth
+            margin="dense"
+            name="confirmNewPassword"
+            type="password"
+            value={confirmNewPassword}
+            onChange={(e) => setConfirmNewPassword(e.target.value)}
+            disabled={changePasswordMutation.isPending}
+            autoComplete="new-password"
+          />
           <Button
             type="submit"
             variant="contained"
-            sx={{ mt: 3, mb: 2 }}
+            sx={{
+              mt: 3,
+              mb: 2,
+              textTransform: 'none',
+              backgroundColor: '#3699FF',
+              '&:hover': {
+                backgroundColor: '#2680d6',
+              },
+              py: 1.5,
+              px: 4
+            }}
             disabled={changePasswordMutation.isPending}
           >
-            {changePasswordMutation.isPending ? <CircularProgress size={24} color="inherit" /> : 'Mude a sua senha'}
+            {changePasswordMutation.isPending ? <CircularProgress size={24} color="inherit" /> : 'Alterar Senha'}
           </Button>
         </Box>
       </Box>
