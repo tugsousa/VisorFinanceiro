@@ -19,25 +19,6 @@ const Feature = ({ icon, title, text, imageName }) => (
         </Typography>
       </Box>
     </Box>
-    <Box
-      sx={{
-        height: 180,
-        bgcolor: 'grey.200',
-        borderRadius: 2,
-        mt: 2,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        border: '1px solid',
-        borderColor: 'grey.300'
-      }}
-    >
-      <Typography color="text.secondary">
-        {
-            <img src={`/images/${imageName}`} alt={title} style={{ width: '100%', borderRadius: '8px' }} />
-        }
-      </Typography>
-    </Box>
   </Grid>
 );
 
@@ -52,25 +33,25 @@ const FeaturesSection = () => {
           icon={<ShowChartIcon fontSize="large" />}
           title="Dashboard de Desempenho"
           text="Vê o teu lucro/prejuízo total, analisa a contribuição das ações, opções e dividendos, e percebe a alocação do teu portfólio."
-          imageName="feature-dashboard.png" // TODO: Crie esta imagem
+          //imageName="feature-dashboard.png" // TODO: Crie esta imagem
         />
         <Feature
           icon={<ReceiptLongIcon fontSize="large" />}
           title="Organiza o teu IRS"
           text="Geramos automaticamente as tabelas que tens de preencher, com os dados de mais-valias, para facilitar o preenchimento da tua declaração."
-          imageName="feature-taxpage.png" // TODO: Crie esta imagem
+          //imageName="feature-taxpage.png" // TODO: Crie esta imagem
         />
         <Feature
           icon={<TableViewIcon fontSize="large" />}
           title="Análise Detalhada de Vendas"
           text="Consulta cada venda com o cálculo FIFO (First-In, First-Out) aplicado automaticamente para determinar as mais e menos-valias."
-          imageName="feature-sales.png" // TODO: Crie esta imagem
+          //imageName="feature-sales.png" // TODO: Crie esta imagem
         />
         <Feature
           icon={<AttachMoneyIcon fontSize="large" />}
           title="Gestão de Dividendos"
           text="Acompanha todos os dividendos recebidos, organizados por ano e país, com a distinção entre o valor bruto e o imposto retido na fonte."
-          imageName="feature-dividends.png" // TODO: Crie esta imagem
+          //imageName="feature-dividends.png" // TODO: Crie esta imagem
         />
       </Grid>
     </Container>
