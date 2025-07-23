@@ -29,9 +29,19 @@ function SignInPage() {
     try {
       await login(email, password);
       setLocalSuccess(true);
-    } catch (err) {
-      const errorMessage = err.message || 'An unexpected error occurred during login.';
-      setLocalError(errorMessage);
+ } catch (err) {
+      // --- START MODIFICATION ---
+      // Check for our specific error code from the backend
+      if (err.response?.data?.code === 'EMAIL_NOT_VERIFIED') {
+        // Use the detailed message from the server, which confirms a new email was sent.
+        const errorMessage = err.response.data.error || 'O teu e-mail ainda não foi validado. Foi enviado um novo link.';
+        setLocalError(errorMessage);
+      } else {
+        // Fallback for all other login errors
+        const errorMessage = err.message || 'Ocorreu um erro inesperado durante o login.';
+        setLocalError(errorMessage);
+      }
+      // --- END MODIFICATION ---
       setLocalSuccess(false);
     }
   };

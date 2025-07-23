@@ -228,9 +228,39 @@ func (h *UserHandler) LoginUserHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if !user.IsEmailVerified {
-		// AND CORRECTED THIS LINE
-		logger.L.Warn("Login attempt failed: email not verified", "email", credentials.Email, "userID", user.ID)
-		sendJSONError(w, "Email not verified. Please check your email for the verification link.", http.StatusForbidden)
+		logger.L.Warn("Login attempt failed: email not verified. Resending verification.", "email", credentials.Email, "userID", user.ID)
+
+		// --- START: New Logic for Resending Verification Email ---
+		tokenBytes := make([]byte, 32)
+		if _, err := rand.Read(tokenBytes); err != nil {
+			logger.L.Error("Failed to generate new verification token on login attempt", "userID", user.ID, "error", err)
+			// Still send the user-facing error, but log the internal issue
+		} else {
+			verificationToken := hex.EncodeToString(tokenBytes)
+			tokenExpiry := time.Now().Add(config.Cfg.VerificationTokenExpiry)
+
+			// Update user in DB with the new token
+			if err := user.UpdateUserVerificationToken(database.DB, verificationToken, tokenExpiry); err != nil {
+				logger.L.Error("Failed to update verification token in DB on login attempt", "userID", user.ID, "error", err)
+			} else {
+				// Send the new verification email
+				err = h.emailService.SendVerificationEmail(user.Email, user.Username, verificationToken)
+				if err != nil {
+					logger.L.Error("Failed to resend verification email on login attempt", "userEmail", user.Email, "error", err)
+				} else {
+					logger.L.Info("Resent verification email successfully on login attempt", "userEmail", user.Email)
+				}
+			}
+		}
+		// --- END: New Logic ---
+
+		// Send a structured error response with a specific code
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusForbidden) // 403 is still appropriate
+		json.NewEncoder(w).Encode(map[string]string{
+			"error": "O teu e-mail ainda não foi verificado. Enviámos um novo link de verificação para o seu endereço de email.",
+			"code":  "EMAIL_NOT_VERIFIED", // This code is key for the frontend
+		})
 		return
 	}
 

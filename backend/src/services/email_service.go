@@ -4,12 +4,14 @@ package services
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
 	"fmt"
-	htmltemplate "html/template"
+	htmltemplate "html/template" // Corrected alias syntax
 	"log/slog"
+	"math/big"
 	"net/smtp"
 	"strings"
-	texttemplate "text/template"
+	texttemplate "text/template" // Corrected alias syntax
 	"time"
 
 	"github.com/mailgun/mailgun-go/v4"
@@ -106,27 +108,51 @@ type SMTPEmailService struct {
 	PasswordResetBaseURL     string
 }
 
-// The `send` method for SMTP is now internal to the SMTPEmailService
-func (s *SMTPEmailService) send(toEmail, subject, body string) error {
+// send method for SMTP now handles multipart (HTML + Text) emails.
+func (s *SMTPEmailService) send(toEmail, subject, textBody, htmlBody string) error {
 	from := s.SenderEmail
 	to := []string{toEmail}
 
+	// Generate a unique boundary
+	n, _ := rand.Int(rand.Reader, big.NewInt(1000000000))
+	boundary := "rumoclaro-boundary-" + n.String()
+
+	// Construct the headers
 	header := make(map[string]string)
 	header["From"] = from
 	header["To"] = toEmail
 	header["Subject"] = subject
-	header["MIME-version"] = "1.0"
-	header["Content-Type"] = "text/plain; charset=\"UTF-8\""
+	header["MIME-Version"] = "1.0"
+	header["Content-Type"] = fmt.Sprintf("multipart/alternative; boundary=%s", boundary)
 
-	var message string
+	var msg bytes.Buffer
 	for k, v := range header {
-		message += fmt.Sprintf("%s: %s\r\n", k, v)
+		msg.WriteString(fmt.Sprintf("%s: %s\r\n", k, v))
 	}
-	message += "\r\n" + body
+	msg.WriteString("\r\n")
 
+	// Plain text part
+	msg.WriteString(fmt.Sprintf("--%s\r\n", boundary))
+	msg.WriteString("Content-Type: text/plain; charset=\"UTF-8\"\r\n")
+	msg.WriteString("\r\n")
+	msg.WriteString(textBody)
+	msg.WriteString("\r\n")
+
+	// HTML part
+	msg.WriteString(fmt.Sprintf("--%s\r\n", boundary))
+	msg.WriteString("Content-Type: text/html; charset=\"UTF-8\"\r\n")
+	msg.WriteString("\r\n")
+	msg.WriteString(htmlBody)
+	msg.WriteString("\r\n")
+
+	// Closing boundary
+	msg.WriteString(fmt.Sprintf("--%s--\r\n", boundary))
+
+	// Send the email
 	auth := smtp.PlainAuth("", s.SMTPUser, s.SMTPPassword, s.SMTPServer)
 	addr := fmt.Sprintf("%s:%d", s.SMTPServer, s.SMTPPort)
-	err := smtp.SendMail(addr, auth, from, to, []byte(message))
+	err := smtp.SendMail(addr, auth, from, to, msg.Bytes())
+
 	if err != nil {
 		logger.L.Error("Failed to send email via SMTP", "error", err, "to", toEmail)
 		return fmt.Errorf("failed to send email via SMTP: %w", err)
@@ -139,17 +165,12 @@ func (s *SMTPEmailService) SendVerificationEmail(toEmail, username, token string
 	verificationLink := fmt.Sprintf("%s?token=%s", s.VerificationEmailBaseURL, token)
 	data := EmailData{Username: username, Link: verificationLink}
 
-	tmpl, err := texttemplate.New("verificationText").Parse(template.TextBody)
+	textBody, htmlBody, err := parseTemplates(template, data)
 	if err != nil {
-		return fmt.Errorf("failed to parse verification text template: %w", err)
+		return err
 	}
 
-	var body bytes.Buffer
-	if err := tmpl.Execute(&body, data); err != nil {
-		return fmt.Errorf("failed to execute verification text template: %w", err)
-	}
-
-	if err := s.send(toEmail, template.Subject, body.String()); err != nil {
+	if err := s.send(toEmail, template.Subject, textBody, htmlBody); err != nil {
 		return err
 	}
 
@@ -166,17 +187,12 @@ func (s *SMTPEmailService) SendPasswordResetEmail(toEmail, username, token strin
 		Expiry:   config.Cfg.PasswordResetTokenExpiry.String(),
 	}
 
-	tmpl, err := texttemplate.New("passwordResetText").Parse(template.TextBody)
+	textBody, htmlBody, err := parseTemplates(template, data)
 	if err != nil {
-		return fmt.Errorf("failed to parse password reset text template: %w", err)
+		return err
 	}
 
-	var body bytes.Buffer
-	if err := tmpl.Execute(&body, data); err != nil {
-		return fmt.Errorf("failed to execute password reset text template: %w", err)
-	}
-
-	if err := s.send(toEmail, template.Subject, body.String()); err != nil {
+	if err := s.send(toEmail, template.Subject, textBody, htmlBody); err != nil {
 		return err
 	}
 	logger.L.Info("Password reset email sent successfully via SMTP", "to", toEmail)
