@@ -12,7 +12,7 @@ function SignUpPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  
+  const [pageWarning, setPageWarning] = useState('');
   const [pageError, setPageError] = useState('');
   const [pageSuccessMessage, setPageSuccessMessage] = useState('');
   const { register, isAuthActionLoading } = useContext(AuthContext);
@@ -22,6 +22,7 @@ function SignUpPage() {
     e.preventDefault();
     setPageSuccessMessage('');
     setPageError('');
+     setPageWarning('');
     successShownRef.current = false;
 
     let clientValidationError = '';
