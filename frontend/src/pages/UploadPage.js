@@ -3,12 +3,12 @@ import React, { useState, useCallback, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { apiUploadFile } from '../api/apiService';
 import { MAX_FILE_SIZE_BYTES, MAX_FILE_SIZE_MB } from '../constants';
-import { Typography, Box, Button, LinearProgress, Paper, Alert, Modal, IconButton, Link as MuiLink } from '@mui/material';
+import { Typography, Box, Button, LinearProgress, Paper, Alert, Modal, IconButton, Link as MuiLink, CircularProgress } from '@mui/material';
 import { styled } from '@mui/material/styles';
 import { useQueryClient } from '@tanstack/react-query';
 import { UploadFile as UploadFileIcon, CheckCircleOutline as CheckCircleIcon, ErrorOutline as ErrorIcon, Close as CloseIcon } from '@mui/icons-material';
 import IBKRGuidePage from './IBKRGuidePage';
-import DEGIROGuidePage from './DEGIROGuidePage'; // Importar o novo guia
+import DEGIROGuidePage from './DEGIROGuidePage';
 
 const UploadDropzone = styled(Box)(({ theme, isDragActive }) => ({
     display: 'flex',
@@ -41,19 +41,48 @@ const modalStyle = {
   overflowY: 'auto'
 };
 
+// A helper function to wrap the API call with a single retry attempt.
+const uploadWithRetry = async (formData, onUploadProgress) => {
+    const MAX_ATTEMPTS = 2;
+    let lastError = null;
+
+    for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+        try {
+            console.log(`Upload attempt ${attempt}...`);
+            const response = await apiUploadFile(formData, onUploadProgress);
+            return response; // Success, return the response
+        } catch (err) {
+            lastError = err;
+            console.error(`Upload attempt ${attempt} failed:`, err);
+            
+            // Do not retry for client-side errors (e.g., 400 Bad Request, 403 Forbidden)
+            if (err.response && err.response.status < 500) {
+                throw lastError;
+            }
+
+            // If it's the last attempt, throw the error. Otherwise, wait before retrying.
+            if (attempt < MAX_ATTEMPTS) {
+                console.log("Waiting 1 second before retrying...");
+                await new Promise(resolve => setTimeout(resolve, 1000));
+            }
+        }
+    }
+    // If all attempts fail, throw the last recorded error.
+    throw lastError;
+};
+
 const UploadPage = () => {
     const { token, refreshUserDataCheck } = useAuth();
     const queryClient = useQueryClient();
 
     const [selectedFile, setSelectedFile] = useState(null);
     const [uploadProgress, setUploadProgress] = useState(0);
-    const [uploadStatus, setUploadStatus] = useState('idle');
+    const [uploadStatus, setUploadStatus] = useState('idle'); // 'idle', 'uploading', 'processing', 'success', 'error'
     const [fileError, setFileError] = useState(null);
     const [isDragActive, setIsDragActive] = useState(false);
     const fileInputRef = useRef(null);
     
-    // Estado para controlar qual guia é mostrado
-    const [guideModal, setGuideModal] = useState(null); // pode ser 'degiro', 'ibkr' ou null
+    const [guideModal, setGuideModal] = useState(null);
     const handleOpenGuide = (broker) => setGuideModal(broker);
     const handleCloseGuide = () => setGuideModal(null);
 
@@ -98,15 +127,20 @@ const UploadPage = () => {
             setUploadStatus('uploading');
             setFileError(null);
 
-            await apiUploadFile(formData, (progressEvent) => {
+            await uploadWithRetry(formData, (progressEvent) => {
                 if (progressEvent.total) {
                     const progress = Math.round((progressEvent.loaded * 100) / progressEvent.total);
                     setUploadProgress(progress);
+                    // When file transfer is complete, switch to processing state
+                    if (progress === 100) {
+                        setUploadStatus('processing');
+                    }
                 }
             });
 
+            // This part is only reached after the server responds successfully
             setUploadStatus('success');
-            await queryClient.invalidateQueries();
+            await queryClient.invalidateQueries(); // Invalidate all queries to refetch data
             await refreshUserDataCheck();
 
         } catch (err) {
@@ -142,7 +176,6 @@ const UploadPage = () => {
             <Typography variant="body1" color="text.secondary" align="center" sx={{ mb: 1 }}>
                 Arraste e solte o seu ficheiro de transações abaixo para começar o processamento automático.
             </Typography>
-            {/* Links para os guias */}
             <Typography align="center" sx={{ mb: 4 }}>
                 Não sabes como obter o ficheiro? Segue o guia para a{' '}
                 <MuiLink component="button" variant="body2" onClick={() => handleOpenGuide('degiro')}>
@@ -181,9 +214,17 @@ const UploadPage = () => {
                 
                 {uploadStatus === 'uploading' && (
                     <Box sx={{ textAlign: 'center' }}>
-                        <Typography variant="h6" sx={{ mb: 2 }}>A carregar {selectedFile?.name}...</Typography>
+                        <Typography variant="h6" sx={{ mb: 2 }}>A enviar {selectedFile?.name}...</Typography>
                         <LinearProgress variant="determinate" value={uploadProgress} sx={{ height: 10, borderRadius: 5 }} />
                         <Typography variant="body1" sx={{ mt: 1 }}>{uploadProgress}%</Typography>
+                    </Box>
+                )}
+
+                {uploadStatus === 'processing' && (
+                    <Box sx={{ textAlign: 'center' }}>
+                        <Typography variant="h6" sx={{ mb: 2 }}>A processar as transações...</Typography>
+                        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>Isto pode demorar um momento, especialmente em ficheiros grandes.</Typography>
+                        <CircularProgress />
                     </Box>
                 )}
 
@@ -206,7 +247,6 @@ const UploadPage = () => {
                 )}
             </Paper>
 
-            {/* Modal para os guias */}
             <Modal
                 open={guideModal !== null}
                 onClose={handleCloseGuide}
