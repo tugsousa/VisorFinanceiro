@@ -3,117 +3,113 @@ package processors
 import (
 	"encoding/json"
 	"fmt"
-	"os"
-	"sort" // Import the sort package
-	"strconv"
+	"net/http"
 	"time"
 
+	"github.com/patrickmn/go-cache" // Import the cache library
 	"github.com/username/taxfolio/backend/src/logger"
 	"github.com/username/taxfolio/backend/src/models"
 )
 
-var historicalRates models.ExchangeRate
-var ratesLoaded bool = false
+// Initialize a new cache for exchange rates.
+var rateCache = cache.New(24*time.Hour, 48*time.Hour)
 
-// LoadHistoricalRates loads rates from the specified file path.
+// LoadHistoricalRates is now obsolete and can be removed or left empty.
 func LoadHistoricalRates(filePath string) error {
-	logger.L.Info("Loading historical exchange rates", "path", filePath)
-	file, err := os.ReadFile(filePath)
-	if err != nil {
-		logger.L.Error("Error reading historical exchange rate file", "path", filePath, "error", err)
-		return fmt.Errorf("error reading historical exchange rate file '%s': %w", filePath, err)
-	}
-
-	err = json.Unmarshal(file, &historicalRates)
-	if err != nil {
-		logger.L.Error("Error unmarshalling historical exchange rates", "path", filePath, "error", err)
-		return fmt.Errorf("error unmarshalling historical exchange rates from '%s': %w", filePath, err)
-	}
-
-	// Sort the observations: Primary by Currency, Secondary by Date (ascending)
-	sort.SliceStable(historicalRates.Root.Obs, func(i, j int) bool {
-		if historicalRates.Root.Obs[i].Ccy != historicalRates.Root.Obs[j].Ccy {
-			return historicalRates.Root.Obs[i].Ccy < historicalRates.Root.Obs[j].Ccy
-		}
-		// Assuming _TIME_PERIOD is "YYYY-MM-DD" format for correct string comparison
-		// For more robust date sorting, parse to time.Time, but string sort works for YYYY-MM-DD
-		return historicalRates.Root.Obs[i].TimePeriod < historicalRates.Root.Obs[j].TimePeriod
-	})
-
-	ratesLoaded = true
-	logger.L.Info("Historical exchange rates loaded and sorted successfully.", "path", filePath, "observationCount", len(historicalRates.Root.Obs))
+	logger.L.Info("Historical rates are now fetched via API; local file is not used.")
 	return nil
 }
 
-// GetExchangeRate retrieves the exchange rate for a given currency and date.
-// If an exact date match is not found, it uses the most recent rate on or before the requested date.
+// GetExchangeRate retrieves the exchange rate for a given currency and date from the ECB API.
+// It uses a cache to store results and has a fallback to find the last available rate.
 func GetExchangeRate(currency string, date time.Time) (float64, error) {
-	if !ratesLoaded {
-		logger.L.Error("Attempted to GetExchangeRate before rates were loaded.")
-		return 0, fmt.Errorf("historical exchange rates not loaded")
-	}
-
 	if currency == "EUR" {
 		return 1.0, nil
 	}
 
-	targetDateStr := date.Format("2006-01-02") // For logging and comparison if needed
-	var bestMatchRateStr string
-	var bestMatchDate time.Time // Keep track of the date of the best rate found
+	// 1. Check Cache First
+	cacheKey := fmt.Sprintf("rate-%s-%s", currency, date.Format("2006-01-02"))
+	if rate, found := rateCache.Get(cacheKey); found {
+		logger.L.Debug("Exchange rate cache hit", "key", cacheKey)
+		return rate.(float64), nil
+	}
+	logger.L.Debug("Exchange rate cache miss", "key", cacheKey)
 
-	for _, rateObs := range historicalRates.Root.Obs {
-		// Since the list is sorted by Ccy, we can optimize by skipping irrelevant currencies
-		if rateObs.Ccy < currency {
+	// 2. Fallback Loop: If no rate for today, check yesterday, etc. (up to 7 days)
+	for i := 0; i < 7; i++ {
+		queryDate := date.AddDate(0, 0, -i)
+		dateStr := queryDate.Format("2006-01-02")
+
+		// Construct the API URL
+		// Key structure is D.{CURRENCY}.EUR.SP00.A for daily rates vs Euro
+		seriesKey := fmt.Sprintf("D.%s.EUR.SP00.A", currency)
+		url := fmt.Sprintf(
+			"https://data-api.ecb.europa.eu/service/data/EXR/%s?startPeriod=%s&endPeriod=%s&format=jsondata",
+			seriesKey,
+			dateStr,
+			dateStr,
+		)
+
+		// Make the HTTP request
+		resp, err := http.Get(url)
+		if err != nil {
+			logger.L.Warn("Failed to make ECB API request", "url", url, "error", err)
+			continue // Try the previous day
+		}
+		defer resp.Body.Close()
+
+		// If we get a 404, it means no data for this day (weekend/holiday), so we continue to the previous day.
+		if resp.StatusCode == http.StatusNotFound {
+			logger.L.Debug("No exchange rate found for date, trying previous day", "currency", currency, "date", dateStr)
 			continue
 		}
-		if rateObs.Ccy > currency {
-			break // We've passed all rates for the target currency
+
+		if resp.StatusCode != http.StatusOK {
+			logger.L.Warn("ECB API returned non-OK status", "status", resp.Status, "url", url)
+			continue // Try the previous day
 		}
 
-		// Now, rateObs.Ccy == currency
-		obsDate, err := time.Parse("2006-01-02", rateObs.TimePeriod) // Assuming _TIME_PERIOD is "YYYY-MM-DD"
+		// Decode the JSON response
+		var ecbData models.ECBResponse
+		if err := json.NewDecoder(resp.Body).Decode(&ecbData); err != nil {
+			logger.L.Warn("Failed to decode ECB API response", "url", url, "error", err)
+			continue // Try the previous day
+		}
+
+		// Extract the rate
+		rate, err := extractRateFromResponse(ecbData)
 		if err != nil {
-			logger.L.Warn("Invalid date format in historical rate data, skipping observation.",
-				"currency", currency, "obsDateStr", rateObs.TimePeriod, "error", err)
-			continue
+			logger.L.Warn("Could not extract rate from ECB response", "date", dateStr, "error", err)
+			continue // Try the previous day
 		}
 
-		// We are looking for a rate on or before the target date.
-		// If obsDate > date, it's too late. Since rates are sorted by date ascending for this currency,
-		// all subsequent rates will also be too late.
-		if obsDate.After(date) {
-			break
-		}
-
-		// obsDate is <= date. This is a candidate.
-		// Since the data is sorted by date, the current obsDate is the latest one encountered so far
-		// that is less than or equal to the target date.
-		bestMatchRateStr = rateObs.ObsValue
-		bestMatchDate = obsDate // Update the date of the rate we found
+		// 3. Success: Store in cache and return
+		logger.L.Info("Successfully fetched exchange rate from ECB API", "currency", currency, "requestedDate", date.Format("2006-01-02"), "foundDate", dateStr, "rate", rate)
+		rateCache.Set(cacheKey, rate, cache.DefaultExpiration)
+		return rate, nil
 	}
 
-	if bestMatchRateStr != "" {
-		exchangeRate, err := strconv.ParseFloat(bestMatchRateStr, 64)
-		if err != nil {
-			logger.L.Error("Invalid exchange rate value string in data",
-				"currency", currency, "foundDate", bestMatchDate.Format("2006-01-02"),
-				"value", bestMatchRateStr, "error", err)
-			return 0, fmt.Errorf("invalid exchange rate value '%s' for %s on/before %s (found for %s): %w",
-				bestMatchRateStr, currency, targetDateStr, bestMatchDate.Format("2006-01-02"), err)
-		}
-		logMsg := "Exchange rate found"
-		if bestMatchDate.Format("2006-01-02") == targetDateStr {
-			logMsg += " (exact match)"
-		} else {
-			logMsg += " (last available prior date)"
-		}
-		logger.L.Debug(logMsg,
-			"currency", currency, "requestedDate", targetDateStr,
-			"foundRateDate", bestMatchDate.Format("2006-01-02"), "rate", exchangeRate)
-		return exchangeRate, nil
-	}
-
-	logger.L.Warn("Exchange rate not found on or before the specified date",
-		"currency", currency, "date", targetDateStr)
-	return 0, fmt.Errorf("exchange rate not found for %s on or before %s", currency, targetDateStr)
+	// 4. Failure after all fallbacks
+	return 0, fmt.Errorf("exchange rate not found for %s on or before %s", currency, date.Format("2006-01-02"))
 }
+
+// extractRateFromResponse safely navigates the complex ECB JSON structure to find the rate.
+func extractRateFromResponse(data models.ECBResponse) (float64, error) {
+	if len(data.DataSets) == 0 {
+		return 0, fmt.Errorf("no dataSets in response")
+	}
+
+	seriesMap := data.DataSets[0].Series
+	// The series key is "0:0:0:0:0". We iterate to be safe.
+	for _, seriesData := range seriesMap {
+		if observations, ok := seriesData.Observations["0"]; ok {
+			if len(observations) > 0 {
+				return observations[0], nil
+			}
+		}
+	}
+
+	return 0, fmt.Errorf("observation value not found in the expected structure")
+}
+
+// Note: The old GetExchangeRate logic and the historicalRates variable can be deleted.

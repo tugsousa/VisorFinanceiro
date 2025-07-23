@@ -15,7 +15,6 @@ type AppConfig struct {
 	DatabasePath       string
 	LogLevel           string
 	CSRFAuthKey        []byte
-	HistoricalDataPath string
 	CountryDataPath    string
 	AccessTokenExpiry  time.Duration
 	RefreshTokenExpiry time.Duration
@@ -108,7 +107,6 @@ func LoadConfig() {
 		DatabasePath:       getEnv("DATABASE_PATH", "./rumoclaro.db"),
 		LogLevel:           getEnv("LOG_LEVEL", "info"),
 		CSRFAuthKey:        []byte(csrfAuthKeyStr),
-		HistoricalDataPath: getEnv("HISTORICAL_DATA_PATH", "data/historicalExchangeRate.json"),
 		CountryDataPath:    getEnv("COUNTRY_DATA_PATH", "data/country.json"),
 		AccessTokenExpiry:  accessTokenExpiry,
 		RefreshTokenExpiry: refreshTokenExpiry,

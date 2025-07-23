@@ -84,9 +84,6 @@ func main() {
 	}
 
 	logger.L.Info("Initializing data loaders...")
-	if err := processors.LoadHistoricalRates(config.Cfg.HistoricalDataPath); err != nil {
-		logger.L.Error("Failed to load historical rates", "error", err)
-	}
 	if err := utils.InitCountryData(config.Cfg.CountryDataPath); err != nil {
 		logger.L.Error("Failed to load country data", "error", err)
 	}
