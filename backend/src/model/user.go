@@ -282,6 +282,24 @@ func (u *User) UpdateUserVerificationStatus(db *sql.DB, isVerified bool) error {
 	_, err = stmt.Exec(u.IsEmailVerified, u.UpdatedAt, u.ID)
 	return err
 }
+func (u *User) UpdateVerificationToken(db *sql.DB, token string, expiresAt time.Time) error {
+	u.EmailVerificationToken = token
+	u.EmailVerificationTokenExpiresAt = expiresAt
+	u.UpdatedAt = time.Now()
+
+	query := `
+	UPDATE users
+	SET email_verification_token = ?, email_verification_token_expires_at = ?, updated_at = ?
+	WHERE id = ?`
+	stmt, err := db.Prepare(query)
+	if err != nil {
+		return err
+	}
+	defer stmt.Close()
+
+	_, err = stmt.Exec(u.EmailVerificationToken, u.EmailVerificationTokenExpiresAt, u.UpdatedAt, u.ID)
+	return err
+}
 
 func (u *User) SetPasswordResetToken(db *sql.DB, token string, expiresAt time.Time) error {
 	u.PasswordResetToken = token

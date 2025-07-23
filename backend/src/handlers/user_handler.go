@@ -50,6 +50,7 @@ func sendJSONError(w http.ResponseWriter, message string, statusCode int) {
 	json.NewEncoder(w).Encode(map[string]string{"error": message})
 }
 
+// Replace the entire RegisterUserHandler function with this updated version.
 func (h *UserHandler) RegisterUserHandler(w http.ResponseWriter, r *http.Request) {
 	var credentials struct {
 		Username string `json:"username"`
@@ -66,10 +67,7 @@ func (h *UserHandler) RegisterUserHandler(w http.ResponseWriter, r *http.Request
 	credentials.Email = strings.ToLower(strings.TrimSpace(credentials.Email))
 	credentials.Password = strings.TrimSpace(credentials.Password)
 
-	if credentials.Username == "" && strings.Contains(credentials.Email, "@") {
-		credentials.Username = strings.Split(credentials.Email, "@")[0]
-	}
-
+	// **MODIFICATION**: Check for username as well now.
 	if credentials.Username == "" || credentials.Email == "" || credentials.Password == "" {
 		sendJSONError(w, "Username, email, and password are required", http.StatusBadRequest)
 		return
@@ -83,6 +81,7 @@ func (h *UserHandler) RegisterUserHandler(w http.ResponseWriter, r *http.Request
 		return
 	}
 
+	// Check for existing username
 	_, err := model.GetUserByUsername(database.DB, credentials.Username)
 	if err == nil {
 		sendJSONError(w, "Username already exists", http.StatusConflict)
@@ -93,16 +92,60 @@ func (h *UserHandler) RegisterUserHandler(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	_, err = model.GetUserByEmail(database.DB, credentials.Email)
+	// Check for existing email
+	existingUser, err := model.GetUserByEmail(database.DB, credentials.Email)
 	if err == nil {
-		sendJSONError(w, "Email address already in use", http.StatusConflict)
+		// **NEW LOGIC STARTS HERE**
+		// User with this email exists. Check if they are verified.
+		if existingUser.IsEmailVerified {
+			// If verified, it's a conflict.
+			sendJSONError(w, "Email address already in use", http.StatusConflict)
+			return
+		}
+
+		// If NOT verified, resend the verification email.
+		logger.L.Info("User exists but is not verified, resending verification email", "email", credentials.Email)
+		tokenBytes := make([]byte, 32)
+		if _, err := rand.Read(tokenBytes); err != nil {
+			logger.L.Error("Failed to generate new verification token bytes for existing user", "error", err)
+			sendJSONError(w, "Failed to process registration", http.StatusInternalServerError)
+			return
+		}
+		verificationToken := hex.EncodeToString(tokenBytes)
+		tokenExpiry := time.Now().Add(config.Cfg.VerificationTokenExpiry)
+
+		// Update the user in the database with the new token
+		if err := existingUser.UpdateVerificationToken(database.DB, verificationToken, tokenExpiry); err != nil {
+			logger.L.Error("Failed to update verification token for existing user", "userID", existingUser.ID, "error", err)
+			sendJSONError(w, "Failed to resend verification email", http.StatusInternalServerError)
+			return
+		}
+
+		// Send the new verification email
+		err = h.emailService.SendVerificationEmail(existingUser.Email, existingUser.Username, verificationToken)
+		if err != nil {
+			logger.L.Error("Failed to resend verification email", "userEmail", existingUser.Email, "error", err)
+			// Still inform the user, but with a warning.
+			sendJSONError(w, "Failed to send new verification email. Please try again later or contact support.", http.StatusInternalServerError)
+			return
+		}
+
+		// Respond with a success message indicating a resend.
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK) // Use 200 OK, not 201 Created
+		json.NewEncoder(w).Encode(map[string]string{
+			"message": "This email is already registered but not verified. We've sent a new verification link to your email address.",
+		})
 		return
+		// **NEW LOGIC ENDS HERE**
+
 	} else if !errors.Is(err, sql.ErrNoRows) && !strings.Contains(strings.ToLower(err.Error()), "user with this email not found") {
 		logger.L.Error("Error checking email uniqueness", "email", credentials.Email, "error", err)
 		sendJSONError(w, "Failed to process registration", http.StatusInternalServerError)
 		return
 	}
 
+	// This is the original path for a completely new user.
 	hashedPassword, err := h.authService.HashPassword(credentials.Password)
 	if err != nil {
 		logger.L.Error("Failed to hash password", "error", err)
@@ -119,7 +162,7 @@ func (h *UserHandler) RegisterUserHandler(w http.ResponseWriter, r *http.Request
 	verificationToken := hex.EncodeToString(tokenBytes)
 	tokenExpiry := time.Now().Add(config.Cfg.VerificationTokenExpiry)
 
-	user := &model.User{
+	newUser := &model.User{
 		Username:                        credentials.Username,
 		Email:                           credentials.Email,
 		Password:                        hashedPassword,
@@ -128,15 +171,15 @@ func (h *UserHandler) RegisterUserHandler(w http.ResponseWriter, r *http.Request
 		EmailVerificationTokenExpiresAt: tokenExpiry,
 	}
 
-	if err := user.CreateUser(database.DB); err != nil {
-		logger.L.Error("Failed to create user in DB", "username", user.Username, "email", user.Email, "error", err)
+	if err := newUser.CreateUser(database.DB); err != nil {
+		logger.L.Error("Failed to create user in DB", "username", newUser.Username, "email", newUser.Email, "error", err)
 		sendJSONError(w, "Failed to create user", http.StatusInternalServerError)
 		return
 	}
 
-	err = h.emailService.SendVerificationEmail(user.Email, user.Username, verificationToken)
+	err = h.emailService.SendVerificationEmail(newUser.Email, newUser.Username, verificationToken)
 	if err != nil {
-		logger.L.Error("Failed to send verification email after user creation", "userEmail", user.Email, "error", err)
+		logger.L.Error("Failed to send verification email after user creation", "userEmail", newUser.Email, "error", err)
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusCreated)
 		json.NewEncoder(w).Encode(map[string]string{
