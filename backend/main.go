@@ -2,6 +2,7 @@
 package main
 
 import (
+	"crypto/tls" // <-- ADDED THIS IMPORT
 	"encoding/json"
 	stdlog "log"
 	"net/http"
@@ -22,7 +23,21 @@ import (
 	"golang.org/x/time/rate"
 )
 
-// ... (rateLimitMiddleware and enableCORS functions remain the same) ...
+// proxyHeadersMiddleware inspects proxy headers to determine if the original
+// request was HTTPS, and updates the request object accordingly. This is crucial
+// for security features (like Secure cookies) to work correctly behind a reverse proxy.
+func proxyHeadersMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Check for the header Caddy (and other proxies) set.
+		if r.Header.Get("X-Forwarded-Proto") == "https" {
+			r.URL.Scheme = "https"
+			// Setting a dummy TLS state tricks handlers into thinking it's a secure connection.
+			r.TLS = &tls.ConnectionState{}
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
 var limiter = rate.NewLimiter(rate.Every(100*time.Millisecond), 30) // Example: 10 requests per second, burst 30
 
 func rateLimitMiddleware(next http.Handler) http.Handler {
@@ -73,7 +88,6 @@ func main() {
 	logger.InitLogger(config.Cfg.LogLevel)
 	logger.L.Info("RumoClaro backend server starting...")
 
-	// ... (Config checks, Data loaders, DB init remain the same) ...
 	if config.Cfg.JWTSecret == "" || len(config.Cfg.JWTSecret) < 32 {
 		logger.L.Error("JWT_SECRET configuration invalid. Must be at least 32 bytes.")
 		os.Exit(1)
@@ -101,17 +115,12 @@ func main() {
 	emailService := services.NewEmailService()
 	userHandler := handlers.NewUserHandler(authService, emailService)
 
-	// --- UPDATED INSTANTIATIONS ---
-	// The new generic processor from the `processors` package
 	transactionProcessor := processors.NewTransactionProcessor()
-
-	// The other processors remain the same
 	dividendProcessor := processors.NewDividendProcessor()
 	stockProcessor := processors.NewStockProcessor()
 	optionProcessor := processors.NewOptionProcessor()
 	cashMovementProcessor := processors.NewCashMovementProcessor()
 
-	// Inject the new transactionProcessor into the service
 	uploadService := services.NewUploadService(
 		transactionProcessor,
 		dividendProcessor,
@@ -120,41 +129,34 @@ func main() {
 		cashMovementProcessor,
 		reportCache,
 	)
-	// --- END OF UPDATED INSTANTIATIONS ---
 
 	uploadHandler := handlers.NewUploadHandler(uploadService)
 	portfolioHandler := handlers.NewPortfolioHandler(uploadService)
 	dividendHandler := handlers.NewDividendHandler(uploadService)
 	txHandler := handlers.NewTransactionHandler(uploadService)
 
-	// ... (Routing and server start logic remains the same) ...
 	logger.L.Info("Configuring routes...")
-	rootMux := http.NewServeMux()   // Main muxer for the application
-	apiRouter := http.NewServeMux() // Muxer for /api prefixed routes
+	rootMux := http.NewServeMux()
+	apiRouter := http.NewServeMux()
 
-	// Public GET routes (no CSRF needed for these GETs as token is usually in query or no sensitive action)
 	apiRouter.HandleFunc("GET /api/auth/csrf", handlers.GetCSRFToken)
-	apiRouter.HandleFunc("GET /api/auth/verify-email", userHandler.VerifyEmailHandler) // Token in query param
+	apiRouter.HandleFunc("GET /api/auth/verify-email", userHandler.VerifyEmailHandler)
 
-	// Auth actions router - POST routes generally need CSRF
 	authActionRouter := http.NewServeMux()
 	authActionRouter.HandleFunc("POST /login", userHandler.LoginUserHandler)
 	authActionRouter.HandleFunc("POST /register", userHandler.RegisterUserHandler)
-	authActionRouter.HandleFunc("POST /refresh", userHandler.RefreshTokenHandler)                          // Refresh might not need CSRF if token is in body and short-lived
-	authActionRouter.HandleFunc("POST /logout", userHandler.AuthMiddleware(userHandler.LogoutUserHandler)) // Logout should be CSRF protected
+	authActionRouter.HandleFunc("POST /refresh", userHandler.RefreshTokenHandler)
+	authActionRouter.HandleFunc("POST /logout", userHandler.AuthMiddleware(userHandler.LogoutUserHandler))
 	authActionRouter.HandleFunc("POST /request-password-reset", userHandler.RequestPasswordResetHandler)
 	authActionRouter.HandleFunc("POST /reset-password", userHandler.ResetPasswordHandler)
 
-	// Apply CSRF to the entire authActionRouter group
 	apiRouter.Handle("/api/auth/", http.StripPrefix("/api/auth", handlers.CSRFMiddleware(config.Cfg.CSRFAuthKey)(authActionRouter)))
 
-	// CSRF and Auth middleware for protected API routes
 	csrfProtection := handlers.CSRFMiddleware(config.Cfg.CSRFAuthKey)
 	applyCsrfAndAuth := func(handler http.HandlerFunc) http.Handler {
 		return csrfProtection(http.HandlerFunc(userHandler.AuthMiddleware(handler)))
 	}
 
-	// Protected Data Endpoints
 	apiRouter.Handle("POST /api/upload", applyCsrfAndAuth(uploadHandler.HandleUpload))
 	apiRouter.Handle("GET /api/realizedgains-data", applyCsrfAndAuth(uploadHandler.HandleGetRealizedGainsData))
 	apiRouter.Handle("GET /api/transactions/processed", applyCsrfAndAuth(txHandler.HandleGetProcessedTransactions))
@@ -165,16 +167,12 @@ func main() {
 	apiRouter.Handle("GET /api/dividend-tax-summary", applyCsrfAndAuth(dividendHandler.HandleGetDividendTaxSummary))
 	apiRouter.Handle("GET /api/dividend-transactions", applyCsrfAndAuth(dividendHandler.HandleGetDividendTransactions))
 	apiRouter.Handle("DELETE /api/transactions/all", applyCsrfAndAuth(txHandler.HandleDeleteAllProcessedTransactions))
-
-	// User specific protected endpoints
 	apiRouter.Handle("GET /api/user/has-data", applyCsrfAndAuth(userHandler.HandleCheckUserData))
 	apiRouter.Handle("POST /api/user/change-password", applyCsrfAndAuth(userHandler.ChangePasswordHandler))
 	apiRouter.Handle("POST /api/user/delete-account", applyCsrfAndAuth(userHandler.DeleteAccountHandler))
 
-	// Mount the API router under /api/
 	rootMux.Handle("/api/", apiRouter)
 
-	// Root path handler
 	rootMux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/" && r.Method == http.MethodGet {
 			w.Header().Set("Content-Type", "application/json")
@@ -188,7 +186,10 @@ func main() {
 	})
 
 	logger.L.Info("Applying global middleware...")
-	finalHandler := enableCORS(rateLimitMiddleware(rootMux))
+	// --- THIS IS THE MODIFIED LINE ---
+	// Wrap with proxyHeadersMiddleware to make the app aware of the HTTPS proxy.
+	// It should be one of the first middlewares to run.
+	finalHandler := proxyHeadersMiddleware(enableCORS(rateLimitMiddleware(rootMux)))
 
 	serverAddr := ":" + config.Cfg.Port
 	server := &http.Server{
