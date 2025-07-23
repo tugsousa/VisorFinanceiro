@@ -3,7 +3,7 @@ import React, { useState, useContext, useRef } from 'react';
 import { Link as RouterLink } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
 import {
-  Box, Typography, TextField, Button, Alert, Link, Divider, CircularProgress
+  Box, Typography, TextField, Button, Alert, Link, Divider
 } from '@mui/material';
 import AuthModal from '../components/auth/AuthModal';
 
@@ -16,19 +16,20 @@ function SignUpPage() {
   const [pageError, setPageError] = useState('');
   const [pageSuccessMessage, setPageSuccessMessage] = useState('');
   const { register, isAuthActionLoading } = useContext(AuthContext);
+  const successShownRef = useRef(false);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setPageSuccessMessage('');
     setPageError('');
+    successShownRef.current = false;
 
     let clientValidationError = '';
-    if (!username.trim()) clientValidationError = 'Username is required.';
-    else if (!email.trim()) clientValidationError = 'Email is required.';
-    else if (!/\S+@\S+\.\S+/.test(email)) clientValidationError = 'Please enter a valid email address.';
-    else if (!password) clientValidationError = 'Password is required.';
-    else if (password.length < 6) clientValidationError = 'Password must be at least 6 characters.';
-    else if (password !== confirmPassword) clientValidationError = 'Passwords do not match.';
+    if (!email.trim()) clientValidationError = 'Email é obrigatório.';
+    else if (!/\S+@\S+\.\S+/.test(email)) clientValidationError = 'Email inválido.';
+    else if (!password) clientValidationError = 'Senha é obrigatória.';
+    else if (password.length < 6) clientValidationError = 'A senha deve ter pelo menos 6 caracteres.';
+    else if (password !== confirmPassword) clientValidationError = 'As senhas não coincidem.';
 
     if (clientValidationError) {
       setPageError(clientValidationError);
@@ -36,12 +37,13 @@ function SignUpPage() {
     }
 
     const onSuccess = (result) => {
-      setPageSuccessMessage(result.message || 'Account created successfully! Please check your email.');
+      setPageSuccessMessage(result.message || 'Conta criada com sucesso. Verifique o seu email.');
+      successShownRef.current = true;
       setPageError('');
     };
 
     const onError = (err) => {
-      setPageError(err.message || 'Failed to create account. Please try again.');
+      setPageError(err.message || 'Erro ao criar conta. Tente novamente.');
       setPageSuccessMessage('');
     };
 
@@ -54,10 +56,10 @@ function SignUpPage() {
     <AuthModal>
       <Box sx={{ width: '100%', maxWidth: 400 }}>
         <Typography component="h1" variant="h5" sx={{ fontWeight: 'bold' }}>
-          Welcome to RumoClaro
+          Bem-vindo a RumoClaro
         </Typography>
         <Typography variant="body2" color="text.secondary" sx={{ mt: 1, mb: 3 }}>
-          Create an account to get started.
+          Crie uma conta para começar a usar a RumoClaro.
         </Typography>
 
         {pageSuccessMessage && (
@@ -73,21 +75,6 @@ function SignUpPage() {
 
         <Box component="form" onSubmit={handleSubmit} noValidate>
 
-          {/* --- NEW USERNAME FIELD --- */}
-          <Typography variant="subtitle2" sx={{ fontWeight: 500, mt: 2 }}>Username</Typography>
-          <TextField
-            fullWidth
-            margin="dense"
-            id="username"
-            name="username"
-            type="text"
-            autoComplete="username"
-            autoFocus
-            value={username}
-            onChange={(e) => setUsername(e.target.value)}
-            disabled={formDisabled}
-          />
-
           <Typography variant="subtitle2" sx={{ fontWeight: 500, mt: 2 }}>Email</Typography>
           <TextField
             fullWidth
@@ -95,63 +82,60 @@ function SignUpPage() {
             id="email"
             name="email"
             type="email"
-            autoComplete="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             disabled={formDisabled}
           />
 
-          <Typography variant="subtitle2" sx={{ fontWeight: 500, mt: 2 }}>Password</Typography>
+          <Typography variant="subtitle2" sx={{ fontWeight: 500, mt: 2 }}>Senha</Typography>
           <TextField
             fullWidth
             margin="dense"
             id="password"
             name="password"
             type="password"
-            autoComplete="new-password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             disabled={formDisabled}
           />
 
-          <Typography variant="subtitle2" sx={{ fontWeight: 500, mt: 2 }}>Confirm Password</Typography>
+          <Typography variant="subtitle2" sx={{ fontWeight: 500, mt: 2 }}>Confirmar Senha</Typography>
           <TextField
             fullWidth
             margin="dense"
             id="confirmPassword"
             name="confirmPassword"
             type="password"
-            autoComplete="new-password"
             value={confirmPassword}
             onChange={(e) => setConfirmPassword(e.target.value)}
             disabled={formDisabled}
           />
 
-          <Button
-            type="submit"
-            fullWidth
-            variant="contained"
-            sx={{
-              mt: 3,
-              mb: 2,
-              textTransform: 'none',
-              backgroundColor: '#3699FF',
-              '&:hover': {
-                backgroundColor: '#2680d6',
-              },
-              py: 1.5,
-            }}
-            disabled={formDisabled}
-          >
-            {isAuthActionLoading ? <CircularProgress size={24} color="inherit" /> : 'Create Account'}
-          </Button>
+      <Button
+        type="submit"
+        variant="contained"
+        sx={{
+          mt: 3,
+          mb: 2,
+          textTransform: 'none',
+          backgroundColor: '#3699FF',
+          '&:hover': {
+            backgroundColor: '#2680d6',
+          },
+          py: 1.5,
+          px: 4
+        }}
+        disabled={formDisabled}
+      >
+        Criar conta
+      </Button>
 
           <Divider sx={{ my: 2 }} />
 
           <Typography variant="body2" align="center">
-            Already have an account?{' '}
+            Já tem uma conta?{' '}
             <Link component={RouterLink} to="/signin" underline="hover">
-              Sign In
+              Iniciar sessão
             </Link>
           </Typography>
         </Box>
