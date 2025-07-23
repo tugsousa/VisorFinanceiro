@@ -105,6 +105,36 @@ export default function TaxPage() {
 
     const numYear = Number(year);
     const filteredStockSales = (taxApiData.stockSales || []).filter(item => getYear(item.SaleDate) === numYear);
+    
+    // --- START: Grouping Logic ---
+    const groupedSalesMap = filteredStockSales.reduce((acc, sale) => {
+      // Create a unique key based on the grouping criteria
+      const groupingKey = `${sale.country_code}|${sale.SaleDate}|${sale.BuyDate}`;
+
+      if (!acc[groupingKey]) {
+        // If this is the first time we see this key, create a new entry.
+        // We create a copy of the sale object to avoid modifying the original data.
+        acc[groupingKey] = {
+          ...sale,
+          // Ensure numeric fields are initialized correctly for summation
+          SaleAmountEUR: sale.SaleAmountEUR || 0,
+          BuyAmountEUR: Math.abs(sale.BuyAmountEUR || 0), // Use absolute value as in the original render
+          Commission: sale.Commission || 0,
+        };
+      } else {
+        // If the key already exists, sum the values.
+        acc[groupingKey].SaleAmountEUR += sale.SaleAmountEUR || 0;
+        acc[groupingKey].BuyAmountEUR += Math.abs(sale.BuyAmountEUR || 0);
+        acc[groupingKey].Commission += sale.Commission || 0;
+      }
+
+      return acc;
+    }, {});
+
+    // Convert the map of grouped sales back into an array
+    const groupedStockSales = Object.values(groupedSalesMap);
+    // --- END: Grouping Logic ---
+
     const filteredOptionSales = (taxApiData.optionSales || []).filter(item => getYear(item.close_date) === numYear);
     
     const dividendYearData = taxApiData.dividendSummary?.[year] || {};
@@ -136,7 +166,7 @@ export default function TaxPage() {
     }, {});
 
     return {
-      stockSaleDetails: filteredStockSales,
+      stockSaleDetails: groupedStockSales,
       optionSaleDetails: filteredOptionSales,
       dividendTaxReportRows: transformedDividends,
       groupedOptionData: Object.values(groupedOptions),
@@ -185,7 +215,6 @@ export default function TaxPage() {
 
   return (
     <Box sx={{ p: { xs: 1, sm: 2 } }}>
-      {/* --- START OF CHANGES --- */}
       <Box sx={{ 
         display: 'flex', 
         justifyContent: 'space-between', 
@@ -223,7 +252,6 @@ export default function TaxPage() {
           </Select>
         </FormControl>
       </Box>
-      {/* --- END OF CHANGES --- */}
       
       {apiError && (selectedYear !== NO_YEAR_SELECTED || (availableYears.length === 0 && loading)) && (
           <Alert severity="warning" sx={{ mb: 2 }}>{apiError}</Alert>
