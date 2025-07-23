@@ -20,9 +20,13 @@ services:
   # This service replaces Nginx. It serves the frontend React app and acts as a
   # reverse proxy for the backend. It handles SSL termination automatically.
   caddy:
-    # The build context is the 'caddy' directory where the Caddy Dockerfile is located.
-    # That Dockerfile is responsible for building the React app and putting it into the Caddy image.
-    build: ./caddy
+    # --- THIS IS THE CORRECTED SECTION ---
+    # The build context is set to the project root '.', and we specify the Dockerfile's location.
+    # This allows the Dockerfile to access both the 'caddy' and 'frontend' directories.
+    build:
+      context: .
+      dockerfile: caddy/Dockerfile
+    # --- END OF CORRECTION ---
     container_name: rumoclaro-caddy-container
     restart: unless-stopped
     ports:
