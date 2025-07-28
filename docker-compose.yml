@@ -45,7 +45,5 @@ services:
 
 # Named volumes are managed by Docker and are the preferred way to persist data.
 volumes:
-  # Volume for the backend's SQLite database
-  rumoclaro-db:
   # Volume for Caddy's SSL certificates and configuration
   caddy_data:
