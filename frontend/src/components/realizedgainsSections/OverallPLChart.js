@@ -158,7 +158,7 @@ const OverallPLChart = ({ stockSaleDetails, optionSaleDetails, dividendTaxResult
         },
       },
       y: {
-        beginAtZero: false,
+        beginAtZero: true,
         grid: { color: '#e0e0e0', borderDash: [2, 4] },
         title: { display: true, text: 'Lucro/Prejuízo (€)' },
       },
