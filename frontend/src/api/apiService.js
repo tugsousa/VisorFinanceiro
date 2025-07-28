@@ -2,6 +2,11 @@
 import axios from 'axios';
 import { API_ENDPOINTS } from '../constants';
 
+// A base da API é lida a partir das variáveis de ambiente.
+// Em desenvolvimento, será http://localhost:8080 (do .env.development)
+// Em produção, será https://www.rumoclaro.pt (do .env.production)
+const API_URL = process.env.REACT_APP_API_BASE_URL;
+
 const getAuthToken = () => localStorage.getItem('auth_token');
 const getRefreshToken = () => localStorage.getItem('refresh_token');
 
@@ -27,7 +32,7 @@ export const setApiServiceCsrfToken = (token) => {
 export const getApiServiceCsrfToken = () => currentCsrfToken;
 
 const apiClient = axios.create({
-  baseURL: '/',
+  baseURL: API_URL, // <-- ALTERAÇÃO PRINCIPAL AQUI
   withCredentials: true,
   headers: {
     'Content-Type': 'application/json',
@@ -37,6 +42,7 @@ const apiClient = axios.create({
 
 export const fetchAndSetCsrfToken = async () => {
   try {
+    // As chamadas usam URLs relativos, pois o baseURL já está definido.
     const response = await apiClient.get(API_ENDPOINTS.AUTH_CSRF);
     const headerToken = response.headers['x-csrf-token'];
     const bodyToken = response.data?.csrfToken;
@@ -96,7 +102,6 @@ apiClient.interceptors.response.use(
   async (error) => {
     const originalRequest = error.config;
     if (error.response?.data?.code === 'EMAIL_NOT_VERIFIED') {
-      // If it's this specific error, don't retry. Just pass the error along.
       return Promise.reject(error);
     }
     if (error.response && error.response.status === 403 && !originalRequest._retryCSRF) {
@@ -152,7 +157,6 @@ apiClient.interceptors.response.use(
         refreshConfig.headers['X-CSRF-Token'] = csrfForRefresh;
       }
 
-
       return apiClient.post(API_ENDPOINTS.AUTH_REFRESH, { refresh_token: localRefreshToken }, refreshConfig)
         .then(res => {
           const { access_token, refresh_token: new_refresh_token } = res.data;
@@ -182,48 +186,14 @@ apiClient.interceptors.response.use(
   }
 );
 
-export const apiLogin = (email, password) => {
-  return apiClient.post(API_ENDPOINTS.AUTH_LOGIN, { email, password });
-};
-
-export const apiRegister = (username, email, password) => {
-  return apiClient.post(API_ENDPOINTS.AUTH_REGISTER, { username, email, password });
-};
-
-export const apiLogout = () => {
-  return apiClient.post(API_ENDPOINTS.AUTH_LOGOUT, {});
-};
-
-export const apiRequestPasswordReset = (email) => {
-  return apiClient.post(API_ENDPOINTS.AUTH_REQUEST_PASSWORD_RESET, { email });
-};
-
-export const apiResetPassword = (token, password, confirm_password) => {
-  return apiClient.post(API_ENDPOINTS.AUTH_RESET_PASSWORD, { token, password, confirm_password });
-};
-
-export const apiChangePassword = (currentPassword, newPassword, confirmNewPassword) => {
-  return apiClient.post(API_ENDPOINTS.USER_CHANGE_PASSWORD, {
-    current_password: currentPassword,
-    new_password: newPassword,
-    confirm_new_password: confirmNewPassword,
-  });
-};
-
-export const apiDeleteAccount = (password) => {
-  return apiClient.post(API_ENDPOINTS.USER_DELETE_ACCOUNT, { password });
-};
-
-
-export const apiUploadFile = (formData, onUploadProgress) => {
-  return apiClient.post(API_ENDPOINTS.UPLOAD, formData, {
-    headers: {
-      'Content-Type': 'multipart/form-data',
-    },
-    onUploadProgress,
-  });
-};
-
+export const apiLogin = (email, password) => apiClient.post(API_ENDPOINTS.AUTH_LOGIN, { email, password });
+export const apiRegister = (username, email, password) => apiClient.post(API_ENDPOINTS.AUTH_REGISTER, { username, email, password });
+export const apiLogout = () => apiClient.post(API_ENDPOINTS.AUTH_LOGOUT, {});
+export const apiRequestPasswordReset = (email) => apiClient.post(API_ENDPOINTS.AUTH_REQUEST_PASSWORD_RESET, { email });
+export const apiResetPassword = (token, password, confirm_password) => apiClient.post(API_ENDPOINTS.AUTH_RESET_PASSWORD, { token, password, confirm_password });
+export const apiChangePassword = (currentPassword, newPassword, confirmNewPassword) => apiClient.post(API_ENDPOINTS.USER_CHANGE_PASSWORD, { current_password: currentPassword, new_password: newPassword, confirm_new_password: confirmNewPassword });
+export const apiDeleteAccount = (password) => apiClient.post(API_ENDPOINTS.USER_DELETE_ACCOUNT, { password });
+export const apiUploadFile = (formData, onUploadProgress) => apiClient.post(API_ENDPOINTS.UPLOAD, formData, { headers: { 'Content-Type': 'multipart/form-data' }, onUploadProgress });
 export const apiFetchRealizedGainsData = () => apiClient.get(API_ENDPOINTS.REALIZEDGAINS_DATA);
 export const apiFetchProcessedTransactions = () => apiClient.get(API_ENDPOINTS.PROCESSED_TRANSACTIONS);
 export const apiFetchStockHoldings = () => apiClient.get(API_ENDPOINTS.STOCK_HOLDINGS);
@@ -233,8 +203,6 @@ export const apiFetchOptionSales = () => apiClient.get(API_ENDPOINTS.OPTION_SALE
 export const apiFetchDividendTaxSummary = () => apiClient.get(API_ENDPOINTS.DIVIDEND_TAX_SUMMARY);
 export const apiFetchDividendTransactions = () => apiClient.get(API_ENDPOINTS.DIVIDEND_TRANSACTIONS);
 export const apiCheckUserHasData = () => apiClient.get(API_ENDPOINTS.USER_HAS_DATA);
-export const apiDeleteAllTransactions = () => {
-  return apiClient.delete(API_ENDPOINTS.DELETE_ALL_TRANSACTIONS);
-};
+export const apiDeleteAllTransactions = () => apiClient.delete(API_ENDPOINTS.DELETE_ALL_TRANSACTIONS);
 
 export default apiClient;

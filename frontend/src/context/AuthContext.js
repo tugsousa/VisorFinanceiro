@@ -22,28 +22,25 @@ export const AuthProvider = ({ children }) => {
   const [token, setToken] = useState(() => localStorage.getItem('auth_token'));
   const [refreshTokenState, setRefreshTokenState] = useState(() => localStorage.getItem('refresh_token'));
   
-  const [isInitialAuthLoading, setIsInitialAuthLoading] = useState(true); // For initial app load check
-  const [isAuthActionLoading, setIsAuthActionLoading] = useState(false); // For actions like login/register
+  const [isInitialAuthLoading, setIsInitialAuthLoading] = useState(true);
+  const [isAuthActionLoading, setIsAuthActionLoading] = useState(false);
   
   const [authError, setAuthError] = useState(null);
-  const [csrfTokenState, setCsrfTokenState] = useState('');
   const [hasInitialData, setHasInitialData] = useState(null);
-  const [checkingData, setCheckingData] = useState(false); // Specifically for checkUserData async operation
+  const [checkingData, setCheckingData] = useState(false);
 
   const fetchCsrfTokenAndUpdateService = useCallback(async (isSilent = false) => {
     try {
       const newCsrfToken = await apiServiceFetchCsrf();
-      if (newCsrfToken) {
-        setCsrfTokenState(newCsrfToken);
-        return newCsrfToken;
-      } else {
-        if (!isSilent) console.warn('AuthContext: Failed to fetch CSRF token via apiService.');
-        if (!isSilent) setAuthError(prev => prev ? `${prev}; CSRF fetch failed` : 'CSRF fetch failed');
-        return null;
+      if (!newCsrfToken && !isSilent) {
+        setAuthError(prev => prev ? `${prev}; CSRF fetch failed` : 'CSRF fetch failed');
       }
+      return newCsrfToken;
     } catch (err) {
-      if (!isSilent) console.error('AuthContext: Error in fetchCsrfTokenAndUpdateService:', err);
-      if (!isSilent) setAuthError(prev => prev ? `${prev}; CSRF fetch error` : 'CSRF fetch error');
+      if (!isSilent) {
+        console.error('AuthContext: Error in fetchCsrfTokenAndUpdateService:', err);
+        setAuthError(prev => prev ? `${prev}; CSRF fetch error` : 'CSRF fetch error');
+      }
       return null;
     }
   }, []);
@@ -85,7 +82,7 @@ export const AuthProvider = ({ children }) => {
     setRefreshTokenState(null);
     setHasInitialData(null);
     setAuthError(null);
-    setIsAuthActionLoading(false); // Ensure action loading is false on logout
+    setIsAuthActionLoading(false);
 
     if (apiCall && oldToken) {
         try {
@@ -97,41 +94,30 @@ export const AuthProvider = ({ children }) => {
     await fetchCsrfTokenAndUpdateService(true);
   }, [fetchCsrfTokenAndUpdateService]);
 
-
   useEffect(() => {
     const initializeAuth = async () => {
       setIsInitialAuthLoading(true);
-      await fetchCsrfTokenAndUpdateService(true); // Fetch CSRF silently first
+      await fetchCsrfTokenAndUpdateService(true);
       const storedToken = localStorage.getItem('auth_token');
-      const storedRefreshToken = localStorage.getItem('refresh_token');
       const storedUser = localStorage.getItem('user');
 
-      if (storedToken && storedRefreshToken && storedUser) {
+      if (storedToken && storedUser) {
         setToken(storedToken);
-        setRefreshTokenState(storedRefreshToken);
         try {
           const parsedUser = JSON.parse(storedUser);
-          setUser(parsedUser); // Set user state based on localStorage
-          // After user is set from localStorage, check their data status
+          setUser(parsedUser);
           await checkUserData(); 
         } catch (e) {
           console.error("Failed to parse stored user during init", e);
-          // If parsing fails, treat as no user and perform a silent logout
           performLogout(false, "Corrupted user data in localStorage on init");
-          setHasInitialData(false); 
-          setCheckingData(false); 
         }
       } else {
-        // No valid session found in localStorage
         performLogout(false, "No tokens or user data in localStorage on init");
-        setHasInitialData(false); 
-        setCheckingData(false); 
       }
       setIsInitialAuthLoading(false);
     };
     initializeAuth();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // Empty dependency array ensures this runs only once on mount
+  }, [performLogout, checkUserData, fetchCsrfTokenAndUpdateService]);
 
   useEffect(() => {
     const handleLogoutEvent = (event) => {
@@ -147,119 +133,81 @@ export const AuthProvider = ({ children }) => {
   const register = async (username, email, password, onSuccess, onError) => {
     setAuthError(null);
     setIsAuthActionLoading(true);
-    console.log("[AuthContext.register] setIsAuthActionLoading(true) called.");
-
-    let operationStage = "init";
-    console.log("[AuthContext.register] Stage:", operationStage, "- Process started.");
-
     try {
-      operationStage = "csrf_check";
-      console.log("[AuthContext.register] Stage:", operationStage, "- Checking CSRF token.");
-      if (!getApiServiceCsrfToken()) {
-        await fetchCsrfTokenAndUpdateService(true);
-        if (!getApiServiceCsrfToken()) {
-          const csrfErrorMsg = "A security token is missing. Please refresh and try again.";
-          console.error("[AuthContext.register] Stage:", operationStage, "- CSRF token fetch FAILED:", csrfErrorMsg);
-          throw new Error(csrfErrorMsg);
-        }
-      }
-      console.log("[AuthContext.register] Stage:", operationStage, "- CSRF token check PASSED/OBTAINED.");
-
-      operationStage = "api_call";
-      console.log("[AuthContext.register] Stage:", operationStage, "- Calling apiRegister with:", { username, email });
+      if (!getApiServiceCsrfToken()) await fetchCsrfTokenAndUpdateService();
       const response = await apiRegister(username, email, password);
-      console.log("[AuthContext.register] Stage:", operationStage, "- apiRegister call SUCCEEDED. Status:", response.status, "Data:", response.data);
-
-      const successMsg = response?.data?.message || "Registration successful! Please check your email to verify your account.";
-      console.log("[AuthContext.register] Stage: success_processing - Extracted success message:", successMsg);
-      
-      if (onSuccess) {
-        onSuccess({ message: successMsg, warning: response?.data?.warning });
-      }
-      // Set loading to false AFTER onSuccess
-      setIsAuthActionLoading(false); 
-      console.log("[AuthContext.register] setIsAuthActionLoading(false) called on SUCCESS path (after onSuccess).");
-      return;
-
+      if (onSuccess) onSuccess(response.data);
     } catch (err) {
-      operationStage = "error_handling";
-      console.error("[AuthContext.register] Stage:", operationStage, "- Error during registration. Raw error object:", err);
-      
-      let specificMessage = "An unexpected error occurred during registration.";
-      if (err.isAxiosError && err.response) {
-        specificMessage = err.response.data?.error || err.response.data?.message || err.message || specificMessage;
-      } else if (err.response) {
-        specificMessage = err.response.data?.error || err.response.data?.message || err.message || specificMessage;
-      } else if (err.message) {
-        specificMessage = err.message;
-      }
-      
-      console.error("[AuthContext.register] Stage:", operationStage, "- Determined specific error message for UI:", specificMessage);
-      
-      if (onError) {
-        onError(new Error(specificMessage));
-      }
-      // Set context error and loading AFTER onError
-      setAuthError(specificMessage); 
+      const errMsg = err.response?.data?.error || err.message || 'Registration failed.';
+      setAuthError(errMsg);
+      if (onError) onError(new Error(errMsg));
+    } finally {
       setIsAuthActionLoading(false);
-      console.log("[AuthContext.register] setIsAuthActionLoading(false) called on ERROR path (after onError).");
     }
   };
 
   const login = async (email, password) => {
     setIsAuthActionLoading(true);
-    setCheckingData(true); // Login will involve checking data
+    setCheckingData(true);
     setAuthError(null);
     try {
-      if (!getApiServiceCsrfToken()) {
-         await fetchCsrfTokenAndUpdateService();
-         if (!getApiServiceCsrfToken()) throw new Error("CSRF token could not be obtained for login.");
-      }
-
+      if (!getApiServiceCsrfToken()) await fetchCsrfTokenAndUpdateService();
       const response = await apiLogin(email, password);
-      const data = response.data;
-
-      if (!data.access_token || !data.refresh_token || !data.user) {
-          throw new Error(data.error || 'Login successful but critical data missing from response.');
-      }
+      const { access_token, refresh_token, user: userData } = response.data;
       
-      setUser(data.user); // Set user immediately
-      setToken(data.access_token);
-      setRefreshTokenState(data.refresh_token);
-
-      localStorage.setItem('auth_token', data.access_token);
-      localStorage.setItem('refresh_token', data.refresh_token);
-      localStorage.setItem('user', JSON.stringify(data.user));
+      setUser(userData);
+      setToken(access_token);
+      setRefreshTokenState(refresh_token);
+      localStorage.setItem('auth_token', access_token);
+      localStorage.setItem('refresh_token', refresh_token);
+      localStorage.setItem('user', JSON.stringify(userData));
       
-      await fetchCsrfTokenAndUpdateService(true); // Silent CSRF refresh
-      await checkUserData(); // This will set hasInitialData and also setCheckingData(false)
+      await fetchCsrfTokenAndUpdateService(true);
+      await checkUserData();
       
-      setIsAuthActionLoading(false); // Login action complete
-      return data;
+      return response.data;
     } catch (err) {
-      const errMsg = err.response?.data?.error || err.message || 'Login failed. Please try again.';
-      
-      // Clear all auth state on login failure
-      setUser(null);
-      setToken(null);
-      setRefreshTokenState(null);
-      localStorage.removeItem('auth_token');
-      localStorage.removeItem('refresh_token');
-      localStorage.removeItem('user');
-      localStorage.removeItem('has_initial_data');
-      setHasInitialData(null);
-
+      const errMsg = err.response?.data?.error || err.message || 'Login failed.';
+      performLogout(false, `Login failed: ${errMsg}`);
       setAuthError(errMsg);
-      setIsAuthActionLoading(false);
-      setCheckingData(false); // Ensure this is also reset on error
       throw new Error(errMsg);
+    } finally {
+      setIsAuthActionLoading(false);
+      setCheckingData(false);
     }
   };
+  
+  // --- NOVA FUNÇÃO PARA O CALLBACK DO GOOGLE ---
+  const loginWithGoogleToken = useCallback(async (appToken, googleUserData) => {
+    setIsAuthActionLoading(true);
+    setCheckingData(true);
+    setAuthError(null);
+
+    // O backend já validou, agora apenas guardamos o estado no frontend
+    const appUser = {
+        id: googleUserData.id, // O backend deve garantir que temos um ID
+        username: googleUserData.name,
+        email: googleUserData.email
+    };
+
+    setUser(appUser);
+    setToken(appToken);
+    setRefreshTokenState(null); // O Google Auth não usa o nosso sistema de refresh token
+
+    localStorage.setItem('auth_token', appToken);
+    localStorage.setItem('user', JSON.stringify(appUser));
+    localStorage.removeItem('refresh_token'); // Limpar refresh token antigo se houver
+
+    await checkUserData();
+    
+    setIsAuthActionLoading(false);
+    setCheckingData(false);
+  }, [checkUserData]);
 
   const logout = async () => {
-    setIsAuthActionLoading(true); // Indicate an action is happening
-    await performLogout(true, "User initiated logout from logout function");
-    setIsAuthActionLoading(false); // Action finished
+    setIsAuthActionLoading(true);
+    await performLogout(true, "User initiated logout");
+    setIsAuthActionLoading(false);
   };
 
   return (
@@ -267,20 +215,16 @@ export const AuthProvider = ({ children }) => {
       value={{
         user,
         token,
-        refreshToken: refreshTokenState,
-        
-        isInitialAuthLoading,    // Specific initial loading
-        isAuthActionLoading,     // Specific action loading
-        // General loading can be derived by consumers if needed, or use specific ones
-        loading: isInitialAuthLoading || isAuthActionLoading || checkingData, 
-
+        isInitialAuthLoading,
+        isAuthActionLoading,
+        loading: isInitialAuthLoading || isAuthActionLoading || checkingData,
         authError,
-        csrfToken: csrfTokenState,
         hasInitialData,
-        checkingData, // Let consumers know if checkUserData is in progress
+        checkingData,
         register,
         login,
         logout,
+        loginWithGoogleToken, // Expor a nova função
         fetchCsrfToken: fetchCsrfTokenAndUpdateService,
         refreshUserDataCheck: checkUserData,
         performLogout,

@@ -111,6 +111,7 @@ func main() {
 	logger.L.Info("Report cache initialized.")
 
 	logger.L.Info("Initializing services and handlers...")
+	handlers.InitializeGoogleOAuthConfig()
 	authService := security.NewAuthService(config.Cfg.JWTSecret)
 	emailService := services.NewEmailService()
 	userHandler := handlers.NewUserHandler(authService, emailService)
@@ -141,6 +142,8 @@ func main() {
 
 	apiRouter.HandleFunc("GET /api/auth/csrf", handlers.GetCSRFToken)
 	apiRouter.HandleFunc("GET /api/auth/verify-email", userHandler.VerifyEmailHandler)
+	apiRouter.HandleFunc("GET /api/auth/google/login", userHandler.HandleGoogleLogin)
+	apiRouter.HandleFunc("GET /api/auth/google/callback", userHandler.HandleGoogleCallback)
 
 	authActionRouter := http.NewServeMux()
 	authActionRouter.HandleFunc("POST /login", userHandler.LoginUserHandler)

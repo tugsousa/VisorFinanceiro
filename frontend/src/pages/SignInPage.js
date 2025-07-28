@@ -1,15 +1,16 @@
 // frontend/src/pages/SignInPage.js
 import React, { useState, useContext, useEffect } from 'react';
-import { useNavigate, Link as RouterLink } from 'react-router-dom';
+import { Link as RouterLink } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
 import {
   Box, Typography, TextField, Button, Alert, CircularProgress, Grid, Link, Divider
 } from '@mui/material';
 import AuthModal from '../components/auth/AuthModal';
 import GoogleIcon from '@mui/icons-material/Google';
+import { API_ENDPOINTS } from '../constants'; // Importe os endpoints
 
 function SignInPage() {
-  const [email, setemail] = useState('');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [localError, setLocalError] = useState('');
   const [localSuccess, setLocalSuccess] = useState(false);
@@ -29,26 +30,23 @@ function SignInPage() {
     try {
       await login(email, password);
       setLocalSuccess(true);
- } catch (err) {
-      // --- START MODIFICATION ---
-      // Check for our specific error code from the backend
+    } catch (err) {
       if (err.response?.data?.code === 'EMAIL_NOT_VERIFIED') {
-        // Use the detailed message from the server, which confirms a new email was sent.
         const errorMessage = err.response.data.error || 'O teu e-mail ainda não foi validado. Foi enviado um novo link.';
         setLocalError(errorMessage);
       } else {
-        // Fallback for all other login errors
         const errorMessage = err.message || 'Ocorreu um erro inesperado durante o login.';
         setLocalError(errorMessage);
       }
-      // --- END MODIFICATION ---
       setLocalSuccess(false);
     }
   };
 
   const handleGoogleSignIn = () => {
-    // Google Sign-In functionality will be added later
-    console.log("Google Sign-In clicked");
+    // Constrói o URL completo para o redirecionamento, usando a variável de ambiente.
+    // Desta forma, não temos URLs "hardcoded" no código do frontend.
+    const googleLoginUrl = `${process.env.REACT_APP_API_BASE_URL}${API_ENDPOINTS.AUTH_GOOGLE_LOGIN}`;
+    window.location.href = googleLoginUrl;
   };
 
   return (
@@ -60,7 +58,7 @@ function SignInPage() {
         <Typography variant="body2" color="text.secondary" sx={{ mt: 1, mb: 2 }}>
           Entre com a sua conta local ou através da sua conta Google.
         </Typography>
-        <Link component={RouterLink} to="/signup" variant="body1" sx={{ mb: 3, display: 'block',textDecoration: 'none' }}>
+        <Link component={RouterLink} to="/signup" variant="body1" sx={{ mb: 3, display: 'block', textDecoration: 'none' }}>
           Criar uma conta
         </Link>
 
@@ -87,7 +85,7 @@ function SignInPage() {
             autoComplete="email"
             autoFocus
             value={email}
-            onChange={(e) => setemail(e.target.value)}
+            onChange={(e) => setEmail(e.target.value)}
             disabled={isAuthActionLoading || (localSuccess && !localError)}
           />
 
@@ -112,32 +110,39 @@ function SignInPage() {
           
           <Button
             type="submit"
+            fullWidth // Faz o botão ocupar a largura toda
             variant="contained"
             sx={{ 
               mt: 3, 
               mb: 2, 
-              backgroundColor: '#3699FF;',
+              backgroundColor: '#3699FF', // Cor principal
               '&:hover': {
-                backgroundColor: '#3699FF;'
+                backgroundColor: '#2680d6', // Cor mais escura no hover
               },
               textTransform: 'none',
-              px: 4
+              py: 1.5 // Aumenta a altura do botão
             }}
             disabled={isAuthActionLoading || (localSuccess && !localError)}
           >
             {isAuthActionLoading ? <CircularProgress size={24} color="inherit" /> : 'Entrar'}
           </Button>
 
-          <Divider sx={{ my: 2 }} />
+          <Divider sx={{ my: 2 }}>OU</Divider>
 
           <Button
+              fullWidth
               variant="outlined"
               startIcon={<GoogleIcon />}
               onClick={handleGoogleSignIn}
               sx={{ 
                 textTransform: 'none', 
                 color: 'text.secondary',
-                borderColor: 'grey.400'
+                borderColor: 'grey.400',
+                py: 1.5,
+                 '&:hover': {
+                    borderColor: 'grey.600',
+                    backgroundColor: 'rgba(0, 0, 0, 0.04)'
+                }
               }}
           >
               Entrar com o Google

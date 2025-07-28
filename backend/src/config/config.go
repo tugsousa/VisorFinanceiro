@@ -39,6 +39,9 @@ type AppConfig struct {
 	// New fields for password reset
 	PasswordResetBaseURL     string        // e.g., http://localhost:3000/reset-password
 	PasswordResetTokenExpiry time.Duration // e.g., 1h
+	GoogleClientID           string
+	GoogleClientSecret       string
+	GoogleRedirectURL        string
 }
 
 var Cfg *AppConfig
@@ -131,6 +134,10 @@ func LoadConfig() {
 		// New fields for password reset
 		PasswordResetBaseURL:     getEnv("PASSWORD_RESET_BASE_URL", "http://localhost:3000/reset-password"),
 		PasswordResetTokenExpiry: passwordResetTokenExpiry,
+
+		GoogleClientID:     getEnv("GOOGLE_CLIENT_ID", ""),
+		GoogleClientSecret: getEnv("GOOGLE_CLIENT_SECRET", ""),
+		GoogleRedirectURL:  getEnv("GOOGLE_REDIRECT_URL", "http://localhost:8080/api/auth/google/callback"),
 	}
 
 	if Cfg.EmailServiceProvider == "mailgun" {
