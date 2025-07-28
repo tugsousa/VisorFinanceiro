@@ -127,7 +127,7 @@ function SignInPage() {
             {isAuthActionLoading ? <CircularProgress size={24} color="inherit" /> : 'Entrar'}
           </Button>
 
-          <Divider sx={{ my: 2 }}>OU</Divider>
+          <Divider sx={{ my: 2 }}></Divider>
 
           <Button
               fullWidth
