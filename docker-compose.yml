@@ -14,7 +14,7 @@ services:
     volumes:
       # Use a named volume to persist the SQLite database.
       # This ensures your data is not lost when the container is recreated.
-      - rumoclaro-db:/app/data
+      - /app/data:/app/data
 
   # The Caddy Web Server
   # This service replaces Nginx. It serves the frontend React app and acts as a
