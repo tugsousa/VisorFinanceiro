@@ -1,49 +1,53 @@
 // frontend/src/pages/VerifyEmailPage.js
 import React, { useMemo } from 'react';
-import { useLocation, useNavigate, Link } from 'react-router-dom';
-import axios from 'axios';
+import { useLocation, useNavigate } from 'react-router-dom';
+// REMOVE THE DIRECT AXIOS IMPORT
+// import axios from 'axios'; 
 import { useQuery } from '@tanstack/react-query';
 import { API_ENDPOINTS } from '../constants';
-import { Typography, Box, CircularProgress, Button, Alert } from '@mui/material';
+// IMPORT THE NEW SERVICE FUNCTION
+import { apiVerifyEmail } from '../api/apiService'; 
+import { Typography, Box, CircularProgress, Alert } from '@mui/material';
 
-// The async function to be used by useQuery
+// THIS ENTIRE FUNCTION IS NOW OBSOLETE AND SHOULD BE DELETED
+/*
 const verifyEmailToken = async (token) => {
   if (!token) {
     throw new Error('Invalid verification link: No token provided.');
   }
   const verificationUrl = `${API_ENDPOINTS.AUTH_VERIFY_EMAIL}?token=${token}`;
   try {
-    const { data } = await axios.get(verificationUrl);
+    const { data } = await axios.get(verificationUrl); // <-- THIS IS THE PROBLEM LINE
     return data;
   } catch (err) {
-    // Re-throw a more informative error for useQuery's error object
     const errorMessage = err.response?.data?.error || err.response?.data?.message || err.message || 'Failed to verify email.';
     throw new Error(errorMessage);
   }
 };
+*/
 
 const VerifyEmailPage = () => {
   const location = useLocation();
   const navigate = useNavigate();
 
-  // Extract token from URL. useMemo ensures this is only calculated once per render.
   const token = useMemo(() => {
     const queryParams = new URLSearchParams(location.search);
     return queryParams.get('token');
   }, [location.search]);
 
-  // useQuery to handle the API call, loading, and error states.
+  // UPDATE THE useQuery HOOK
   const { data, error, isLoading, isSuccess, isError } = useQuery({
     queryKey: ['emailVerification', token],
-    queryFn: () => verifyEmailToken(token),
-    enabled: !!token, // The query will only run if the token exists.
-    retry: false, // Don't retry on failure, as a bad token won't become good.
+    // REPLACE THE OLD FUNCTION WITH THE NEW API SERVICE CALL
+    queryFn: async () => {
+        const response = await apiVerifyEmail(token);
+        return response.data; // Ensure we pass the data part to the component
+    },
+    enabled: !!token,
+    retry: false, 
     refetchOnWindowFocus: false,
   });
   
-  // Side-effect for redirection on successful verification.
-  // This is a valid use of useEffect as it performs an action (navigation)
-  // in response to a state change from the query.
   React.useEffect(() => {
       if (isSuccess) {
           setTimeout(() => navigate('/signin?verified=true'), 3000);

@@ -204,5 +204,6 @@ export const apiFetchDividendTaxSummary = () => apiClient.get(API_ENDPOINTS.DIVI
 export const apiFetchDividendTransactions = () => apiClient.get(API_ENDPOINTS.DIVIDEND_TRANSACTIONS);
 export const apiCheckUserHasData = () => apiClient.get(API_ENDPOINTS.USER_HAS_DATA);
 export const apiDeleteAllTransactions = () => apiClient.delete(API_ENDPOINTS.DELETE_ALL_TRANSACTIONS);
+export const apiVerifyEmail = (token) => apiClient.get(`${API_ENDPOINTS.AUTH_VERIFY_EMAIL}?token=${token}`);
 
 export default apiClient;
