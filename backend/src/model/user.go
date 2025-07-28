@@ -11,12 +11,13 @@ import (
 )
 
 type User struct {
-	ID        int64     `json:"id"` // Changed to int64 to match GetUserIDFromContext
-	Username  string    `json:"username"`
-	Email     string    `json:"email"`
-	Password  string    `json:"-"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
+	ID           int64     `json:"id"` // Changed to int64 to match GetUserIDFromContext
+	Username     string    `json:"username"`
+	Email        string    `json:"email"`
+	Password     string    `json:"-"`
+	AuthProvider string    `json:"auth_provider,omitempty"` // CORREÇÃO: Adicionado campo para o provedor de autenticação
+	CreatedAt    time.Time `json:"created_at"`
+	UpdatedAt    time.Time `json:"updated_at"`
 
 	IsEmailVerified                 bool      `json:"is_email_verified"`
 	EmailVerificationToken          string    `json:"-"`
@@ -55,10 +56,15 @@ func (u *User) CreateUser(db *sql.DB) error {
 	now := time.Now()
 	u.CreatedAt = now
 	u.UpdatedAt = now
+	// CORREÇÃO: Garante que 'local' é o padrão se nenhum AuthProvider for definido
+	if u.AuthProvider == "" {
+		u.AuthProvider = "local"
+	}
 
+	// CORREÇÃO: Adicionado `auth_provider` à query
 	query := `
-	INSERT INTO users (username, email, password, is_email_verified, email_verification_token, email_verification_token_expires_at, password_reset_token, password_reset_token_expires_at, created_at, updated_at)
-	VALUES (?, ?, ?, ?, ?, ?, NULL, NULL, ?, ?)`
+	INSERT INTO users (username, email, password, auth_provider, is_email_verified, email_verification_token, email_verification_token_expires_at, password_reset_token, password_reset_token_expires_at, created_at, updated_at)
+	VALUES (?, ?, ?, ?, ?, ?, ?, NULL, NULL, ?, ?)`
 	stmt, err := db.Prepare(query)
 	if err != nil {
 		return err
@@ -76,6 +82,7 @@ func (u *User) CreateUser(db *sql.DB) error {
 		u.Username,
 		u.Email,
 		u.Password,
+		u.AuthProvider, // CORREÇÃO: Adicionado o valor do AuthProvider
 		u.IsEmailVerified,
 		u.EmailVerificationToken,
 		emailTokenExpiresArg,
@@ -89,13 +96,14 @@ func (u *User) CreateUser(db *sql.DB) error {
 	if err != nil {
 		return err
 	}
-	u.ID = id // Assign LastInsertId (which is int64)
+	u.ID = id
 	return nil
 }
 
 func GetUserByID(db *sql.DB, id int64) (*User, error) {
+	// CORREÇÃO: Adicionado `auth_provider` à query
 	query := `
-	SELECT id, username, email, password, is_email_verified,
+	SELECT id, username, email, password, auth_provider, is_email_verified,
 	       email_verification_token, email_verification_token_expires_at,
 	       password_reset_token, password_reset_token_expires_at,
 	       created_at, updated_at
@@ -103,13 +111,16 @@ func GetUserByID(db *sql.DB, id int64) (*User, error) {
 	WHERE id = ?`
 	row := db.QueryRow(query, id)
 	var user User
+	var authProvider sql.NullString // CORREÇÃO: Adicionada variável para ler da DB
 	var emailVerificationToken sql.NullString
 	var emailVerificationTokenExpiresAt sql.NullTime
 	var passwordResetToken sql.NullString
 	var passwordResetTokenExpiresAt sql.NullTime
 
+	// CORREÇÃO: Adicionado `&authProvider` ao Scan
 	err := row.Scan(
 		&user.ID, &user.Username, &user.Email, &user.Password,
+		&authProvider,
 		&user.IsEmailVerified,
 		&emailVerificationToken, &emailVerificationTokenExpiresAt,
 		&passwordResetToken, &passwordResetTokenExpiresAt,
@@ -120,6 +131,10 @@ func GetUserByID(db *sql.DB, id int64) (*User, error) {
 			return nil, errors.New("user not found")
 		}
 		return nil, err
+	}
+	// CORREÇÃO: Atribuído o valor lido da DB à struct
+	if authProvider.Valid {
+		user.AuthProvider = authProvider.String
 	}
 	if emailVerificationToken.Valid {
 		user.EmailVerificationToken = emailVerificationToken.String
@@ -137,8 +152,9 @@ func GetUserByID(db *sql.DB, id int64) (*User, error) {
 }
 
 func GetUserByUsername(db *sql.DB, username string) (*User, error) {
+	// CORREÇÃO: Adicionado `auth_provider` à query
 	query := `
-	SELECT id, username, email, password, is_email_verified, 
+	SELECT id, username, email, password, auth_provider, is_email_verified, 
 	       email_verification_token, email_verification_token_expires_at,
 	       password_reset_token, password_reset_token_expires_at,
 	       created_at, updated_at
@@ -146,13 +162,16 @@ func GetUserByUsername(db *sql.DB, username string) (*User, error) {
 	WHERE username = ?`
 	row := db.QueryRow(query, username)
 	var user User
+	var authProvider sql.NullString // CORREÇÃO: Adicionada variável para ler da DB
 	var emailVerificationToken sql.NullString
 	var emailVerificationTokenExpiresAt sql.NullTime
 	var passwordResetToken sql.NullString
 	var passwordResetTokenExpiresAt sql.NullTime
 
+	// CORREÇÃO: Adicionado `&authProvider` ao Scan
 	err := row.Scan(
 		&user.ID, &user.Username, &user.Email, &user.Password,
+		&authProvider,
 		&user.IsEmailVerified,
 		&emailVerificationToken, &emailVerificationTokenExpiresAt,
 		&passwordResetToken, &passwordResetTokenExpiresAt,
@@ -163,6 +182,10 @@ func GetUserByUsername(db *sql.DB, username string) (*User, error) {
 			return nil, errors.New("user not found")
 		}
 		return nil, err
+	}
+	// CORREÇÃO: Atribuído o valor lido da DB à struct
+	if authProvider.Valid {
+		user.AuthProvider = authProvider.String
 	}
 	if emailVerificationToken.Valid {
 		user.EmailVerificationToken = emailVerificationToken.String
@@ -180,8 +203,9 @@ func GetUserByUsername(db *sql.DB, username string) (*User, error) {
 }
 
 func GetUserByEmail(db *sql.DB, email string) (*User, error) {
+	// CORREÇÃO: Adicionado `auth_provider` à query
 	query := `
-	SELECT id, username, email, password, is_email_verified, 
+	SELECT id, username, email, password, auth_provider, is_email_verified, 
 	       email_verification_token, email_verification_token_expires_at,
 	       password_reset_token, password_reset_token_expires_at,
 	       created_at, updated_at
@@ -189,13 +213,16 @@ func GetUserByEmail(db *sql.DB, email string) (*User, error) {
 	WHERE email = ?`
 	row := db.QueryRow(query, email)
 	var user User
+	var authProvider sql.NullString // CORREÇÃO: Adicionada variável para ler da DB
 	var emailVerificationToken sql.NullString
 	var emailVerificationTokenExpiresAt sql.NullTime
 	var passwordResetToken sql.NullString
 	var passwordResetTokenExpiresAt sql.NullTime
 
+	// CORREÇÃO: Adicionado `&authProvider` ao Scan
 	err := row.Scan(
 		&user.ID, &user.Username, &user.Email, &user.Password,
+		&authProvider,
 		&user.IsEmailVerified,
 		&emailVerificationToken, &emailVerificationTokenExpiresAt,
 		&passwordResetToken, &passwordResetTokenExpiresAt,
@@ -206,6 +233,10 @@ func GetUserByEmail(db *sql.DB, email string) (*User, error) {
 			return nil, errors.New("user with this email not found")
 		}
 		return nil, err
+	}
+	// CORREÇÃO: Atribuído o valor lido da DB à struct
+	if authProvider.Valid {
+		user.AuthProvider = authProvider.String
 	}
 	if emailVerificationToken.Valid {
 		user.EmailVerificationToken = emailVerificationToken.String
@@ -223,8 +254,9 @@ func GetUserByEmail(db *sql.DB, email string) (*User, error) {
 }
 
 func GetUserByVerificationToken(db *sql.DB, token string) (*User, error) {
+	// CORREÇÃO: Adicionado `auth_provider` à query
 	query := `
-	SELECT id, username, email, password, is_email_verified, 
+	SELECT id, username, email, password, auth_provider, is_email_verified, 
 	       email_verification_token, email_verification_token_expires_at, 
 	       password_reset_token, password_reset_token_expires_at,
 	       created_at, updated_at
@@ -232,13 +264,16 @@ func GetUserByVerificationToken(db *sql.DB, token string) (*User, error) {
 	WHERE email_verification_token = ?`
 	row := db.QueryRow(query, token)
 	var user User
+	var authProvider sql.NullString // CORREÇÃO: Adicionada variável para ler da DB
 	var emailVerificationTokenFromDB sql.NullString
 	var emailVerificationTokenExpiresAt sql.NullTime
 	var passwordResetToken sql.NullString
 	var passwordResetTokenExpiresAt sql.NullTime
 
+	// CORREÇÃO: Adicionado `&authProvider` ao Scan
 	err := row.Scan(
 		&user.ID, &user.Username, &user.Email, &user.Password,
+		&authProvider,
 		&user.IsEmailVerified,
 		&emailVerificationTokenFromDB, &emailVerificationTokenExpiresAt,
 		&passwordResetToken, &passwordResetTokenExpiresAt,
@@ -249,6 +284,10 @@ func GetUserByVerificationToken(db *sql.DB, token string) (*User, error) {
 			return nil, errors.New("invalid or expired verification token")
 		}
 		return nil, err
+	}
+	// CORREÇÃO: Atribuído o valor lido da DB à struct
+	if authProvider.Valid {
+		user.AuthProvider = authProvider.String
 	}
 	user.EmailVerificationToken = token
 	if emailVerificationTokenExpiresAt.Valid {
@@ -335,8 +374,9 @@ func (u *User) UpdateUserVerificationToken(db *sql.DB, token string, expiresAt t
 }
 
 func GetUserByPasswordResetToken(db *sql.DB, token string) (*User, error) {
+	// CORREÇÃO: Adicionado `auth_provider` à query
 	query := `
-	SELECT id, username, email, password, is_email_verified, 
+	SELECT id, username, email, password, auth_provider, is_email_verified, 
 	       email_verification_token, email_verification_token_expires_at,
 	       password_reset_token, password_reset_token_expires_at,
 	       created_at, updated_at
@@ -344,13 +384,16 @@ func GetUserByPasswordResetToken(db *sql.DB, token string) (*User, error) {
 	WHERE password_reset_token = ? AND password_reset_token_expires_at > ?`
 	row := db.QueryRow(query, token, time.Now())
 	var user User
+	var authProvider sql.NullString // CORREÇÃO: Adicionada variável para ler da DB
 	var emailVerificationToken sql.NullString
 	var emailVerificationTokenExpiresAt sql.NullTime
 	var passwordResetTokenFromDB sql.NullString
 	var passwordResetTokenExpiresAt sql.NullTime
 
+	// CORREÇÃO: Adicionado `&authProvider` ao Scan
 	err := row.Scan(
 		&user.ID, &user.Username, &user.Email, &user.Password,
+		&authProvider,
 		&user.IsEmailVerified,
 		&emailVerificationToken, &emailVerificationTokenExpiresAt,
 		&passwordResetTokenFromDB, &passwordResetTokenExpiresAt,
@@ -361,6 +404,10 @@ func GetUserByPasswordResetToken(db *sql.DB, token string) (*User, error) {
 			return nil, errors.New("invalid or expired password reset token")
 		}
 		return nil, err
+	}
+	// CORREÇÃO: Atribuído o valor lido da DB à struct
+	if authProvider.Valid {
+		user.AuthProvider = authProvider.String
 	}
 	if emailVerificationToken.Valid {
 		user.EmailVerificationToken = emailVerificationToken.String
@@ -502,11 +549,10 @@ func DeleteSessionByRefreshToken(db *sql.DB, refreshToken string) error {
 	}
 	rowsAffected, err := result.RowsAffected()
 	if err != nil {
-		// Log error getting rows affected, but don't necessarily return it as critical
 		log.Printf("Error getting rows affected after deleting refresh token: %v (Rows: %d)", err, rowsAffected)
 	}
 	if rowsAffected == 0 {
-		// Not necessarily an error, token might have already been removed or never existed
+		// Not necessarily an error
 	}
-	return nil // Return nil if exec was successful
+	return nil
 }

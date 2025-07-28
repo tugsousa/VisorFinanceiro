@@ -32,6 +32,7 @@ func InitDB(databasePath string) {
 		username TEXT NOT NULL UNIQUE,
 		password TEXT NOT NULL,
 		email TEXT NOT NULL UNIQUE,
+		auth_provider TEXT DEFAULT 'local',
 		is_email_verified BOOLEAN DEFAULT FALSE,
 		email_verification_token TEXT,
 		email_verification_token_expires_at TIMESTAMP,
@@ -203,6 +204,14 @@ func migrateUserTable() {
 			logger.L.Error("Error adding 'password_reset_token_expires_at' column to 'users' table", "error", err)
 		} else {
 			logger.L.Info("Added 'password_reset_token_expires_at' column to 'users' table")
+		}
+	}
+	if _, ok := columnExists["auth_provider"]; !ok {
+		_, err := DB.Exec("ALTER TABLE users ADD COLUMN auth_provider TEXT DEFAULT 'local'")
+		if err != nil {
+			logger.L.Error("Error adding 'auth_provider' column to 'users' table", "error", err)
+		} else {
+			logger.L.Info("Added 'auth_provider' column to 'users' table")
 		}
 	}
 

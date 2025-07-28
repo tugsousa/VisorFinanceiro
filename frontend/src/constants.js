@@ -11,7 +11,8 @@
       AUTH_REQUEST_PASSWORD_RESET: `${API_BASE_PATH}/auth/request-password-reset`,
       AUTH_RESET_PASSWORD: `${API_BASE_PATH}/auth/reset-password`,
       AUTH_RESET_PASSWORD_PAGE: `${API_BASE_PATH}/auth/reset-password`, 
-
+      AUTH_GOOGLE_LOGIN: `${API_BASE_PATH}/auth/google/login`,
+      
       UPLOAD: `${API_BASE_PATH}/upload`,
       REALIZEDGAINS_DATA: `${API_BASE_PATH}/realizedgains-data`,
       PROCESSED_TRANSACTIONS: `${API_BASE_PATH}/transactions/processed`,
@@ -24,6 +25,7 @@
       USER_HAS_DATA: `${API_BASE_PATH}/user/has-data`,
       DELETE_ALL_TRANSACTIONS: `${API_BASE_PATH}/transactions/all`,
       
+
       // New User Settings Endpoints
       USER_CHANGE_PASSWORD: `${API_BASE_PATH}/user/change-password`,
       USER_DELETE_ACCOUNT: `${API_BASE_PATH}/user/delete-account`,

@@ -8,7 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io" // Adicionar este import
+	"io"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -36,13 +36,12 @@ var passwordRegex = regexp.MustCompile(`^.{6,}$`) // Basic: at least 6 character
 
 var (
 	googleOauthConfig *oauth2.Config
-	oauthStateString  = "random-string-for-security" // Em produção, deve ser gerado aleatoriamente e guardado na sessão
+	oauthStateString  = "random-string-for-security"
 )
 
 type UserHandler struct {
 	authService  *security.AuthService
 	emailService services.EmailService
-	// uploadService services.UploadService // Only add if you intend to use it here, e.g., for cache invalidation on delete
 }
 
 func InitializeGoogleOAuthConfig() {
@@ -95,6 +94,7 @@ func (h *UserHandler) HandleGoogleCallback(w http.ResponseWriter, r *http.Reques
 		Email    string `json:"email"`
 		Name     string `json:"name"`
 		Verified bool   `json:"verified_email"`
+		ID       string `json:"id"`
 	}
 	if err := json.Unmarshal(contents, &googleUser); err != nil {
 		logger.L.Error("Failed to unmarshal Google user info", "error", err)
@@ -110,32 +110,26 @@ func (h *UserHandler) HandleGoogleCallback(w http.ResponseWriter, r *http.Reques
 	// Lógica para encontrar ou criar o utilizador
 	user, err := model.GetUserByEmail(database.DB, googleUser.Email)
 	if err != nil { // Utilizador não existe, vamos criá-lo
+		// CORREÇÃO: Usar o email como username para garantir unicidade e definir o AuthProvider
 		newUser := &model.User{
-			Username:        googleUser.Name,
+			Username:        googleUser.Email, // Usar email como username garante unicidade
 			Email:           googleUser.Email,
-			Password:        "",   // Sem password para logins OAuth
-			IsEmailVerified: true, // O email da Google já é verificado
-			// auth_provider será 'google'
+			Password:        "",       // Sem password para logins OAuth
+			AuthProvider:    "google", // Definir o provedor
+			IsEmailVerified: true,
 		}
 
-		// Adicione o campo auth_provider à struct User em model/user.go
-		// e modifique a função CreateUser para o guardar
-		// Por simplicidade, faremos um update após a criação
 		if err := newUser.CreateUser(database.DB); err != nil {
 			logger.L.Error("Failed to create Google user", "error", err)
 			http.Redirect(w, r, "/signin?error=user_creation_failed", http.StatusTemporaryRedirect)
 			return
 		}
-
-		// Definir o auth_provider
-		_, err = database.DB.Exec("UPDATE users SET auth_provider = 'google' WHERE id = ?", newUser.ID)
-		if err != nil {
-			logger.L.Error("Failed to set auth_provider for new Google user", "error", err)
-		}
 		user = newUser
 
 	} else { // Utilizador já existe
-		if user.Password != "" { // Se tem password, é um utilizador local
+		// CORREÇÃO: Verificar se a conta existente é local (tem password)
+		if user.AuthProvider == "local" || user.Password != "" {
+			logger.L.Warn("Google login attempt for existing local account", "email", user.Email)
 			http.Redirect(w, r, "/signin?error=email_already_exists_local", http.StatusTemporaryRedirect)
 			return
 		}
@@ -151,15 +145,14 @@ func (h *UserHandler) HandleGoogleCallback(w http.ResponseWriter, r *http.Reques
 
 	// Redirecionar para uma página de callback no frontend com o token
 	redirectURL := fmt.Sprintf("http://localhost:3000/auth/google/callback?token=%s&user=%s",
-		appToken, url.QueryEscape(string(contents))) // Passar também os dados do user
+		appToken, url.QueryEscape(string(contents)))
 	http.Redirect(w, r, redirectURL, http.StatusTemporaryRedirect)
 }
 
-func NewUserHandler(authService *security.AuthService, emailService services.EmailService /*, uploadService services.UploadService */) *UserHandler {
+func NewUserHandler(authService *security.AuthService, emailService services.EmailService) *UserHandler {
 	return &UserHandler{
 		authService:  authService,
 		emailService: emailService,
-		// uploadService: uploadService,
 	}
 }
 
@@ -243,6 +236,7 @@ func (h *UserHandler) RegisterUserHandler(w http.ResponseWriter, r *http.Request
 		Username:                        credentials.Username,
 		Email:                           credentials.Email,
 		Password:                        hashedPassword,
+		AuthProvider:                    "local", // CORREÇÃO: Definir explicitamente como 'local'
 		IsEmailVerified:                 false,
 		EmailVerificationToken:          verificationToken,
 		EmailVerificationTokenExpiresAt: tokenExpiry,
@@ -341,7 +335,6 @@ func (h *UserHandler) LoginUserHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := user.CheckPassword(credentials.Password); err != nil {
-		// CORRECTED THIS LINE
 		logger.L.Warn("Password check failed for login", "email", credentials.Email, "error", err)
 		sendJSONError(w, "Invalid email or password", http.StatusUnauthorized)
 		return
@@ -350,20 +343,16 @@ func (h *UserHandler) LoginUserHandler(w http.ResponseWriter, r *http.Request) {
 	if !user.IsEmailVerified {
 		logger.L.Warn("Login attempt failed: email not verified. Resending verification.", "email", credentials.Email, "userID", user.ID)
 
-		// --- START: New Logic for Resending Verification Email ---
 		tokenBytes := make([]byte, 32)
 		if _, err := rand.Read(tokenBytes); err != nil {
 			logger.L.Error("Failed to generate new verification token on login attempt", "userID", user.ID, "error", err)
-			// Still send the user-facing error, but log the internal issue
 		} else {
 			verificationToken := hex.EncodeToString(tokenBytes)
 			tokenExpiry := time.Now().Add(config.Cfg.VerificationTokenExpiry)
 
-			// Update user in DB with the new token
 			if err := user.UpdateUserVerificationToken(database.DB, verificationToken, tokenExpiry); err != nil {
 				logger.L.Error("Failed to update verification token in DB on login attempt", "userID", user.ID, "error", err)
 			} else {
-				// Send the new verification email
 				err = h.emailService.SendVerificationEmail(user.Email, user.Username, verificationToken)
 				if err != nil {
 					logger.L.Error("Failed to resend verification email on login attempt", "userEmail", user.Email, "error", err)
@@ -372,14 +361,12 @@ func (h *UserHandler) LoginUserHandler(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 		}
-		// --- END: New Logic ---
 
-		// Send a structured error response with a specific code
 		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusForbidden) // 403 is still appropriate
+		w.WriteHeader(http.StatusForbidden)
 		json.NewEncoder(w).Encode(map[string]string{
 			"error": "O teu e-mail ainda não foi verificado. Enviámos um novo link de verificação para o seu endereço de email.",
-			"code":  "EMAIL_NOT_VERIFIED", // This code is key for the frontend
+			"code":  "EMAIL_NOT_VERIFIED",
 		})
 		return
 	}
@@ -567,6 +554,13 @@ func (h *UserHandler) ChangePasswordHandler(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
+	// CORREÇÃO: Impedir que utilizadores não-locais (ex: Google) mudem a password aqui
+	if user.AuthProvider != "local" {
+		logger.L.Warn("Attempt to change password for non-local account", "userID", userID, "provider", user.AuthProvider)
+		sendJSONError(w, "Password cannot be changed for accounts created via Google.", http.StatusForbidden)
+		return
+	}
+
 	if err := user.CheckPassword(req.CurrentPassword); err != nil {
 		logger.L.Warn("Current password mismatch for password change", "userID", userID)
 		sendJSONError(w, "Incorrect current password", http.StatusForbidden)
@@ -585,13 +579,6 @@ func (h *UserHandler) ChangePasswordHandler(w http.ResponseWriter, r *http.Reque
 		sendJSONError(w, "Failed to change password", http.StatusInternalServerError)
 		return
 	}
-
-	// Optional: Invalidate other sessions for the user.
-	// Could be done by deleting all sessions for user ID except the current one.
-	// This requires getting the current session token, which is not straightforward here.
-	// A simpler approach is to delete all sessions, forcing re-login on all devices.
-	// Or, add a last_password_change_at timestamp to user and check against session.created_at.
-	// For now, keeping it simple.
 
 	logger.L.Info("Password changed successfully", "userID", userID)
 	w.Header().Set("Content-Type", "application/json")
@@ -622,23 +609,25 @@ func (h *UserHandler) DeleteAccountHandler(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	if err := user.CheckPassword(req.Password); err != nil {
-		logger.L.Warn("Password mismatch for account deletion", "userID", userID)
-		sendJSONError(w, "Incorrect password. Account deletion failed.", http.StatusForbidden)
-		return
+	// CORREÇÃO: Apenas verificar a password para contas locais
+	if user.AuthProvider == "local" {
+		if err := user.CheckPassword(req.Password); err != nil {
+			logger.L.Warn("Password mismatch for account deletion", "userID", userID)
+			sendJSONError(w, "Incorrect password. Account deletion failed.", http.StatusForbidden)
+			return
+		}
 	}
 
 	// Begin transaction
-	txDB, err := database.DB.Begin() // Renamed to txDB to avoid conflict with local tx
+	txDB, err := database.DB.Begin()
 	if err != nil {
 		logger.L.Error("Failed to begin transaction for account deletion", "userID", userID, "error", err)
 		sendJSONError(w, "Failed to delete account", http.StatusInternalServerError)
 		return
 	}
-	// Defer rollback/commit logic
 	committed := false
 	defer func() {
-		if !committed && txDB != nil { // Check if txDB is not nil before rollback
+		if !committed && txDB != nil {
 			rbErr := txDB.Rollback()
 			if rbErr != nil {
 				logger.L.Error("Error rolling back DB transaction for account deletion", "userID", userID, "rollbackError", rbErr)
@@ -646,40 +635,33 @@ func (h *UserHandler) DeleteAccountHandler(w http.ResponseWriter, r *http.Reques
 		}
 	}()
 
-	// 1. Delete processed transactions
 	if _, err = txDB.Exec("DELETE FROM processed_transactions WHERE user_id = ?", userID); err != nil {
 		logger.L.Error("Failed to delete processed transactions for user", "userID", userID, "error", err)
 		sendJSONError(w, "Failed to delete account data (transactions)", http.StatusInternalServerError)
-		return // err is set, defer will rollback
+		return
 	}
 
-	// 2. Delete sessions
 	if _, err = txDB.Exec("DELETE FROM sessions WHERE user_id = ?", userID); err != nil {
 		logger.L.Error("Failed to delete sessions for user", "userID", userID, "error", err)
 		sendJSONError(w, "Failed to delete account data (sessions)", http.StatusInternalServerError)
-		return // err is set, defer will rollback
+		return
 	}
 
-	// 3. Delete user
 	if _, err = txDB.Exec("DELETE FROM users WHERE id = ?", userID); err != nil {
 		logger.L.Error("Failed to delete user from users table", "userID", userID, "error", err)
 		sendJSONError(w, "Failed to delete user account", http.StatusInternalServerError)
-		return // err is set, defer will rollback
+		return
 	}
 
 	if err = txDB.Commit(); err != nil {
 		logger.L.Error("Failed to commit transaction for account deletion", "userID", userID, "error", err)
 		sendJSONError(w, "Failed to finalize account deletion", http.StatusInternalServerError)
-		return // err is set, defer would have already rolled back due to commit error setting err
+		return
 	}
 	committed = true
 
-	// If UserHandler had uploadService:
-	// h.uploadService.InvalidateUserCache(userID)
-	// Logger statement for this action would be inside InvalidateUserCache.
-
 	logger.L.Info("Account deleted successfully", "userID", userID)
-	w.WriteHeader(http.StatusNoContent) // 204 No Content is appropriate
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (h *UserHandler) AuthMiddleware(next http.HandlerFunc) http.HandlerFunc {
@@ -713,9 +695,22 @@ func (h *UserHandler) AuthMiddleware(next http.HandlerFunc) http.HandlerFunc {
 
 		_, err = model.GetSessionByToken(database.DB, tokenString)
 		if err != nil {
-			logger.L.Warn("AuthMiddleware: Session validation failed for access token", "path", r.URL.Path, "error", err)
-			sendJSONError(w, "Invalid or expired session", http.StatusUnauthorized)
-			return
+			// Esta verificação pode falhar para tokens do Google, pois eles não criam uma sessão na nossa DB
+			// Uma abordagem melhor seria verificar o AuthProvider do utilizador
+			userIDIntCheck, _ := strconv.ParseInt(userIDStr, 10, 64)
+			user, userErr := model.GetUserByID(database.DB, userIDIntCheck)
+			if userErr != nil {
+				logger.L.Warn("AuthMiddleware: User not found for token after session check failed", "userID", userIDStr, "error", userErr)
+				sendJSONError(w, "Invalid session or user", http.StatusUnauthorized)
+				return
+			}
+			// Se o utilizador for do Google, permitimos passar sem uma sessão na nossa DB.
+			// Se for local e não tiver sessão, é um erro.
+			if user.AuthProvider == "local" {
+				logger.L.Warn("AuthMiddleware: Session validation failed for local user's access token", "path", r.URL.Path, "error", err)
+				sendJSONError(w, "Invalid or expired session", http.StatusUnauthorized)
+				return
+			}
 		}
 
 		userIDInt, err := strconv.ParseInt(userIDStr, 10, 64)
