@@ -402,9 +402,10 @@ func (h *UserHandler) LoginUserHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	userData := map[string]interface{}{
-		"id":       user.ID,
-		"username": user.Username,
-		"email":    user.Email,
+		"id":            user.ID,
+		"username":      user.Username,
+		"email":         user.Email,
+		"auth_provider": user.AuthProvider,
 	}
 
 	w.Header().Set("Content-Type", "application/json")
