@@ -1,5 +1,5 @@
 # Stage 1: Build the React application (same as your frontend Dockerfile)
-FROM node:20-alpine AS builder
+FROM node:20.15.1-alpine3.19 AS builder
 WORKDIR /app
 # 1. Declare the build argument
 ARG REACT_APP_API_BASE_URL
@@ -12,7 +12,7 @@ COPY frontend/ .
 RUN npm run build
 
 # Stage 2: Serve the app using Caddy
-FROM caddy:2-alpine
+FROM caddy:2.8.4-alpine
 
 # Copy the Caddyfile configuration into the container
 COPY caddy/Caddyfile /etc/caddy/Caddyfile

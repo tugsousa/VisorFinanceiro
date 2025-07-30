@@ -1,6 +1,7 @@
 # Stage 1: The build environment
 # Use the official Golang image that matches your project's version. Alpine is smaller.
 FROM golang:1.23-alpine AS builder
+RUN apk update && apk upgrade
 
 # Set the Current Working Directory inside the container
 WORKDIR /app
@@ -24,6 +25,7 @@ RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o rumoclaro-backend
 # Stage 2: The production environment
 # Use a minimal, non-root base image for security and size.
 FROM alpine:latest
+RUN apk update && apk upgrade
 
 # It's a good practice to run as a non-root user
 RUN addgroup -S appgroup && adduser -S appuser -G appgroup
