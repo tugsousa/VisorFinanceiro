@@ -1,49 +1,34 @@
 # docker-compose.yml
-# This file defines the services, networks, and volumes for your application.
-# It now uses Caddy for automatic HTTPS and as a reverse proxy.
 
 services:
-  # The Backend Go Application
-  # This service runs your API. It is not exposed directly to the internet.
   backend:
     build: ./backend
     container_name: rumoclaro-backend-container
     restart: unless-stopped
     env_file:
-      - .env # Load environment variables from a .env file in the root
+      - .env
     volumes:
-      # Use a named volume to persist the SQLite database.
-      # This ensures your data is not lost when the container is recreated.
-      - /app/data:/app/data
+      # CORREÇÃO: Use um volume nomeado para o diretório de dados.
+      # Isto irá persistir o ficheiro da base de dados sem substituir o country.json.
+      - rumoclaro_data:/app/data
 
-  # The Caddy Web Server
-  # This service replaces Nginx. It serves the frontend React app and acts as a
-  # reverse proxy for the backend. It handles SSL termination automatically.
   caddy:
-    # --- THIS IS THE CORRECTED SECTION ---
-    # The build context is set to the project root '.', and we specify the Dockerfile's location.
-    # This allows the Dockerfile to access both the 'caddy' and 'frontend' directories.
     build:
       context: .
       dockerfile: caddy/Dockerfile
-    # --- END OF CORRECTION ---
+      args:
+        - REACT_APP_API_BASE_URL=${REACT_APP_API_BASE_URL}
     container_name: rumoclaro-caddy-container
     restart: unless-stopped
     ports:
-      # Port 80 is required by Caddy for the ACME HTTP-01 challenge to get SSL certificates
-      # from Let's Encrypt. Caddy also uses it to automatically redirect all HTTP traffic to HTTPS.
       - "80:80"
-      # Port 443 is the standard port for HTTPS traffic. This is where your users will connect.
       - "443:443"
     volumes:
-      # This named volume is critical. It persists Caddy's SSL certificates and other state,
-      # preventing you from hitting Let's Encrypt rate limits on restarts.
       - caddy_data:/data
     depends_on:
-      # This ensures the backend container is started before the Caddy container.
       - backend
 
-# Named volumes are managed by Docker and are the preferred way to persist data.
+# Defina os volumes nomeados no nível superior do ficheiro.
 volumes:
-  # Volume for Caddy's SSL certificates and configuration
+  rumoclaro_data: # Volume para persistir a base de dados do backend.
   caddy_data:

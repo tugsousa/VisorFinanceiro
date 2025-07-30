@@ -1,6 +1,11 @@
 # Stage 1: Build the React application (same as your frontend Dockerfile)
 FROM node:20-alpine AS builder
 WORKDIR /app
+# 1. Declare the build argument
+ARG REACT_APP_API_BASE_URL
+# 2. Set it as an environment variable for the build script
+ENV REACT_APP_API_BASE_URL=${REACT_APP_API_BASE_URL}
+
 COPY frontend/package*.json ./
 RUN npm install
 COPY frontend/ .
