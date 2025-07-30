@@ -144,8 +144,10 @@ func (h *UserHandler) HandleGoogleCallback(w http.ResponseWriter, r *http.Reques
 	}
 
 	// Redirecionar para uma página de callback no frontend com o token
-	redirectURL := fmt.Sprintf("http://localhost:3000/auth/google/callback?token=%s&user=%s",
-		appToken, url.QueryEscape(string(contents)))
+	redirectURL := fmt.Sprintf("%s/auth/google/callback?token=%s&user=%s",
+		config.Cfg.FrontendBaseURL, // <-- USE THE CONFIG VARIABLE
+		appToken,
+		url.QueryEscape(string(contents)))
 	http.Redirect(w, r, redirectURL, http.StatusTemporaryRedirect)
 }
 

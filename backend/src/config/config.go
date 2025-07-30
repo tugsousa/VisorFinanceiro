@@ -42,6 +42,7 @@ type AppConfig struct {
 	GoogleClientID           string
 	GoogleClientSecret       string
 	GoogleRedirectURL        string
+	FrontendBaseURL          string
 }
 
 var Cfg *AppConfig
@@ -138,6 +139,7 @@ func LoadConfig() {
 		GoogleClientID:     getEnv("GOOGLE_CLIENT_ID", ""),
 		GoogleClientSecret: getEnv("GOOGLE_CLIENT_SECRET", ""),
 		GoogleRedirectURL:  getEnv("GOOGLE_REDIRECT_URL", "http://localhost:8080/api/auth/google/callback"),
+		FrontendBaseURL:    getEnv("FRONTEND_BASE_URL", "http://localhost:3000"),
 	}
 
 	if Cfg.EmailServiceProvider == "mailgun" {
