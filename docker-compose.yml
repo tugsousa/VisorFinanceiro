@@ -1,34 +1,45 @@
 # docker-compose.yml
 
 services:
+  # The Go Backend Service
   backend:
     build: ./backend
     container_name: rumoclaro-backend-container
     restart: unless-stopped
+    # Loads environment variables from the .env file in the project's root directory.
+    # This is where you'll define your database path, secrets, and frontend URL.
     env_file:
       - .env
     volumes:
-      # CORREÇÃO: Use um volume nomeado para o diretório de dados.
-      # Isto irá persistir o ficheiro da base de dados sem substituir o country.json.
-      - rumoclaro_data:/app/data
+      # Mounts a named volume to the /app/db directory inside the container.
+      # This ensures your SQLite database file persists even if the container is removed.
+      # This path MUST match the directory created and given permissions in the Dockerfile.
+      - rumoclaro_data:/app/db
 
+  # The Caddy Service (serves the frontend and acts as a reverse proxy)
   caddy:
     build:
       context: .
       dockerfile: caddy/Dockerfile
       args:
+        # Passes the variable from the root .env file into the frontend build process.
+        # This is how your React app knows the production API URL at build time.
         - REACT_APP_API_BASE_URL=${REACT_APP_API_BASE_URL}
     container_name: rumoclaro-caddy-container
     restart: unless-stopped
     ports:
+      # Maps host ports 80 and 443 to the container's ports.
+      # Caddy will automatically handle HTTPS for these ports.
       - "80:80"
       - "443:443"
     volumes:
+      # Persists Caddy's automatically generated SSL certificates and state.
       - caddy_data:/data
     depends_on:
+      # Ensures the backend service starts before the Caddy service.
       - backend
 
-# Defina os volumes nomeados no nível superior do ficheiro.
+# Define the named volumes used by the services to persist data.
 volumes:
-  rumoclaro_data: # Volume para persistir a base de dados do backend.
-  caddy_data:
+  rumoclaro_data: # Volume for persisting the backend's database.
+  caddy_data:     # Volume for persisting Caddy's state and certificates.
