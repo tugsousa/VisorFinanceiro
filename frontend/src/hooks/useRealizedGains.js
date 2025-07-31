@@ -1,7 +1,8 @@
 // frontend/src/hooks/useRealizedGains.js
 import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { apiFetchRealizedGainsData } from '../api/apiService';
+// MODIFICAÇÃO: Importar a função da API para obter os valores de mercado
+import { apiFetchRealizedGainsData, apiFetchCurrentHoldingsValue } from '../api/apiService';
 import { ALL_YEARS_OPTION, NO_YEAR_SELECTED } from '../constants';
 import { getYearString, extractYearsFromData, parseDateRobust } from '../utils/dateUtils';
 
@@ -49,6 +50,29 @@ export const useRealizedGains = (token, selectedYear) => {
     select: (response) => response.data,
   });
 
+  // --- NOVA ADIÇÃO ---
+  // Obter os dados de mercado atuais para os ativos em carteira
+  const { data: liveHoldingsData } = useQuery({
+    queryKey: ['currentHoldingsValue', token],
+    queryFn: () => apiFetchCurrentHoldingsValue(),
+    enabled: !!token && !!allData && allData.StockHoldings && Object.keys(allData.StockHoldings).length > 0,
+    staleTime: 1000 * 60 * 5, // 5 minutes
+    select: (response) => {
+      // Transformar o array da API num Map para pesquisas rápidas (O(1))
+      const liveDataMap = new Map();
+      if (response.data) {
+        response.data.forEach(item => {
+          liveDataMap.set(item.ISIN, {
+            marketValue: item.market_value_eur,
+            status: item.Status,
+          });
+        });
+      }
+      return liveDataMap;
+    },
+  });
+  // --- FIM DA NOVA ADIÇÃO ---
+
   const derivedDividendTaxSummary = useMemo(() => {
     if (allData && allData.DividendTransactionsList) {
       return processTransactionsToDividendSummary(allData.DividendTransactionsList);
@@ -62,7 +86,7 @@ export const useRealizedGains = (token, selectedYear) => {
     const stockHoldingYears = allData.StockHoldings ? Object.keys(allData.StockHoldings) : [];
 
     const dateAccessors = {
-      StockSaleDetails: 'SaleDate', // CORRECTED
+      StockSaleDetails: 'SaleDate',
       OptionSaleDetails: 'close_date',
       DividendTaxResult: null,
     };
@@ -110,14 +134,14 @@ export const useRealizedGains = (token, selectedYear) => {
     if (selectedYear === ALL_YEARS_OPTION || !selectedYear) return dataSet;
     return {
       ...dataSet,
-      StockSaleDetails: dataSet.StockSaleDetails.filter(s => getYearString(s.SaleDate) === selectedYear), // CORRECTED
+      StockSaleDetails: dataSet.StockSaleDetails.filter(s => getYearString(s.SaleDate) === selectedYear),
       OptionSaleDetails: dataSet.OptionSaleDetails.filter(o => getYearString(o.close_date) === selectedYear),
       DividendTransactionsList: dataSet.DividendTransactionsList.filter(tx => getYearString(tx.date) === selectedYear),
     };
   }, [allData, selectedYear]);
 
   const summaryPLs = useMemo(() => {
-    const stockPL = (filteredData.StockSaleDetails || []).reduce((sum, sale) => sum + (sale.Delta || 0), 0); // CORRECTED
+    const stockPL = (filteredData.StockSaleDetails || []).reduce((sum, sale) => sum + (sale.Delta || 0), 0);
     const optionPL = (filteredData.OptionSaleDetails || []).reduce((sum, sale) => sum + (sale.delta || 0), 0);
     let dividendPL = 0;
 
@@ -137,6 +161,7 @@ export const useRealizedGains = (token, selectedYear) => {
     return { stockPL, optionPL, dividendPL, totalPL };
   }, [filteredData, derivedDividendTaxSummary, selectedYear]);
   
+  // --- LÓGICA DO GRÁFICO MODIFICADA ---
   const holdingsChartData = useMemo(() => {
     const stockHoldingsForChart = filteredData.StockHoldings;
     
@@ -150,13 +175,13 @@ export const useRealizedGains = (token, selectedYear) => {
 
       if (!acc[isin]) {
         acc[isin] = {
-          totalValue: 0,
+          totalCost: 0, // Agora vamos guardar o custo
           latestName: product_name,
           latestDate: parseDateRobust(buy_date) || new Date(0),
         };
       }
       
-      acc[isin].totalValue += Math.abs(buy_amount_eur || 0);
+      acc[isin].totalCost += Math.abs(buy_amount_eur || 0);
 
       const currentDate = parseDateRobust(buy_date);
       if (currentDate && currentDate > acc[isin].latestDate) {
@@ -167,26 +192,36 @@ export const useRealizedGains = (token, selectedYear) => {
       return acc;
     }, {});
 
-    const aggregatedHoldings = Object.values(holdingsByIsin);
+    // Agora, enriquecemos com o valor de mercado
+    const aggregatedHoldings = Object.entries(holdingsByIsin).map(([isin, group]) => {
+      const liveInfo = liveHoldingsData?.get(isin);
+      // Usar o valor de mercado se existir; caso contrário, usar o custo como fallback
+      const currentValue = liveInfo?.marketValue ?? group.totalCost;
+      return {
+        name: group.latestName,
+        value: currentValue,
+      };
+    });
     
-    aggregatedHoldings.sort((a, b) => b.totalValue - a.totalValue);
+    aggregatedHoldings.sort((a, b) => b.value - a.value);
 
     const topN = 7;
     const topHoldings = aggregatedHoldings.slice(0, topN);
     const otherHoldings = aggregatedHoldings.slice(topN);
 
-    const labels = topHoldings.map(item => item.latestName);
-    const data = topHoldings.map(item => item.totalValue);
+    const labels = topHoldings.map(item => item.name);
+    const data = topHoldings.map(item => item.value);
 
     if (otherHoldings.length > 0) {
-      const othersValue = otherHoldings.reduce((sum, item) => sum + item.totalValue, 0);
-      labels.push('Others');
+      const othersValue = otherHoldings.reduce((sum, item) => sum + item.value, 0);
+      labels.push('Outros');
       data.push(othersValue);
     }
 
     return { labels, datasets: [{ data }] };
-
-  }, [filteredData.StockHoldings]);
+  // A dependência agora inclui os dados de mercado
+  }, [filteredData.StockHoldings, liveHoldingsData]);
+  // --- FIM DA MODIFICAÇÃO ---
 
   return {
     allData,

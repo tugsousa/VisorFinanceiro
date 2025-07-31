@@ -82,26 +82,25 @@ const detailedColumns = [
 export default function StockHoldingsSection({ holdingsData }) {
   const [viewMode, setViewMode] = useState('grouped');
 
-  // STEP 1.2: Fetch the live market data using react-query
   const { data: liveData, isFetching: isLivePriceFetching } = useQuery({
     queryKey: ['currentHoldingsValue'],
     queryFn: apiFetchCurrentHoldingsValue,
-    // Transform the API response array into a map for quick lookups by ISIN
     select: (response) => {
       const liveDataMap = new Map();
       if (response.data) {
         response.data.forEach(item => {
-          liveDataMap.set(item.ISIN, {
+          // --- MODIFICAÇÃO PRINCIPAL AQUI ---
+          // Usar 'item.isin' e 'item.status' (minúsculas) para corresponder à resposta JSON da API.
+          liveDataMap.set(item.isin, {
             marketValue: item.market_value_eur,
-            status: item.Status,
+            status: item.status,
           });
         });
       }
       return liveDataMap;
     },
-    // Only run this query if there is historical holdings data to enrich
     enabled: !!holdingsData && holdingsData.length > 0,
-    staleTime: 1000 * 60 * 5, // Cache for 5 minutes
+    staleTime: 1000 * 60 * 5,
     refetchOnWindowFocus: true,
   });
 
@@ -111,7 +110,6 @@ export default function StockHoldingsSection({ holdingsData }) {
     }
   };
   
-  // STEP 2.1: Merge historical and live data
   const groupedData = useMemo(() => {
     if (!holdingsData) return [];
 
@@ -141,7 +139,6 @@ export default function StockHoldingsSection({ holdingsData }) {
       return acc;
     }, {});
 
-    // Enrich with live data
     return Object.values(groupedByIsin).map(group => {
       const liveInfo = liveData?.get(group.isin);
       const marketValueEUR = liveInfo?.marketValue ?? group.totalCostBasisEUR;
@@ -156,7 +153,6 @@ export default function StockHoldingsSection({ holdingsData }) {
     });
   }, [holdingsData, liveData]);
 
-  // STEP 2.2: Define new columns for the grouped view
   const groupedColumns = [
     { field: 'product_name', headerName: 'Produto', flex: 1, minWidth: 200 },
     { field: 'isin', headerName: 'ISIN', width: 130 },
@@ -170,7 +166,6 @@ export default function StockHoldingsSection({ holdingsData }) {
       headerAlign: 'right',
       valueFormatter: (value) => formatCurrency(value),
     },
-    // NEW COLUMN: Market Value
     {
       field: 'marketValueEUR',
       headerName: 'Valor de Mercado (€)',
@@ -184,7 +179,6 @@ export default function StockHoldingsSection({ holdingsData }) {
         isFetching: isLivePriceFetching
       }),
     },
-    // NEW COLUMN: Unrealized P/L
     {
       field: 'unrealizedPL',
       headerName: 'L/P Não Realizado (€)',
