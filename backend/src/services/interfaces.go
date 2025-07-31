@@ -37,3 +37,14 @@ type UploadService interface {
 	GetOptionSaleDetails(userID int64) ([]models.OptionSaleDetail, error)
 	InvalidateUserCache(userID int64)
 }
+
+type PriceInfo struct {
+	Status   string  // "OK" or "UNAVAILABLE"
+	Price    float64 // Price in EUR
+	Currency string  // Should always be "EUR" in the final result
+}
+
+// PriceService defines the interface for fetching current market prices.
+type PriceService interface {
+	GetCurrentPrices(isins []string) (map[string]PriceInfo, error)
+}

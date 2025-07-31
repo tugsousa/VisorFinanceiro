@@ -36,13 +36,13 @@ type AppConfig struct {
 	VerificationEmailBaseURL string
 	VerificationTokenExpiry  time.Duration
 
-	// New fields for password reset
-	PasswordResetBaseURL     string        // e.g., http://localhost:3000/reset-password
-	PasswordResetTokenExpiry time.Duration // e.g., 1h
+	PasswordResetBaseURL     string
+	PasswordResetTokenExpiry time.Duration
 	GoogleClientID           string
 	GoogleClientSecret       string
 	GoogleRedirectURL        string
 	FrontendBaseURL          string
+	FMPApiKey                string
 }
 
 var Cfg *AppConfig
@@ -97,7 +97,6 @@ func LoadConfig() {
 		verificationTokenExpiry = 24 * time.Hour
 	}
 
-	// New Password Reset Config
 	passwordResetTokenExpiryStr := getEnv("PASSWORD_RESET_TOKEN_EXPIRY", "1h")
 	passwordResetTokenExpiry, err := time.ParseDuration(passwordResetTokenExpiryStr)
 	if err != nil {
@@ -132,7 +131,6 @@ func LoadConfig() {
 		VerificationEmailBaseURL: getEnv("VERIFICATION_EMAIL_BASE_URL", "http://localhost:3000/verify-email"),
 		VerificationTokenExpiry:  verificationTokenExpiry,
 
-		// New fields for password reset
 		PasswordResetBaseURL:     getEnv("PASSWORD_RESET_BASE_URL", "http://localhost:3000/reset-password"),
 		PasswordResetTokenExpiry: passwordResetTokenExpiry,
 
@@ -140,6 +138,7 @@ func LoadConfig() {
 		GoogleClientSecret: getEnv("GOOGLE_CLIENT_SECRET", ""),
 		GoogleRedirectURL:  getEnv("GOOGLE_REDIRECT_URL", "http://localhost:8080/api/auth/google/callback"),
 		FrontendBaseURL:    getEnv("FRONTEND_BASE_URL", "http://localhost:3000"),
+		FMPApiKey:          getEnv("FMP_API_KEY", ""),
 	}
 
 	if Cfg.EmailServiceProvider == "mailgun" {

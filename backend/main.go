@@ -2,7 +2,7 @@
 package main
 
 import (
-	"crypto/tls" // <-- ADDED THIS IMPORT
+	"crypto/tls"
 	"encoding/json"
 	stdlog "log"
 	"net/http"
@@ -59,8 +59,8 @@ func enableCORS(next http.Handler) http.Handler {
 		origin := r.Header.Get("Origin")
 		// In production, replace "http://localhost:3000" with your actual frontend domain(s).
 		allowedOrigins := map[string]bool{
-			"http://localhost:3000":    true,
-			"https://www.rumoclaro.pt": true,
+			"http://localhost:3000": true,
+			"https://rumoclaro.pt":  true,
 			// Add other origins here if needed, e.g., "https://yourdomain.com"
 		}
 
@@ -116,6 +116,9 @@ func main() {
 	emailService := services.NewEmailService()
 	userHandler := handlers.NewUserHandler(authService, emailService)
 
+	// Instantiate the new price service
+	priceService := services.NewPriceService()
+
 	transactionProcessor := processors.NewTransactionProcessor()
 	dividendProcessor := processors.NewDividendProcessor()
 	stockProcessor := processors.NewStockProcessor()
@@ -132,7 +135,8 @@ func main() {
 	)
 
 	uploadHandler := handlers.NewUploadHandler(uploadService)
-	portfolioHandler := handlers.NewPortfolioHandler(uploadService)
+	// Pass both services to the PortfolioHandler constructor
+	portfolioHandler := handlers.NewPortfolioHandler(uploadService, priceService)
 	dividendHandler := handlers.NewDividendHandler(uploadService)
 	txHandler := handlers.NewTransactionHandler(uploadService)
 
@@ -163,6 +167,10 @@ func main() {
 	apiRouter.Handle("POST /api/upload", applyCsrfAndAuth(uploadHandler.HandleUpload))
 	apiRouter.Handle("GET /api/realizedgains-data", applyCsrfAndAuth(uploadHandler.HandleGetRealizedGainsData))
 	apiRouter.Handle("GET /api/transactions/processed", applyCsrfAndAuth(txHandler.HandleGetProcessedTransactions))
+
+	// Add the new route for fetching current holdings value
+	apiRouter.Handle("GET /api/holdings/current-value", applyCsrfAndAuth(portfolioHandler.HandleGetCurrentHoldingsValue))
+
 	apiRouter.Handle("GET /api/holdings/stocks", applyCsrfAndAuth(portfolioHandler.HandleGetStockHoldings))
 	apiRouter.Handle("GET /api/holdings/options", applyCsrfAndAuth(portfolioHandler.HandleGetOptionHoldings))
 	apiRouter.Handle("GET /api/stock-sales", applyCsrfAndAuth(portfolioHandler.HandleGetStockSales))
@@ -189,9 +197,6 @@ func main() {
 	})
 
 	logger.L.Info("Applying global middleware...")
-	// --- THIS IS THE MODIFIED LINE ---
-	// Wrap with proxyHeadersMiddleware to make the app aware of the HTTPS proxy.
-	// It should be one of the first middlewares to run.
 	finalHandler := proxyHeadersMiddleware(enableCORS(rateLimitMiddleware(rootMux)))
 
 	serverAddr := ":" + config.Cfg.Port

@@ -23,8 +23,9 @@ func InitDB(databasePath string) {
 	} else {
 		stdlog.Println("Checking database migrations for:", databasePath)
 	}
-	migrateUserTable() // Migration for users table
-	migrateDatabase()  // Existing migration for processed_transactions
+	migrateUserTable()
+	migrateDatabase()
+	migrateISINMappingTable()
 
 	createTableStatement := `
 	CREATE TABLE IF NOT EXISTS users (
@@ -81,6 +82,15 @@ func InitDB(databasePath string) {
 		FOREIGN KEY(user_id) REFERENCES users(id),
 		UNIQUE(user_id, hash_id)
 	);
+
+	 CREATE TABLE IF NOT EXISTS isin_ticker_map (
+        isin TEXT PRIMARY KEY NOT NULL,
+        ticker_symbol TEXT NOT NULL,
+        exchange TEXT,
+        currency TEXT NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        last_checked_at TIMESTAMP
+    );
 	`
 
 	_, err = DB.Exec(createTableStatement)
@@ -189,7 +199,6 @@ func migrateUserTable() {
 		}
 	}
 
-	// ** NEW MIGRATIONS FOR PASSWORD RESET **
 	if _, ok := columnExists["password_reset_token"]; !ok {
 		_, err := DB.Exec("ALTER TABLE users ADD COLUMN password_reset_token TEXT")
 		if err != nil {
@@ -233,6 +242,39 @@ func migrateUserTable() {
 	}
 }
 
+func migrateISINMappingTable() {
+	var tableName string
+	err := DB.QueryRow("SELECT name FROM sqlite_master WHERE type='table' AND name='isin_ticker_map'").Scan(&tableName)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return
+		}
+		logger.L.Error("Error checking for 'isin_ticker_map' table", "error", err)
+		return
+	}
+	// 2. If it exists, check its columns
+	rows, err := DB.Query("PRAGMA table_info(isin_ticker_map)")
+	if err != nil { /* handle error */
+		return
+	}
+	defer rows.Close()
+
+	columnExists := make(map[string]bool)
+	for rows.Next() {
+		var name string
+		columnExists[name] = true
+	}
+	// 3. Add the new column if it doesn't exist
+	if _, ok := columnExists["company_name"]; !ok {
+		_, err := DB.Exec("ALTER TABLE isin_ticker_map ADD COLUMN company_name TEXT")
+		if err != nil {
+			logger.L.Error("Error adding 'company_name' column", "error", err)
+		} else {
+			logger.L.Info("Added 'company_name' column to isin_ticker_map table")
+		}
+	}
+}
+
 func migrateDatabase() {
 	var tableName string
 	err := DB.QueryRow("SELECT name FROM sqlite_master WHERE type='table' AND name='processed_transactions'").Scan(&tableName)
@@ -272,7 +314,7 @@ func migrateDatabase() {
 		var notnullVal int
 		var dfltValue interface{}
 
-		// CORRECTED SCAN: Use ¬nullVal
+		// Use &notnullVal
 		if err := rows.Scan(&cid, &name, &dataType, &notnullVal, &dfltValue, &pk); err != nil {
 			if logger.L != nil {
 				logger.L.Error("Error scanning column info", "error", err)
