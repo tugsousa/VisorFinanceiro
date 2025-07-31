@@ -1,202 +1,255 @@
+// backend/src/services/price_service.go
 package services
 
 import (
-	"database/sql"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
+	"net/http/cookiejar"
+	"regexp"
 	"strings"
 	"time"
 
-	"github.com/username/taxfolio/backend/src/config"
-	"github.com/username/taxfolio/backend/src/database"
 	"github.com/username/taxfolio/backend/src/logger"
-	"github.com/username/taxfolio/backend/src/model"
 	"github.com/username/taxfolio/backend/src/processors"
+	"golang.org/x/net/publicsuffix"
 )
 
-// fmpISINResponse defines the structure for the FMP ISIN search API response.
-type fmpISINResponse struct {
-	Symbol   string `json:"symbol"`
-	Name     string `json:"name"`
-	Currency string `json:"currency"`
-	Exchange string `json:"exchange"`
+// Structs for Yahoo Finance API responses
+type yahooSearchResponse struct {
+	Quotes []struct {
+		Symbol    string `json:"symbol"`
+		Exchange  string `json:"exchange"`
+		Shortname string `json:"shortname"`
+		QuoteType string `json:"quoteType"`
+	} `json:"quotes"`
 }
 
-// fmpQuoteResponse defines the structure for the FMP Quote API response.
-type fmpQuoteResponse struct {
-	Symbol string  `json:"symbol"`
-	Price  float64 `json:"price"`
+type yahooQuoteResponse struct {
+	QuoteResponse struct {
+		Result []struct {
+			Symbol             string  `json:"symbol"`
+			RegularMarketPrice float64 `json:"regularMarketPrice"`
+			Currency           string  `json:"currency"`
+		} `json:"result"`
+		Error interface{} `json:"error"`
+	} `json:"quoteResponse"`
 }
 
 // priceServiceImpl implements the PriceService interface.
+// It now includes a cookie jar and a crumb for authenticated Yahoo requests.
 type priceServiceImpl struct {
 	httpClient http.Client
+	crumb      string // Yahoo's crumb for authentication
 }
 
 // NewPriceService creates a new instance of the price service.
+// It initializes the HTTP client with a cookie jar and fetches the Yahoo crumb.
 func NewPriceService() PriceService {
-	return &priceServiceImpl{
-		httpClient: http.Client{Timeout: 15 * time.Second},
+	jar, err := cookiejar.New(&cookiejar.Options{PublicSuffixList: publicsuffix.List})
+	if err != nil {
+		logger.L.Error("Failed to create cookie jar", "error", err)
 	}
+
+	client := http.Client{
+		Jar:     jar,
+		Timeout: 20 * time.Second,
+	}
+
+	s := &priceServiceImpl{
+		httpClient: client,
+	}
+
+	// Initialize the service by getting the crumb
+	if err := s.initializeYahooSession(); err != nil {
+		logger.L.Error("Failed to initialize Yahoo Finance session. Price fetching may fail.", "error", err)
+	}
+
+	return s
 }
 
-// GetCurrentPrices is the main function that orchestrates fetching prices for a list of ISINs.
+// initializeYahooSession visits a Yahoo Finance page to get necessary cookies and the crumb.
+func (s *priceServiceImpl) initializeYahooSession() error {
+	logger.L.Info("Initializing Yahoo Finance session to get crumb and cookies...")
+	// We use a less common ticker to avoid heavily cached pages.
+	initURL := "https://finance.yahoo.com/quote/VHYL.L"
+	req, err := http.NewRequest("GET", initURL, nil)
+	if err != nil {
+		return err
+	}
+	// A valid User-Agent is crucial.
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36")
+
+	resp, err := s.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("failed to make initial request to Yahoo: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return fmt.Errorf("failed to read Yahoo response body: %w", err)
+	}
+
+	// Use regex to find the crumb in the HTML/JS response.
+	re := regexp.MustCompile(`"CrumbStore":{"crumb":"(.*?)"}`)
+	matches := re.FindStringSubmatch(string(body))
+
+	if len(matches) < 2 {
+		return fmt.Errorf("could not find crumb in Yahoo Finance response. The page structure may have changed")
+	}
+
+	s.crumb = matches[1]
+	logger.L.Info("Successfully obtained Yahoo Finance crumb.")
+	return nil
+}
+
+// GetCurrentPrices is the main function that now exclusively uses Yahoo Finance.
 func (s *priceServiceImpl) GetCurrentPrices(isins []string) (map[string]PriceInfo, error) {
 	result := make(map[string]PriceInfo)
+	isinsToProcess := make(map[string]bool)
 	for _, isin := range isins {
 		result[isin] = PriceInfo{Status: "UNAVAILABLE"}
+		if isin != "" {
+			isinsToProcess[isin] = true
+		}
 	}
-	if len(isins) == 0 {
+	if len(isinsToProcess) == 0 {
 		return result, nil
 	}
 
-	// Step 1: Check our local DB for already resolved ISINs to save API calls.
-	existingMappings, err := model.GetMappingsByISINs(database.DB, isins)
-	if err != nil {
-		logger.L.Error("Failed to get existing ISIN mappings from DB", "error", err)
-		// Continue execution, we'll just have to call the API for everything.
-	}
-	logger.L.Info("ISIN mapping cache check", "total_isins", len(isins), "found_in_db", len(existingMappings))
-
-	// Step 2: Identify which ISINs we still need to look up via the API.
-	neededISINs := []string{}
-	for _, isin := range isins {
-		if _, found := existingMappings[isin]; !found {
-			neededISINs = append(neededISINs, isin)
+	// If the crumb is missing, try to re-initialize the session.
+	if s.crumb == "" {
+		logger.L.Warn("Yahoo crumb is missing, attempting to re-initialize session.")
+		if err := s.initializeYahooSession(); err != nil {
+			return result, fmt.Errorf("failed to re-initialize Yahoo session: %w", err)
 		}
 	}
 
-	// Step 3: Resolve the missing ISINs via the FMP API.
-	newlyResolvedMappings := make(map[string]model.ISINTickerMap)
-	if len(neededISINs) > 0 {
-		newlyResolvedMappings = s.resolveISINsFromAPI(neededISINs)
-		logger.L.Info("Resolved new ISINs from API", "count", len(newlyResolvedMappings))
-
-		// Step 4: Save the newly resolved mappings back to our DB for future use.
-		for _, newMapping := range newlyResolvedMappings {
-			if err := model.InsertMapping(database.DB, newMapping); err != nil {
-				logger.L.Error("Failed to insert new ISIN mapping into DB", "isin", newMapping.ISIN, "error", err)
-			}
-		}
+	uniqueISINs := make([]string, 0, len(isinsToProcess))
+	for isin := range isinsToProcess {
+		uniqueISINs = append(uniqueISINs, isin)
 	}
 
-	// Step 5: Consolidate all mappings (from DB and newly resolved).
-	allMappings := existingMappings
-	for isin, mapping := range newlyResolvedMappings {
-		allMappings[isin] = mapping
-	}
-
-	// Step 6: Fetch prices for all available tickers.
-	finalPricesEUR, err := s.fetchAndConvertPrices(allMappings)
+	// Fetch all prices from Yahoo
+	yahooPrices, err := s.fetchPricesFromYahoo(uniqueISINs)
 	if err != nil {
-		// This is not a fatal error; some prices might be unavailable. Log and continue.
-		logger.L.Error("Error during price fetch and conversion", "error", err)
+		logger.L.Error("An error occurred during the Yahoo Finance fetch process", "error", err)
 	}
 
-	// Step 7: Populate the final result map.
-	for isin, price := range finalPricesEUR {
-		result[isin] = PriceInfo{Status: "OK", Price: price, Currency: "EUR"}
+	// Populate the final result map
+	for isin, priceInfo := range yahooPrices {
+		if priceInfo.Status == "OK" {
+			result[isin] = priceInfo
+		}
 	}
 
 	return result, nil
 }
 
-// resolveISINsFromAPI calls the FMP API for a list of ISINs and returns the resolved mappings.
-func (s *priceServiceImpl) resolveISINsFromAPI(isins []string) map[string]model.ISINTickerMap {
-	resolved := make(map[string]model.ISINTickerMap)
-	apiKey := config.Cfg.FMPApiKey
-	if apiKey == "" {
-		logger.L.Error("FMP_API_KEY is not configured. Cannot resolve ISINs.")
-		return resolved
-	}
-
+// fetchPricesFromYahoo orchestrates the scraping process for a list of ISINs.
+func (s *priceServiceImpl) fetchPricesFromYahoo(isins []string) (map[string]PriceInfo, error) {
+	yahooResults := make(map[string]PriceInfo)
 	for _, isin := range isins {
-		url := fmt.Sprintf("https://financialmodelingprep.com/api/v3/search-isin/%s?apikey=%s", isin, apiKey)
-		resp, err := s.httpClient.Get(url)
+		time.Sleep(250 * time.Millisecond) // Respectful delay
+
+		ticker, err := s.getTickerForISIN(isin)
 		if err != nil {
-			logger.L.Warn("Failed to call FMP ISIN API", "isin", isin, "error", err)
-			continue
-		}
-		defer resp.Body.Close()
-
-		var fmpData []fmpISINResponse
-		if err := json.NewDecoder(resp.Body).Decode(&fmpData); err != nil || len(fmpData) == 0 {
-			logger.L.Warn("Failed to decode FMP ISIN response or no data returned", "isin", isin, "error", err)
+			logger.L.Warn("Yahoo Fetch: Could not get ticker", "isin", isin, "error", err)
 			continue
 		}
 
-		// Priority Logic: Find the best ticker from the results.
-		// Prefer EUR currency, then major exchanges like NASDAQ/NYSE.
-		bestMatch := fmpData[0] // Default to the first result
-		for _, item := range fmpData {
-			if item.Currency == "EUR" {
-				bestMatch = item
-				break
-			}
-			if strings.Contains(item.Exchange, "NASDAQ") || strings.Contains(item.Exchange, "NYSE") {
-				bestMatch = item
-			}
+		price, currency, err := s.getPriceForTicker(ticker)
+		if err != nil {
+			logger.L.Warn("Yahoo Fetch: Could not get price", "ticker", ticker, "error", err)
+			continue
 		}
 
-		resolved[isin] = model.ISINTickerMap{
-			ISIN:         isin,
-			TickerSymbol: bestMatch.Symbol,
-			Exchange:     sql.NullString{String: bestMatch.Exchange, Valid: bestMatch.Exchange != ""},
-			Currency:     bestMatch.Currency,
+		priceEUR := price
+		if strings.ToUpper(currency) != "EUR" {
+			rate, err := processors.GetExchangeRate(currency, time.Now())
+			if err != nil || rate == 0 {
+				logger.L.Warn("Yahoo Fetch: Could not get exchange rate", "currency", currency, "error", err)
+				continue
+			}
+			priceEUR = price / rate
 		}
-		time.Sleep(100 * time.Millisecond) // Be respectful to the API rate limits
+
+		logger.L.Info("Yahoo Fetch: Successfully got price", "isin", isin, "ticker", ticker, "priceEUR", priceEUR)
+		yahooResults[isin] = PriceInfo{
+			Status:   "OK",
+			Price:    priceEUR,
+			Currency: "EUR",
+		}
 	}
-	return resolved
+	return yahooResults, nil
 }
 
-// fetchAndConvertPrices gets prices for tickers and converts them to EUR.
-func (s *priceServiceImpl) fetchAndConvertPrices(mappings map[string]model.ISINTickerMap) (map[string]float64, error) {
-	finalPricesEUR := make(map[string]float64)
-	apiKey := config.Cfg.FMPApiKey
+// getTickerForISIN uses Yahoo's search to find a ticker for an ISIN.
+func (s *priceServiceImpl) getTickerForISIN(isin string) (string, error) {
+	// This endpoint seems to work without the crumb for now, but we keep the auth'd client.
+	searchURL := fmt.Sprintf("https://query1.finance.yahoo.com/v1/finance/search?q=%s", isin)
+	req, err := http.NewRequest("GET", searchURL, nil)
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36")
 
-	// Group tickers by currency to make efficient batch API calls.
-	tickersByCurrency := make(map[string][]string)
-	isinByTicker := make(map[string]string)
-	for isin, mapping := range mappings {
-		tickersByCurrency[mapping.Currency] = append(tickersByCurrency[mapping.Currency], mapping.TickerSymbol)
-		isinByTicker[mapping.TickerSymbol] = isin
+	resp, err := s.httpClient.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("failed to call Yahoo search API for ISIN %s: %w", isin, err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("yahoo search API returned non-OK status %d for ISIN %s", resp.StatusCode, isin)
 	}
 
-	for currency, tickers := range tickersByCurrency {
-		if len(tickers) == 0 {
-			continue
-		}
-		url := fmt.Sprintf("https://financialmodelingprep.com/api/v3/quote/%s?apikey=%s", strings.Join(tickers, ","), apiKey)
-		resp, err := s.httpClient.Get(url)
-		if err != nil {
-			logger.L.Warn("Failed to call FMP quote API", "currency", currency, "error", err)
-			continue
-		}
-		defer resp.Body.Close()
-
-		var quotes []fmpQuoteResponse
-		if err := json.NewDecoder(resp.Body).Decode(&quotes); err != nil {
-			logger.L.Warn("Failed to decode FMP quote response", "currency", currency, "error", err)
-			continue
-		}
-
-		// Get exchange rate for the entire batch if not EUR.
-		rateToEUR := 1.0
-		if currency != "EUR" {
-			rate, err := processors.GetExchangeRate(currency, time.Now())
-			if err != nil {
-				logger.L.Warn("Could not get exchange rate for currency, prices will be incorrect", "currency", currency, "error", err)
-			} else if rate > 0 { // Ensure rate is not zero to avoid division by zero
-				rateToEUR = rate
-			}
-		}
-
-		for _, quote := range quotes {
-			isin := isinByTicker[quote.Symbol]
-			finalPricesEUR[isin] = quote.Price / rateToEUR
-		}
+	var searchData yahooSearchResponse
+	if err := json.NewDecoder(resp.Body).Decode(&searchData); err != nil {
+		return "", fmt.Errorf("failed to decode Yahoo search response for ISIN %s: %w", isin, err)
 	}
 
-	return finalPricesEUR, nil
+	if len(searchData.Quotes) == 0 {
+		return "", fmt.Errorf("no ticker found for ISIN %s on Yahoo Finance", isin)
+	}
+
+	return searchData.Quotes[0].Symbol, nil
+}
+
+// getPriceForTicker uses Yahoo's quote endpoint to get the price for a ticker.
+// THIS IS THE MODIFIED FUNCTION that uses the crumb.
+func (s *priceServiceImpl) getPriceForTicker(ticker string) (float64, string, error) {
+	// This v7 endpoint requires the crumb.
+	quoteURL := fmt.Sprintf("https://query2.finance.yahoo.com/v7/finance/quote?symbols=%s&crumb=%s", ticker, s.crumb)
+	req, err := http.NewRequest("GET", quoteURL, nil)
+	if err != nil {
+		return 0, "", err
+	}
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36")
+
+	resp, err := s.httpClient.Do(req)
+	if err != nil {
+		return 0, "", fmt.Errorf("failed to call Yahoo quote API for ticker %s: %w", ticker, err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		bodyBytes, _ := io.ReadAll(resp.Body) // Read body for context
+		return 0, "", fmt.Errorf("yahoo quote API returned non-OK status %d for ticker %s. Body: %s", resp.StatusCode, ticker, string(bodyBytes))
+	}
+
+	var quoteData yahooQuoteResponse
+	if err := json.NewDecoder(resp.Body).Decode(&quoteData); err != nil {
+		return 0, "", fmt.Errorf("failed to decode Yahoo quote response for ticker %s: %w", ticker, err)
+	}
+
+	if quoteData.QuoteResponse.Error != nil || len(quoteData.QuoteResponse.Result) == 0 {
+		return 0, "", fmt.Errorf("yahoo quote API returned an error or no result for ticker %s", ticker)
+	}
+
+	price := quoteData.QuoteResponse.Result[0].RegularMarketPrice
+	currency := quoteData.QuoteResponse.Result[0].Currency
+	return price, currency, nil
 }
