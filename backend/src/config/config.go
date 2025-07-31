@@ -27,9 +27,6 @@ type AppConfig struct {
 	SMTPUser     string
 	SMTPPassword string
 
-	MailgunDomain        string
-	MailgunPrivateAPIKey string
-
 	SenderEmail string
 	SenderName  string
 
@@ -42,7 +39,6 @@ type AppConfig struct {
 	GoogleClientSecret       string
 	GoogleRedirectURL        string
 	FrontendBaseURL          string
-	FMPApiKey                string
 }
 
 var Cfg *AppConfig
@@ -115,15 +111,12 @@ func LoadConfig() {
 		RefreshTokenExpiry: refreshTokenExpiry,
 		MaxUploadSizeBytes: maxUploadSizeBytes,
 
-		EmailServiceProvider: getEnv("EMAIL_SERVICE_PROVIDER", "mailgun"),
+		EmailServiceProvider: getEnv("EMAIL_SERVICE_PROVIDER", "smtp"),
 
 		SMTPServer:   getEnv("SMTP_SERVER", ""),
 		SMTPPort:     getEnvAsInt("SMTP_PORT", 587),
 		SMTPUser:     getEnv("SMTP_USER", ""),
 		SMTPPassword: getEnv("SMTP_PASSWORD", ""),
-
-		MailgunDomain:        getEnv("MAILGUN_DOMAIN", ""),
-		MailgunPrivateAPIKey: getEnv("MAILGUN_PRIVATE_API_KEY", ""),
 
 		SenderEmail: getEnv("SENDER_EMAIL", "noreply@example.com"),
 		SenderName:  getEnv("SENDER_NAME", "Rumoclaro App"),
@@ -138,19 +131,6 @@ func LoadConfig() {
 		GoogleClientSecret: getEnv("GOOGLE_CLIENT_SECRET", ""),
 		GoogleRedirectURL:  getEnv("GOOGLE_REDIRECT_URL", "http://localhost:8080/api/auth/google/callback"),
 		FrontendBaseURL:    getEnv("FRONTEND_BASE_URL", "http://localhost:3000"),
-		FMPApiKey:          getEnv("FMP_API_KEY", ""),
-	}
-
-	if Cfg.EmailServiceProvider == "mailgun" {
-		if Cfg.MailgunDomain == "" {
-			log.Fatalf("FATAL: MAILGUN_DOMAIN is required when EMAIL_SERVICE_PROVIDER is 'mailgun', but it's not set in environment or .env file.")
-		}
-		if Cfg.MailgunPrivateAPIKey == "" {
-			log.Fatalf("FATAL: MAILGUN_PRIVATE_API_KEY is required when EMAIL_SERVICE_PROVIDER is 'mailgun', but it's not set in environment or .env file.")
-		}
-		if Cfg.SenderEmail == "noreply@example.com" || Cfg.SenderEmail == "" {
-			log.Fatalf("FATAL: SENDER_EMAIL must be configured properly (e.g., your Mailgun sender) when EMAIL_SERVICE_PROVIDER is 'mailgun'.")
-		}
 	}
 
 	log.Printf("Configuration loaded: Port=%s, LogLevel=%s, DBPath=%s, EmailProvider=%s",

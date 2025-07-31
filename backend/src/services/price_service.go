@@ -7,7 +7,6 @@ import (
 	"io"
 	"net/http"
 	"net/http/cookiejar"
-	"regexp"
 	"strings"
 	"time"
 
@@ -16,7 +15,7 @@ import (
 	"golang.org/x/net/publicsuffix"
 )
 
-// Structs for Yahoo Finance API responses
+// Structs for Yahoo Finance API responses (remain the same)
 type yahooSearchResponse struct {
 	Quotes []struct {
 		Symbol    string `json:"symbol"`
@@ -37,15 +36,11 @@ type yahooQuoteResponse struct {
 	} `json:"quoteResponse"`
 }
 
-// priceServiceImpl implements the PriceService interface.
-// It now includes a cookie jar and a crumb for authenticated Yahoo requests.
 type priceServiceImpl struct {
 	httpClient http.Client
-	crumb      string // Yahoo's crumb for authentication
+	crumb      string
 }
 
-// NewPriceService creates a new instance of the price service.
-// It initializes the HTTP client with a cookie jar and fetches the Yahoo crumb.
 func NewPriceService() PriceService {
 	jar, err := cookiejar.New(&cookiejar.Options{PublicSuffixList: publicsuffix.List})
 	if err != nil {
@@ -61,7 +56,6 @@ func NewPriceService() PriceService {
 		httpClient: client,
 	}
 
-	// Initialize the service by getting the crumb
 	if err := s.initializeYahooSession(); err != nil {
 		logger.L.Error("Failed to initialize Yahoo Finance session. Price fetching may fail.", "error", err)
 	}
@@ -69,38 +63,58 @@ func NewPriceService() PriceService {
 	return s
 }
 
-// initializeYahooSession visits a Yahoo Finance page to get necessary cookies and the crumb.
+// --- THIS IS THE CORRECTED FUNCTION ---
+// initializeYahooSession now uses a more reliable method to get the crumb.
 func (s *priceServiceImpl) initializeYahooSession() error {
 	logger.L.Info("Initializing Yahoo Finance session to get crumb and cookies...")
-	// We use a less common ticker to avoid heavily cached pages.
-	initURL := "https://finance.yahoo.com/quote/VHYL.L"
-	req, err := http.NewRequest("GET", initURL, nil)
+
+	// Step 1: Visit a page to get the necessary session cookies. The cookie jar in httpClient will store them.
+	cookieURL := "https://finance.yahoo.com/quote/AAPL" // A standard ticker page
+	req, err := http.NewRequest("GET", cookieURL, nil)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to create initial cookie request: %w", err)
 	}
-	// A valid User-Agent is crucial.
 	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36")
 
-	resp, err := s.httpClient.Do(req)
+	cookieResp, err := s.httpClient.Do(req)
 	if err != nil {
-		return fmt.Errorf("failed to make initial request to Yahoo: %w", err)
+		return fmt.Errorf("failed to make initial cookie request to Yahoo: %w", err)
 	}
-	defer resp.Body.Close()
+	cookieResp.Body.Close()
+	if cookieResp.StatusCode != http.StatusOK {
+		return fmt.Errorf("yahoo returned non-OK status for cookie request: %s", cookieResp.Status)
+	}
+	logger.L.Debug("Successfully obtained Yahoo Finance session cookies.")
 
-	body, err := io.ReadAll(resp.Body)
+	// Step 2: Use the cookies to hit the dedicated crumb endpoint.
+	crumbURL := "https://query1.finance.yahoo.com/v1/test/getcrumb"
+	reqCrumb, err := http.NewRequest("GET", crumbURL, nil)
 	if err != nil {
-		return fmt.Errorf("failed to read Yahoo response body: %w", err)
+		return fmt.Errorf("failed to create crumb request: %w", err)
+	}
+	reqCrumb.Header.Set("User-Agent", req.Header.Get("User-Agent")) // Use the same User-Agent
+
+	crumbResp, err := s.httpClient.Do(reqCrumb)
+	if err != nil {
+		return fmt.Errorf("failed to make crumb request to Yahoo: %w", err)
+	}
+	defer crumbResp.Body.Close()
+
+	if crumbResp.StatusCode != http.StatusOK {
+		return fmt.Errorf("yahoo crumb endpoint returned non-OK status: %s", crumbResp.Status)
 	}
 
-	// Use regex to find the crumb in the HTML/JS response.
-	re := regexp.MustCompile(`"CrumbStore":{"crumb":"(.*?)"}`)
-	matches := re.FindStringSubmatch(string(body))
-
-	if len(matches) < 2 {
-		return fmt.Errorf("could not find crumb in Yahoo Finance response. The page structure may have changed")
+	body, err := io.ReadAll(crumbResp.Body)
+	if err != nil {
+		return fmt.Errorf("failed to read Yahoo crumb response body: %w", err)
 	}
 
-	s.crumb = matches[1]
+	crumb := string(body)
+	if len(crumb) < 5 || len(crumb) > 30 { // Basic sanity check for a valid crumb
+		return fmt.Errorf("received an invalid crumb from Yahoo: '%s'", crumb)
+	}
+
+	s.crumb = crumb
 	logger.L.Info("Successfully obtained Yahoo Finance crumb.")
 	return nil
 }
@@ -119,7 +133,6 @@ func (s *priceServiceImpl) GetCurrentPrices(isins []string) (map[string]PriceInf
 		return result, nil
 	}
 
-	// If the crumb is missing, try to re-initialize the session.
 	if s.crumb == "" {
 		logger.L.Warn("Yahoo crumb is missing, attempting to re-initialize session.")
 		if err := s.initializeYahooSession(); err != nil {
@@ -132,13 +145,11 @@ func (s *priceServiceImpl) GetCurrentPrices(isins []string) (map[string]PriceInf
 		uniqueISINs = append(uniqueISINs, isin)
 	}
 
-	// Fetch all prices from Yahoo
 	yahooPrices, err := s.fetchPricesFromYahoo(uniqueISINs)
 	if err != nil {
 		logger.L.Error("An error occurred during the Yahoo Finance fetch process", "error", err)
 	}
 
-	// Populate the final result map
 	for isin, priceInfo := range yahooPrices {
 		if priceInfo.Status == "OK" {
 			result[isin] = priceInfo
@@ -148,11 +159,10 @@ func (s *priceServiceImpl) GetCurrentPrices(isins []string) (map[string]PriceInf
 	return result, nil
 }
 
-// fetchPricesFromYahoo orchestrates the scraping process for a list of ISINs.
 func (s *priceServiceImpl) fetchPricesFromYahoo(isins []string) (map[string]PriceInfo, error) {
 	yahooResults := make(map[string]PriceInfo)
 	for _, isin := range isins {
-		time.Sleep(250 * time.Millisecond) // Respectful delay
+		time.Sleep(250 * time.Millisecond)
 
 		ticker, err := s.getTickerForISIN(isin)
 		if err != nil {
@@ -186,9 +196,7 @@ func (s *priceServiceImpl) fetchPricesFromYahoo(isins []string) (map[string]Pric
 	return yahooResults, nil
 }
 
-// getTickerForISIN uses Yahoo's search to find a ticker for an ISIN.
 func (s *priceServiceImpl) getTickerForISIN(isin string) (string, error) {
-	// This endpoint seems to work without the crumb for now, but we keep the auth'd client.
 	searchURL := fmt.Sprintf("https://query1.finance.yahoo.com/v1/finance/search?q=%s", isin)
 	req, err := http.NewRequest("GET", searchURL, nil)
 	if err != nil {
@@ -218,10 +226,7 @@ func (s *priceServiceImpl) getTickerForISIN(isin string) (string, error) {
 	return searchData.Quotes[0].Symbol, nil
 }
 
-// getPriceForTicker uses Yahoo's quote endpoint to get the price for a ticker.
-// THIS IS THE MODIFIED FUNCTION that uses the crumb.
 func (s *priceServiceImpl) getPriceForTicker(ticker string) (float64, string, error) {
-	// This v7 endpoint requires the crumb.
 	quoteURL := fmt.Sprintf("https://query2.finance.yahoo.com/v7/finance/quote?symbols=%s&crumb=%s", ticker, s.crumb)
 	req, err := http.NewRequest("GET", quoteURL, nil)
 	if err != nil {
@@ -236,7 +241,7 @@ func (s *priceServiceImpl) getPriceForTicker(ticker string) (float64, string, er
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		bodyBytes, _ := io.ReadAll(resp.Body) // Read body for context
+		bodyBytes, _ := io.ReadAll(resp.Body)
 		return 0, "", fmt.Errorf("yahoo quote API returned non-OK status %d for ticker %s. Body: %s", resp.StatusCode, ticker, string(bodyBytes))
 	}
 

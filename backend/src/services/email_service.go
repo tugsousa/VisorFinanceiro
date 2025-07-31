@@ -3,7 +3,6 @@ package services
 
 import (
 	"bytes"
-	"context"
 	"crypto/rand"
 	"fmt"
 	htmltemplate "html/template" // Corrected alias syntax
@@ -12,9 +11,7 @@ import (
 	"net/smtp"
 	"strings"
 	texttemplate "text/template" // Corrected alias syntax
-	"time"
 
-	"github.com/mailgun/mailgun-go/v4"
 	"github.com/username/taxfolio/backend/src/config"
 	"github.com/username/taxfolio/backend/src/logger"
 )
@@ -64,19 +61,6 @@ func NewEmailService() EmailService {
 	logger.L.Info("Initializing email service", "provider", provider)
 
 	switch provider {
-	case "mailgun":
-		if config.Cfg.MailgunDomain == "" || config.Cfg.MailgunPrivateAPIKey == "" || config.Cfg.SenderEmail == "" {
-			logger.L.Warn("Mailgun configuration incomplete. Falling back to MockEmailService.")
-			return &MockEmailService{}
-		}
-		mg := mailgun.NewMailgun(config.Cfg.MailgunDomain, config.Cfg.MailgunPrivateAPIKey)
-		return &MailgunEmailService{
-			mg:                       mg,
-			senderEmail:              config.Cfg.SenderEmail,
-			senderName:               config.Cfg.SenderName,
-			verificationEmailBaseURL: config.Cfg.VerificationEmailBaseURL,
-			passwordResetBaseURL:     config.Cfg.PasswordResetBaseURL,
-		}
 	case "smtp":
 		if config.Cfg.SMTPServer == "" || config.Cfg.SMTPUser == "" || config.Cfg.SMTPPassword == "" || config.Cfg.SenderEmail == "" {
 			logger.L.Warn("SMTP configuration incomplete. Falling back to MockEmailService.")
@@ -199,33 +183,6 @@ func (s *SMTPEmailService) SendPasswordResetEmail(toEmail, username, token strin
 	return nil
 }
 
-// MailgunEmailService sends emails using Mailgun.
-type MailgunEmailService struct {
-	mg                       mailgun.Mailgun
-	senderEmail              string
-	senderName               string
-	verificationEmailBaseURL string
-	passwordResetBaseURL     string
-}
-
-// The `send` method for Mailgun is now internal to the MailgunEmailService
-func (s *MailgunEmailService) send(toEmail, subject, textBody, htmlBody string) error {
-	from := fmt.Sprintf("%s <%s>", s.senderName, s.senderEmail)
-	message := s.mg.NewMessage(from, subject, textBody, toEmail)
-	message.SetHtml(htmlBody)
-
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*20)
-	defer cancel()
-
-	resp, id, err := s.mg.Send(ctx, message)
-	if err != nil {
-		logger.L.Error("Failed to send email via Mailgun", "error", err, "to", toEmail, "mailgunResp", resp, "mailgunId", id)
-		return fmt.Errorf("mailgun send failed: %w. Response: %s", err, resp)
-	}
-	logger.L.Info("Email sent successfully via Mailgun", "to", toEmail, "id", id, "mailgunResp", resp)
-	return nil
-}
-
 // parseTemplates is a helper function to parse both text and HTML templates
 func parseTemplates(template EmailTemplate, data EmailData) (string, string, error) {
 	var textBody, htmlBody bytes.Buffer
@@ -249,36 +206,6 @@ func parseTemplates(template EmailTemplate, data EmailData) (string, string, err
 	}
 
 	return textBody.String(), htmlBody.String(), nil
-}
-
-func (s *MailgunEmailService) SendVerificationEmail(toEmail, username, token string) error {
-	template := emailTemplates["verification"]
-	verificationLink := fmt.Sprintf("%s?token=%s", s.verificationEmailBaseURL, token)
-	data := EmailData{Username: username, Link: verificationLink}
-
-	textBody, htmlBody, err := parseTemplates(template, data)
-	if err != nil {
-		return err
-	}
-
-	return s.send(toEmail, template.Subject, textBody, htmlBody)
-}
-
-func (s *MailgunEmailService) SendPasswordResetEmail(toEmail, username, token string) error {
-	template := emailTemplates["passwordReset"]
-	resetLink := fmt.Sprintf("%s?token=%s", s.passwordResetBaseURL, token)
-	data := EmailData{
-		Username: username,
-		Link:     resetLink,
-		Expiry:   config.Cfg.PasswordResetTokenExpiry.String(),
-	}
-
-	textBody, htmlBody, err := parseTemplates(template, data)
-	if err != nil {
-		return err
-	}
-
-	return s.send(toEmail, template.Subject, textBody, htmlBody)
 }
 
 // MockEmailService is a mock implementation of EmailService for testing.
