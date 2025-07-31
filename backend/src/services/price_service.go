@@ -63,37 +63,66 @@ func NewPriceService() PriceService {
 	return s
 }
 
-// --- THIS IS THE CORRECTED FUNCTION ---
-// initializeYahooSession now uses a more reliable method to get the crumb.
 func (s *priceServiceImpl) initializeYahooSession() error {
 	logger.L.Info("Initializing Yahoo Finance session to get crumb and cookies...")
 
-	// Step 1: Visit a page to get the necessary session cookies. The cookie jar in httpClient will store them.
-	cookieURL := "https://finance.yahoo.com/quote/AAPL" // A standard ticker page
+	// --- Step 1: Visit homepage to get initial cookies ---
+	cookieURL := "https://finance.yahoo.com"
 	req, err := http.NewRequest("GET", cookieURL, nil)
 	if err != nil {
 		return fmt.Errorf("failed to create initial cookie request: %w", err)
 	}
-	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36")
+	// Add more browser-like headers
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
+	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7")
+	req.Header.Set("Accept-Language", "en-US,en;q=0.9")
 
+	logger.L.Debug("Attempting to get session cookies from homepage", "url", cookieURL)
 	cookieResp, err := s.httpClient.Do(req)
 	if err != nil {
 		return fmt.Errorf("failed to make initial cookie request to Yahoo: %w", err)
 	}
-	cookieResp.Body.Close()
+	defer cookieResp.Body.Close()
+
 	if cookieResp.StatusCode != http.StatusOK {
+		bodyBytes, _ := io.ReadAll(cookieResp.Body)
+		logger.L.Error("Yahoo cookie request failed", "status", cookieResp.Status, "responseBody", string(bodyBytes))
 		return fmt.Errorf("yahoo returned non-OK status for cookie request: %s", cookieResp.Status)
 	}
-	logger.L.Debug("Successfully obtained Yahoo Finance session cookies.")
+	logger.L.Debug("Successfully obtained initial session cookies from homepage.")
 
-	// Step 2: Use the cookies to hit the dedicated crumb endpoint.
+	// --- MODIFICATION: Step 2: Simulate accepting the cookie consent ---
+	consentURL := "https://consent.yahoo.com/v2/collectConsent"
+	consentReq, err := http.NewRequest("POST", consentURL, nil) // A POST with no body is often sufficient
+	if err != nil {
+		return fmt.Errorf("failed to create consent request: %w", err)
+	}
+	// Copy headers and the cookies we just got will be sent automatically by the client
+	consentReq.Header.Set("User-Agent", req.Header.Get("User-Agent"))
+
+	logger.L.Debug("Attempting to post cookie consent", "url", consentURL)
+	consentResp, err := s.httpClient.Do(consentReq)
+	if err != nil {
+		return fmt.Errorf("failed to make consent request to Yahoo: %w", err)
+	}
+	defer consentResp.Body.Close()
+
+	if consentResp.StatusCode != http.StatusOK && consentResp.StatusCode != http.StatusNoContent {
+		bodyBytes, _ := io.ReadAll(consentResp.Body)
+		logger.L.Error("Yahoo consent request failed", "status", consentResp.Status, "responseBody", string(bodyBytes))
+		return fmt.Errorf("yahoo returned non-OK status for consent request: %s", consentResp.Status)
+	}
+	logger.L.Debug("Successfully posted cookie consent. Cookies should now be valid.")
+
+	// --- Step 3: Now get the crumb with the validated cookies ---
 	crumbURL := "https://query1.finance.yahoo.com/v1/test/getcrumb"
 	reqCrumb, err := http.NewRequest("GET", crumbURL, nil)
 	if err != nil {
 		return fmt.Errorf("failed to create crumb request: %w", err)
 	}
-	reqCrumb.Header.Set("User-Agent", req.Header.Get("User-Agent")) // Use the same User-Agent
+	reqCrumb.Header.Set("User-Agent", req.Header.Get("User-Agent"))
 
+	logger.L.Debug("Attempting to get crumb", "url", crumbURL)
 	crumbResp, err := s.httpClient.Do(reqCrumb)
 	if err != nil {
 		return fmt.Errorf("failed to make crumb request to Yahoo: %w", err)
@@ -101,6 +130,8 @@ func (s *priceServiceImpl) initializeYahooSession() error {
 	defer crumbResp.Body.Close()
 
 	if crumbResp.StatusCode != http.StatusOK {
+		bodyBytes, _ := io.ReadAll(crumbResp.Body)
+		logger.L.Error("Yahoo crumb request failed", "status", crumbResp.Status, "responseBody", string(bodyBytes))
 		return fmt.Errorf("yahoo crumb endpoint returned non-OK status: %s", crumbResp.Status)
 	}
 
@@ -110,7 +141,7 @@ func (s *priceServiceImpl) initializeYahooSession() error {
 	}
 
 	crumb := string(body)
-	if len(crumb) < 5 || len(crumb) > 30 { // Basic sanity check for a valid crumb
+	if len(crumb) < 5 || len(crumb) > 30 {
 		return fmt.Errorf("received an invalid crumb from Yahoo: '%s'", crumb)
 	}
 
@@ -119,7 +150,7 @@ func (s *priceServiceImpl) initializeYahooSession() error {
 	return nil
 }
 
-// GetCurrentPrices is the main function that now exclusively uses Yahoo Finance.
+// GetCurrentPrices remains the same
 func (s *priceServiceImpl) GetCurrentPrices(isins []string) (map[string]PriceInfo, error) {
 	result := make(map[string]PriceInfo)
 	isinsToProcess := make(map[string]bool)
@@ -159,6 +190,7 @@ func (s *priceServiceImpl) GetCurrentPrices(isins []string) (map[string]PriceInf
 	return result, nil
 }
 
+// fetchPricesFromYahoo remains the same
 func (s *priceServiceImpl) fetchPricesFromYahoo(isins []string) (map[string]PriceInfo, error) {
 	yahooResults := make(map[string]PriceInfo)
 	for _, isin := range isins {
@@ -196,13 +228,14 @@ func (s *priceServiceImpl) fetchPricesFromYahoo(isins []string) (map[string]Pric
 	return yahooResults, nil
 }
 
+// getTickerForISIN remains the same
 func (s *priceServiceImpl) getTickerForISIN(isin string) (string, error) {
 	searchURL := fmt.Sprintf("https://query1.finance.yahoo.com/v1/finance/search?q=%s", isin)
 	req, err := http.NewRequest("GET", searchURL, nil)
 	if err != nil {
 		return "", err
 	}
-	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36")
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
 
 	resp, err := s.httpClient.Do(req)
 	if err != nil {
@@ -226,13 +259,14 @@ func (s *priceServiceImpl) getTickerForISIN(isin string) (string, error) {
 	return searchData.Quotes[0].Symbol, nil
 }
 
+// getPriceForTicker remains the same
 func (s *priceServiceImpl) getPriceForTicker(ticker string) (float64, string, error) {
 	quoteURL := fmt.Sprintf("https://query2.finance.yahoo.com/v7/finance/quote?symbols=%s&crumb=%s", ticker, s.crumb)
 	req, err := http.NewRequest("GET", quoteURL, nil)
 	if err != nil {
 		return 0, "", err
 	}
-	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36")
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
 
 	resp, err := s.httpClient.Do(req)
 	if err != nil {
@@ -242,7 +276,8 @@ func (s *priceServiceImpl) getPriceForTicker(ticker string) (float64, string, er
 
 	if resp.StatusCode != http.StatusOK {
 		bodyBytes, _ := io.ReadAll(resp.Body)
-		return 0, "", fmt.Errorf("yahoo quote API returned non-OK status %d for ticker %s. Body: %s", resp.StatusCode, ticker, string(bodyBytes))
+		logger.L.Error("Yahoo quote API returned non-OK status", "status", resp.Status, "ticker", ticker, "responseBody", string(bodyBytes))
+		return 0, "", fmt.Errorf("yahoo quote API returned non-OK status %d for ticker %s", resp.StatusCode, ticker)
 	}
 
 	var quoteData yahooQuoteResponse
@@ -250,8 +285,14 @@ func (s *priceServiceImpl) getPriceForTicker(ticker string) (float64, string, er
 		return 0, "", fmt.Errorf("failed to decode Yahoo quote response for ticker %s: %w", ticker, err)
 	}
 
-	if quoteData.QuoteResponse.Error != nil || len(quoteData.QuoteResponse.Result) == 0 {
-		return 0, "", fmt.Errorf("yahoo quote API returned an error or no result for ticker %s", ticker)
+	if quoteData.QuoteResponse.Error != nil {
+		errorJSON, _ := json.Marshal(quoteData.QuoteResponse.Error)
+		logger.L.Error("Yahoo quote API returned an error in its response", "ticker", ticker, "error", string(errorJSON))
+		return 0, "", fmt.Errorf("yahoo quote API returned an error for ticker %s: %s", ticker, string(errorJSON))
+	}
+
+	if len(quoteData.QuoteResponse.Result) == 0 {
+		return 0, "", fmt.Errorf("yahoo quote API returned no result for ticker %s", ticker)
 	}
 
 	price := quoteData.QuoteResponse.Result[0].RegularMarketPrice
