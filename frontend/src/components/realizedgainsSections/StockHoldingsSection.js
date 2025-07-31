@@ -1,10 +1,50 @@
 import React, { useState, useMemo } from 'react';
-import { Typography, Paper, Box, ToggleButtonGroup, ToggleButton } from '@mui/material';
+import { Typography, Paper, Box, ToggleButtonGroup, ToggleButton, Tooltip, CircularProgress } from '@mui/material';
 import { DataGrid } from '@mui/x-data-grid';
 import { ptPT } from '@mui/x-data-grid/locales';
 import { parseDateRobust } from '../../utils/dateUtils';
+import { useQuery } from '@tanstack/react-query';
+import { apiFetchCurrentHoldingsValue } from '../../api/apiService';
+import { formatCurrency } from '../../utils/formatUtils';
 
-// Columns for the original, detailed view
+// Helper function to render the Unrealized P/L cell with color coding
+const renderUnrealizedPLCell = (params) => {
+  const { value, isFetching } = params;
+  if (isFetching) {
+    return <CircularProgress size={20} />;
+  }
+  if (typeof value !== 'number') return '';
+
+  const textColor = value >= 0 ? 'success.main' : 'error.main';
+  return (
+    <Box sx={{ color: textColor, fontWeight: '500' }}>
+      {formatCurrency(value)}
+    </Box>
+  );
+};
+
+// Helper function to render the Market Value cell with loading state and tooltip
+const renderMarketValueCell = (params) => {
+  const { value, status, isFetching } = params;
+  if (isFetching) {
+    return <CircularProgress size={20} />;
+  }
+  if (typeof value !== 'number') return '';
+
+  const formattedValue = formatCurrency(value);
+
+  if (status === 'UNAVAILABLE') {
+    return (
+      <Tooltip title="Preço atual indisponível. A usar o valor de compra." placement="top">
+        <span>{`${formattedValue} *`}</span>
+      </Tooltip>
+    );
+  }
+  return formattedValue;
+};
+
+
+// Columns for the detailed view (unchanged)
 const detailedColumns = [
   { field: 'product_name', headerName: 'Produto', flex: 1, minWidth: 200 },
   { field: 'isin', headerName: 'ISIN', width: 130 },
@@ -39,42 +79,39 @@ const detailedColumns = [
   { field: 'buy_currency', headerName: 'Moeda', width: 90 },
 ];
 
-// Columns for the new, grouped view
-const groupedColumns = [
-  { field: 'product_name', headerName: 'Produto', flex: 1, minWidth: 200 },
-  { field: 'isin', headerName: 'ISIN', width: 130 },
-  { field: 'quantity', headerName: 'Qtd', type: 'number', width: 110, align: 'right', headerAlign: 'right' },
-  {
-    field: 'averageCostPriceEUR',
-    headerName: 'Preço Médio (€)',
-    type: 'number',
-    width: 140,
-    align: 'right',
-    headerAlign: 'right',
-    valueGetter: (_, row) => row.quantity > 0 ? (row.totalCostBasisEUR / row.quantity) : 0,
-    valueFormatter: (value) => typeof value === 'number' ? value.toFixed(2) : '',
-  },
-  {
-    field: 'totalCostBasisEUR',
-    headerName: 'Custo Total (€)',
-    type: 'number',
-    width: 140,
-    align: 'right',
-    headerAlign: 'right',
-    valueFormatter: (value) => typeof value === 'number' ? value.toFixed(2) : '',
-  },
-];
-
-
 export default function StockHoldingsSection({ holdingsData }) {
-  const [viewMode, setViewMode] = useState('grouped'); // 'detailed' or 'grouped'
+  const [viewMode, setViewMode] = useState('grouped');
+
+  // STEP 1.2: Fetch the live market data using react-query
+  const { data: liveData, isFetching: isLivePriceFetching } = useQuery({
+    queryKey: ['currentHoldingsValue'],
+    queryFn: apiFetchCurrentHoldingsValue,
+    // Transform the API response array into a map for quick lookups by ISIN
+    select: (response) => {
+      const liveDataMap = new Map();
+      if (response.data) {
+        response.data.forEach(item => {
+          liveDataMap.set(item.ISIN, {
+            marketValue: item.market_value_eur,
+            status: item.Status,
+          });
+        });
+      }
+      return liveDataMap;
+    },
+    // Only run this query if there is historical holdings data to enrich
+    enabled: !!holdingsData && holdingsData.length > 0,
+    staleTime: 1000 * 60 * 5, // Cache for 5 minutes
+    refetchOnWindowFocus: true,
+  });
 
   const handleViewChange = (event, newViewMode) => {
     if (newViewMode !== null) {
       setViewMode(newViewMode);
     }
   };
-
+  
+  // STEP 2.1: Merge historical and live data
   const groupedData = useMemo(() => {
     if (!holdingsData) return [];
 
@@ -104,9 +141,63 @@ export default function StockHoldingsSection({ holdingsData }) {
       return acc;
     }, {});
 
-    return Object.values(groupedByIsin);
-  }, [holdingsData]);
+    // Enrich with live data
+    return Object.values(groupedByIsin).map(group => {
+      const liveInfo = liveData?.get(group.isin);
+      const marketValueEUR = liveInfo?.marketValue ?? group.totalCostBasisEUR;
+      const unrealizedPL = marketValueEUR - group.totalCostBasisEUR;
+      
+      return {
+        ...group,
+        marketValueEUR,
+        unrealizedPL,
+        priceStatus: liveInfo?.status ?? 'UNAVAILABLE',
+      };
+    });
+  }, [holdingsData, liveData]);
 
+  // STEP 2.2: Define new columns for the grouped view
+  const groupedColumns = [
+    { field: 'product_name', headerName: 'Produto', flex: 1, minWidth: 200 },
+    { field: 'isin', headerName: 'ISIN', width: 130 },
+    { field: 'quantity', headerName: 'Qtd', type: 'number', width: 110, align: 'right', headerAlign: 'right' },
+    {
+      field: 'totalCostBasisEUR',
+      headerName: 'Custo Total (€)',
+      type: 'number',
+      width: 140,
+      align: 'right',
+      headerAlign: 'right',
+      valueFormatter: (value) => formatCurrency(value),
+    },
+    // NEW COLUMN: Market Value
+    {
+      field: 'marketValueEUR',
+      headerName: 'Valor de Mercado (€)',
+      type: 'number',
+      width: 180,
+      align: 'right',
+      headerAlign: 'right',
+      renderCell: (params) => renderMarketValueCell({
+        value: params.value,
+        status: params.row.priceStatus,
+        isFetching: isLivePriceFetching
+      }),
+    },
+    // NEW COLUMN: Unrealized P/L
+    {
+      field: 'unrealizedPL',
+      headerName: 'L/P Não Realizado (€)',
+      type: 'number',
+      width: 180,
+      align: 'right',
+      headerAlign: 'right',
+      renderCell: (params) => renderUnrealizedPLCell({
+        value: params.value,
+        isFetching: isLivePriceFetching
+      }),
+    },
+  ];
 
   if (!holdingsData || holdingsData.length === 0) {
     return (
@@ -165,7 +256,7 @@ export default function StockHoldingsSection({ holdingsData }) {
             columns={groupedColumns}
             initialState={{
               pagination: { paginationModel: { pageSize: 10 } },
-              sorting: { sortModel: [{ field: 'totalCostBasisEUR', sort: 'desc' }] },
+              sorting: { sortModel: [{ field: 'marketValueEUR', sort: 'desc' }] },
             }}
             pageSizeOptions={[10, 25, 50]}
             disableRowSelectionOnClick

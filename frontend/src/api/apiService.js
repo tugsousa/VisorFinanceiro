@@ -197,6 +197,7 @@ export const apiUploadFile = (formData, onUploadProgress) => apiClient.post(API_
 export const apiFetchRealizedGainsData = () => apiClient.get(API_ENDPOINTS.REALIZEDGAINS_DATA);
 export const apiFetchProcessedTransactions = () => apiClient.get(API_ENDPOINTS.PROCESSED_TRANSACTIONS);
 export const apiFetchStockHoldings = () => apiClient.get(API_ENDPOINTS.STOCK_HOLDINGS);
+export const apiFetchCurrentHoldingsValue = () => apiClient.get(API_ENDPOINTS.CURRENT_HOLDINGS_VALUE);
 export const apiFetchOptionHoldings = () => apiClient.get(API_ENDPOINTS.OPTION_HOLDINGS);
 export const apiFetchStockSales = () => apiClient.get(API_ENDPOINTS.STOCK_SALES);
 export const apiFetchOptionSales = () => apiClient.get(API_ENDPOINTS.OPTION_SALES);

@@ -12,11 +12,12 @@
       AUTH_RESET_PASSWORD: `${API_BASE_PATH}/auth/reset-password`,
       AUTH_RESET_PASSWORD_PAGE: `${API_BASE_PATH}/auth/reset-password`, 
       AUTH_GOOGLE_LOGIN: `${API_BASE_PATH}/auth/google/login`,
-      
+
       UPLOAD: `${API_BASE_PATH}/upload`,
       REALIZEDGAINS_DATA: `${API_BASE_PATH}/realizedgains-data`,
       PROCESSED_TRANSACTIONS: `${API_BASE_PATH}/transactions/processed`,
       STOCK_HOLDINGS: `${API_BASE_PATH}/holdings/stocks`,
+      CURRENT_HOLDINGS_VALUE: `${API_BASE_PATH}/holdings/current-value`,
       OPTION_HOLDINGS: `${API_BASE_PATH}/holdings/options`,
       STOCK_SALES: `${API_BASE_PATH}/stock-sales`,
       OPTION_SALES: `${API_BASE_PATH}/option-sales`,
@@ -25,8 +26,6 @@
       USER_HAS_DATA: `${API_BASE_PATH}/user/has-data`,
       DELETE_ALL_TRANSACTIONS: `${API_BASE_PATH}/transactions/all`,
       
-
-      // New User Settings Endpoints
       USER_CHANGE_PASSWORD: `${API_BASE_PATH}/user/change-password`,
       USER_DELETE_ACCOUNT: `${API_BASE_PATH}/user/delete-account`,
     };
@@ -42,6 +41,6 @@
       noDataAvailable: "No data available.",
     };
 
-    export const ALLOWED_FILE_TYPES = ['text/csv', 'application/vnd.ms-excel']; // Removed xlsx for stricter CSV focus
+    export const ALLOWED_FILE_TYPES = ['text/csv', 'application/vnd.ms-excel'];
     export const MAX_FILE_SIZE_MB = 5;
     export const MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024;
