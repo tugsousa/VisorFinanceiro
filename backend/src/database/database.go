@@ -252,18 +252,32 @@ func migrateISINMappingTable() {
 		logger.L.Error("Error checking for 'isin_ticker_map' table", "error", err)
 		return
 	}
-	// 2. If it exists, check its columns
+
 	rows, err := DB.Query("PRAGMA table_info(isin_ticker_map)")
-	if err != nil { /* handle error */
+	if err != nil {
+		logger.L.Error("Error querying table info for 'isin_ticker_map'", "error", err)
 		return
 	}
 	defer rows.Close()
 
 	columnExists := make(map[string]bool)
 	for rows.Next() {
-		var name string
+		var cid, notnull, pk int
+		var name, dataType string
+		var dfltValue sql.NullString // Use sql.NullString for nullable default value
+
+		// Correctly scan all columns from PRAGMA table_info
+		if err := rows.Scan(&cid, &name, &dataType, &notnull, &dfltValue, &pk); err != nil {
+			logger.L.Error("Error scanning column info for 'isin_ticker_map'", "error", err)
+			return
+		}
 		columnExists[name] = true
 	}
+	if err = rows.Err(); err != nil {
+		logger.L.Error("Error iterating over column info for 'isin_ticker_map'", "error", err)
+		return
+	}
+
 	// 3. Add the new column if it doesn't exist
 	if _, ok := columnExists["company_name"]; !ok {
 		_, err := DB.Exec("ALTER TABLE isin_ticker_map ADD COLUMN company_name TEXT")
@@ -314,7 +328,7 @@ func migrateDatabase() {
 		var notnullVal int
 		var dfltValue interface{}
 
-		// Use &notnullVal
+		// Use ¬nullVal
 		if err := rows.Scan(&cid, &name, &dataType, &notnullVal, &dfltValue, &pk); err != nil {
 			if logger.L != nil {
 				logger.L.Error("Error scanning column info", "error", err)

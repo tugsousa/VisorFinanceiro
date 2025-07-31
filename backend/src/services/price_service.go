@@ -15,7 +15,7 @@ import (
 	"golang.org/x/net/publicsuffix"
 )
 
-// Structs for Yahoo Finance API responses (remain the same)
+// Struct for the v1 search API to convert ISIN to Ticker
 type yahooSearchResponse struct {
 	Quotes []struct {
 		Symbol    string `json:"symbol"`
@@ -25,25 +25,29 @@ type yahooSearchResponse struct {
 	} `json:"quotes"`
 }
 
-type yahooQuoteResponse struct {
-	QuoteResponse struct {
+// Struct for the v8 chart/quote API to get the price
+type yahooChartResponse struct {
+	Chart struct {
 		Result []struct {
-			Symbol             string  `json:"symbol"`
-			RegularMarketPrice float64 `json:"regularMarketPrice"`
-			Currency           string  `json:"currency"`
+			Meta struct {
+				Currency           string  `json:"currency"`
+				Symbol             string  `json:"symbol"`
+				RegularMarketPrice float64 `json:"regularMarketPrice"`
+			} `json:"meta"`
 		} `json:"result"`
 		Error interface{} `json:"error"`
-	} `json:"quoteResponse"`
+	} `json:"chart"`
 }
 
 type priceServiceImpl struct {
-	httpClient http.Client
-	crumb      string
+	httpClient    http.Client
+	isInitialized bool
 }
 
 func NewPriceService() PriceService {
 	jar, err := cookiejar.New(&cookiejar.Options{PublicSuffixList: publicsuffix.List})
 	if err != nil {
+		// Log the error but don't fail, as the service might still work
 		logger.L.Error("Failed to create cookie jar", "error", err)
 	}
 
@@ -51,136 +55,71 @@ func NewPriceService() PriceService {
 		Jar:     jar,
 		Timeout: 20 * time.Second,
 	}
-
 	s := &priceServiceImpl{
-		httpClient: client,
+		httpClient:    client,
+		isInitialized: false,
 	}
-
-	if err := s.initializeYahooSession(); err != nil {
-		logger.L.Error("Failed to initialize Yahoo Finance session. Price fetching may fail.", "error", err)
-	}
-
+	// Best-effort initialization at startup
+	s.initializeYahooSession()
 	return s
 }
 
+// This function "warms up" the session by getting valid cookies from Yahoo.
 func (s *priceServiceImpl) initializeYahooSession() error {
-	logger.L.Info("Initializing Yahoo Finance session to get crumb and cookies...")
+	logger.L.Info("Attempting to initialize Yahoo Finance session and get cookies...")
 
-	// --- Step 1: Visit homepage to get initial cookies ---
-	cookieURL := "https://finance.yahoo.com"
-	req, err := http.NewRequest("GET", cookieURL, nil)
+	// Visiting a standard quote page is more likely to yield a valid session
+	initURL := "https://finance.yahoo.com/quote/AAPL"
+	req, err := http.NewRequest("GET", initURL, nil)
 	if err != nil {
-		return fmt.Errorf("failed to create initial cookie request: %w", err)
+		s.isInitialized = false
+		return fmt.Errorf("failed to create session init request: %w", err)
 	}
-	// Add more browser-like headers
+
 	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
-	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7")
-	req.Header.Set("Accept-Language", "en-US,en;q=0.9")
 
-	logger.L.Debug("Attempting to get session cookies from homepage", "url", cookieURL)
-	cookieResp, err := s.httpClient.Do(req)
+	resp, err := s.httpClient.Do(req)
 	if err != nil {
-		return fmt.Errorf("failed to make initial cookie request to Yahoo: %w", err)
+		s.isInitialized = false
+		return fmt.Errorf("failed to make session init request to Yahoo: %w", err)
 	}
-	defer cookieResp.Body.Close()
+	defer resp.Body.Close()
+	io.Copy(io.Discard, resp.Body) // Ensure the body is read and connection is reusable
 
-	if cookieResp.StatusCode != http.StatusOK {
-		bodyBytes, _ := io.ReadAll(cookieResp.Body)
-		logger.L.Error("Yahoo cookie request failed", "status", cookieResp.Status, "responseBody", string(bodyBytes))
-		return fmt.Errorf("yahoo returned non-OK status for cookie request: %s", cookieResp.Status)
-	}
-	logger.L.Debug("Successfully obtained initial session cookies from homepage.")
-
-	// --- MODIFICATION: Step 2: Simulate accepting the cookie consent ---
-	consentURL := "https://consent.yahoo.com/v2/collectConsent"
-	consentReq, err := http.NewRequest("POST", consentURL, nil) // A POST with no body is often sufficient
-	if err != nil {
-		return fmt.Errorf("failed to create consent request: %w", err)
-	}
-	// Copy headers and the cookies we just got will be sent automatically by the client
-	consentReq.Header.Set("User-Agent", req.Header.Get("User-Agent"))
-
-	logger.L.Debug("Attempting to post cookie consent", "url", consentURL)
-	consentResp, err := s.httpClient.Do(consentReq)
-	if err != nil {
-		return fmt.Errorf("failed to make consent request to Yahoo: %w", err)
-	}
-	defer consentResp.Body.Close()
-
-	if consentResp.StatusCode != http.StatusOK && consentResp.StatusCode != http.StatusNoContent {
-		bodyBytes, _ := io.ReadAll(consentResp.Body)
-		logger.L.Error("Yahoo consent request failed", "status", consentResp.Status, "responseBody", string(bodyBytes))
-		return fmt.Errorf("yahoo returned non-OK status for consent request: %s", consentResp.Status)
-	}
-	logger.L.Debug("Successfully posted cookie consent. Cookies should now be valid.")
-
-	// --- Step 3: Now get the crumb with the validated cookies ---
-	crumbURL := "https://query1.finance.yahoo.com/v1/test/getcrumb"
-	reqCrumb, err := http.NewRequest("GET", crumbURL, nil)
-	if err != nil {
-		return fmt.Errorf("failed to create crumb request: %w", err)
-	}
-	reqCrumb.Header.Set("User-Agent", req.Header.Get("User-Agent"))
-
-	logger.L.Debug("Attempting to get crumb", "url", crumbURL)
-	crumbResp, err := s.httpClient.Do(reqCrumb)
-	if err != nil {
-		return fmt.Errorf("failed to make crumb request to Yahoo: %w", err)
-	}
-	defer crumbResp.Body.Close()
-
-	if crumbResp.StatusCode != http.StatusOK {
-		bodyBytes, _ := io.ReadAll(crumbResp.Body)
-		logger.L.Error("Yahoo crumb request failed", "status", crumbResp.Status, "responseBody", string(bodyBytes))
-		return fmt.Errorf("yahoo crumb endpoint returned non-OK status: %s", crumbResp.Status)
+	if resp.StatusCode == http.StatusOK {
+		s.isInitialized = true
+		logger.L.Info("Yahoo session initialized successfully, cookies obtained.")
+		return nil
 	}
 
-	body, err := io.ReadAll(crumbResp.Body)
-	if err != nil {
-		return fmt.Errorf("failed to read Yahoo crumb response body: %w", err)
-	}
-
-	crumb := string(body)
-	if len(crumb) < 5 || len(crumb) > 30 {
-		return fmt.Errorf("received an invalid crumb from Yahoo: '%s'", crumb)
-	}
-
-	s.crumb = crumb
-	logger.L.Info("Successfully obtained Yahoo Finance crumb.")
-	return nil
+	s.isInitialized = false
+	return fmt.Errorf("failed to initialize Yahoo session, status: %s", resp.Status)
 }
 
-// GetCurrentPrices remains the same
 func (s *priceServiceImpl) GetCurrentPrices(isins []string) (map[string]PriceInfo, error) {
 	result := make(map[string]PriceInfo)
-	isinsToProcess := make(map[string]bool)
-	for _, isin := range isins {
-		result[isin] = PriceInfo{Status: "UNAVAILABLE"}
-		if isin != "" {
-			isinsToProcess[isin] = true
-		}
-	}
-	if len(isinsToProcess) == 0 {
+	if len(isins) == 0 {
 		return result, nil
 	}
 
-	if s.crumb == "" {
-		logger.L.Warn("Yahoo crumb is missing, attempting to re-initialize session.")
+	// If the initial session setup failed or wasn't run, try it again.
+	if !s.isInitialized {
 		if err := s.initializeYahooSession(); err != nil {
-			return result, fmt.Errorf("failed to re-initialize Yahoo session: %w", err)
+			logger.L.Error("Failed to re-initialize Yahoo session during GetCurrentPrices", "error", err)
+			// We can still proceed and try to fetch prices, it might work.
 		}
 	}
 
-	uniqueISINs := make([]string, 0, len(isinsToProcess))
-	for isin := range isinsToProcess {
-		uniqueISINs = append(uniqueISINs, isin)
-	}
-
-	yahooPrices, err := s.fetchPricesFromYahoo(uniqueISINs)
+	yahooPrices, err := s.fetchPricesFromYahoo(isins)
 	if err != nil {
 		logger.L.Error("An error occurred during the Yahoo Finance fetch process", "error", err)
 	}
 
+	// Initialize all ISINs with UNAVAILABLE status
+	for _, isin := range isins {
+		result[isin] = PriceInfo{Status: "UNAVAILABLE"}
+	}
+	// Overwrite with any successful results
 	for isin, priceInfo := range yahooPrices {
 		if priceInfo.Status == "OK" {
 			result[isin] = priceInfo
@@ -190,35 +129,38 @@ func (s *priceServiceImpl) GetCurrentPrices(isins []string) (map[string]PriceInf
 	return result, nil
 }
 
-// fetchPricesFromYahoo remains the same
 func (s *priceServiceImpl) fetchPricesFromYahoo(isins []string) (map[string]PriceInfo, error) {
 	yahooResults := make(map[string]PriceInfo)
 	for _, isin := range isins {
-		time.Sleep(250 * time.Millisecond)
+		time.Sleep(300 * time.Millisecond)
 
+		// Step 1: Convert ISIN to Ticker
 		ticker, err := s.getTickerForISIN(isin)
 		if err != nil {
-			logger.L.Warn("Yahoo Fetch: Could not get ticker", "isin", isin, "error", err)
+			logger.L.Warn("Yahoo Fetch Step 1 Failed: Could not get ticker", "isin", isin, "error", err)
 			continue
 		}
+		logger.L.Debug("Yahoo Fetch Step 1 OK: Found ticker for ISIN", "isin", isin, "ticker", ticker)
 
+		// Step 2: Get Price for the found Ticker
 		price, currency, err := s.getPriceForTicker(ticker)
 		if err != nil {
-			logger.L.Warn("Yahoo Fetch: Could not get price", "ticker", ticker, "error", err)
+			logger.L.Warn("Yahoo Fetch Step 2 Failed: Could not get price", "ticker", ticker, "error", err)
 			continue
 		}
 
+		// Step 3: Convert to EUR
 		priceEUR := price
 		if strings.ToUpper(currency) != "EUR" {
 			rate, err := processors.GetExchangeRate(currency, time.Now())
 			if err != nil || rate == 0 {
-				logger.L.Warn("Yahoo Fetch: Could not get exchange rate", "currency", currency, "error", err)
+				logger.L.Warn("Yahoo Fetch Step 3 Failed: Could not get exchange rate", "currency", currency, "error", err)
 				continue
 			}
 			priceEUR = price / rate
 		}
 
-		logger.L.Info("Yahoo Fetch: Successfully got price", "isin", isin, "ticker", ticker, "priceEUR", priceEUR)
+		logger.L.Info("Yahoo Fetch Success: Got price for ISIN", "isin", isin, "ticker", ticker, "priceEUR", priceEUR)
 		yahooResults[isin] = PriceInfo{
 			Status:   "OK",
 			Price:    priceEUR,
@@ -228,9 +170,8 @@ func (s *priceServiceImpl) fetchPricesFromYahoo(isins []string) (map[string]Pric
 	return yahooResults, nil
 }
 
-// getTickerForISIN remains the same
 func (s *priceServiceImpl) getTickerForISIN(isin string) (string, error) {
-	searchURL := fmt.Sprintf("https://query1.finance.yahoo.com/v1/finance/search?q=%s", isin)
+	searchURL := fmt.Sprintf("https://query1.finance.yahoo.com/v1/finance/search?q=%s&quotesCount=1&lang=en-US", isin)
 	req, err := http.NewRequest("GET", searchURL, nil)
 	if err != nil {
 		return "", err
@@ -244,6 +185,8 @@ func (s *priceServiceImpl) getTickerForISIN(isin string) (string, error) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		logger.L.Error("Yahoo search API returned non-OK status", "status", resp.Status, "isin", isin, "responseBody", string(bodyBytes))
 		return "", fmt.Errorf("yahoo search API returned non-OK status %d for ISIN %s", resp.StatusCode, isin)
 	}
 
@@ -252,16 +195,15 @@ func (s *priceServiceImpl) getTickerForISIN(isin string) (string, error) {
 		return "", fmt.Errorf("failed to decode Yahoo search response for ISIN %s: %w", isin, err)
 	}
 
-	if len(searchData.Quotes) == 0 {
-		return "", fmt.Errorf("no ticker found for ISIN %s on Yahoo Finance", isin)
+	if len(searchData.Quotes) == 0 || searchData.Quotes[0].Symbol == "" {
+		return "", fmt.Errorf("no ticker symbol found for ISIN %s on Yahoo Finance", isin)
 	}
 
 	return searchData.Quotes[0].Symbol, nil
 }
 
-// getPriceForTicker remains the same
 func (s *priceServiceImpl) getPriceForTicker(ticker string) (float64, string, error) {
-	quoteURL := fmt.Sprintf("https://query2.finance.yahoo.com/v7/finance/quote?symbols=%s&crumb=%s", ticker, s.crumb)
+	quoteURL := fmt.Sprintf("https://query1.finance.yahoo.com/v8/finance/chart/%s", ticker)
 	req, err := http.NewRequest("GET", quoteURL, nil)
 	if err != nil {
 		return 0, "", err
@@ -270,32 +212,38 @@ func (s *priceServiceImpl) getPriceForTicker(ticker string) (float64, string, er
 
 	resp, err := s.httpClient.Do(req)
 	if err != nil {
-		return 0, "", fmt.Errorf("failed to call Yahoo quote API for ticker %s: %w", ticker, err)
+		return 0, "", fmt.Errorf("failed to call Yahoo chart API for ticker %s: %w", ticker, err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		bodyBytes, _ := io.ReadAll(resp.Body)
-		logger.L.Error("Yahoo quote API returned non-OK status", "status", resp.Status, "ticker", ticker, "responseBody", string(bodyBytes))
-		return 0, "", fmt.Errorf("yahoo quote API returned non-OK status %d for ticker %s", resp.StatusCode, ticker)
+		logger.L.Error("Yahoo chart API returned non-OK status", "status", resp.Status, "ticker", ticker, "responseBody", string(bodyBytes))
+		return 0, "", fmt.Errorf("yahoo chart API returned non-OK status %d for ticker %s", resp.StatusCode, ticker)
 	}
 
-	var quoteData yahooQuoteResponse
-	if err := json.NewDecoder(resp.Body).Decode(&quoteData); err != nil {
-		return 0, "", fmt.Errorf("failed to decode Yahoo quote response for ticker %s: %w", ticker, err)
+	var chartData yahooChartResponse
+	if err := json.NewDecoder(resp.Body).Decode(&chartData); err != nil {
+		return 0, "", fmt.Errorf("failed to decode Yahoo chart response for ticker %s: %w", ticker, err)
 	}
 
-	if quoteData.QuoteResponse.Error != nil {
-		errorJSON, _ := json.Marshal(quoteData.QuoteResponse.Error)
-		logger.L.Error("Yahoo quote API returned an error in its response", "ticker", ticker, "error", string(errorJSON))
-		return 0, "", fmt.Errorf("yahoo quote API returned an error for ticker %s: %s", ticker, string(errorJSON))
+	if chartData.Chart.Error != nil {
+		errorJSON, _ := json.Marshal(chartData.Chart.Error)
+		logger.L.Error("Yahoo chart API returned an error in its response", "ticker", ticker, "error", string(errorJSON))
+		return 0, "", fmt.Errorf("yahoo chart API returned an error for ticker %s: %s", ticker, string(errorJSON))
 	}
 
-	if len(quoteData.QuoteResponse.Result) == 0 {
-		return 0, "", fmt.Errorf("yahoo quote API returned no result for ticker %s", ticker)
+	if len(chartData.Chart.Result) == 0 || chartData.Chart.Result[0].Meta.RegularMarketPrice == 0 {
+		return 0, "", fmt.Errorf("no price data found for ticker %s in chart response", ticker)
 	}
 
-	price := quoteData.QuoteResponse.Result[0].RegularMarketPrice
-	currency := quoteData.QuoteResponse.Result[0].Currency
+	meta := chartData.Chart.Result[0].Meta
+	price := meta.RegularMarketPrice
+	currency := meta.Currency
+
+	if currency == "" {
+		return 0, "", fmt.Errorf("currency not found in API response for ticker %s", ticker)
+	}
+
 	return price, currency, nil
 }
