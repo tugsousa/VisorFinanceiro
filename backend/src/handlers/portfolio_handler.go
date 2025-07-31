@@ -24,6 +24,25 @@ func NewPortfolioHandler(uploadService services.UploadService, priceService serv
 	}
 }
 
+// Helper struct for aggregating purchase lots by ISIN
+type AggregatedHolding struct {
+	ISIN              string
+	ProductName       string
+	TotalQuantity     int
+	TotalCostBasisEUR float64
+}
+
+// Final response struct that the frontend will receive
+type HoldingWithValue struct {
+	ISIN              string  `json:"isin"`
+	ProductName       string  `json:"product_name"`
+	Quantity          int     `json:"quantity"`
+	TotalCostBasisEUR float64 `json:"total_cost_basis_eur"`
+	CurrentPriceEUR   float64 `json:"current_price_eur"`
+	MarketValueEUR    float64 `json:"market_value_eur"`
+	Status            string  `json:"status"`
+}
+
 func (h *PortfolioHandler) HandleGetCurrentHoldingsValue(w http.ResponseWriter, r *http.Request) {
 	userID, ok := GetUserIDFromContext(r.Context())
 	if !ok {
@@ -32,66 +51,72 @@ func (h *PortfolioHandler) HandleGetCurrentHoldingsValue(w http.ResponseWriter, 
 	}
 	log.Printf("Handling GetCurrentHoldingsValue for userID: %d", userID)
 
-	// 1. Get current stock holdings from the existing service.
-	holdings, err := h.uploadService.GetStockHoldings(userID)
+	// 1. Get all individual purchase lots.
+	individualLots, err := h.uploadService.GetStockHoldings(userID)
 	if err != nil {
 		utils.SendJSONError(w, fmt.Sprintf("Error retrieving stock holdings for userID %d: %v", userID, err), http.StatusInternalServerError)
 		return
 	}
 
-	// 2. Extract the unique ISINs from the holdings list.
-	isinMap := make(map[string]bool)
-	for _, holding := range holdings {
-		// Only try to get prices for holdings with a valid ISIN
-		if holding.ISIN != "" && !strings.HasPrefix(strings.ToLower(holding.ISIN), "unknown") {
-			isinMap[holding.ISIN] = true
+	// 2. Aggregate these lots by ISIN.
+	groupedHoldings := make(map[string]AggregatedHolding)
+	for _, lot := range individualLots {
+		if lot.ISIN == "" {
+			continue // Skip lots without an ISIN
 		}
-	}
-	uniqueISINs := make([]string, 0, len(isinMap))
-	for isin := range isinMap {
-		uniqueISINs = append(uniqueISINs, isin)
+
+		agg, exists := groupedHoldings[lot.ISIN]
+		if !exists {
+			agg = AggregatedHolding{
+				ISIN:        lot.ISIN,
+				ProductName: lot.ProductName, // Use the name from the first lot encountered
+			}
+		}
+		agg.TotalQuantity += lot.Quantity
+		agg.TotalCostBasisEUR += lot.BuyAmountEUR
+
+		groupedHoldings[lot.ISIN] = agg
 	}
 
-	// 3. Call the new PriceService to get current prices.
+	// 3. Extract unique ISINs from the aggregated map.
+	uniqueISINs := make([]string, 0, len(groupedHoldings))
+	for isin := range groupedHoldings {
+		if !strings.HasPrefix(strings.ToLower(isin), "unknown") {
+			uniqueISINs = append(uniqueISINs, isin)
+		}
+	}
+
+	// 4. Call the PriceService to get current prices for the unique ISINs.
 	prices, err := h.priceService.GetCurrentPrices(uniqueISINs)
 	if err != nil {
-		// Log the error but don't fail the request, as we can still return holdings with purchase data.
+		// Log the error but don't fail the request. We can still return holdings with purchase data.
 		log.Printf("Warning: could not fetch some or all current prices for userID %d: %v", userID, err)
 	}
 
-	// 4. Combine the holding data with the price data for the final response.
-	type HoldingWithValue struct {
-		models.PurchaseLot
-		CurrentPriceEUR float64 `json:"current_price_eur"`
-		MarketValueEUR  float64 `json:"market_value_eur"`
-		Status          string  `json:"status"`
-	}
-
+	// 5. Combine the aggregated holding data with the price data for the final response.
 	response := []HoldingWithValue{}
-	for _, holding := range holdings {
-		priceInfo, found := prices[holding.ISIN]
-		currentPrice := 0.0
-		marketValue := 0.0
-		status := "UNAVAILABLE"
+	for isin, holding := range groupedHoldings {
+		priceInfo, found := prices[isin]
 
-		// Use the average purchase price as the default/fallback value
-		if holding.Quantity > 0 {
-			currentPrice = holding.BuyAmountEUR / float64(holding.Quantity)
-		}
-		marketValue = holding.BuyAmountEUR
+		currentPrice := 0.0
+		marketValue := holding.TotalCostBasisEUR // Default to cost basis
+		status := "UNAVAILABLE"
 
 		// If we found a live price, override the fallback values
 		if found && priceInfo.Status == "OK" {
 			status = "OK"
 			currentPrice = priceInfo.Price
-			marketValue = priceInfo.Price * float64(holding.Quantity)
+			marketValue = priceInfo.Price * float64(holding.TotalQuantity) // The correct calculation
 		}
 
 		response = append(response, HoldingWithValue{
-			PurchaseLot:     holding,
-			CurrentPriceEUR: currentPrice,
-			MarketValueEUR:  marketValue,
-			Status:          status,
+			ISIN:              holding.ISIN,
+			ProductName:       holding.ProductName,
+			Quantity:          holding.TotalQuantity,
+			TotalCostBasisEUR: holding.TotalCostBasisEUR,
+			CurrentPriceEUR:   currentPrice,
+			MarketValueEUR:    marketValue,
+			Status:            status,
 		})
 	}
 
