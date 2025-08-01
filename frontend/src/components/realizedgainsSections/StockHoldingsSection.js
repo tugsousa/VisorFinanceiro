@@ -6,7 +6,7 @@ import { ptPT } from '@mui/x-data-grid/locales';
 import { parseDateRobust } from '../../utils/dateUtils';
 import { formatCurrency } from '../../utils/formatUtils';
 
-// Helper functions (sem alterações)
+// Helper functions
 const renderUnrealizedPLCell = (params) => {
   const { value, isFetching } = params;
   if (isFetching) { return <CircularProgress size={20} />; }
@@ -37,8 +37,8 @@ const detailedColumns = [
   { field: 'buy_currency', headerName: 'Moeda', width: 90 },
 ];
 
-// Colunas para a vista AGRUPADA
-const groupedColumns = [
+// Colunas para a vista AGRUPADA (CURRENT holdings)
+const groupedColumnsCurrent = [
   { field: 'product_name', headerName: 'Produto', flex: 1, minWidth: 200 },
   { field: 'isin', headerName: 'ISIN', width: 130 },
   { field: 'quantity', headerName: 'Qtd', type: 'number', width: 110, align: 'right', headerAlign: 'right' },
@@ -51,8 +51,14 @@ const groupedColumns = [
   },
 ];
 
+// Colunas para a vista AGRUPADA (HISTORICAL holdings)
+const groupedColumnsHistorical = [
+    { field: 'product_name', headerName: 'Produto', flex: 1, minWidth: 200 },
+    { field: 'isin', headerName: 'ISIN', width: 130 },
+    { field: 'quantity', headerName: 'Qtd', type: 'number', width: 110, align: 'right', headerAlign: 'right' },
+    { field: 'total_cost_basis_eur', headerName: 'Custo Total (€)', type: 'number', width: 140, align: 'right', headerAlign: 'right', valueFormatter: (value) => formatCurrency(value) },
+];
 
-// MODIFICATION: Component now receives data and loading states as props.
 export default function StockHoldingsSection({ groupedData, detailedData, isGroupedFetching, isDetailedFetching }) {
   const [viewMode, setViewMode] = useState('grouped');
 
@@ -62,14 +68,17 @@ export default function StockHoldingsSection({ groupedData, detailedData, isGrou
     }
   };
   
-  // MODIFICATION: Memoized rows now depend on props instead of local queries.
+  const isGroupedDataHistorical = groupedData?.[0]?.isHistorical === true;
+  
+  const groupedColumns = isGroupedDataHistorical ? groupedColumnsHistorical : groupedColumnsCurrent;
+
   const groupedRows = useMemo(() => {
     if (!groupedData) return [];
     return groupedData.map(item => ({
       id: item.isin,
       ...item,
-      marketValueEUR: item.market_value_eur,
-      unrealizedPL: item.market_value_eur + item.total_cost_basis_eur,
+      marketValueEUR: !item.isHistorical ? item.market_value_eur : undefined,
+      unrealizedPL: !item.isHistorical ? (item.market_value_eur - item.total_cost_basis_eur) : undefined,
       isFetching: isGroupedFetching,
     }));
   }, [groupedData, isGroupedFetching]);

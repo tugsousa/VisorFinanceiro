@@ -49,13 +49,12 @@ export const useRealizedGains = (token, selectedYear) => {
     select: (response) => response.data,
   });
 
-  // MODIFICATION: Fetch holdings with current market value and simplify the query's select function.
   const { data: holdingsWithMarketValue, isFetching: isHoldingsValueFetching } = useQuery({
     queryKey: ['currentHoldingsValue', token],
     queryFn: () => apiFetchCurrentHoldingsValue(),
     enabled: !!token && !!allData && allData.StockHoldings && Object.keys(allData.StockHoldings).length > 0,
     staleTime: 1000 * 60 * 5, // 5 minutes
-    select: (response) => response.data || [], // Just return the array of holdings
+    select: (response) => response.data || [], 
   });
 
   const derivedDividendTaxSummary = useMemo(() => {
@@ -146,15 +145,56 @@ export const useRealizedGains = (token, selectedYear) => {
     return { stockPL, optionPL, dividendPL, totalPL };
   }, [filteredData, derivedDividendTaxSummary, selectedYear]);
   
-  // MODIFICATION: The chart data is now derived from the API call that returns current market values.
+  const holdingsForGroupedView = useMemo(() => {
+    const currentYear = new Date().getFullYear().toString();
+    const isCurrentView = selectedYear === ALL_YEARS_OPTION || selectedYear === currentYear;
+
+    if (isCurrentView) {
+        if (!holdingsWithMarketValue) return [];
+        return holdingsWithMarketValue.map(holding => ({
+            ...holding,
+            total_cost_basis_eur: Math.abs(holding.total_cost_basis_eur),
+            isHistorical: false,
+        }));
+    }
+
+    if (allData && allData.StockHoldings && allData.StockHoldings[selectedYear]) {
+        const historicalLots = allData.StockHoldings[selectedYear];
+        
+        const groupedHoldingsMap = historicalLots.reduce((acc, lot) => {
+            const isin = lot.isin || 'UNKNOWN';
+            if (!acc[isin]) {
+                acc[isin] = {
+                    isin: isin,
+                    product_name: lot.product_name,
+                    quantity: 0,
+                    total_cost_basis_eur: 0,
+                    isHistorical: true,
+                };
+            }
+            acc[isin].quantity += lot.quantity;
+            acc[isin].total_cost_basis_eur += Math.abs(lot.buy_amount_eur);
+            return acc;
+        }, {});
+
+        return Object.values(groupedHoldingsMap);
+    }
+
+    return [];
+  }, [selectedYear, holdingsWithMarketValue, allData]);
+
   const holdingsChartData = useMemo(() => {
-    if (!holdingsWithMarketValue || holdingsWithMarketValue.length === 0) {
+    const dataForChart = holdingsForGroupedView;
+
+    if (!dataForChart || dataForChart.length === 0) {
       return null;
     }
 
-    const holdingsForChart = holdingsWithMarketValue.map(holding => ({
+    const isHistorical = dataForChart[0]?.isHistorical === true;
+
+    const holdingsForChart = dataForChart.map(holding => ({
       name: holding.product_name,
-      value: holding.market_value_eur,
+      value: isHistorical ? holding.total_cost_basis_eur : holding.market_value_eur,
     }));
     
     holdingsForChart.sort((a, b) => b.value - a.value);
@@ -173,7 +213,7 @@ export const useRealizedGains = (token, selectedYear) => {
     }
 
     return { labels, datasets: [{ data }] };
-  }, [holdingsWithMarketValue]);
+  }, [holdingsForGroupedView]);
 
   return {
     allData,
@@ -182,8 +222,7 @@ export const useRealizedGains = (token, selectedYear) => {
     derivedDividendTaxSummary,
     availableYears,
     holdingsChartData,
-    // MODIFICATION: Export the new data and its loading state for the holdings section.
-    holdingsWithMarketValue,
+    holdingsForGroupedView,
     isHoldingsValueFetching,
     isLoading,
     isError,

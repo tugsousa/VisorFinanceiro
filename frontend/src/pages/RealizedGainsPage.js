@@ -78,7 +78,6 @@ export default function RealizedGainsPage() {
   const [selectedYear, setSelectedYear] = useState(ALL_YEARS_OPTION);
   const [currentTab, setCurrentTab] = useState('overview');
 
-  // MODIFICATION: Destructure new data from the hook
   const {
     allData,
     filteredData,
@@ -86,7 +85,7 @@ export default function RealizedGainsPage() {
     derivedDividendTaxSummary,
     availableYears,
     holdingsChartData,
-    holdingsWithMarketValue,
+    holdingsForGroupedView,
     isHoldingsValueFetching,
     isLoading, 
     isError,
@@ -103,6 +102,10 @@ export default function RealizedGainsPage() {
 
   const handleYearChange = (event) => setSelectedYear(event.target.value);
   const handleTabChange = (event, newValue) => setCurrentTab(newValue);
+  
+  const isGroupedDataLoading = (selectedYear === ALL_YEARS_OPTION || selectedYear === new Date().getFullYear().toString()) 
+    ? isHoldingsValueFetching 
+    : isLoading;
 
   if (isLoading) {
     return <CircularProgress sx={{ display: 'block', margin: 'auto', mt: 6 }} />;
@@ -238,11 +241,10 @@ export default function RealizedGainsPage() {
       {/* ATIVOS */}
       {currentTab === 'holdings' && (
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-          {/* MODIFICATION: Pass the correct data and loading states as props. */}
           <StockHoldingsSection 
-            groupedData={holdingsWithMarketValue || []}
+            groupedData={holdingsForGroupedView || []}
             detailedData={filteredData.StockHoldings || []}
-            isGroupedFetching={isHoldingsValueFetching}
+            isGroupedFetching={isGroupedDataLoading}
             isDetailedFetching={isLoading}
           />
           <OptionHoldingsSection holdingsData={filteredData.OptionHoldings || []} />
