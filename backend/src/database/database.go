@@ -26,6 +26,7 @@ func InitDB(databasePath string) {
 	migrateUserTable()
 	migrateDatabase()
 	migrateISINMappingTable()
+	migrateDailyPricesTable() // Add this line
 
 	createTableStatement := `
 	CREATE TABLE IF NOT EXISTS users (
@@ -91,6 +92,15 @@ func InitDB(databasePath string) {
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         last_checked_at TIMESTAMP
     );
+
+	CREATE TABLE IF NOT EXISTS daily_prices (
+		ticker_symbol TEXT NOT NULL,
+		date TEXT NOT NULL,
+		price REAL NOT NULL,
+		currency TEXT NOT NULL,
+		updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+		PRIMARY KEY (ticker_symbol, date)
+	);
 	`
 
 	_, err = DB.Exec(createTableStatement)
@@ -107,6 +117,22 @@ func InitDB(databasePath string) {
 	}
 }
 
+func migrateDailyPricesTable() {
+	var count int
+	err := DB.QueryRow("SELECT count(*) FROM sqlite_master WHERE type='table' AND name='daily_prices'").Scan(&count)
+	if err != nil {
+		logger.L.Error("Failed to check for daily_prices table existence", "error", err)
+		return
+	}
+	if count == 1 {
+		logger.L.Debug("daily_prices table already exists, no migration needed.")
+		return
+	}
+	// The table will be created by the main CREATE TABLE statement if it doesn't exist.
+	// This function is a placeholder for future modifications to this table.
+}
+
+// ... (rest of the file remains the same)
 func migrateUserTable() {
 	var tableName string
 	err := DB.QueryRow("SELECT name FROM sqlite_master WHERE type='table' AND name='users'").Scan(&tableName)

@@ -2,19 +2,24 @@
 package services
 
 import (
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"net/http/cookiejar"
 	"strings"
+	"sync"
 	"time"
 
+	"github.com/username/taxfolio/backend/src/database"
 	"github.com/username/taxfolio/backend/src/logger"
+	"github.com/username/taxfolio/backend/src/model"
 	"github.com/username/taxfolio/backend/src/processors"
 	"golang.org/x/net/publicsuffix"
 )
 
+// ... (struct definitions for yahooSearchResponse and yahooChartResponse remain the same)
 // Struct for the v1 search API to convert ISIN to Ticker
 type yahooSearchResponse struct {
 	Quotes []struct {
@@ -22,6 +27,7 @@ type yahooSearchResponse struct {
 		Exchange  string `json:"exchange"`
 		Shortname string `json:"shortname"`
 		QuoteType string `json:"quoteType"`
+		Currency  string `json:"currency"`
 	} `json:"quotes"`
 }
 
@@ -42,15 +48,14 @@ type yahooChartResponse struct {
 type priceServiceImpl struct {
 	httpClient    http.Client
 	isInitialized bool
+	mu            sync.Mutex
 }
 
 func NewPriceService() PriceService {
 	jar, err := cookiejar.New(&cookiejar.Options{PublicSuffixList: publicsuffix.List})
 	if err != nil {
-		// Log the error but don't fail, as the service might still work
 		logger.L.Error("Failed to create cookie jar", "error", err)
 	}
-
 	client := http.Client{
 		Jar:     jar,
 		Timeout: 20 * time.Second,
@@ -59,149 +64,214 @@ func NewPriceService() PriceService {
 		httpClient:    client,
 		isInitialized: false,
 	}
-	// Best-effort initialization at startup
-	s.initializeYahooSession()
+	go s.initializeYahooSession()
 	return s
 }
 
-// This function "warms up" the session by getting valid cookies from Yahoo.
-func (s *priceServiceImpl) initializeYahooSession() error {
-	logger.L.Info("Attempting to initialize Yahoo Finance session and get cookies...")
-
-	// Visiting a standard quote page is more likely to yield a valid session
-	initURL := "https://finance.yahoo.com/quote/AAPL"
-	req, err := http.NewRequest("GET", initURL, nil)
-	if err != nil {
-		s.isInitialized = false
-		return fmt.Errorf("failed to create session init request: %w", err)
+func (s *priceServiceImpl) initializeYahooSession() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.isInitialized {
+		return
 	}
-
+	logger.L.Info("Attempting to initialize Yahoo Finance session...")
+	initURL := "https://finance.yahoo.com/quote/AAPL"
+	req, _ := http.NewRequest("GET", initURL, nil)
 	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
-
 	resp, err := s.httpClient.Do(req)
 	if err != nil {
-		s.isInitialized = false
-		return fmt.Errorf("failed to make session init request to Yahoo: %w", err)
+		logger.L.Error("Failed session init request", "error", err)
+		return
 	}
 	defer resp.Body.Close()
-	io.Copy(io.Discard, resp.Body) // Ensure the body is read and connection is reusable
-
+	io.Copy(io.Discard, resp.Body)
 	if resp.StatusCode == http.StatusOK {
 		s.isInitialized = true
-		logger.L.Info("Yahoo session initialized successfully, cookies obtained.")
-		return nil
+		logger.L.Info("Yahoo session initialized successfully.")
+	} else {
+		logger.L.Warn("Failed to initialize Yahoo session", "status", resp.Status)
 	}
-
-	s.isInitialized = false
-	return fmt.Errorf("failed to initialize Yahoo session, status: %s", resp.Status)
 }
 
 func (s *priceServiceImpl) GetCurrentPrices(isins []string) (map[string]PriceInfo, error) {
-	result := make(map[string]PriceInfo)
-	if len(isins) == 0 {
-		return result, nil
-	}
-
-	// If the initial session setup failed or wasn't run, try it again.
+	s.mu.Lock()
 	if !s.isInitialized {
-		if err := s.initializeYahooSession(); err != nil {
-			logger.L.Error("Failed to re-initialize Yahoo session during GetCurrentPrices", "error", err)
-			// We can still proceed and try to fetch prices, it might work.
-		}
+		s.mu.Unlock()
+		s.initializeYahooSession()
+	} else {
+		s.mu.Unlock()
 	}
 
-	yahooPrices, err := s.fetchPricesFromYahoo(isins)
+	results := make(map[string]PriceInfo)
+	for _, isin := range isins {
+		results[isin] = PriceInfo{Status: "UNAVAILABLE"}
+	}
+	if len(isins) == 0 {
+		return results, nil
+	}
+
+	// 1. Get ISIN -> Ticker mappings (from DB cache or API)
+	isinToTickerMap, err := s.getIsinToTickerMap(isins)
 	if err != nil {
-		logger.L.Error("An error occurred during the Yahoo Finance fetch process", "error", err)
+		return results, err
 	}
 
-	// Initialize all ISINs with UNAVAILABLE status
+	// 2. Get Ticker -> Price mappings (from DB cache or API for today)
+	tickerToPriceMap, err := s.getTickerToPriceMap(isinToTickerMap)
+	if err != nil {
+		return results, err
+	}
+
+	// 3. Combine results and convert to EUR
 	for _, isin := range isins {
-		result[isin] = PriceInfo{Status: "UNAVAILABLE"}
-	}
-	// Overwrite with any successful results
-	for isin, priceInfo := range yahooPrices {
-		if priceInfo.Status == "OK" {
-			result[isin] = priceInfo
-		}
-	}
-
-	return result, nil
-}
-
-func (s *priceServiceImpl) fetchPricesFromYahoo(isins []string) (map[string]PriceInfo, error) {
-	yahooResults := make(map[string]PriceInfo)
-	for _, isin := range isins {
-		time.Sleep(300 * time.Millisecond)
-
-		// Step 1: Convert ISIN to Ticker
-		ticker, err := s.getTickerForISIN(isin)
-		if err != nil {
-			logger.L.Warn("Yahoo Fetch Step 1 Failed: Could not get ticker", "isin", isin, "error", err)
+		ticker, ok := isinToTickerMap[isin]
+		if !ok {
 			continue
 		}
-		logger.L.Debug("Yahoo Fetch Step 1 OK: Found ticker for ISIN", "isin", isin, "ticker", ticker)
-
-		// Step 2: Get Price for the found Ticker
-		price, currency, err := s.getPriceForTicker(ticker)
-		if err != nil {
-			logger.L.Warn("Yahoo Fetch Step 2 Failed: Could not get price", "ticker", ticker, "error", err)
+		priceInfo, ok := tickerToPriceMap[ticker]
+		if !ok {
 			continue
 		}
 
-		// Step 3: Convert to EUR
-		priceEUR := price
-		if strings.ToUpper(currency) != "EUR" {
-			rate, err := processors.GetExchangeRate(currency, time.Now())
+		priceEUR := priceInfo.Price
+		if strings.ToUpper(priceInfo.Currency) != "EUR" {
+			rate, err := processors.GetExchangeRate(priceInfo.Currency, time.Now())
 			if err != nil || rate == 0 {
-				logger.L.Warn("Yahoo Fetch Step 3 Failed: Could not get exchange rate", "currency", currency, "error", err)
+				logger.L.Warn("Could not get exchange rate to convert price", "currency", priceInfo.Currency, "ticker", ticker, "error", err)
 				continue
 			}
-			priceEUR = price / rate
+			priceEUR = priceInfo.Price / rate
 		}
-
-		logger.L.Info("Yahoo Fetch Success: Got price for ISIN", "isin", isin, "ticker", ticker, "priceEUR", priceEUR)
-		yahooResults[isin] = PriceInfo{
+		results[isin] = PriceInfo{
 			Status:   "OK",
 			Price:    priceEUR,
 			Currency: "EUR",
 		}
 	}
-	return yahooResults, nil
+
+	return results, nil
 }
 
-func (s *priceServiceImpl) getTickerForISIN(isin string) (string, error) {
+func (s *priceServiceImpl) getIsinToTickerMap(isins []string) (map[string]string, error) {
+	isinToTickerMap := make(map[string]string)
+	dbMappings, err := model.GetMappingsByISINs(database.DB, isins)
+	if err != nil {
+		logger.L.Error("Failed to get ISIN mappings from DB", "error", err)
+	}
+
+	isinsToFetch := []string{}
+	for _, isin := range isins {
+		if mapping, ok := dbMappings[isin]; ok {
+			isinToTickerMap[isin] = mapping.TickerSymbol
+		} else {
+			isinsToFetch = append(isinsToFetch, isin)
+		}
+	}
+
+	if len(isinsToFetch) > 0 {
+		for _, isin := range isinsToFetch {
+			time.Sleep(250 * time.Millisecond)
+			ticker, exchange, currency, err := s.fetchTickerForISIN(isin)
+			if err != nil {
+				logger.L.Warn("Could not get ticker for ISIN from API", "isin", isin, "error", err)
+				continue
+			}
+			isinToTickerMap[isin] = ticker
+			newMapping := model.ISINTickerMap{
+				ISIN:         isin,
+				TickerSymbol: ticker,
+				Exchange:     sql.NullString{String: exchange, Valid: exchange != ""},
+				Currency:     currency,
+			}
+			model.InsertMapping(database.DB, newMapping)
+		}
+	}
+	return isinToTickerMap, nil
+}
+
+func (s *priceServiceImpl) getTickerToPriceMap(isinToTickerMap map[string]string) (map[string]model.DailyPrice, error) {
+	tickerToPriceMap := make(map[string]model.DailyPrice)
+	uniqueTickers := make(map[string]bool)
+	for _, ticker := range isinToTickerMap {
+		uniqueTickers[ticker] = true
+	}
+
+	var tickerList []string
+	for ticker := range uniqueTickers {
+		tickerList = append(tickerList, ticker)
+	}
+
+	todayStr := time.Now().Format("2006-01-02")
+	cachedPrices, err := model.GetPricesByTickersAndDate(database.DB, tickerList, todayStr)
+	if err != nil {
+		logger.L.Error("Failed to get daily prices from DB", "error", err)
+	}
+
+	tickersToFetch := []string{}
+	for _, ticker := range tickerList {
+		if price, ok := cachedPrices[ticker]; ok {
+			tickerToPriceMap[ticker] = price
+		} else {
+			tickersToFetch = append(tickersToFetch, ticker)
+		}
+	}
+
+	if len(tickersToFetch) > 0 {
+		for _, ticker := range tickersToFetch {
+			time.Sleep(250 * time.Millisecond)
+			price, currency, err := s.getPriceForTicker(ticker)
+			if err != nil {
+				logger.L.Warn("Could not get price for ticker from API", "ticker", ticker, "error", err)
+				continue
+			}
+			dailyPrice := model.DailyPrice{
+				TickerSymbol: ticker,
+				Date:         todayStr,
+				Price:        price,
+				Currency:     currency,
+			}
+			tickerToPriceMap[ticker] = dailyPrice
+			model.InsertOrUpdatePrice(database.DB, dailyPrice)
+		}
+	}
+	return tickerToPriceMap, nil
+}
+
+// ... (fetchTickerForISIN and getPriceForTicker functions remain the same as in the previous response)
+// fetchTickerForISIN calls Yahoo and returns ticker, exchange, and currency.
+func (s *priceServiceImpl) fetchTickerForISIN(isin string) (string, string, string, error) {
 	searchURL := fmt.Sprintf("https://query1.finance.yahoo.com/v1/finance/search?q=%s&quotesCount=1&lang=en-US", isin)
 	req, err := http.NewRequest("GET", searchURL, nil)
 	if err != nil {
-		return "", err
+		return "", "", "", err
 	}
 	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
 
 	resp, err := s.httpClient.Do(req)
 	if err != nil {
-		return "", fmt.Errorf("failed to call Yahoo search API for ISIN %s: %w", isin, err)
+		return "", "", "", fmt.Errorf("failed to call Yahoo search API for ISIN %s: %w", isin, err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		bodyBytes, _ := io.ReadAll(resp.Body)
 		logger.L.Error("Yahoo search API returned non-OK status", "status", resp.Status, "isin", isin, "responseBody", string(bodyBytes))
-		return "", fmt.Errorf("yahoo search API returned non-OK status %d for ISIN %s", resp.StatusCode, isin)
+		return "", "", "", fmt.Errorf("yahoo search API returned non-OK status %d for ISIN %s", resp.StatusCode, isin)
 	}
 
 	var searchData yahooSearchResponse
 	if err := json.NewDecoder(resp.Body).Decode(&searchData); err != nil {
-		return "", fmt.Errorf("failed to decode Yahoo search response for ISIN %s: %w", isin, err)
+		return "", "", "", fmt.Errorf("failed to decode Yahoo search response for ISIN %s: %w", isin, err)
 	}
 
 	if len(searchData.Quotes) == 0 || searchData.Quotes[0].Symbol == "" {
-		return "", fmt.Errorf("no ticker symbol found for ISIN %s on Yahoo Finance", isin)
+		return "", "", "", fmt.Errorf("no ticker symbol found for ISIN %s on Yahoo Finance", isin)
 	}
-
-	return searchData.Quotes[0].Symbol, nil
+	quote := searchData.Quotes[0]
+	return quote.Symbol, quote.Exchange, quote.Currency, nil
 }
 
+// getPriceForTicker remains largely the same
 func (s *priceServiceImpl) getPriceForTicker(ticker string) (float64, string, error) {
 	quoteURL := fmt.Sprintf("https://query1.finance.yahoo.com/v8/finance/chart/%s", ticker)
 	req, err := http.NewRequest("GET", quoteURL, nil)
