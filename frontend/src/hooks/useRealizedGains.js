@@ -1,7 +1,6 @@
 // frontend/src/hooks/useRealizedGains.js
 import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
-// MODIFICAÇÃO: Importar a função da API para obter os valores de mercado
 import { apiFetchRealizedGainsData, apiFetchCurrentHoldingsValue } from '../api/apiService';
 import { ALL_YEARS_OPTION, NO_YEAR_SELECTED } from '../constants';
 import { getYearString, extractYearsFromData, parseDateRobust } from '../utils/dateUtils';
@@ -50,28 +49,14 @@ export const useRealizedGains = (token, selectedYear) => {
     select: (response) => response.data,
   });
 
-  // --- NOVA ADIÇÃO ---
-  // Obter os dados de mercado atuais para os ativos em carteira
-  const { data: liveHoldingsData } = useQuery({
+  // MODIFICATION: Fetch holdings with current market value and simplify the query's select function.
+  const { data: holdingsWithMarketValue, isFetching: isHoldingsValueFetching } = useQuery({
     queryKey: ['currentHoldingsValue', token],
     queryFn: () => apiFetchCurrentHoldingsValue(),
     enabled: !!token && !!allData && allData.StockHoldings && Object.keys(allData.StockHoldings).length > 0,
     staleTime: 1000 * 60 * 5, // 5 minutes
-    select: (response) => {
-      // Transformar o array da API num Map para pesquisas rápidas (O(1))
-      const liveDataMap = new Map();
-      if (response.data) {
-        response.data.forEach(item => {
-          liveDataMap.set(item.ISIN, {
-            marketValue: item.market_value_eur,
-            status: item.Status,
-          });
-        });
-      }
-      return liveDataMap;
-    },
+    select: (response) => response.data || [], // Just return the array of holdings
   });
-  // --- FIM DA NOVA ADIÇÃO ---
 
   const derivedDividendTaxSummary = useMemo(() => {
     if (allData && allData.DividendTransactionsList) {
@@ -161,53 +146,22 @@ export const useRealizedGains = (token, selectedYear) => {
     return { stockPL, optionPL, dividendPL, totalPL };
   }, [filteredData, derivedDividendTaxSummary, selectedYear]);
   
-  // --- LÓGICA DO GRÁFICO MODIFICADA ---
+  // MODIFICATION: The chart data is now derived from the API call that returns current market values.
   const holdingsChartData = useMemo(() => {
-    const stockHoldingsForChart = filteredData.StockHoldings;
-    
-    if (!stockHoldingsForChart || stockHoldingsForChart.length === 0) {
+    if (!holdingsWithMarketValue || holdingsWithMarketValue.length === 0) {
       return null;
     }
 
-    const holdingsByIsin = stockHoldingsForChart.reduce((acc, holding) => {
-      const { isin, product_name, buy_amount_eur, buy_date } = holding;
-      if (!isin) return acc;
-
-      if (!acc[isin]) {
-        acc[isin] = {
-          totalCost: 0, // Agora vamos guardar o custo
-          latestName: product_name,
-          latestDate: parseDateRobust(buy_date) || new Date(0),
-        };
-      }
-      
-      acc[isin].totalCost += Math.abs(buy_amount_eur || 0);
-
-      const currentDate = parseDateRobust(buy_date);
-      if (currentDate && currentDate > acc[isin].latestDate) {
-        acc[isin].latestDate = currentDate;
-        acc[isin].latestName = product_name;
-      }
-
-      return acc;
-    }, {});
-
-    // Agora, enriquecemos com o valor de mercado
-    const aggregatedHoldings = Object.entries(holdingsByIsin).map(([isin, group]) => {
-      const liveInfo = liveHoldingsData?.get(isin);
-      // Usar o valor de mercado se existir; caso contrário, usar o custo como fallback
-      const currentValue = liveInfo?.marketValue ?? group.totalCost;
-      return {
-        name: group.latestName,
-        value: currentValue,
-      };
-    });
+    const holdingsForChart = holdingsWithMarketValue.map(holding => ({
+      name: holding.product_name,
+      value: holding.market_value_eur,
+    }));
     
-    aggregatedHoldings.sort((a, b) => b.value - a.value);
+    holdingsForChart.sort((a, b) => b.value - a.value);
 
     const topN = 7;
-    const topHoldings = aggregatedHoldings.slice(0, topN);
-    const otherHoldings = aggregatedHoldings.slice(topN);
+    const topHoldings = holdingsForChart.slice(0, topN);
+    const otherHoldings = holdingsForChart.slice(topN);
 
     const labels = topHoldings.map(item => item.name);
     const data = topHoldings.map(item => item.value);
@@ -219,9 +173,7 @@ export const useRealizedGains = (token, selectedYear) => {
     }
 
     return { labels, datasets: [{ data }] };
-  // A dependência agora inclui os dados de mercado
-  }, [filteredData.StockHoldings, liveHoldingsData]);
-  // --- FIM DA MODIFICAÇÃO ---
+  }, [holdingsWithMarketValue]);
 
   return {
     allData,
@@ -230,6 +182,9 @@ export const useRealizedGains = (token, selectedYear) => {
     derivedDividendTaxSummary,
     availableYears,
     holdingsChartData,
+    // MODIFICATION: Export the new data and its loading state for the holdings section.
+    holdingsWithMarketValue,
+    isHoldingsValueFetching,
     isLoading,
     isError,
     error,

@@ -78,6 +78,7 @@ export default function RealizedGainsPage() {
   const [selectedYear, setSelectedYear] = useState(ALL_YEARS_OPTION);
   const [currentTab, setCurrentTab] = useState('overview');
 
+  // MODIFICATION: Destructure new data from the hook
   const {
     allData,
     filteredData,
@@ -85,6 +86,8 @@ export default function RealizedGainsPage() {
     derivedDividendTaxSummary,
     availableYears,
     holdingsChartData,
+    holdingsWithMarketValue,
+    isHoldingsValueFetching,
     isLoading, 
     isError,
     error,
@@ -235,7 +238,13 @@ export default function RealizedGainsPage() {
       {/* ATIVOS */}
       {currentTab === 'holdings' && (
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-          <StockHoldingsSection holdingsData={filteredData.StockHoldings || []} />
+          {/* MODIFICATION: Pass the correct data and loading states as props. */}
+          <StockHoldingsSection 
+            groupedData={holdingsWithMarketValue || []}
+            detailedData={filteredData.StockHoldings || []}
+            isGroupedFetching={isHoldingsValueFetching}
+            isDetailedFetching={isLoading}
+          />
           <OptionHoldingsSection holdingsData={filteredData.OptionHoldings || []} />
         </Box>
       )}

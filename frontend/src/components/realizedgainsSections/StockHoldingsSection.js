@@ -1,11 +1,9 @@
+// frontend/src/components/realizedgainsSections/StockHoldingsSection.js
 import React, { useState, useMemo } from 'react';
 import { Typography, Paper, Box, ToggleButtonGroup, ToggleButton, Tooltip, CircularProgress } from '@mui/material';
 import { DataGrid } from '@mui/x-data-grid';
 import { ptPT } from '@mui/x-data-grid/locales';
 import { parseDateRobust } from '../../utils/dateUtils';
-import { useQuery } from '@tanstack/react-query';
-// MODIFICAÇÃO: Apenas precisamos de um endpoint para a vista agrupada, e outro para a detalhada
-import { apiFetchCurrentHoldingsValue, apiFetchStockHoldings } from '../../api/apiService';
 import { formatCurrency } from '../../utils/formatUtils';
 
 // Helper functions (sem alterações)
@@ -54,22 +52,9 @@ const groupedColumns = [
 ];
 
 
-export default function StockHoldingsSection() {
+// MODIFICATION: Component now receives data and loading states as props.
+export default function StockHoldingsSection({ groupedData, detailedData, isGroupedFetching, isDetailedFetching }) {
   const [viewMode, setViewMode] = useState('grouped');
-
-  // Query para a vista AGRUPADA - chama o endpoint que faz todo o trabalho
-  const { data: groupedDataFromApi, isFetching: isGroupedFetching } = useQuery({
-    queryKey: ['currentHoldingsValue'],
-    queryFn: async () => (await apiFetchCurrentHoldingsValue()).data || [],
-    enabled: viewMode === 'grouped', // Só é executada quando esta vista está ativa
-  });
-
-  // Query para a vista DETALHADA - chama o endpoint que devolve os lotes individuais
-  const { data: detailedDataFromApi, isFetching: isDetailedFetching } = useQuery({
-    queryKey: ['stockHoldings'],
-    queryFn: async () => (await apiFetchStockHoldings()).data || [],
-    enabled: viewMode === 'detailed', // Só é executada quando esta vista está ativa
-  });
 
   const handleViewChange = (event, newViewMode) => {
     if (newViewMode !== null) {
@@ -77,26 +62,25 @@ export default function StockHoldingsSection() {
     }
   };
   
-  // Prepara as linhas para a tabela AGRUPADA
+  // MODIFICATION: Memoized rows now depend on props instead of local queries.
   const groupedRows = useMemo(() => {
-    if (!groupedDataFromApi) return [];
-    return groupedDataFromApi.map(item => ({
+    if (!groupedData) return [];
+    return groupedData.map(item => ({
       id: item.isin,
       ...item,
       marketValueEUR: item.market_value_eur,
       unrealizedPL: item.market_value_eur + item.total_cost_basis_eur,
       isFetching: isGroupedFetching,
     }));
-  }, [groupedDataFromApi, isGroupedFetching]);
+  }, [groupedData, isGroupedFetching]);
 
-  // Prepara as linhas para a tabela DETALHADA
   const detailedRows = useMemo(() => {
-    if (!detailedDataFromApi) return [];
-    return detailedDataFromApi.map((holding, index) => ({
+    if (!detailedData) return [];
+    return detailedData.map((holding, index) => ({
       id: `${holding.isin}-${holding.buy_date}-${index}`,
       ...holding,
     }));
-  }, [detailedDataFromApi]);
+  }, [detailedData]);
   
   const noData = viewMode === 'grouped' 
     ? !isGroupedFetching && groupedRows.length === 0
