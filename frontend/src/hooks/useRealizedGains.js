@@ -145,6 +145,22 @@ export const useRealizedGains = (token, selectedYear) => {
     return { stockPL, optionPL, dividendPL, totalPL };
   }, [filteredData, derivedDividendTaxSummary, selectedYear]);
   
+  // CORRECTION: Ensure we use Math.abs on the cost basis for the total calculation.
+  const unrealizedStockPL = useMemo(() => {
+    if (!holdingsWithMarketValue || holdingsWithMarketValue.length === 0 || selectedYear !== ALL_YEARS_OPTION) {
+      return 0;
+    }
+  
+    const totals = holdingsWithMarketValue.reduce((acc, holding) => {
+      acc.marketValue += holding.market_value_eur || 0;
+      // The backend sends cost_basis as a negative number. We need its positive magnitude for the calculation.
+      acc.costBasis += Math.abs(holding.total_cost_basis_eur || 0); 
+      return acc;
+    }, { marketValue: 0, costBasis: 0 });
+  
+    return totals.marketValue - totals.costBasis;
+  }, [holdingsWithMarketValue, selectedYear]);
+
   const holdingsForGroupedView = useMemo(() => {
     const currentYear = new Date().getFullYear().toString();
     const isCurrentView = selectedYear === ALL_YEARS_OPTION || selectedYear === currentYear;
@@ -219,6 +235,7 @@ export const useRealizedGains = (token, selectedYear) => {
     allData,
     filteredData,
     summaryPLs,
+    unrealizedStockPL,
     derivedDividendTaxSummary,
     availableYears,
     holdingsChartData,

@@ -13,6 +13,7 @@ import ShowChartIcon from '@mui/icons-material/ShowChart';
 import CandlestickChartIcon from '@mui/icons-material/CandlestickChart';
 import AttachMoneyIcon from '@mui/icons-material/AttachMoney';
 import AccountBalanceWalletIcon from '@mui/icons-material/AccountBalanceWallet';
+import TrendingUpIcon from '@mui/icons-material/TrendingUp'; // MODIFICATION: Import a new icon
 
 import StockHoldingsSection from '../components/realizedgainsSections/StockHoldingsSection';
 import OptionHoldingsSection from '../components/realizedgainsSections/OptionHoldingsSection';
@@ -82,6 +83,7 @@ export default function RealizedGainsPage() {
     allData,
     filteredData,
     summaryPLs,
+    unrealizedStockPL, // MODIFICATION: Get the new value from the hook
     derivedDividendTaxSummary,
     availableYears,
     holdingsChartData,
@@ -183,6 +185,13 @@ export default function RealizedGainsPage() {
             {/* Item 1 in Left Column: Key Metrics */}
             <Grid item xs={12}>
                 <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
+                  {/* MODIFICATION START: Add the new KeyMetricCard for unrealized P/L */}
+                  {/* It will only display if a year is NOT selected, which is correct for this metric */}
+                  {selectedYear === ALL_YEARS_OPTION && (
+                    <KeyMetricCard title="L/P Não Realizado" value={unrealizedStockPL} icon={<TrendingUpIcon />} />
+                  )}
+                  {/* MODIFICATION END */}
+
                   <KeyMetricCard title="L/P de Ações" value={summaryPLs.stockPL} icon={<ShowChartIcon />} />
                   <KeyMetricCard title="L/P de Opções" value={summaryPLs.optionPL} icon={<CandlestickChartIcon />} />
                   <KeyMetricCard title="Dividendos" value={summaryPLs.dividendPL} icon={<AttachMoneyIcon />} />
