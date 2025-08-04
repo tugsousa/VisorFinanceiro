@@ -6,10 +6,16 @@ toolchain go1.23.4
 
 require (
 	github.com/golang-jwt/jwt/v5 v5.2.2
-	golang.org/x/net v0.21.0
+	golang.org/x/net v0.38.0
 )
 
-require cloud.google.com/go/compute/metadata v0.3.0 // indirect
+require (
+	cloud.google.com/go/compute/metadata v0.3.0 // indirect
+	github.com/golang-migrate/migrate/v4 v4.18.3 // indirect
+	github.com/hashicorp/errwrap v1.1.0 // indirect
+	github.com/hashicorp/go-multierror v1.1.1 // indirect
+	go.uber.org/atomic v1.11.0 // indirect
+)
 
 require (
 	github.com/dustin/go-humanize v1.0.1 // indirect
@@ -26,12 +32,12 @@ require (
 	github.com/patrickmn/go-cache v2.1.0+incompatible
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
 	golang.org/x/crypto v0.38.0
-	golang.org/x/exp v0.0.0-20250305212735-054e65f0b394 // indirect
+	golang.org/x/exp v0.0.0-20250718183923-645b1fa84792 // indirect
 	golang.org/x/oauth2 v0.21.0
-	golang.org/x/sys v0.33.0 // indirect
+	golang.org/x/sys v0.34.0 // indirect
 	golang.org/x/time v0.11.0
-	modernc.org/libc v1.62.1 // indirect
+	modernc.org/libc v1.66.6 // indirect
 	modernc.org/mathutil v1.7.1 // indirect
-	modernc.org/memory v1.9.1 // indirect
-	modernc.org/sqlite v1.37.0
+	modernc.org/memory v1.11.0 // indirect
+	modernc.org/sqlite v1.38.2
 )

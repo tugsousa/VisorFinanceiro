@@ -104,6 +104,7 @@ func main() {
 
 	logger.L.Info("Initializing database...", "path", config.Cfg.DatabasePath)
 	database.InitDB(config.Cfg.DatabasePath)
+	database.RunMigrations(config.Cfg.DatabasePath)
 	logger.L.Info("Database initialized successfully.")
 
 	logger.L.Info("Initializing report cache...")
