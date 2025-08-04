@@ -46,7 +46,13 @@ var Cfg *AppConfig
 func LoadConfig() {
 	errEnv := godotenv.Load()
 	if errEnv != nil {
-		log.Println("Info: No .env file found or error loading .env file. Relying on OS environment variables and defaults. Error (if any):", errEnv)
+		// This is the expected case in production with Docker
+		if os.IsNotExist(errEnv) {
+			log.Println("Info: No .env file found. Relying on OS environment variables.")
+		} else {
+			// A .env file was found but couldn't be parsed
+			log.Printf("Warning: Error loading .env file: %v. Relying on OS environment variables.", errEnv)
+		}
 	} else {
 		log.Println(".env file loaded successfully.")
 	}
