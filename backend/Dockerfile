@@ -39,9 +39,8 @@ WORKDIR /app
 # This data is part of the image itself and will be located at /app/data.
 COPY data ./data
 
-# *** ADD THIS LINE ***
-# Copy the migrations from the builder stage so the app can find them on startup.
-COPY --from=builder /app/db/migrations ./db/migrations
+# *** FIX: Copy the migrations from the source context so the app can find them on startup. ***
+COPY db/migrations ./db/migrations
 
 # Create the directory where the persistent database volume will be mounted.
 # This separates persistent data from the static data above.
