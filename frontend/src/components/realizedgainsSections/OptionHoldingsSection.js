@@ -1,3 +1,5 @@
+// frontend/src/components/realizedgainsSections/OptionHoldingsSection.js
+
 import React from 'react';
 import { Typography, Paper, Box } from '@mui/material';
 import { DataGrid } from '@mui/x-data-grid';
@@ -17,13 +19,27 @@ const columns = [
             </Typography>
         ),
     },
-    // Corrected value formatters
-    { field: 'open_price', headerName: 'Preço abertura', type: 'number', width: 120, valueFormatter: (params) => typeof params.value === 'number' ? params.value.toFixed(4) : '' },
-    { field: 'open_amount_eur', headerName: 'Montante (€)', type: 'number', width: 130, valueFormatter: (params) => typeof params.value === 'number' ? params.value.toFixed(2) : '' },
+    // CORREÇÃO APLICADA AQUI
+    { 
+      field: 'open_price', 
+      headerName: 'Preço abertura', 
+      type: 'number', 
+      width: 120, 
+      valueFormatter: (params) => typeof params.value === 'number' ? params.value.toFixed(4) : '' 
+    },
+    // E CORREÇÃO APLICADA AQUI
+    { 
+      field: 'open_amount_eur', 
+      headerName: 'Montante (€)', 
+      type: 'number', 
+      width: 130, 
+      valueFormatter: (params) => typeof params.value === 'number' ? params.value.toFixed(2) : '' 
+    },
     { field: 'open_currency', headerName: 'Moeda', width: 90 },
 ];
 
 export default function OptionHoldingsSection({ holdingsData }) {
+  // ... o resto do componente permanece igual
   if (!holdingsData || holdingsData.length === 0) {
     return (
       <Paper elevation={0} sx={{ p: 2, mb: 3, border: 'none' }}>
