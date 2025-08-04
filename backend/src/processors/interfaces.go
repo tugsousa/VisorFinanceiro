@@ -16,6 +16,9 @@ type DividendProcessor interface {
 
 // StockProcessor defines the interface for processing stock transactions.
 type StockProcessor interface {
+	// Process takes a full list of transactions and returns all derived data:
+	// 1. A complete list of all calculated sale details.
+	// 2. A map of open purchase lots, keyed by year, for historical views.
 	Process(transactions []models.ProcessedTransaction) ([]models.SaleDetail, map[string][]models.PurchaseLot)
 }
 

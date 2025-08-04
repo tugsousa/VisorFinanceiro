@@ -16,13 +16,16 @@ import (
 )
 
 const (
-	ckLatestUploadResult   = "latest_upload_result_user_%d"
-	ckStockSales           = "stock_sales_user_%d"
-	ckOptionSales          = "option_sales_user_%d"
-	ckDividendSummary      = "dividend_summary_user_%d"
-	ckStockHoldings        = "stock_holdings_user_%d"
-	ckOptionHoldings       = "option_holdings_user_%d"
-	ckDividendTxns         = "dividend_txns_user_%d"
+	// Long-lived caches for full calculation results
+	ckAllStockSales       = "res_all_stock_sales_user_%d"
+	ckStockHoldingsByYear = "res_stock_holdings_by_year_user_%d"
+
+	// TODO: Add result caches for options and dividends when they are refactored
+
+	// Short-lived, aggregate cache
+	ckLatestUploadResult = "agg_latest_upload_result_user_%d"
+	ckDividendSummary    = "agg_dividend_summary_user_%d"
+
 	DefaultCacheExpiration = 15 * time.Minute
 	CacheCleanupInterval   = 30 * time.Minute
 )
@@ -58,86 +61,121 @@ func (s *uploadServiceImpl) ProcessUpload(fileReader io.Reader, userID int64, so
 	overallStartTime := time.Now()
 	logger.L.Info("ProcessUpload START", "userID", userID, "source", source)
 
-	// Step 1: Get the appropriate parser from the factory
 	parser, err := parsers.GetParser(source)
 	if err != nil {
-		logger.L.Error("Failed to get parser for source", "source", source, "error", err)
 		return nil, fmt.Errorf("%w: %v", ErrParsingFailed, err)
 	}
 
-	// Step 2: Use the broker-specific parser to get canonical transactions
 	canonicalTxs, err := parser.Parse(fileReader)
 	if err != nil {
-		logger.L.Error("Error parsing file in service", "userID", userID, "source", source, "error", err)
 		return nil, fmt.Errorf("%w: %v", ErrParsingFailed, err)
 	}
 
-	// Step 3: Use the generic transaction processor to enrich the data
-	processedTransactions := s.transactionProcessor.Process(canonicalTxs)
-	if len(processedTransactions) == 0 {
-		return &UploadResult{}, nil // No processable transactions found
+	newlyProcessedTxs := s.transactionProcessor.Process(canonicalTxs)
+	if len(newlyProcessedTxs) == 0 {
+		return s.GetLatestUploadResult(userID)
 	}
 
-	// Step 4: Store in database
+	// --- Database Insertion ---
 	dbTx, err := database.DB.Begin()
 	if err != nil {
 		return nil, fmt.Errorf("error beginning database transaction: %w", err)
 	}
-	committed := false
-	defer func() {
-		if !committed {
-			dbTx.Rollback()
-		}
-	}()
+	defer dbTx.Rollback()
 
-	stmt, err := dbTx.Prepare(`
-        INSERT INTO processed_transactions
-        (user_id, date, source, product_name, isin, quantity, original_quantity, price,
-         transaction_type, transaction_subtype, buy_sell, description, amount, currency, commission, order_id,
-         exchange_rate, amount_eur, country_code, input_string, hash_id)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+	stmt, err := dbTx.Prepare(`INSERT INTO processed_transactions (user_id, date, source, product_name, isin, quantity, original_quantity, price, transaction_type, transaction_subtype, buy_sell, description, amount, currency, commission, order_id, exchange_rate, amount_eur, country_code, input_string, hash_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
 	if err != nil {
 		return nil, fmt.Errorf("error preparing insert statement: %w", err)
 	}
 	defer stmt.Close()
 
-	var duplicatesSkipped int
-	for _, tx := range processedTransactions {
-		_, err := stmt.Exec(
-			userID, tx.Date, tx.Source, tx.ProductName, tx.ISIN, tx.Quantity, tx.OriginalQuantity, tx.Price,
-			tx.TransactionType, tx.TransactionSubType, tx.BuySell, tx.Description, tx.Amount, tx.Currency,
-			tx.Commission, tx.OrderID, tx.ExchangeRate, tx.AmountEUR, tx.CountryCode, tx.InputString, tx.HashId)
+	for _, tx := range newlyProcessedTxs {
+		_, err := stmt.Exec(userID, tx.Date, tx.Source, tx.ProductName, tx.ISIN, tx.Quantity, tx.OriginalQuantity, tx.Price, tx.TransactionType, tx.TransactionSubType, tx.BuySell, tx.Description, tx.Amount, tx.Currency, tx.Commission, tx.OrderID, tx.ExchangeRate, tx.AmountEUR, tx.CountryCode, tx.InputString, tx.HashId)
 		if err != nil {
-			// Check if the error is a UNIQUE constraint violation
 			if strings.Contains(strings.ToLower(err.Error()), "unique constraint failed") {
-				duplicatesSkipped++
-				logger.L.Debug("Skipping duplicate transaction", "userID", userID, "hash_id", tx.HashId, "orderID", tx.OrderID)
-				continue // Ignore error and continue to the next transaction
+				logger.L.Debug("Skipping duplicate transaction on upload", "userID", userID, "hash_id", tx.HashId)
+				continue
 			}
-			// For any other error, rollback and fail the entire upload
-
-			return nil, fmt.Errorf("error inserting processed transaction (OrderID: %s): %w", tx.OrderID, err)
+			return nil, fmt.Errorf("error inserting transaction (OrderID: %s): %w", tx.OrderID, err)
 		}
 	}
 
 	if err := dbTx.Commit(); err != nil {
-		return nil, fmt.Errorf("error committing processed transactions to database: %w", err)
+		return nil, fmt.Errorf("error committing transactions: %w", err)
 	}
-	committed = true
 
-	// Step 5: Invalidate caches and generate results
+	// --- Invalidate Caches ---
+	// This simple strategy ensures data consistency. The next request will trigger a full, correct recalculation.
 	s.InvalidateUserCache(userID)
+
+	logger.L.Info("ProcessUpload END", "userID", userID, "duration", time.Since(overallStartTime))
+	return s.GetLatestUploadResult(userID)
+}
+
+// InvalidateUserCache clears all cached data for a user, forcing a complete rebuild on the next request.
+func (s *uploadServiceImpl) InvalidateUserCache(userID int64) {
+	keysToDelete := []string{
+		fmt.Sprintf(ckAllStockSales, userID),
+		fmt.Sprintf(ckStockHoldingsByYear, userID),
+		fmt.Sprintf(ckLatestUploadResult, userID),
+		fmt.Sprintf(ckDividendSummary, userID),
+	}
+	for _, key := range keysToDelete {
+		s.reportCache.Delete(key)
+	}
+	logger.L.Info("Invalidated all caches for user", "userID", userID)
+}
+
+// getStockData is the central function to populate stock-related caches on a cache miss.
+func (s *uploadServiceImpl) getStockData(userID int64) ([]models.SaleDetail, map[string][]models.PurchaseLot, error) {
+	salesCacheKey := fmt.Sprintf(ckAllStockSales, userID)
+	holdingsByYearCacheKey := fmt.Sprintf(ckStockHoldingsByYear, userID)
+
+	if cachedSales, salesFound := s.reportCache.Get(salesCacheKey); salesFound {
+		if cachedHoldings, holdingsFound := s.reportCache.Get(holdingsByYearCacheKey); holdingsFound {
+			logger.L.Debug("Cache hit for all stock data", "userID", userID)
+			return cachedSales.([]models.SaleDetail), cachedHoldings.(map[string][]models.PurchaseLot), nil
+		}
+	}
+
+	logger.L.Info("Cache miss for stock data, recalculating from DB", "userID", userID)
 	allUserTransactions, err := fetchUserProcessedTransactions(userID)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	// The processor does the heavy lifting of calculating everything in one pass.
+	allSales, holdingsByYear := s.stockProcessor.Process(allUserTransactions)
+
+	s.reportCache.Set(salesCacheKey, allSales, cache.NoExpiration)
+	s.reportCache.Set(holdingsByYearCacheKey, holdingsByYear, cache.NoExpiration)
+	logger.L.Info("Populated stock result caches from DB", "userID", userID)
+
+	return allSales, holdingsByYear, nil
+}
+
+func (s *uploadServiceImpl) GetLatestUploadResult(userID int64) (*UploadResult, error) {
+	cacheKey := fmt.Sprintf(ckLatestUploadResult, userID)
+	if cached, found := s.reportCache.Get(cacheKey); found {
+		logger.L.Info("Cache hit for GetLatestUploadResult", "userID", userID)
+		return cached.(*UploadResult), nil
+	}
+	logger.L.Info("Cache miss for GetLatestUploadResult, computing...", "userID", userID)
+
+	stockSaleDetails, stockHoldingsByYear, err := s.getStockData(userID)
 	if err != nil {
 		return nil, err
 	}
 
-	stockSaleDetails, stockHoldingsByYear := s.stockProcessor.Process(allUserTransactions)
-	optionSaleDetails, optionHoldings := s.optionProcessor.Process(allUserTransactions)
-	cashMovements := s.cashMovementProcessor.Process(allUserTransactions)
+	allTxns, err := fetchUserProcessedTransactions(userID)
+	if err != nil {
+		return nil, err
+	}
 
+	optionSaleDetails, optionHoldings := s.optionProcessor.Process(allTxns)
+	cashMovements := s.cashMovementProcessor.Process(allTxns)
 	var dividendTransactionsList []models.ProcessedTransaction
-	for _, tx := range allUserTransactions {
+	for _, tx := range allTxns {
 		if tx.TransactionType == "DIVIDEND" {
 			dividendTransactionsList = append(dividendTransactionsList, tx)
 		}
@@ -151,99 +189,43 @@ func (s *uploadServiceImpl) ProcessUpload(fileReader io.Reader, userID int64, so
 		CashMovements:            cashMovements,
 		DividendTransactionsList: dividendTransactionsList,
 	}
-
-	logger.L.Info("ProcessUpload END", "userID", userID, "duration", time.Since(overallStartTime))
+	s.reportCache.Set(cacheKey, result, DefaultCacheExpiration)
 	return result, nil
 }
 
-func (s *uploadServiceImpl) InvalidateUserCache(userID int64) {
-	keysToDelete := []string{
-		fmt.Sprintf(ckLatestUploadResult, userID),
-		fmt.Sprintf(ckStockSales, userID),
-		fmt.Sprintf(ckOptionSales, userID),
-		fmt.Sprintf(ckDividendSummary, userID),
-		fmt.Sprintf(ckStockHoldings, userID),
-		fmt.Sprintf(ckOptionHoldings, userID),
-		fmt.Sprintf(ckDividendTxns, userID),
-	}
-	for _, key := range keysToDelete {
-		s.reportCache.Delete(key)
-	}
-	logger.L.Info("Invalidated all caches for user", "userID", userID)
+func (s *uploadServiceImpl) GetStockSaleDetails(userID int64) ([]models.SaleDetail, error) {
+	sales, _, err := s.getStockData(userID)
+	return sales, err
 }
 
-func (s *uploadServiceImpl) GetLatestUploadResult(userID int64) (*UploadResult, error) {
-	cacheKey := fmt.Sprintf(ckLatestUploadResult, userID)
-	if cachedResult, found := s.reportCache.Get(cacheKey); found {
-		if result, ok := cachedResult.(*UploadResult); ok {
-			logger.L.Info("Cache hit for GetLatestUploadResult", "userID", userID, "cacheKey", cacheKey)
-			return result, nil
-		}
-		logger.L.Warn("Cache data type mismatch for GetLatestUploadResult", "userID", userID, "cacheKey", cacheKey)
-	}
-
-	logger.L.Info("Cache miss for GetLatestUploadResult, computing...", "userID", userID, "cacheKey", cacheKey)
-	overallStartTime := time.Now()
-
-	userTransactions, err := fetchUserProcessedTransactions(userID)
+func (s *uploadServiceImpl) GetStockHoldings(userID int64) ([]models.PurchaseLot, error) {
+	_, holdingsByYear, err := s.getStockData(userID)
 	if err != nil {
 		return nil, err
 	}
 
-	if len(userTransactions) == 0 {
-		logger.L.Info("No transactions found for user, returning empty result", "userID", userID)
-		emptyResult := &UploadResult{
-			StockSaleDetails:         []models.SaleDetail{},
-			StockHoldings:            make(map[string][]models.PurchaseLot),
-			OptionSaleDetails:        []models.OptionSaleDetail{},
-			OptionHoldings:           []models.OptionHolding{},
-			CashMovements:            []models.CashMovement{},
-			DividendTransactionsList: []models.ProcessedTransaction{},
-		}
-		s.reportCache.Set(cacheKey, emptyResult, DefaultCacheExpiration)
-		return emptyResult, nil
-	}
-
-	logger.L.Info("Processing all fetched transactions for GetLatestUploadResult", "userID", userID, "transactionCount", len(userTransactions))
-	processingStartTime := time.Now()
-	stockSaleDetails, stockHoldings := s.stockProcessor.Process(userTransactions)
-	optionSaleDetails, optionHoldings := s.optionProcessor.Process(userTransactions)
-	cashMovements := s.cashMovementProcessor.Process(userTransactions)
-
-	var dividendTransactionsList []models.ProcessedTransaction
-	var dividendCandidateCount int
-	for _, tx := range userTransactions {
-		if tx.TransactionType == "DIVIDEND" {
-			dividendCandidateCount++
-			dividendTransactionsList = append(dividendTransactionsList, tx)
+	// Find the latest year in the map to return the most current holdings.
+	latestYear := ""
+	for year := range holdingsByYear {
+		if latestYear == "" || year > latestYear {
+			latestYear = year
 		}
 	}
-	logger.L.Info("Dividend filtering complete for GetLatestUploadResult", "userID", userID, "foundDividendTransactions", dividendCandidateCount, "finalListSize", len(dividendTransactionsList))
-	logger.L.Debug("Processing complete for GetLatestUploadResult", "userID", userID, "duration", time.Since(processingStartTime))
 
-	uploadResult := &UploadResult{
-		StockSaleDetails:         stockSaleDetails,
-		StockHoldings:            stockHoldings,
-		OptionSaleDetails:        optionSaleDetails,
-		OptionHoldings:           optionHoldings,
-		CashMovements:            cashMovements,
-		DividendTransactionsList: dividendTransactionsList,
+	if latestHoldings, ok := holdingsByYear[latestYear]; ok {
+		return latestHoldings, nil
 	}
 
-	s.reportCache.Set(cacheKey, uploadResult, DefaultCacheExpiration)
-	logger.L.Info("Computed and cached GetLatestUploadResult", "userID", userID, "cacheKey", cacheKey, "duration", time.Since(overallStartTime))
-	return uploadResult, nil
+	return []models.PurchaseLot{}, nil // Return empty slice if no holdings found
 }
+
+// --- Other methods remain largely unchanged, but will benefit from future refactoring ---
 
 func (s *uploadServiceImpl) GetDividendTaxSummary(userID int64) (models.DividendTaxResult, error) {
 	cacheKey := fmt.Sprintf(ckDividendSummary, userID)
 	if data, found := s.reportCache.Get(cacheKey); found {
-		if summary, ok := data.(models.DividendTaxResult); ok {
-			logger.L.Info("Cache hit for GetDividendTaxSummary", "userID", userID)
-			return summary, nil
-		}
+		return data.(models.DividendTaxResult), nil
 	}
-	logger.L.Info("Cache miss for GetDividendTaxSummary, computing...", "userID", userID)
 	userTransactions, err := fetchUserProcessedTransactions(userID)
 	if err != nil {
 		return nil, err
@@ -253,33 +235,25 @@ func (s *uploadServiceImpl) GetDividendTaxSummary(userID int64) (models.Dividend
 	return summary, nil
 }
 
-func (s *uploadServiceImpl) GetStockSaleDetails(userID int64) ([]models.SaleDetail, error) {
-	cacheKey := fmt.Sprintf(ckStockSales, userID)
-	if cachedData, found := s.reportCache.Get(cacheKey); found {
-		if sales, ok := cachedData.([]models.SaleDetail); ok {
-			logger.L.Info("Cache hit for GetStockSaleDetails", "userID", userID)
-			return sales, nil
-		}
-	}
-	logger.L.Info("Cache miss for GetStockSaleDetails, computing...", "userID", userID)
+func (s *uploadServiceImpl) GetOptionSaleDetails(userID int64) ([]models.OptionSaleDetail, error) {
 	userTransactions, err := fetchUserProcessedTransactions(userID)
 	if err != nil {
 		return nil, err
 	}
-	stockSaleDetails, _ := s.stockProcessor.Process(userTransactions)
-	s.reportCache.Set(cacheKey, stockSaleDetails, DefaultCacheExpiration)
-	return stockSaleDetails, nil
+	optionSaleDetails, _ := s.optionProcessor.Process(userTransactions)
+	return optionSaleDetails, nil
+}
+
+func (s *uploadServiceImpl) GetOptionHoldings(userID int64) ([]models.OptionHolding, error) {
+	userTransactions, err := fetchUserProcessedTransactions(userID)
+	if err != nil {
+		return nil, err
+	}
+	_, optionHoldings := s.optionProcessor.Process(userTransactions)
+	return optionHoldings, nil
 }
 
 func (s *uploadServiceImpl) GetDividendTransactions(userID int64) ([]models.ProcessedTransaction, error) {
-	cacheKey := fmt.Sprintf(ckDividendTxns, userID)
-	if data, found := s.reportCache.Get(cacheKey); found {
-		if txns, ok := data.([]models.ProcessedTransaction); ok {
-			logger.L.Info("Cache hit for GetDividendTransactions", "userID", userID)
-			return txns, nil
-		}
-	}
-	logger.L.Info("Cache miss for GetDividendTransactions, computing...", "userID", userID)
 	userTransactions, err := fetchUserProcessedTransactions(userID)
 	if err != nil {
 		return nil, err
@@ -290,107 +264,29 @@ func (s *uploadServiceImpl) GetDividendTransactions(userID int64) ([]models.Proc
 			dividends = append(dividends, tx)
 		}
 	}
-	s.reportCache.Set(cacheKey, dividends, DefaultCacheExpiration)
 	return dividends, nil
 }
 
-func (s *uploadServiceImpl) GetStockHoldings(userID int64) ([]models.PurchaseLot, error) {
-	cacheKey := fmt.Sprintf(ckStockHoldings, userID)
-	if data, found := s.reportCache.Get(cacheKey); found {
-		if holdings, ok := data.([]models.PurchaseLot); ok {
-			logger.L.Info("Cache hit for GetStockHoldings", "userID", userID)
-			return holdings, nil
-		}
-	}
-	logger.L.Info("Cache miss for GetStockHoldings, computing...", "userID", userID)
-	userTransactions, err := fetchUserProcessedTransactions(userID)
-	if err != nil {
-		return nil, err
-	}
-	_, stockHoldingsByYear := s.stockProcessor.Process(userTransactions)
-	latestYear := ""
-	for year := range stockHoldingsByYear {
-		if latestYear == "" || year > latestYear {
-			latestYear = year
-		}
-	}
-	latestHoldings := stockHoldingsByYear[latestYear]
-	if latestHoldings == nil {
-		latestHoldings = []models.PurchaseLot{}
-	}
-	s.reportCache.Set(cacheKey, latestHoldings, DefaultCacheExpiration)
-	return latestHoldings, nil
-}
-
-func (s *uploadServiceImpl) GetOptionHoldings(userID int64) ([]models.OptionHolding, error) {
-	cacheKey := fmt.Sprintf(ckOptionHoldings, userID)
-	if data, found := s.reportCache.Get(cacheKey); found {
-		if holdings, ok := data.([]models.OptionHolding); ok {
-			logger.L.Info("Cache hit for GetOptionHoldings", "userID", userID)
-			return holdings, nil
-		}
-	}
-	logger.L.Info("Cache miss for GetOptionHoldings, computing...", "userID", userID)
-	userTransactions, err := fetchUserProcessedTransactions(userID)
-	if err != nil {
-		return nil, err
-	}
-	_, optionHoldings := s.optionProcessor.Process(userTransactions)
-	s.reportCache.Set(cacheKey, optionHoldings, DefaultCacheExpiration)
-	return optionHoldings, nil
-}
-
-func (s *uploadServiceImpl) GetOptionSaleDetails(userID int64) ([]models.OptionSaleDetail, error) {
-	cacheKey := fmt.Sprintf(ckOptionSales, userID)
-	if data, found := s.reportCache.Get(cacheKey); found {
-		if sales, ok := data.([]models.OptionSaleDetail); ok {
-			logger.L.Info("Cache hit for GetOptionSaleDetails", "userID", userID)
-			return sales, nil
-		}
-	}
-	logger.L.Info("Cache miss for GetOptionSaleDetails, computing...", "userID", userID)
-	userTransactions, err := fetchUserProcessedTransactions(userID)
-	if err != nil {
-		return nil, err
-	}
-	optionSaleDetails, _ := s.optionProcessor.Process(userTransactions)
-	s.reportCache.Set(cacheKey, optionSaleDetails, DefaultCacheExpiration)
-	return optionSaleDetails, nil
-}
-
+// fetchUserProcessedTransactions remains the same
 func fetchUserProcessedTransactions(userID int64) ([]models.ProcessedTransaction, error) {
 	logger.L.Debug("Fetching processed transactions from DB", "userID", userID)
-	rows, err := database.DB.Query(`
-		SELECT id, date, source, product_name, isin, quantity, original_quantity, price, 
-		       transaction_type, transaction_subtype, buy_sell, description, amount, currency, commission, 
-		       order_id, exchange_rate, amount_eur, country_code, input_string, hash_id
-		FROM processed_transactions
-		WHERE user_id = ?
-		ORDER BY date ASC, id ASC`, userID)
-
+	rows, err := database.DB.Query(`SELECT id, date, source, product_name, isin, quantity, original_quantity, price, transaction_type, transaction_subtype, buy_sell, description, amount, currency, commission, order_id, exchange_rate, amount_eur, country_code, input_string, hash_id FROM processed_transactions WHERE user_id = ? ORDER BY date ASC, id ASC`, userID)
 	if err != nil {
-		logger.L.Error("Error querying transactions from DB", "userID", userID, "error", err)
 		return nil, fmt.Errorf("error querying transactions for userID %d: %w", userID, err)
 	}
 	defer rows.Close()
-
 	var transactions []models.ProcessedTransaction
 	for rows.Next() {
 		var tx models.ProcessedTransaction
-		scanErr := rows.Scan(
-			&tx.ID, &tx.Date, &tx.Source, &tx.ProductName, &tx.ISIN, &tx.Quantity, &tx.OriginalQuantity, &tx.Price,
-			&tx.TransactionType, &tx.TransactionSubType, &tx.BuySell, &tx.Description, &tx.Amount, &tx.Currency,
-			&tx.Commission, &tx.OrderID, &tx.ExchangeRate, &tx.AmountEUR, &tx.CountryCode, &tx.InputString, &tx.HashId)
+		scanErr := rows.Scan(&tx.ID, &tx.Date, &tx.Source, &tx.ProductName, &tx.ISIN, &tx.Quantity, &tx.OriginalQuantity, &tx.Price, &tx.TransactionType, &tx.TransactionSubType, &tx.BuySell, &tx.Description, &tx.Amount, &tx.Currency, &tx.Commission, &tx.OrderID, &tx.ExchangeRate, &tx.AmountEUR, &tx.CountryCode, &tx.InputString, &tx.HashId)
 		if scanErr != nil {
-			logger.L.Error("Error scanning transaction row from DB", "userID", userID, "error", scanErr)
 			return nil, fmt.Errorf("error scanning transaction row for userID %d: %w", userID, scanErr)
 		}
 		transactions = append(transactions, tx)
 	}
 	if err = rows.Err(); err != nil {
-		logger.L.Error("Error iterating over transaction rows from DB", "userID", userID, "error", err)
 		return nil, fmt.Errorf("error iterating over transaction rows for userID %d: %w", userID, err)
 	}
-	logger.L.Info("DB fetch for user complete.", "userID", userID, "totalTransactionCount", len(transactions))
+	logger.L.Info("DB fetch complete.", "userID", userID, "transactionCount", len(transactions))
 	return transactions, nil
 }

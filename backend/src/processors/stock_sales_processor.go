@@ -14,6 +14,8 @@ func NewStockProcessor() StockProcessor {
 	return &stockProcessorImpl{}
 }
 
+// Process implements the StockProcessor interface.
+// This is the restored, correct logic that processes the entire transaction list in one pass.
 func (p *stockProcessorImpl) Process(transactions []models.ProcessedTransaction) ([]models.SaleDetail, map[string][]models.PurchaseLot) {
 	stockTransactions := filterAndSortStockTransactions(transactions)
 	if len(stockTransactions) == 0 {
@@ -22,6 +24,7 @@ func (p *stockProcessorImpl) Process(transactions []models.ProcessedTransaction)
 	return calculateSalesAndYearlyHoldings(stockTransactions)
 }
 
+// calculateSalesAndYearlyHoldings contains the original, correct FIFO and snapshot logic.
 func calculateSalesAndYearlyHoldings(transactions []models.ProcessedTransaction) ([]models.SaleDetail, map[string][]models.PurchaseLot) {
 	saleDetails := []models.SaleDetail{}
 	holdingsByYear := make(map[string][]models.PurchaseLot)
@@ -37,14 +40,15 @@ func calculateSalesAndYearlyHoldings(transactions []models.ProcessedTransaction)
 		txDate := utils.ParseDate(tx.Date)
 		currentYear := txDate.Year()
 
+		// If the year changes, take a snapshot of the current holdings for the previous year(s).
 		if currentYear > lastProcessedYear {
 			snapshot := collectAndCopyHoldings(openPurchasesByISIN)
-			holdingsByYear[strconv.Itoa(lastProcessedYear)] = snapshot
-			for year := lastProcessedYear + 1; year < currentYear; year++ {
+			for year := lastProcessedYear; year < currentYear; year++ {
 				holdingsByYear[strconv.Itoa(year)] = snapshot
 			}
 		}
 
+		// Process the current transaction (buy or sell).
 		if tx.TransactionType == "STOCK" && tx.BuySell == "BUY" {
 			purchaseCopy := tx
 			openPurchasesByISIN[tx.ISIN] = append(openPurchasesByISIN[tx.ISIN], &purchaseCopy)
@@ -103,12 +107,14 @@ func calculateSalesAndYearlyHoldings(transactions []models.ProcessedTransaction)
 		lastProcessedYear = currentYear
 	}
 
+	// Take the final snapshot for the very last year processed.
 	finalSnapshot := collectAndCopyHoldings(openPurchasesByISIN)
 	holdingsByYear[strconv.Itoa(lastProcessedYear)] = finalSnapshot
 
 	return saleDetails, holdingsByYear
 }
 
+// collectAndCopyHoldings is a helper to create the PurchaseLot view model from the internal state.
 func collectAndCopyHoldings(holdingsMap map[string][]*models.ProcessedTransaction) []models.PurchaseLot {
 	var snapshot []models.PurchaseLot
 	for _, lots := range holdingsMap {
@@ -137,6 +143,7 @@ func collectAndCopyHoldings(holdingsMap map[string][]*models.ProcessedTransactio
 	return snapshot
 }
 
+// filterAndSortStockTransactions remains the same, ensuring transactions are processed in order.
 func filterAndSortStockTransactions(transactions []models.ProcessedTransaction) []models.ProcessedTransaction {
 	var stockTx []models.ProcessedTransaction
 	for _, tx := range transactions {
