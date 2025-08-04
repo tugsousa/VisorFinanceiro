@@ -41,14 +41,12 @@ export const useRealizedGains = (token, selectedYear) => {
     const error = results.find(q => q.error)?.error;
 
     const allData = useMemo(() => ({
-        // --- FIX STARTS HERE: Renaming keys to PascalCase to match the page component's expectations ---
         StockSaleDetails: stockSalesQuery.data,
         OptionSaleDetails: optionSalesQuery.data,
-        dividendSummary: dividendSummaryQuery.data, // This one is derived, name can stay but let's be consistent where possible
+        dividendSummary: dividendSummaryQuery.data,
         DividendTransactionsList: dividendTransactionsQuery.data,
         StockHoldings: stockHoldingsByYearQuery.data,
         OptionHoldings: optionHoldingsQuery.data
-        // --- FIX ENDS HERE ---
     }), [
         stockSalesQuery.data,
         optionSalesQuery.data,
@@ -66,12 +64,12 @@ export const useRealizedGains = (token, selectedYear) => {
             DividendTaxResult: null,
         };
         const dataForYearExtraction = {
-            stockSales: allData.StockSaleDetails, // Use corrected key
-            optionSales: allData.OptionSaleDetails, // Use corrected key
+            stockSales: allData.StockSaleDetails,
+            optionSales: allData.OptionSaleDetails,
             DividendTaxResult: allData.dividendSummary,
         };
         const yearsFromUtil = extractYearsFromData(dataForYearExtraction, dateAccessors);
-        const stockHoldingYears = allData.StockHoldings ? Object.keys(allData.StockHoldings) : []; // Use corrected key
+        const stockHoldingYears = allData.StockHoldings ? Object.keys(allData.StockHoldings) : [];
         const allYearsSet = new Set([...yearsFromUtil, ...stockHoldingYears]);
         const sortedYears = Array.from(allYearsSet)
             .filter(y => y && y !== ALL_YEARS_OPTION && y !== NO_YEAR_SELECTED)
@@ -87,7 +85,7 @@ export const useRealizedGains = (token, selectedYear) => {
         if (isLoading || !allData) return defaultStructure;
 
         let holdingsForSelectedPeriod = [];
-        if (allData.StockHoldings) { // Use corrected key
+        if (allData.StockHoldings) {
             if (selectedYear === ALL_YEARS_OPTION) {
                 const latestYear = Object.keys(allData.StockHoldings).sort().pop();
                 holdingsForSelectedPeriod = allData.StockHoldings[latestYear] || [];
@@ -106,8 +104,13 @@ export const useRealizedGains = (token, selectedYear) => {
 
         if (selectedYear === ALL_YEARS_OPTION || !selectedYear) return dataSet;
         
+        // CORREÇÃO: A lógica agora permite que as Posições em Opções apareçam para o ano atual.
+        const currentYear = new Date().getFullYear().toString();
+        const showOptionHoldings = selectedYear === currentYear;
+
         return {
             ...dataSet,
+            OptionHoldings: showOptionHoldings ? dataSet.OptionHoldings : [],
             StockSaleDetails: dataSet.StockSaleDetails.filter(s => getYearString(s.SaleDate) === selectedYear),
             OptionSaleDetails: dataSet.OptionSaleDetails.filter(o => getYearString(o.close_date) === selectedYear),
             DividendTransactionsList: dataSet.DividendTransactionsList.filter(tx => getYearString(tx.date) === selectedYear),
@@ -161,7 +164,7 @@ export const useRealizedGains = (token, selectedYear) => {
             }));
         }
 
-        if (allData.StockHoldings && allData.StockHoldings[selectedYear]) { // Use corrected key
+        if (allData.StockHoldings && allData.StockHoldings[selectedYear]) {
             const historicalLots = allData.StockHoldings[selectedYear];
             const groupedHoldingsMap = historicalLots.reduce((acc, lot) => {
                 const isin = lot.isin || 'UNKNOWN';
@@ -204,8 +207,7 @@ export const useRealizedGains = (token, selectedYear) => {
 
         return { labels, datasets: [{ data }] };
     }, [holdingsForGroupedView]);
-
-    // I will also rename the derivedDividendTaxSummary for consistency in the return object
+    
     const derivedDividendTaxSummary = dividendSummaryQuery.data;
 
     return {

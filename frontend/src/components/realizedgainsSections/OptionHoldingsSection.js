@@ -8,10 +8,10 @@ import { ptPT } from '@mui/x-data-grid/locales';
 const columns = [
     { field: 'product_name', headerName: 'Produto', flex: 1, minWidth: 200 },
     { field: 'open_date', headerName: 'Dt. abertura', width: 110 },
-    { 
-        field: 'quantity', 
-        headerName: 'Qtd', 
-        type: 'number', 
+    {
+        field: 'quantity',
+        headerName: 'Qtd',
+        type: 'number',
         width: 80,
         renderCell: (params) => (
             <Typography sx={{ color: params.value >= 0 ? 'inherit' : 'error.main' }}>
@@ -19,27 +19,27 @@ const columns = [
             </Typography>
         ),
     },
-    // CORREÇÃO APLICADA AQUI
-    { 
-      field: 'open_price', 
-      headerName: 'Preço abertura', 
-      type: 'number', 
-      width: 120, 
-      valueFormatter: (params) => typeof params.value === 'number' ? params.value.toFixed(4) : '' 
+    {
+      field: 'open_price',
+      headerName: 'Preço abertura',
+      type: 'number',
+      width: 120,
+      // CORREÇÃO: O primeiro argumento do valueFormatter é o próprio valor da célula, não um objeto de parâmetros.
+      valueFormatter: (value) => typeof value === 'number' ? value.toFixed(4) : ''
     },
-    // E CORREÇÃO APLICADA AQUI
-    { 
-      field: 'open_amount_eur', 
-      headerName: 'Montante (€)', 
-      type: 'number', 
-      width: 130, 
-      valueFormatter: (params) => typeof params.value === 'number' ? params.value.toFixed(2) : '' 
+    {
+      field: 'open_amount_eur',
+      // CORREÇÃO: Renomeado o cabeçalho conforme solicitado.
+      headerName: 'Custo Total (€)',
+      type: 'number',
+      width: 140, // Aumentado um pouco para o novo título
+      // CORREÇÃO: O primeiro argumento do valueFormatter é o próprio valor da célula.
+      valueFormatter: (value) => typeof value === 'number' ? value.toFixed(2) : ''
     },
     { field: 'open_currency', headerName: 'Moeda', width: 90 },
 ];
 
 export default function OptionHoldingsSection({ holdingsData }) {
-  // ... o resto do componente permanece igual
   if (!holdingsData || holdingsData.length === 0) {
     return (
       <Paper elevation={0} sx={{ p: 2, mb: 3, border: 'none' }}>

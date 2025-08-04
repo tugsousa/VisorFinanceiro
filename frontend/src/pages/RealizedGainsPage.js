@@ -1,4 +1,3 @@
-// frontend/src/pages/RealizedGainsPage.js
 import React, { useState, useEffect } from 'react';
 import {
   Typography, Box, FormControl, InputLabel, Select, MenuItem,
@@ -6,14 +5,14 @@ import {
 } from '@mui/material';
 import { useAuth } from '../context/AuthContext';
 import { useRealizedGains } from '../hooks/useRealizedGains';
-import { UI_TEXT, ALL_YEARS_OPTION } from '../constants';
+import { UI_TEXT, ALL_YEARS_OPTION, NO_YEAR_SELECTED } from '../constants';
 import { formatCurrency } from '../utils/formatUtils';
 
 import ShowChartIcon from '@mui/icons-material/ShowChart';
 import CandlestickChartIcon from '@mui/icons-material/CandlestickChart';
 import AttachMoneyIcon from '@mui/icons-material/AttachMoney';
 import AccountBalanceWalletIcon from '@mui/icons-material/AccountBalanceWallet';
-import TrendingUpIcon from '@mui/icons-material/TrendingUp'; // MODIFICATION: Import a new icon
+import TrendingUpIcon from '@mui/icons-material/TrendingUp';
 
 import StockHoldingsSection from '../components/realizedgainsSections/StockHoldingsSection';
 import OptionHoldingsSection from '../components/realizedgainsSections/OptionHoldingsSection';
@@ -40,7 +39,6 @@ const isDataEmpty = (data) => {
   );
 };
 
-// Refactor KeyMetricCard para um design mais vistoso
 const KeyMetricCard = ({ title, value, icon, color }) => {
   const isPositive = value >= 0;
   const bgColor = isPositive ? 'rgba(76, 175, 80, 0.1)' : 'rgba(244, 67, 54, 0.1)';
@@ -48,18 +46,18 @@ const KeyMetricCard = ({ title, value, icon, color }) => {
 
   return (
     <Card
-      elevation={0}  // sem sombra agora
+      elevation={0}
       sx={{
         display: 'flex',
         alignItems: 'center',
-        p: 1.5,            // padding menor
+        p: 1.5,
         bgcolor: bgColor,
         borderRadius: 2,
-        minWidth: 140,      // um pouco mais pequeno
+        minWidth: 140,
         flex: '1 1 0',
       }}
     >
-      <Box sx={{ mr: 1.5, color: textColor, fontSize: 32 /* ícone menor */ }}>
+      <Box sx={{ mr: 1.5, color: textColor, fontSize: 32 }}>
         {React.cloneElement(icon, { fontSize: 'inherit' })}
       </Box>
       <Box>
@@ -83,7 +81,7 @@ export default function RealizedGainsPage() {
     allData,
     filteredData,
     summaryPLs,
-    unrealizedStockPL, // MODIFICATION: Get the new value from the hook
+    unrealizedStockPL,
     derivedDividendTaxSummary,
     availableYears,
     holdingsChartData,
@@ -128,7 +126,6 @@ export default function RealizedGainsPage() {
 
   return (
     <Box sx={{ p: { xs: 2, sm: 4, md: 6 }, maxWidth: 1200, mx: 'auto' }}>
-      {/* Header com título e filtro de ano */}
       <Box sx={{
         display: 'flex',
         flexDirection: { xs: 'column', sm: 'row' },
@@ -158,7 +155,6 @@ export default function RealizedGainsPage() {
         </FormControl>
       </Box>
 
-      {/* Tabs */}
       <Tabs
         value={currentTab}
         onChange={handleTabChange}
@@ -174,51 +170,27 @@ export default function RealizedGainsPage() {
         <Tab label="Dividendos" value="dividends" />
       </Tabs>
 
-   {/* VISÃO GERAL */}
       {currentTab === 'overview' && (
         <Grid container spacing={3}>
-
-          {/* --- LEFT COLUMN --- */}
-          {/* This grid item is a container for the stacked items on the left */}
           <Grid item xs={12} lg={5} container spacing={3} alignContent="flex-start">
-            
-            {/* Item 1 in Left Column: Key Metrics */}
             <Grid item xs={12}>
                 <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
-                  {/* MODIFICATION START: Add the new KeyMetricCard for unrealized P/L */}
-                  {/* It will only display if a year is NOT selected, which is correct for this metric */}
                   {selectedYear === ALL_YEARS_OPTION && (
                     <KeyMetricCard title="L/P Não Realizado" value={unrealizedStockPL} icon={<TrendingUpIcon />} />
                   )}
-                  {/* MODIFICATION END */}
-
                   <KeyMetricCard title="L/P de Ações" value={summaryPLs.stockPL} icon={<ShowChartIcon />} />
                   <KeyMetricCard title="L/P de Opções" value={summaryPLs.optionPL} icon={<CandlestickChartIcon />} />
                   <KeyMetricCard title="Dividendos" value={summaryPLs.dividendPL} icon={<AttachMoneyIcon />} />
                   <KeyMetricCard title="Total L/P" value={summaryPLs.totalPL} icon={<AccountBalanceWalletIcon />} />
                 </Box>
             </Grid>
-
-            {/* Item 2 in Left Column: Holdings Doughnut Chart */}
             <Grid item xs={12}>
-              <Paper elevation={0} sx={{
-                p: 3,
-                height: 400, // A stable height prevents layout bugs
-                borderRadius: 3,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center'
-              }}>
+              <Paper elevation={0} sx={{ p: 3, height: 400, borderRadius: 3, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <HoldingsAllocationChart chartData={holdingsChartData} />
               </Paper>
             </Grid>
           </Grid>
-
-          {/* --- RIGHT COLUMN --- */}
-          {/* This grid item is a container for the stacked bar charts on the right */}
           <Grid item xs={12} lg={7} container spacing={3} alignContent="flex-start">
-            
-            {/* Item 1 in Right Column: Overall P/L Chart */}
             <Grid item xs={12}>
               <Paper elevation={0} sx={{ p: 2, height: 350, borderRadius: 3 }}>
                 <OverallPLChart
@@ -229,8 +201,6 @@ export default function RealizedGainsPage() {
                 />
               </Paper>
             </Grid>
-
-            {/* Item 2 in Right Column: P/L Contribution Chart */}
             <Grid item xs={12}>
               <Paper elevation={0} sx={{ p: 2, height: 350, borderRadius: 3 }}>
                 <PLContributionChart 
@@ -243,11 +213,9 @@ export default function RealizedGainsPage() {
               </Paper>
             </Grid>
           </Grid>
-
         </Grid>
       )}
 
-      {/* ATIVOS */}
       {currentTab === 'holdings' && (
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
           <StockHoldingsSection 
@@ -256,21 +224,21 @@ export default function RealizedGainsPage() {
             isGroupedFetching={isGroupedDataLoading}
             isDetailedFetching={isLoading}
           />
-          <OptionHoldingsSection holdingsData={filteredData.OptionHoldings || []} />
+          {/* CORREÇÃO: A renderização agora baseia-se na presença de dados no array filtrado */}
+          {filteredData.OptionHoldings && filteredData.OptionHoldings.length > 0 && (
+            <OptionHoldingsSection holdingsData={filteredData.OptionHoldings} />
+          )}
         </Box>
       )}
 
-      {/* VENDAS DE AÇÕES */}
       {currentTab === 'stock-sales' && (
         <StockSalesSection stockSalesData={filteredData.StockSaleDetails} selectedYear={selectedYear} />
       )}
 
-      {/* VENDAS DE OPÇÕES */}
       {currentTab === 'option-sales' && (
         <OptionSalesSection optionSalesData={filteredData.OptionSaleDetails} selectedYear={selectedYear} />
       )}
 
-      {/* DIVIDENDOS */}
       {currentTab === 'dividends' && (
         <DividendsSection dividendTransactionsData={filteredData.DividendTransactionsList} selectedYear={selectedYear} />
       )}
