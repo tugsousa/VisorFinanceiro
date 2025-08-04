@@ -1,14 +1,24 @@
 // frontend/src/utils/formatUtils.js
 
 /**
- * Formats a number as a currency string (EUR).
+ * Formats a number as a currency string (EUR) with customizable options.
  * @param {number|null|undefined} value - The number to format.
+ * @param {object} options - Options for Intl.NumberFormat, e.g., { minimumFractionDigits: 4 }.
  * @returns {string} The formatted currency string.
  */
-export const formatCurrency = (value) => {
+export const formatCurrency = (value, options = {}) => {
+  const defaultOptions = {
+    style: 'currency',
+    currency: 'EUR',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  };
+
+  const finalOptions = { ...defaultOptions, ...options };
   // Alterado de 'de-DE' para 'pt-PT' para usar o formato de moeda português.
-  return new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(value || 0);
+  return new Intl.NumberFormat('pt-PT', finalOptions).format(value || 0);
 };
+
 
 /**
  * Calculates an annualized return percentage.

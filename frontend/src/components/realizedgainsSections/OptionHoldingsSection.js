@@ -1,9 +1,8 @@
-// frontend/src/components/realizedgainsSections/OptionHoldingsSection.js
-
 import React from 'react';
 import { Typography, Paper, Box } from '@mui/material';
 import { DataGrid } from '@mui/x-data-grid';
 import { ptPT } from '@mui/x-data-grid/locales';
+import { formatCurrency } from '../../utils/formatUtils'; // Import the utility
 
 const columns = [
     { field: 'product_name', headerName: 'Produto', flex: 1, minWidth: 200 },
@@ -13,28 +12,30 @@ const columns = [
         headerName: 'Qtd',
         type: 'number',
         width: 80,
-        renderCell: (params) => (
-            <Typography sx={{ color: params.value >= 0 ? 'inherit' : 'error.main' }}>
-                {params.value}
-            </Typography>
-        ),
+        align: 'right',
+        headerAlign: 'right',
     },
     {
       field: 'open_price',
       headerName: 'Preço abertura',
       type: 'number',
       width: 120,
-      // CORREÇÃO: O primeiro argumento do valueFormatter é o próprio valor da célula, não um objeto de parâmetros.
-      valueFormatter: (value) => typeof value === 'number' ? value.toFixed(4) : ''
+      align: 'right',
+      headerAlign: 'right',
+      valueFormatter: (value) => 
+        formatCurrency(value, { 
+          minimumFractionDigits: 4, 
+          maximumFractionDigits: 4 
+        }),
     },
     {
       field: 'open_amount_eur',
-      // CORREÇÃO: Renomeado o cabeçalho conforme solicitado.
       headerName: 'Custo Total (€)',
       type: 'number',
-      width: 140, // Aumentado um pouco para o novo título
-      // CORREÇÃO: O primeiro argumento do valueFormatter é o próprio valor da célula.
-      valueFormatter: (value) => typeof value === 'number' ? value.toFixed(2) : ''
+      width: 140,
+      align: 'right',
+      headerAlign: 'right',
+      valueFormatter: (value) => formatCurrency(value),
     },
     { field: 'open_currency', headerName: 'Moeda', width: 90 },
 ];
