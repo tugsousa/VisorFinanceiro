@@ -189,15 +189,15 @@ export default function Layout({ children }) {
             {' Rumo Claro. Todos os direitos reservados.'}
           </Typography>
           <Box sx={{ display: 'flex', justifyContent: 'center', gap: 2, mt: 1 }}>
-            <MuiLink component={RouterLink} to="/privacy-policy" variant="body2">
+            <MuiLink component={RouterLink} to="/policies/privacy-policy" variant="body2">
               Política de Privacidade
             </MuiLink>
-            <MuiLink component={RouterLink} to="/terms-of-service" variant="body2">
+            <MuiLink component={RouterLink} to="/policies/terms-of-service" variant="body2">
               Termos de Serviço
             </MuiLink>
-            <Typography variant="body2" color="text.secondary">
-              Contacto: geral@rumoclaro.pt
-            </Typography>
+            <MuiLink component={RouterLink} to="/policies/contact-information" variant="body2">
+              Informações de contacto
+            </MuiLink>
           </Box>
         </Container>
       </Box>

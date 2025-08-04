@@ -14,8 +14,9 @@ import ResetPasswordPage from './pages/ResetPasswordPage';
 import SettingsPage from './pages/SettingsPage';
 import LandingPage from './pages/LandingPage'; 
 import DashboardPage from './pages/DashboardPage';
-import PrivacyPolicyPage from './pages/PrivacyPolicyPage';
-import TermsOfServicePage from './pages/TermsOfServicePage';
+import PrivacyPolicyPage from './pages/policies/PrivacyPolicyPage';
+import TermsOfServicePage from './pages/policies/TermsOfServicePage';
+import ContactInformationPage from './pages/policies/ContactInformationPage';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { CircularProgress, Box } from '@mui/material';
 import GoogleAuthCallbackPage from './pages/GoogleAuthCallbackPage'; // Importe a nova página
@@ -90,8 +91,9 @@ function App() {
 
             {/* Rotas de Informação */}
             <Route path="/verify-email" element={<VerifyEmailPage />} />
-            <Route path="/privacy-policy" element={<PrivacyPolicyPage />} />
-            <Route path="/terms-of-service" element={<TermsOfServicePage />} />
+            <Route path="/policies/privacy-policy" element={<PrivacyPolicyPage />} />
+            <Route path="/policies/terms-of-service" element={<TermsOfServicePage />} />
+            <Route path="/policies/contact-information" element={<ContactInformationPage />} />
 
             {/* Rotas Protegidas */}
             <Route path="/dashboard" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
