@@ -17,8 +17,9 @@ const columns = [
             </Typography>
         ),
     },
-    { field: 'open_price', headerName: 'Preço abertura', type: 'number', width: 120, valueFormatter: (params) => params.value.toFixed(4) },
-    { field: 'open_amount_eur', headerName: 'Montante (€)', type: 'number', width: 130, valueFormatter: (params) => params.value.toFixed(2) },
+    // Corrected value formatters
+    { field: 'open_price', headerName: 'Preço abertura', type: 'number', width: 120, valueFormatter: (params) => typeof params.value === 'number' ? params.value.toFixed(4) : '' },
+    { field: 'open_amount_eur', headerName: 'Montante (€)', type: 'number', width: 130, valueFormatter: (params) => typeof params.value === 'number' ? params.value.toFixed(2) : '' },
     { field: 'open_currency', headerName: 'Moeda', width: 90 },
 ];
 
