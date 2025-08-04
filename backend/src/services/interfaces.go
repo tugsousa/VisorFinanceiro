@@ -31,7 +31,7 @@ type UploadService interface {
 	GetLatestUploadResult(userID int64) (*UploadResult, error)
 	GetDividendTaxSummary(userID int64) (models.DividendTaxResult, error)
 	GetDividendTransactions(userID int64) ([]models.ProcessedTransaction, error)
-	GetStockHoldings(userID int64) ([]models.PurchaseLot, error)
+	GetStockHoldings(userID int64) (map[string][]models.PurchaseLot, error)
 	GetOptionHoldings(userID int64) ([]models.OptionHolding, error)
 	GetStockSaleDetails(userID int64) ([]models.SaleDetail, error)
 	GetOptionSaleDetails(userID int64) ([]models.OptionSaleDetail, error)

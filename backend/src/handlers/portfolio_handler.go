@@ -52,11 +52,19 @@ func (h *PortfolioHandler) HandleGetCurrentHoldingsValue(w http.ResponseWriter, 
 	log.Printf("Handling GetCurrentHoldingsValue for userID: %d", userID)
 
 	// 1. Get all individual purchase lots.
-	individualLots, err := h.uploadService.GetStockHoldings(userID)
+	holdingsByYear, err := h.uploadService.GetStockHoldings(userID)
 	if err != nil {
 		utils.SendJSONError(w, fmt.Sprintf("Error retrieving stock holdings for userID %d: %v", userID, err), http.StatusInternalServerError)
 		return
 	}
+
+	latestYear := ""
+	for year := range holdingsByYear {
+		if latestYear == "" || year > latestYear {
+			latestYear = year
+		}
+	}
+	individualLots := holdingsByYear[latestYear]
 
 	// 2. Aggregate these lots by ISIN.
 	groupedHoldings := make(map[string]AggregatedHolding)
@@ -176,7 +184,7 @@ func (h *PortfolioHandler) HandleGetStockHoldings(w http.ResponseWriter, r *http
 		return
 	}
 	if stockHoldings == nil {
-		stockHoldings = []models.PurchaseLot{}
+		stockHoldings = make(map[string][]models.PurchaseLot)
 	}
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(stockHoldings)

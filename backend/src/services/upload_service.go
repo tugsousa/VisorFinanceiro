@@ -198,25 +198,12 @@ func (s *uploadServiceImpl) GetStockSaleDetails(userID int64) ([]models.SaleDeta
 	return sales, err
 }
 
-func (s *uploadServiceImpl) GetStockHoldings(userID int64) ([]models.PurchaseLot, error) {
+func (s *uploadServiceImpl) GetStockHoldings(userID int64) (map[string][]models.PurchaseLot, error) {
 	_, holdingsByYear, err := s.getStockData(userID)
 	if err != nil {
 		return nil, err
 	}
-
-	// Find the latest year in the map to return the most current holdings.
-	latestYear := ""
-	for year := range holdingsByYear {
-		if latestYear == "" || year > latestYear {
-			latestYear = year
-		}
-	}
-
-	if latestHoldings, ok := holdingsByYear[latestYear]; ok {
-		return latestHoldings, nil
-	}
-
-	return []models.PurchaseLot{}, nil // Return empty slice if no holdings found
+	return holdingsByYear, nil
 }
 
 // --- Other methods remain largely unchanged, but will benefit from future refactoring ---
