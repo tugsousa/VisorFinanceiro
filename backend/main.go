@@ -10,6 +10,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi/v5/middleware"
 	"github.com/patrickmn/go-cache"
 	"github.com/username/taxfolio/backend/src/config"
 	"github.com/username/taxfolio/backend/src/database"
@@ -142,68 +144,73 @@ func main() {
 	txHandler := handlers.NewTransactionHandler(uploadService)
 
 	logger.L.Info("Configuring routes...")
-	rootMux := http.NewServeMux()
-	apiRouter := http.NewServeMux()
+	r := chi.NewRouter()
 
-	apiRouter.HandleFunc("GET /api/auth/csrf", handlers.GetCSRFToken)
-	apiRouter.HandleFunc("GET /api/auth/verify-email", userHandler.VerifyEmailHandler)
-	apiRouter.HandleFunc("GET /api/auth/google/login", userHandler.HandleGoogleLogin)
-	apiRouter.HandleFunc("GET /api/auth/google/callback", userHandler.HandleGoogleCallback)
+	// Global middleware
+	r.Use(middleware.Recoverer)
+	r.Use(proxyHeadersMiddleware)
+	r.Use(enableCORS)
+	r.Use(rateLimitMiddleware)
 
-	authActionRouter := http.NewServeMux()
-	authActionRouter.HandleFunc("POST /login", userHandler.LoginUserHandler)
-	authActionRouter.HandleFunc("POST /register", userHandler.RegisterUserHandler)
-	authActionRouter.HandleFunc("POST /refresh", userHandler.RefreshTokenHandler)
-	authActionRouter.HandleFunc("POST /logout", userHandler.AuthMiddleware(userHandler.LogoutUserHandler))
-	authActionRouter.HandleFunc("POST /request-password-reset", userHandler.RequestPasswordResetHandler)
-	authActionRouter.HandleFunc("POST /reset-password", userHandler.ResetPasswordHandler)
+	r.Get("/", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]string{"message": "RumoClaro Backend is running"})
+	})
 
-	apiRouter.Handle("/api/auth/", http.StripPrefix("/api/auth", handlers.CSRFMiddleware(config.Cfg.CSRFAuthKey)(authActionRouter)))
+	// API routes
+	r.Route("/api", func(r chi.Router) {
+		// Public auth routes
+		r.Group(func(r chi.Router) {
+			r.Get("/auth/csrf", handlers.GetCSRFToken)
+			r.Get("/auth/verify-email", userHandler.VerifyEmailHandler)
+			r.Get("/auth/google/login", userHandler.HandleGoogleLogin)
+			r.Get("/auth/google/callback", userHandler.HandleGoogleCallback)
+		})
 
-	csrfProtection := handlers.CSRFMiddleware(config.Cfg.CSRFAuthKey)
-	applyCsrfAndAuth := func(handler http.HandlerFunc) http.Handler {
-		return csrfProtection(http.HandlerFunc(userHandler.AuthMiddleware(handler)))
-	}
+		// Auth actions with CSRF protection
+		r.Group(func(r chi.Router) {
+			r.Use(handlers.CSRFMiddleware(config.Cfg.CSRFAuthKey))
+			r.Post("/auth/login", userHandler.LoginUserHandler)
+			r.Post("/auth/register", userHandler.RegisterUserHandler)
+			r.Post("/auth/refresh", userHandler.RefreshTokenHandler)
+			r.With(userHandler.AuthMiddleware).Post("/auth/logout", userHandler.LogoutUserHandler)
+			r.Post("/auth/request-password-reset", userHandler.RequestPasswordResetHandler)
+			r.Post("/auth/reset-password", userHandler.ResetPasswordHandler)
+		})
 
-	apiRouter.Handle("POST /api/upload", applyCsrfAndAuth(uploadHandler.HandleUpload))
-	apiRouter.Handle("GET /api/realizedgains-data", applyCsrfAndAuth(uploadHandler.HandleGetRealizedGainsData))
-	apiRouter.Handle("GET /api/transactions/processed", applyCsrfAndAuth(txHandler.HandleGetProcessedTransactions))
+		// Protected API routes with CSRF and Auth
+		r.Group(func(r chi.Router) {
+			r.Use(handlers.CSRFMiddleware(config.Cfg.CSRFAuthKey))
+			r.Use(userHandler.AuthMiddleware)
 
-	// Add the new route for fetching current holdings value
-	apiRouter.Handle("GET /api/holdings/current-value", applyCsrfAndAuth(portfolioHandler.HandleGetCurrentHoldingsValue))
+			r.Post("/upload", uploadHandler.HandleUpload)
+			r.Get("/realizedgains-data", uploadHandler.HandleGetRealizedGainsData)
+			r.Get("/transactions/processed", txHandler.HandleGetProcessedTransactions)
+			r.Get("/holdings/current-value", portfolioHandler.HandleGetCurrentHoldingsValue)
+			r.Get("/holdings/stocks", portfolioHandler.HandleGetStockHoldings)
+			r.Get("/holdings/options", portfolioHandler.HandleGetOptionHoldings)
+			r.Get("/stock-sales", portfolioHandler.HandleGetStockSales)
+			r.Get("/option-sales", portfolioHandler.HandleGetOptionSales)
+			r.Get("/dividend-tax-summary", dividendHandler.HandleGetDividendTaxSummary)
+			r.Get("/dividend-transactions", dividendHandler.HandleGetDividendTransactions)
+			r.Delete("/transactions/all", txHandler.HandleDeleteAllProcessedTransactions)
+			r.Get("/user/has-data", userHandler.HandleCheckUserData)
+			r.Post("/user/change-password", userHandler.ChangePasswordHandler)
+			r.Post("/user/delete-account", userHandler.DeleteAccountHandler)
+		})
+	})
 
-	apiRouter.Handle("GET /api/holdings/stocks", applyCsrfAndAuth(portfolioHandler.HandleGetStockHoldings))
-	apiRouter.Handle("GET /api/holdings/options", applyCsrfAndAuth(portfolioHandler.HandleGetOptionHoldings))
-	apiRouter.Handle("GET /api/stock-sales", applyCsrfAndAuth(portfolioHandler.HandleGetStockSales))
-	apiRouter.Handle("GET /api/option-sales", applyCsrfAndAuth(portfolioHandler.HandleGetOptionSales))
-	apiRouter.Handle("GET /api/dividend-tax-summary", applyCsrfAndAuth(dividendHandler.HandleGetDividendTaxSummary))
-	apiRouter.Handle("GET /api/dividend-transactions", applyCsrfAndAuth(dividendHandler.HandleGetDividendTransactions))
-	apiRouter.Handle("DELETE /api/transactions/all", applyCsrfAndAuth(txHandler.HandleDeleteAllProcessedTransactions))
-	apiRouter.Handle("GET /api/user/has-data", applyCsrfAndAuth(userHandler.HandleCheckUserData))
-	apiRouter.Handle("POST /api/user/change-password", applyCsrfAndAuth(userHandler.ChangePasswordHandler))
-	apiRouter.Handle("POST /api/user/delete-account", applyCsrfAndAuth(userHandler.DeleteAccountHandler))
-
-	rootMux.Handle("/api/", apiRouter)
-
-	rootMux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/" && r.Method == http.MethodGet {
-			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode(map[string]string{"message": "RumoClaro Backend is running"})
-			return
-		}
+	r.NotFound(func(w http.ResponseWriter, r *http.Request) {
 		if !strings.HasPrefix(r.URL.Path, "/api/") {
 			logger.L.Warn("Root level path not found", "method", r.Method, "path", r.URL.Path)
 			http.NotFound(w, r)
 		}
 	})
 
-	logger.L.Info("Applying global middleware...")
-	finalHandler := proxyHeadersMiddleware(enableCORS(rateLimitMiddleware(rootMux)))
-
 	serverAddr := ":" + config.Cfg.Port
 	server := &http.Server{
 		Addr:         serverAddr,
-		Handler:      finalHandler,
+		Handler:      r,
 		ReadTimeout:  15 * time.Second,
 		WriteTimeout: 15 * time.Second,
 		IdleTimeout:  60 * time.Second,

@@ -1,3 +1,4 @@
+// backend/src/handlers/user_handler.go
 package handlers
 
 import (
@@ -667,8 +668,8 @@ func (h *UserHandler) DeleteAccountHandler(w http.ResponseWriter, r *http.Reques
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (h *UserHandler) AuthMiddleware(next http.HandlerFunc) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
+func (h *UserHandler) AuthMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		authHeader := r.Header.Get("Authorization")
 		if authHeader == "" {
 			logger.L.Debug("AuthMiddleware: Authorization header missing", "path", r.URL.Path)
@@ -724,8 +725,8 @@ func (h *UserHandler) AuthMiddleware(next http.HandlerFunc) http.HandlerFunc {
 		}
 
 		ctx := context.WithValue(r.Context(), userIDContextKey, userIDInt)
-		next(w, r.WithContext(ctx))
-	}
+		next.ServeHTTP(w, r.WithContext(ctx))
+	})
 }
 
 func (h *UserHandler) RefreshTokenHandler(w http.ResponseWriter, r *http.Request) {
