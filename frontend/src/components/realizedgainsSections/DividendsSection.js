@@ -225,7 +225,7 @@ export default function DividendsSection({ dividendTransactionsData, selectedYea
   if (relevantDividendTransactions.length === 0) {
     return (
       <Paper elevation={0} sx={{ p: 2, mb: 3, border: 'none' }}>
-        <Typography>Não existe informação de dividendos {(selectedYear === ALL_YEARS_OPTION) ? 'available' : `for ${selectedYear}`}.</Typography>
+        <Typography>Não existe informação disponível.</Typography>
       </Paper>
     );
   }

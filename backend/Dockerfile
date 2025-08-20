@@ -12,6 +12,8 @@ RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o rumoclaro-backend
 # Stage 2: The production environment
 FROM alpine:latest
 
+ENV GO_ENV=PRO
+
 # Install root certificates, which are necessary for making HTTPS requests.
 # The --no-cache flag prevents the package index from being stored, keeping the image small.
 RUN apk update && apk add --no-cache ca-certificates

@@ -221,7 +221,7 @@ export default function OptionSalesSection({ optionSalesData, selectedYear }) {
     if (!optionSalesData || optionSalesData.length === 0) {
         return (
             <Paper elevation={0} sx={{ p: 2, mb: 3, border: 'none' }}>
-                <Typography>Sem dados de vendas de opções {(selectedYear === ALL_YEARS_OPTION) ? 'disponivel' : `para ${selectedYear}`}.</Typography>
+                <Typography>Não existe informação disponível.</Typography>
             </Paper>
         );
     }

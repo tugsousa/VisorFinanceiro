@@ -30,6 +30,17 @@ func NewParser() *DeGiroParser {
 	return &DeGiroParser{}
 }
 
+func normalizeDecimalString(s string) string {
+	// 1. Trim whitespace and quotes
+	cleaned := strings.TrimSpace(s)
+	cleaned = strings.Trim(cleaned, "\"")
+
+	// 2. Replace comma with a period for the decimal point
+	cleaned = strings.ReplaceAll(cleaned, ",", ".")
+
+	return cleaned
+}
+
 // Parse reads a DeGiro CSV file and converts its rows into a slice of CanonicalTransaction.
 // This method now contains the full logic, from reading the CSV to classifying transactions.
 func (p *DeGiroParser) Parse(file io.Reader) ([]models.CanonicalTransaction, error) {
@@ -77,7 +88,8 @@ func (p *DeGiroParser) Parse(file io.Reader) ([]models.CanonicalTransaction, err
 			continue
 		}
 
-		sourceAmt, _ := strconv.ParseFloat(raw.Amount, 64)
+		normalizedAmount := normalizeDecimalString(raw.Amount)
+		sourceAmt, _ := strconv.ParseFloat(normalizedAmount, 64)
 		finalAmount := sourceAmt // For DeGiro, the sign is authoritative
 
 		// Enforce sign for specific types to be safe
@@ -182,7 +194,8 @@ func findCommissionForOrder(orderId string, transactions []RawTransaction) (floa
 	var totalCommission float64
 	for _, transaction := range transactions {
 		if transaction.OrderID == orderId && strings.Contains(transaction.Description, "Comissões de transação") {
-			amount, err := strconv.ParseFloat(transaction.Amount, 64)
+			normalizedAmount := normalizeDecimalString(transaction.Amount)
+			amount, err := strconv.ParseFloat(normalizedAmount, 64)
 			if err != nil {
 				return 0, fmt.Errorf("invalid commission amount for transaction %s: %w", transaction.OrderID, err)
 			}

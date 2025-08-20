@@ -228,7 +228,7 @@ export default function StockSalesSection({ stockSalesData, selectedYear }) {
     if (!stockSalesData || stockSalesData.length === 0) {
         return (
             <Paper elevation={0} sx={{ p: 2, mb: 3, border: 'none' }}>
-                <Typography>Sem dados de vendas de ações {(selectedYear === ALL_YEARS_OPTION) ? 'disponivel' : `para ${selectedYear}`}.</Typography>
+                <Typography>Não existe informação disponível.</Typography>
             </Paper>
         );
     }

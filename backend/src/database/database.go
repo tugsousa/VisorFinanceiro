@@ -3,8 +3,11 @@ package database
 
 import (
 	"database/sql"
-	"errors" // Import errors package
+	"errors"
+	"fmt"
 	stdlog "log"
+	"os"
+	"path/filepath"
 
 	"github.com/golang-migrate/migrate/v4"
 	"github.com/golang-migrate/migrate/v4/database/sqlite"
@@ -15,22 +18,19 @@ import (
 
 var DB *sql.DB
 
+// ... InitDB function remains the same ...
 func InitDB(databasePath string) {
 	db, err := sql.Open("sqlite", databasePath)
 	if err != nil {
 		stdlog.Fatalf("failed to open database at %s: %v", databasePath, err)
 	}
-
-	// Ping the database to verify the connection is alive.
 	if err = db.Ping(); err != nil {
 		stdlog.Fatalf("failed to ping database: %v", err)
 	}
-
 	DB = db
 	logger.L.Info("Database connection established.")
 }
 
-// New function to run migrations
 func RunMigrations(databasePath string) {
 	if DB == nil {
 		logger.L.Error("Database connection is not initialized before running migrations")
@@ -43,19 +43,39 @@ func RunMigrations(databasePath string) {
 		stdlog.Fatalf("could not create sqlite migration driver: %v", err)
 	}
 
-	// The path is relative to the backend executable's location
+	var migrationsSourceURL string
+
+	if os.Getenv("GO_ENV") == "PRO" {
+		// In Docker, use the hardcoded path that works
+		migrationsSourceURL = "file:///app/db/migrations"
+	} else {
+		// --- INÍCIO DA CORREÇÃO PARA WINDOWS ---
+		// Get the current working directory
+		cwd, err := os.Getwd()
+		if err != nil {
+			stdlog.Fatalf("failed to get current working directory: %v", err)
+		}
+		// Construct the absolute path to the migrations directory
+		localMigrationsPath := filepath.Join(cwd, "db", "migrations")
+
+		// Format the path into a valid file URI for go-migrate on Windows.
+		// The key is to use "file://" and not "file:///"
+		migrationsSourceURL = fmt.Sprintf("file://%s", filepath.ToSlash(localMigrationsPath))
+		// --- FIM DA CORREÇÃO PARA WINDOWS ---
+	}
+
 	m, err := migrate.NewWithDatabaseInstance(
-		"file:///app/db/migrations",
+		migrationsSourceURL,
 		databasePath,
 		driver,
 	)
 	if err != nil {
-		logger.L.Error("Migration instance creation failed", "error", err)
+		logger.L.Error("Migration instance creation failed", "source", migrationsSourceURL, "error", err)
 		stdlog.Fatalf("migration instance creation failed: %v", err)
 	}
 
-	logger.L.Info("Applying database migrations...")
-	err = m.Up() // Apply all available "up" migrations
+	logger.L.Info("Applying database migrations...", "source", migrationsSourceURL)
+	err = m.Up()
 	if err != nil {
 		if errors.Is(err, migrate.ErrNoChange) {
 			logger.L.Info("No new database migrations to apply.")
