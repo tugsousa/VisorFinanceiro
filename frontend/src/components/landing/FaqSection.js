@@ -30,7 +30,7 @@ const FaqSection = () => {
         />
         <FaqItem
           question="Que corretoras são suportadas?"
-          answer="De momento, suportamos a DEGIRO e a Interactive Brokers, mas queremos adicionar mais corretoras em breve."
+          answer="De momento, suportamos a DEGIRO e a Interactive Brokers, mas pretendemos adicionar mais correctoras."
         />
         <FaqItem
           question="A taxa de câmbio usada é a oficial da Autoridade Tributária?"

@@ -27,12 +27,12 @@ const TrustSection = () => {
           <TrustPoint
             icon={<DeleteForeverIcon fontSize="inherit" />}
             title="Controlo Total"
-            text="Estás no controlo. Podes eliminar todas as tuas transações ou mesmo a tua conta inteira a qualquer momento, de forma permanente."
+            text="Estás no controlo. Podes eliminar todas as tuas transações ou mesmo a tua conta inteira a qualquer momento."
           />
           <TrustPoint
             icon={<DoNotDisturbOnIcon fontSize="inherit" />}
             title="Sem Venda de Dados"
-            text="Nunca vendemos nem partilhamos os teus dados pessoais ou financeiros com terceiros para fins de marketing."
+            text="Não vendemos nem partilhamos os teus dados pessoais ou financeiros com terceiros para fins de marketing."
           />
           <TrustPoint
             icon={<LockIcon fontSize="inherit" />}

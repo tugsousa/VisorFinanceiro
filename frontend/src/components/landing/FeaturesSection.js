@@ -26,7 +26,7 @@ const FeaturesSection = () => {
   return (
     <Container maxWidth="lg" sx={{ py: { xs: 4, md: 8 } }}>
       <Typography variant="h4" component="h2" align="center" sx={{ fontWeight: 'bold', mb: 6 }}>
-        Tudo o que Precisa num Só Lugar
+        Tudo o que Precisas num Só Lugar
       </Typography>
       <Grid container spacing={4}>
         <Feature

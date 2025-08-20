@@ -26,13 +26,13 @@ const HowItWorksSection = () => {
         <Step
           number="1"
           title="Carrega o teu ficheiro"
-          text="Exporta o extrato do teu broker (por exemplo, DEGIRO ou Interactive Brokers) e carrega-o na nossa plataforma segura."
+          text="Exporta o extrato do teu broker e carrega-o na nossa plataforma."
           //imageName="screenshot-upload-page.png" // TODO: Crie e adicione esta imagem
         />
         <Step
           number="2"
           title="Análise Automática"
-          text="O RumoClaro processa instantaneamente as tuas transações, aplicando as taxas de câmbio históricas corretas."
+          text="O RumoClaro processa as tuas transações, aplicando as taxas de câmbio necessárias."
           //imageName="icon-processing.png" // TODO: Crie e adicione esta imagem/ícone
         />
         <Step

@@ -25,7 +25,7 @@ const DashboardPage = () => {
                 Bem-vindo, {user?.username || 'User'}!
             </Typography>
             <Typography variant="subtitle1" color="text.secondary" sx={{ mb: 4 }}>
-                O que gostaria de fazer hoje?
+                
             </Typography>
             <Grid container spacing={3}>
                 {dashboardItems.map((item) => (
