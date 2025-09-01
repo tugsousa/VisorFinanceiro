@@ -9,56 +9,70 @@ import (
 	"github.com/joho/godotenv"
 )
 
+// AppConfig holds all configuration for the application.
+// The values are loaded from environment variables.
 type AppConfig struct {
+	// Core settings
+	Port         string
+	DatabasePath string
+	LogLevel     string
+
+	// Security settings
 	JWTSecret          string
-	Port               string
-	DatabasePath       string
-	LogLevel           string
 	CSRFAuthKey        []byte
-	CountryDataPath    string
 	AccessTokenExpiry  time.Duration
 	RefreshTokenExpiry time.Duration
 	MaxUploadSizeBytes int64
 
-	EmailServiceProvider string
+	// Data file paths
+	CountryDataPath string
 
+	// Email Service settings
+	EmailServiceProvider string
+	SenderEmail          string
+	SenderName           string
+
+	// SMTP specific settings
 	SMTPServer   string
 	SMTPPort     int
 	SMTPUser     string
 	SMTPPassword string
 
-	SenderEmail string
-	SenderName  string
-
+	// URL and Token Expiry settings for user actions
 	VerificationEmailBaseURL string
 	VerificationTokenExpiry  time.Duration
-
 	PasswordResetBaseURL     string
 	PasswordResetTokenExpiry time.Duration
-	GoogleClientID           string
-	GoogleClientSecret       string
-	GoogleRedirectURL        string
-	FrontendBaseURL          string
+
+	// Google OAuth settings
+	GoogleClientID     string
+	GoogleClientSecret string
+	GoogleRedirectURL  string
+
+	// Frontend URL for reference (e.g., CORS, redirects)
+	FrontendBaseURL string
 }
 
+// Cfg is a global instance of the AppConfig.
 var Cfg *AppConfig
 
+// LoadConfig loads configuration from environment variables or a .env file.
+// It centralizes all configuration logic for the application.
 func LoadConfig() {
 	errEnv := godotenv.Load()
 	if errEnv != nil {
-		// This is the expected case in production with Docker
 		if os.IsNotExist(errEnv) {
-			log.Println("Info: No .env file found. Relying on OS environment variables.")
+			log.Println("Info: No .env file found. Relying on OS environment variables, which is expected in production.")
 		} else {
-			// A .env file was found but couldn't be parsed
 			log.Printf("Warning: Error loading .env file: %v. Relying on OS environment variables.", errEnv)
 		}
 	} else {
-		log.Println(".env file loaded successfully.")
+		log.Println(".env file loaded successfully for local development.")
 	}
 
 	log.Println("Loading application configuration...")
 
+	// --- Security & Tokens (Secrets) ---
 	jwtSecret := getEnv("JWT_SECRET", "your-very-secure-and-long-jwt-secret-key-for-hs256-minimum-32-bytes")
 	if jwtSecret == "your-very-secure-and-long-jwt-secret-key-for-hs256-minimum-32-bytes" {
 		log.Println("WARNING: Using default insecure JWT_SECRET. Set JWT_SECRET environment variable for production.")
@@ -72,77 +86,83 @@ func LoadConfig() {
 		log.Fatalf("FATAL: CSRF_AUTH_KEY must be at least 32 bytes long. Current length: %d", len(csrfAuthKeyStr))
 	}
 
-	accessTokenExpiryStr := getEnv("ACCESS_TOKEN_EXPIRY", "60m")
-	refreshTokenExpiryStr := getEnv("REFRESH_TOKEN_EXPIRY", "168h")
-	accessTokenExpiry, err := time.ParseDuration(accessTokenExpiryStr)
-	if err != nil {
-		log.Printf("WARNING: Invalid ACCESS_TOKEN_EXPIRY format '%s'. Using default 60m. Error: %v", accessTokenExpiryStr, err)
-		accessTokenExpiry = 60 * time.Minute
-	}
-	refreshTokenExpiry, err := time.ParseDuration(refreshTokenExpiryStr)
-	if err != nil {
-		log.Printf("WARNING: Invalid REFRESH_TOKEN_EXPIRY format '%s'. Using default 7d (168h). Error: %v", refreshTokenExpiryStr, err)
-		refreshTokenExpiry = 7 * 24 * time.Hour
-	}
+	// --- Token Expiry Durations ---
+	accessTokenExpiry := getEnvAsDuration("ACCESS_TOKEN_EXPIRY", 60*time.Minute)
+	refreshTokenExpiry := getEnvAsDuration("REFRESH_TOKEN_EXPIRY", 168*time.Hour) // 7 days
+	verificationTokenExpiry := getEnvAsDuration("VERIFICATION_TOKEN_EXPIRY", 24*time.Hour)
+	passwordResetTokenExpiry := getEnvAsDuration("PASSWORD_RESET_TOKEN_EXPIRY", 1*time.Hour)
 
-	maxUploadSizeBytesStr := getEnv("MAX_UPLOAD_SIZE_BYTES", "10485760")
+	// --- File Size Limits ---
+	maxUploadSizeBytesStr := getEnv("MAX_UPLOAD_SIZE_BYTES", "10485760") // 10MB default
 	maxUploadSizeBytes, err := strconv.ParseInt(maxUploadSizeBytesStr, 10, 64)
 	if err != nil {
 		log.Printf("WARNING: Invalid MAX_UPLOAD_SIZE_BYTES format '%s'. Using default 10MB. Error: %v", maxUploadSizeBytesStr, err)
 		maxUploadSizeBytes = 10 * 1024 * 1024
 	}
 
-	verificationTokenExpiryStr := getEnv("VERIFICATION_TOKEN_EXPIRY", "24h")
-	verificationTokenExpiry, err := time.ParseDuration(verificationTokenExpiryStr)
-	if err != nil {
-		log.Printf("WARNING: Invalid VERIFICATION_TOKEN_EXPIRY format '%s'. Using default 24h. Error: %v", verificationTokenExpiryStr, err)
-		verificationTokenExpiry = 24 * time.Hour
-	}
+	// --- URL Derivation Logic ---
+	// This is the new, refactored approach to handle URLs.
+	// We get one base URL for the frontend and one for the public-facing backend API,
+	// then construct the specific URLs from them.
 
-	passwordResetTokenExpiryStr := getEnv("PASSWORD_RESET_TOKEN_EXPIRY", "1h")
-	passwordResetTokenExpiry, err := time.ParseDuration(passwordResetTokenExpiryStr)
-	if err != nil {
-		log.Printf("WARNING: Invalid PASSWORD_RESET_TOKEN_EXPIRY format '%s'. Using default 1h. Error: %v", passwordResetTokenExpiryStr, err)
-		passwordResetTokenExpiry = 1 * time.Hour
-	}
+	// The base URL of the frontend application (e.g., for links in emails).
+	// In local dev, this is typically http://localhost:3000. In prod, https://rumoclaro.pt.
+	frontendBaseURL := getEnv("APP_BASE_URL", "http://localhost:3000")
 
+	// The public-facing base URL of the backend API (e.g., for OAuth callbacks).
+	// In local dev, this is http://localhost:8080. In prod, https://rumoclaro.pt.
+	// We use REACT_APP_API_BASE_URL as the variable name for consistency with the frontend build process.
+	apiBaseURL := getEnv("REACT_APP_API_BASE_URL", "http://localhost:8080")
+
+	// Derive specific URLs from the base URLs.
+	verificationEmailBaseURL := getEnv("VERIFICATION_EMAIL_BASE_URL", frontendBaseURL+"/verify-email")
+	passwordResetBaseURL := getEnv("PASSWORD_RESET_BASE_URL", frontendBaseURL+"/reset-password")
+	googleRedirectURL := getEnv("GOOGLE_REDIRECT_URL", apiBaseURL+"/api/auth/google/callback")
+
+	// --- Populate the Global Config Struct ---
 	Cfg = &AppConfig{
+		// Core
+		Port:         getEnv("PORT", "8080"),
+		DatabasePath: getEnv("DATABASE_PATH", "./rumoclaro.db"),
+		LogLevel:     getEnv("LOG_LEVEL", "info"),
+
+		// Security
 		JWTSecret:          jwtSecret,
-		Port:               getEnv("PORT", "8080"),
-		DatabasePath:       getEnv("DATABASE_PATH", "./rumoclaro.db"),
-		LogLevel:           getEnv("LOG_LEVEL", "info"),
 		CSRFAuthKey:        []byte(csrfAuthKeyStr),
-		CountryDataPath:    getEnv("COUNTRY_DATA_PATH", "data/country.json"),
 		AccessTokenExpiry:  accessTokenExpiry,
 		RefreshTokenExpiry: refreshTokenExpiry,
 		MaxUploadSizeBytes: maxUploadSizeBytes,
 
+		// Data
+		CountryDataPath: getEnv("COUNTRY_DATA_PATH", "data/country.json"),
+
+		// Email
 		EmailServiceProvider: getEnv("EMAIL_SERVICE_PROVIDER", "smtp"),
+		SenderEmail:          getEnv("SENDER_EMAIL", "noreply@example.com"),
+		SenderName:           getEnv("SENDER_NAME", "Rumoclaro App"),
+		SMTPServer:           getEnv("SMTP_SERVER", ""),
+		SMTPPort:             getEnvAsInt("SMTP_PORT", 587),
+		SMTPUser:             getEnv("SMTP_USER", ""),
+		SMTPPassword:         getEnv("SMTP_PASSWORD", ""),
 
-		SMTPServer:   getEnv("SMTP_SERVER", ""),
-		SMTPPort:     getEnvAsInt("SMTP_PORT", 587),
-		SMTPUser:     getEnv("SMTP_USER", ""),
-		SMTPPassword: getEnv("SMTP_PASSWORD", ""),
-
-		SenderEmail: getEnv("SENDER_EMAIL", "noreply@example.com"),
-		SenderName:  getEnv("SENDER_NAME", "Rumoclaro App"),
-
-		VerificationEmailBaseURL: getEnv("VERIFICATION_EMAIL_BASE_URL", "http://localhost:3000/verify-email"),
+		// URLs & Expiries
+		FrontendBaseURL:          frontendBaseURL,
+		VerificationEmailBaseURL: verificationEmailBaseURL,
 		VerificationTokenExpiry:  verificationTokenExpiry,
-
-		PasswordResetBaseURL:     getEnv("PASSWORD_RESET_BASE_URL", "http://localhost:3000/reset-password"),
+		PasswordResetBaseURL:     passwordResetBaseURL,
 		PasswordResetTokenExpiry: passwordResetTokenExpiry,
 
+		// Google OAuth
 		GoogleClientID:     getEnv("GOOGLE_CLIENT_ID", ""),
 		GoogleClientSecret: getEnv("GOOGLE_CLIENT_SECRET", ""),
-		GoogleRedirectURL:  getEnv("GOOGLE_REDIRECT_URL", "http://localhost:8080/api/auth/google/callback"),
-		FrontendBaseURL:    getEnv("FRONTEND_BASE_URL", "http://localhost:3000"),
+		GoogleRedirectURL:  googleRedirectURL,
 	}
 
-	log.Printf("Configuration loaded: Port=%s, LogLevel=%s, DBPath=%s, EmailProvider=%s",
-		Cfg.Port, Cfg.LogLevel, Cfg.DatabasePath, Cfg.EmailServiceProvider)
+	log.Printf("Configuration loaded: Port=%s, LogLevel=%s, DBPath=%s, FrontendURL=%s",
+		Cfg.Port, Cfg.LogLevel, Cfg.DatabasePath, Cfg.FrontendBaseURL)
 }
 
+// getEnv retrieves an environment variable or returns a fallback value.
 func getEnv(key, fallback string) string {
 	if value, exists := os.LookupEnv(key); exists {
 		return value
@@ -151,10 +171,11 @@ func getEnv(key, fallback string) string {
 	return fallback
 }
 
+// getEnvAsInt retrieves an environment variable as an integer or returns a fallback.
 func getEnvAsInt(key string, fallback int) int {
 	valueStr := getEnv(key, "")
 	if valueStr == "" {
-		log.Printf("Integer value for %s not set or empty, using default: %d", key, fallback)
+		// The getEnv function already logs the fallback, so no need to log here again.
 		return fallback
 	}
 	if value, err := strconv.Atoi(valueStr); err == nil {
@@ -164,10 +185,11 @@ func getEnvAsInt(key string, fallback int) int {
 	return fallback
 }
 
+// getEnvAsDuration retrieves an environment variable as a time.Duration or returns a fallback.
 func getEnvAsDuration(key string, fallback time.Duration) time.Duration {
 	valueStr := getEnv(key, "")
 	if valueStr == "" {
-		log.Printf("Duration value for %s not set or empty, using default: %s", key, fallback.String())
+		// The getEnv function already logs the fallback.
 		return fallback
 	}
 	if value, err := time.ParseDuration(valueStr); err == nil {
