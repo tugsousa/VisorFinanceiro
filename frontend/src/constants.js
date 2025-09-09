@@ -25,7 +25,7 @@
       DIVIDEND_TRANSACTIONS: `${API_BASE_PATH}/dividend-transactions`,
       USER_HAS_DATA: `${API_BASE_PATH}/user/has-data`,
       DELETE_ALL_TRANSACTIONS: `${API_BASE_PATH}/transactions/all`,
-      
+      FEES_DATA: `${API_BASE_PATH}/fees`,
       USER_CHANGE_PASSWORD: `${API_BASE_PATH}/user/change-password`,
       USER_DELETE_ACCOUNT: `${API_BASE_PATH}/user/delete-account`,
     };

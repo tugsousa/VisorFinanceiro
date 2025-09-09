@@ -17,6 +17,7 @@ type UploadResult struct {
 	OptionHoldings           []models.OptionHolding          `json:"OptionHoldings"`
 	CashMovements            []models.CashMovement           `json:"CashMovements"`
 	DividendTransactionsList []models.ProcessedTransaction   `json:"DividendTransactionsList"`
+	FeeDetails               []models.FeeDetail              `json:"FeeDetails"`
 }
 
 // Define common service errors
@@ -35,6 +36,7 @@ type UploadService interface {
 	GetOptionHoldings(userID int64) ([]models.OptionHolding, error)
 	GetStockSaleDetails(userID int64) ([]models.SaleDetail, error)
 	GetOptionSaleDetails(userID int64) ([]models.OptionSaleDetail, error)
+	GetFeeDetails(userID int64) ([]models.FeeDetail, error)
 	InvalidateUserCache(userID int64)
 }
 

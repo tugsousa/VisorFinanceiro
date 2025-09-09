@@ -22,6 +22,7 @@ import DividendsSection from '../components/realizedgainsSections/DividendsSecti
 import OverallPLChart from '../components/realizedgainsSections/OverallPLChart';
 import HoldingsAllocationChart from '../components/realizedgainsSections/HoldingsAllocationChart';
 import PLContributionChart from '../components/realizedgainsSections/PLContributionChart';
+import FeesSection from '../components/realizedgainsSections/FeesSection';
 
 const isDataEmpty = (data) => {
   if (!data) return true;
@@ -34,6 +35,7 @@ const isDataEmpty = (data) => {
     (data.StockSaleDetails?.length ?? 0) === 0 &&
     (data.OptionSaleDetails?.length ?? 0) === 0 &&
     (data.DividendTransactionsList?.length ?? 0) === 0 &&
+    (data.FeeDetails?.length ?? 0) === 0 &&
     !hasStockHoldings &&
     (data.OptionHoldings?.length ?? 0) === 0
   );
@@ -168,6 +170,7 @@ export default function RealizedGainsPage() {
         <Tab label="Vendas de Ações" value="stock-sales" />
         <Tab label="Vendas de Opções" value="option-sales" />
         <Tab label="Dividendos" value="dividends" />
+        <Tab label="Taxas e Comissões" value="fees" />
       </Tabs>
 
       {currentTab === 'overview' && (
@@ -241,6 +244,12 @@ export default function RealizedGainsPage() {
 
       {currentTab === 'dividends' && (
         <DividendsSection dividendTransactionsData={filteredData.DividendTransactionsList} selectedYear={selectedYear} />
+      )}
+      {currentTab === 'fees' && (
+        <FeesSection 
+          feeData={filteredData.FeeDetails} 
+          selectedYear={selectedYear} 
+        />
       )}
     </Box>
   );

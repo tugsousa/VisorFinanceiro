@@ -203,12 +203,13 @@ const UploadPage = () => {
                             type="file"
                             hidden
                             onChange={handleFileInputChange}
-                            accept=".csv,.xml"
+                            //accept=".csv,.xml"
                         />
                         <UploadFileIcon sx={{ fontSize: 50, mb: 2 }} />
                         <Typography variant="h6">Arraste e solte o seu ficheiro aqui</Typography>
                         <Typography>ou clique para selecionar o ficheiro</Typography>
-                        <Typography variant="caption" sx={{ mt: 1 }}>Tipos suportados: CSV (Degiro), XML (IBKR) | Limite: {MAX_FILE_SIZE_MB}MB</Typography>
+                        <Typography variant="caption" sx={{ mt: 1 }}>Tipos suportados: CSV (Degiro), XML (IBKR) | Limite: {MAX_FILE_SIZE_MB}MB<br/>
+  Problemas no telemóvel? Se o ficheiro aparecer a cinzento, tente renomeá-lo para garantir que termina em .csv.</Typography>
                     </UploadDropzone>
                 )}
                 

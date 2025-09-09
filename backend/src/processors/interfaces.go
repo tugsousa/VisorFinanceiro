@@ -31,3 +31,6 @@ type OptionProcessor interface {
 type CashMovementProcessor interface {
 	Process(transactions []models.ProcessedTransaction) []models.CashMovement
 }
+type FeeProcessor interface {
+	Process(transactions []models.ProcessedTransaction) []models.FeeDetail
+}

@@ -30,17 +30,15 @@ import (
 // for security features (like Secure cookies) to work correctly behind a reverse proxy.
 func proxyHeadersMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Check for the header Caddy (and other proxies) set.
 		if r.Header.Get("X-Forwarded-Proto") == "https" {
 			r.URL.Scheme = "https"
-			// Setting a dummy TLS state tricks handlers into thinking it's a secure connection.
 			r.TLS = &tls.ConnectionState{}
 		}
 		next.ServeHTTP(w, r)
 	})
 }
 
-var limiter = rate.NewLimiter(rate.Every(100*time.Millisecond), 30) // Example: 10 requests per second, burst 30
+var limiter = rate.NewLimiter(rate.Every(100*time.Millisecond), 30)
 
 func rateLimitMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -59,21 +57,19 @@ func rateLimitMiddleware(next http.Handler) http.Handler {
 func enableCORS(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		origin := r.Header.Get("Origin")
-		// In production, replace "http://localhost:3000" with your actual frontend domain(s).
 		allowedOrigins := map[string]bool{
 			"http://localhost:3000": true,
 			"https://rumoclaro.pt":  true,
-			// Add other origins here if needed, e.g., "https://yourdomain.com"
 		}
 
 		if allowedOrigins[origin] {
 			w.Header().Set("Access-Control-Allow-Origin", origin)
-			w.Header().Set("Access-Control-Allow-Credentials", "true") // Important for cookies/auth headers
+			w.Header().Set("Access-Control-Allow-Credentials", "true")
 			w.Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS, PUT, DELETE, PATCH")
 			w.Header().Set("Access-Control-Allow-Headers", "Accept, Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization, X-Requested-With, Cookie, If-None-Match")
-			w.Header().Set("Access-Control-Expose-Headers", "X-CSRF-Token, ETag") // Ensure ETag is exposed if used
-		} else if origin == "" { // For requests from the same origin or tools like Postman that don't send Origin
-			w.Header().Set("Access-Control-Allow-Origin", "*") // Be cautious with wildcard in production
+			w.Header().Set("Access-Control-Expose-Headers", "X-CSRF-Token, ETag")
+		} else if origin == "" {
+			w.Header().Set("Access-Control-Allow-Origin", "*")
 		}
 
 		if r.Method == "OPTIONS" {
@@ -127,6 +123,7 @@ func main() {
 	stockProcessor := processors.NewStockProcessor()
 	optionProcessor := processors.NewOptionProcessor()
 	cashMovementProcessor := processors.NewCashMovementProcessor()
+	feeProcessor := processors.NewFeeProcessor()
 
 	uploadService := services.NewUploadService(
 		transactionProcessor,
@@ -134,6 +131,7 @@ func main() {
 		stockProcessor,
 		optionProcessor,
 		cashMovementProcessor,
+		feeProcessor,
 		reportCache,
 	)
 
@@ -142,6 +140,7 @@ func main() {
 	portfolioHandler := handlers.NewPortfolioHandler(uploadService, priceService)
 	dividendHandler := handlers.NewDividendHandler(uploadService)
 	txHandler := handlers.NewTransactionHandler(uploadService)
+	feeHandler := handlers.NewFeeHandler(uploadService)
 
 	logger.L.Info("Configuring routes...")
 	r := chi.NewRouter()
@@ -193,6 +192,7 @@ func main() {
 			r.Get("/option-sales", portfolioHandler.HandleGetOptionSales)
 			r.Get("/dividend-tax-summary", dividendHandler.HandleGetDividendTaxSummary)
 			r.Get("/dividend-transactions", dividendHandler.HandleGetDividendTransactions)
+			r.Get("/fees", feeHandler.HandleGetFeeDetails)
 			r.Delete("/transactions/all", txHandler.HandleDeleteAllProcessedTransactions)
 			r.Get("/user/has-data", userHandler.HandleCheckUserData)
 			r.Post("/user/change-password", userHandler.ChangePasswordHandler)

@@ -19,7 +19,7 @@ const (
 	// Long-lived caches for full calculation results
 	ckAllStockSales       = "res_all_stock_sales_user_%d"
 	ckStockHoldingsByYear = "res_stock_holdings_by_year_user_%d"
-
+	ckAllFeeDetails       = "res_all_fee_details_user_%d"
 	// TODO: Add result caches for options and dividends when they are refactored
 
 	// Short-lived, aggregate cache
@@ -36,6 +36,7 @@ type uploadServiceImpl struct {
 	stockProcessor        processors.StockProcessor
 	optionProcessor       processors.OptionProcessor
 	cashMovementProcessor processors.CashMovementProcessor
+	feeProcessor          processors.FeeProcessor
 	reportCache           *cache.Cache
 }
 
@@ -45,6 +46,7 @@ func NewUploadService(
 	stockProcessor processors.StockProcessor,
 	optionProcessor processors.OptionProcessor,
 	cashMovementProcessor processors.CashMovementProcessor,
+	feeProcessor processors.FeeProcessor,
 	reportCache *cache.Cache,
 ) UploadService {
 	return &uploadServiceImpl{
@@ -53,6 +55,7 @@ func NewUploadService(
 		stockProcessor:        stockProcessor,
 		optionProcessor:       optionProcessor,
 		cashMovementProcessor: cashMovementProcessor,
+		feeProcessor:          feeProcessor,
 		reportCache:           reportCache,
 	}
 }
@@ -119,6 +122,7 @@ func (s *uploadServiceImpl) InvalidateUserCache(userID int64) {
 		fmt.Sprintf(ckStockHoldingsByYear, userID),
 		fmt.Sprintf(ckLatestUploadResult, userID),
 		fmt.Sprintf(ckDividendSummary, userID),
+		fmt.Sprintf(ckAllFeeDetails, userID),
 	}
 	for _, key := range keysToDelete {
 		s.reportCache.Delete(key)
@@ -174,6 +178,8 @@ func (s *uploadServiceImpl) GetLatestUploadResult(userID int64) (*UploadResult, 
 
 	optionSaleDetails, optionHoldings := s.optionProcessor.Process(allTxns)
 	cashMovements := s.cashMovementProcessor.Process(allTxns)
+	feeDetails := s.feeProcessor.Process(allTxns)
+
 	var dividendTransactionsList []models.ProcessedTransaction
 	for _, tx := range allTxns {
 		if tx.TransactionType == "DIVIDEND" {
@@ -188,9 +194,33 @@ func (s *uploadServiceImpl) GetLatestUploadResult(userID int64) (*UploadResult, 
 		OptionHoldings:           optionHoldings,
 		CashMovements:            cashMovements,
 		DividendTransactionsList: dividendTransactionsList,
+		FeeDetails:               feeDetails,
 	}
 	s.reportCache.Set(cacheKey, result, DefaultCacheExpiration)
 	return result, nil
+}
+
+func (s *uploadServiceImpl) GetFeeDetails(userID int64) ([]models.FeeDetail, error) {
+	cacheKey := fmt.Sprintf(ckAllFeeDetails, userID)
+	if cached, found := s.reportCache.Get(cacheKey); found {
+		logger.L.Debug("Cache hit for fee details", "userID", userID)
+		return cached.([]models.FeeDetail), nil
+	}
+
+	logger.L.Info("Cache miss for fee details, recalculating from DB", "userID", userID)
+	allUserTransactions, err := fetchUserProcessedTransactions(userID)
+	if err != nil {
+		return nil, err
+	}
+
+	// The fee processor does the heavy lifting.
+	feeDetails := s.feeProcessor.Process(allUserTransactions)
+
+	// Set the cache for subsequent requests.
+	s.reportCache.Set(cacheKey, feeDetails, cache.NoExpiration)
+	logger.L.Info("Populated fee details cache from DB", "userID", userID)
+
+	return feeDetails, nil
 }
 
 func (s *uploadServiceImpl) GetStockSaleDetails(userID int64) ([]models.SaleDetail, error) {

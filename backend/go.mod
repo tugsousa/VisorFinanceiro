@@ -1,8 +1,8 @@
 module github.com/username/taxfolio/backend
 
-go 1.23.0
+go 1.24.0
 
-toolchain go1.23.4
+toolchain go1.24.7
 
 require (
 	github.com/golang-jwt/jwt/v5 v5.2.2
@@ -29,7 +29,7 @@ require (
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
 	golang.org/x/crypto v0.38.0
 	golang.org/x/exp v0.0.0-20250718183923-645b1fa84792 // indirect
-	golang.org/x/oauth2 v0.21.0
+	golang.org/x/oauth2 v0.31.0
 	golang.org/x/sys v0.34.0 // indirect
 	golang.org/x/time v0.11.0
 	modernc.org/libc v1.66.6 // indirect

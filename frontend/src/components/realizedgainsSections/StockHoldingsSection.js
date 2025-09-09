@@ -43,6 +43,7 @@ const groupedColumnsCurrent = [
   { field: 'isin', headerName: 'ISIN', width: 130 },
   { field: 'quantity', headerName: 'Qtd', type: 'number', width: 110, align: 'right', headerAlign: 'right' },
   { field: 'total_cost_basis_eur', headerName: 'Custo Total (€)', type: 'number', width: 140, align: 'right', headerAlign: 'right', valueFormatter: (value) => formatCurrency(value) },
+  {   field: 'current_price_eur', headerName: 'Preço Atual (€)', type: 'number', width: 150, align: 'right', headerAlign: 'right', valueFormatter: (value) => formatCurrency(value) },
   { field: 'marketValueEUR', headerName: 'Valor de Mercado (€)', type: 'number', width: 180, align: 'right', headerAlign: 'right',
     renderCell: (params) => renderMarketValueCell({ value: params.value, status: params.row.status, isFetching: params.row.isFetching })
   },
