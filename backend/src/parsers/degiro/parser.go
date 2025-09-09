@@ -83,6 +83,13 @@ func (p *DeGiroParser) Parse(file io.Reader) ([]models.CanonicalTransaction, err
 		}
 
 		txType, subType, buySell, productName, quantity, price := classifyDeGiroTransaction(raw)
+
+		// --- FIX START: Ignore transaction lines that are only for commissions ---
+		if txType == "COMMISSION_IGNORE" {
+			continue // Skip creating a transaction for this, it will be handled by findCommissionForOrder
+		}
+		// --- FIX END ---
+
 		if txType == "UNKNOWN" {
 			log.Printf("DeGiro Parser: Skipping unknown transaction type for description: '%s'", raw.Description)
 			continue
@@ -128,6 +135,18 @@ func classifyDeGiroTransaction(raw RawTransaction) (txType, subType, buySell, pr
 	desc := strings.TrimSpace(strings.ReplaceAll(raw.Description, "\u00A0", " "))
 	lowerDesc := strings.ToLower(desc)
 
+	// --- FIX START: Distinguish between trade commissions and other fees ---
+	if strings.Contains(lowerDesc, "comissões de transação") {
+		// This is a commission linked to a trade. We don't create a separate transaction for it.
+		// It will be found and attached to the main trade via findCommissionForOrder.
+		return "COMMISSION_IGNORE", "", "", "", 0, 0
+	}
+	if strings.Contains(lowerDesc, "custo de conectividade") {
+		// This is a standalone fee and should be treated as such.
+		return "FEE", "", "", desc, 0, 0
+	}
+	// --- FIX END ---
+
 	// Handle non-trade types first
 	if strings.Contains(lowerDesc, "dividendo") {
 		productName = strings.TrimSpace(raw.Name)
@@ -139,9 +158,14 @@ func classifyDeGiroTransaction(raw RawTransaction) (txType, subType, buySell, pr
 	if strings.EqualFold(lowerDesc, "depósito") || strings.Contains(lowerDesc, "flatex deposit") {
 		return "CASH", "DEPOSIT", "", "Cash Deposit", 0, 0
 	}
-	if strings.Contains(lowerDesc, "comissões de transação") || strings.Contains(lowerDesc, "custo de conectividade") {
-		return "FEE", "", "", desc, 0, 0
-	}
+
+	// This part is now removed from the FIX above and handled more specifically
+	/*
+		if strings.Contains(lowerDesc, "comissões de transação") || strings.Contains(lowerDesc, "custo de conectividade") {
+			return "FEE", "", "", desc, 0, 0
+		}
+	*/
+
 	if strings.Contains(lowerDesc, "mudança de produto") {
 		return "PRODUCT_CHANGE", "", "", "Product Change", 0, 0
 	}
