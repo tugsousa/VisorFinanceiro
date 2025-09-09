@@ -2,8 +2,6 @@
 package processors
 
 import (
-	"fmt"
-
 	"github.com/username/taxfolio/backend/src/models"
 )
 
@@ -32,7 +30,7 @@ func (p *feeProcessorImpl) Process(transactions []models.ProcessedTransaction) [
 		if tx.Commission > 0 {
 			feeDetails = append(feeDetails, models.FeeDetail{
 				Date:        tx.Date,
-				Description: fmt.Sprintf("Commission for trade of %s", tx.ProductName),
+				Description: tx.ProductName,
 				AmountEUR:   -tx.Commission, // Commissions are a negative value (cost)
 				Source:      tx.Source,
 				Category:    "Trade Commission",

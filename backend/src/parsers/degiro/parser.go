@@ -140,7 +140,7 @@ func classifyDeGiroTransaction(raw RawTransaction) (txType, subType, buySell, pr
 		return "CASH", "DEPOSIT", "", "Cash Deposit", 0, 0
 	}
 	if strings.Contains(lowerDesc, "comissões de transação") || strings.Contains(lowerDesc, "custo de conectividade") {
-		return "FEE", "", "", "Brokerage Fee", 0, 0
+		return "FEE", "", "", desc, 0, 0
 	}
 	if strings.Contains(lowerDesc, "mudança de produto") {
 		return "PRODUCT_CHANGE", "", "", "Product Change", 0, 0

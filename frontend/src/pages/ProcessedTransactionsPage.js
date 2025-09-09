@@ -93,10 +93,8 @@ const ProcessedTransactionsPage = () => {
   const deleteTransactionsMutation = useMutation({
     mutationFn: apiDeleteAllTransactions,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['processedTransactions', token] });
+      queryClient.invalidateQueries();
       refreshUserDataCheck();
-      queryClient.invalidateQueries({ queryKey: ['realizedGainsData', token] });
-      queryClient.invalidateQueries({ queryKey: ['taxReportData', token] });
       setShowDeleteConfirmDialog(false);
     },
     onError: (error) => {

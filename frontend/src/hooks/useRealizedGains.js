@@ -8,7 +8,8 @@ import {
     apiFetchDividendTransactions,
     apiFetchStockHoldings,
     apiFetchOptionHoldings,
-    apiFetchCurrentHoldingsValue
+    apiFetchCurrentHoldingsValue,
+    apiFetchFees
 } from '../api/apiService';
 import { ALL_YEARS_OPTION, NO_YEAR_SELECTED } from '../constants';
 import { getYearString, extractYearsFromData } from '../utils/dateUtils';
@@ -22,7 +23,8 @@ export const useRealizedGains = (token, selectedYear) => {
             { queryKey: ['dividendTransactions', token], queryFn: apiFetchDividendTransactions, enabled: !!token, staleTime: 1000 * 60 * 5, select: (res) => res.data || [] },
             { queryKey: ['stockHoldingsByYear', token], queryFn: apiFetchStockHoldings, enabled: !!token, staleTime: 1000 * 60 * 5, select: (res) => res.data || {} },
             { queryKey: ['optionHoldings', token], queryFn: apiFetchOptionHoldings, enabled: !!token, staleTime: 1000 * 60 * 5, select: (res) => res.data || [] },
-            { queryKey: ['currentHoldingsValue', token], queryFn: apiFetchCurrentHoldingsValue, enabled: !!token, staleTime: 1000 * 60 * 5, select: (res) => res.data || [] }
+            { queryKey: ['currentHoldingsValue', token], queryFn: apiFetchCurrentHoldingsValue, enabled: !!token, staleTime: 1000 * 60 * 5, select: (res) => res.data || [] },
+            { queryKey: ['fees', token], queryFn: apiFetchFees, enabled: !!token, staleTime: 1000 * 60 * 5, select: (res) => res.data || [] }
         ]
     });
 
@@ -33,7 +35,8 @@ export const useRealizedGains = (token, selectedYear) => {
         dividendTransactionsQuery,
         stockHoldingsByYearQuery,
         optionHoldingsQuery,
-        currentHoldingsValueQuery
+        currentHoldingsValueQuery,
+        feesQuery
     ] = results;
 
     const isLoading = results.some(q => q.isLoading);
@@ -46,14 +49,16 @@ export const useRealizedGains = (token, selectedYear) => {
         dividendSummary: dividendSummaryQuery.data,
         DividendTransactionsList: dividendTransactionsQuery.data,
         StockHoldings: stockHoldingsByYearQuery.data,
-        OptionHoldings: optionHoldingsQuery.data
+        OptionHoldings: optionHoldingsQuery.data,
+        FeeDetails: feesQuery.data
     }), [
         stockSalesQuery.data,
         optionSalesQuery.data,
         dividendSummaryQuery.data,
         dividendTransactionsQuery.data,
         stockHoldingsByYearQuery.data,
-        optionHoldingsQuery.data
+        optionHoldingsQuery.data,
+        feesQuery.data
     ]);
 
     const availableYears = useMemo(() => {
@@ -81,6 +86,7 @@ export const useRealizedGains = (token, selectedYear) => {
         const defaultStructure = {
             StockHoldings: [], OptionHoldings: [], StockSaleDetails: [],
             OptionSaleDetails: [], DividendTransactionsList: [],
+            FeeDetails: []
         };
         if (isLoading || !allData) return defaultStructure;
 
@@ -100,6 +106,7 @@ export const useRealizedGains = (token, selectedYear) => {
             StockSaleDetails: allData.StockSaleDetails || [],
             OptionSaleDetails: allData.OptionSaleDetails || [],
             DividendTransactionsList: allData.DividendTransactionsList || [],
+            FeeDetails: allData.FeeDetails || []
         };
 
         if (selectedYear === ALL_YEARS_OPTION || !selectedYear) return dataSet;
@@ -114,6 +121,7 @@ export const useRealizedGains = (token, selectedYear) => {
             StockSaleDetails: dataSet.StockSaleDetails.filter(s => getYearString(s.SaleDate) === selectedYear),
             OptionSaleDetails: dataSet.OptionSaleDetails.filter(o => getYearString(o.close_date) === selectedYear),
             DividendTransactionsList: dataSet.DividendTransactionsList.filter(tx => getYearString(tx.date) === selectedYear),
+            FeeDetails: dataSet.FeeDetails.filter(fee => getYearString(fee.date) === selectedYear)
         };
     }, [allData, selectedYear, isLoading]);
 
