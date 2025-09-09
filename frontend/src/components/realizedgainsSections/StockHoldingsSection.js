@@ -120,12 +120,13 @@ export default function StockHoldingsSection({ groupedData, detailedData, isGrou
         </ToggleButtonGroup>
       </Box>
 
-      <Box sx={{ height: 400, width: '100%' }}>
+      <Box sx={{ width: '100%' }}>
         {viewMode === 'detailed' ? (
           <DataGrid
             rows={detailedRows}
             columns={detailedColumns}
             loading={isDetailedFetching}
+            autoHeight
             initialState={{
               pagination: { paginationModel: { pageSize: 10 } },
               sorting: { sortModel: [{ field: 'buy_date', sort: 'desc' }] },
@@ -139,6 +140,7 @@ export default function StockHoldingsSection({ groupedData, detailedData, isGrou
             rows={groupedRows}
             columns={groupedColumns}
             loading={isGroupedFetching}
+            autoHeight
             initialState={{
               pagination: { paginationModel: { pageSize: 10 } },
               sorting: { sortModel: [{ field: 'marketValueEUR', sort: 'desc' }] },

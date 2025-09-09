@@ -9,12 +9,22 @@ import { Chart as ChartJS, ArcElement, CategoryScale, LinearScale, BarElement, T
 import { parseDateRobust, getYearString, getMonthIndex } from '../../utils/dateUtils';
 import { formatCurrency } from '../../utils/formatUtils';
 import { ALL_YEARS_OPTION, MONTH_NAMES_CHART } from '../../constants';
-// --- FIX: Added the missing import statement below ---
-import { generateColorPalette, generateDistinctColor } from '../../utils/chartUtils';
+import { generateRedTonePalette } from '../../utils/chartUtils';
 
 
 // Register all necessary components for Chart.js
 ChartJS.register(ArcElement, CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend);
+
+// --- CHANGE START: Added translation map ---
+const categoryTranslations = {
+    'Trade Commission': 'Comissões de transação',
+    'Brokerage Fee': 'Custo corretagem',
+};
+
+// Helper function to translate a category, falling back to the original if not found
+const translateCategory = (category) => categoryTranslations[category] || category;
+// --- CHANGE END ---
+
 
 const columns = [
     {
@@ -67,16 +77,20 @@ export default function FeesSection({ feeData, selectedYear }) {
 
         // For Time Series Chart
         const timeSeriesMap = {};
-        const categories = new Set(feeData.map(f => f.category));
+        // --- CHANGE START: Translate categories when creating the Set ---
+        const categories = new Set(feeData.map(f => translateCategory(f.category)));
+        // --- CHANGE END ---
 
         feeData.forEach(fee => {
             const absAmount = Math.abs(fee.amount_eur);
             
             // By Source
             sourceMap[fee.source] = (sourceMap[fee.source] || 0) + absAmount;
-
-            // By Category
-            categoryMap[fee.category] = (categoryMap[fee.category] || 0) + absAmount;
+            
+            // --- CHANGE START: Use translated category for grouping ---
+            const translatedCat = translateCategory(fee.category);
+            categoryMap[translatedCat] = (categoryMap[translatedCat] || 0) + absAmount;
+            // --- CHANGE END ---
 
             // By Time (Yearly or Monthly)
             const key = selectedYear === ALL_YEARS_OPTION ? getYearString(fee.date) : getMonthIndex(fee.date);
@@ -86,7 +100,9 @@ export default function FeesSection({ feeData, selectedYear }) {
                  timeSeriesMap[key] = {};
                  categories.forEach(cat => timeSeriesMap[key][cat] = 0);
             }
-            timeSeriesMap[key][fee.category] = (timeSeriesMap[key][fee.category] || 0) + absAmount;
+            // --- CHANGE START: Use translated category for time series ---
+            timeSeriesMap[key][translatedCat] = (timeSeriesMap[key][translatedCat] || 0) + absAmount;
+            // --- CHANGE END ---
         });
 
         // --- Chart Data Preparation ---
@@ -97,8 +113,8 @@ export default function FeesSection({ feeData, selectedYear }) {
             labels: sourceLabels,
             datasets: [{
                 data: sourceLabels.map(label => sourceMap[label]),
-                backgroundColor: generateColorPalette(sourceLabels.length, 'background'),
-                borderColor: generateColorPalette(sourceLabels.length, 'border'),
+                backgroundColor: generateRedTonePalette(sourceLabels.length, 'background'),
+                borderColor: generateRedTonePalette(sourceLabels.length, 'border'),
                 borderWidth: 1,
             }],
         };
@@ -109,8 +125,8 @@ export default function FeesSection({ feeData, selectedYear }) {
             labels: categoryLabels,
             datasets: [{
                 data: categoryLabels.map(label => categoryMap[label]),
-                backgroundColor: generateColorPalette(categoryLabels.length, 'background'),
-                borderColor: generateColorPalette(categoryLabels.length, 'border'),
+                backgroundColor: generateRedTonePalette(categoryLabels.length, 'background'),
+                borderColor: generateRedTonePalette(categoryLabels.length, 'border'),
                 borderWidth: 1,
             }],
         };
@@ -119,6 +135,9 @@ export default function FeesSection({ feeData, selectedYear }) {
         const timeLabels = selectedYear === ALL_YEARS_OPTION 
             ? Object.keys(timeSeriesMap).sort()
             : MONTH_NAMES_CHART;
+        
+        const categoryColors = generateRedTonePalette(categories.size, 'background');
+        const categoryBorderColors = generateRedTonePalette(categories.size, 'border');
 
         const timeSeries = {
             labels: timeLabels,
@@ -128,8 +147,8 @@ export default function FeesSection({ feeData, selectedYear }) {
                     const key = selectedYear === ALL_YEARS_OPTION ? label : monthIndex;
                     return timeSeriesMap[key]?.[cat] || 0;
                 }),
-                backgroundColor: generateDistinctColor(index, categories.size, 'background'),
-                borderColor: generateDistinctColor(index, categories.size, 'border'),
+                backgroundColor: categoryColors[index % categoryColors.length],
+                borderColor: categoryBorderColors[index % categoryBorderColors.length],
                 borderWidth: 1,
                 borderRadius: 4,
             })),
@@ -175,10 +194,13 @@ export default function FeesSection({ feeData, selectedYear }) {
         );
     }
 
+    // --- CHANGE START: Translate categories for the DataGrid ---
     const rows = feeData.map((fee, index) => ({
         id: `${fee.date}-${fee.description}-${index}`,
-        ...fee
+        ...fee,
+        category: translateCategory(fee.category),
     }));
+    // --- CHANGE END ---
 
     return (
         <Paper elevation={0} sx={{ p: 2, mb: 3, border: 'none' }}>
@@ -216,17 +238,17 @@ export default function FeesSection({ feeData, selectedYear }) {
             </Grid>
             
             {/* DataGrid */}
-            <Box sx={{ height: 600, width: '100%' }}>
+            <Box sx={{ width: '100%' }}>
                 <DataGrid
                     rows={rows}
                     columns={columns}
+                    autoHeight
                     initialState={{
                         pagination: { paginationModel: { pageSize: 10 } },
                         sorting: { sortModel: [{ field: 'date', sort: 'desc' }] },
                     }}
                     pageSizeOptions={[10, 25, 50]}
                     disableRowSelectionOnClick
-                    sx={{ height: 'auto' }}
                     localeText={ptPT.components.MuiDataGrid.defaultProps.localeText}
                 />
             </Box>

@@ -167,7 +167,6 @@ const ProcessedTransactionsPage = () => {
             disableRowSelectionOnClick
             density="compact"
             localeText={ptPT.components.MuiDataGrid.defaultProps.localeText}
-            sx={{ maxHeight: '75vh' }}
           />
         </Paper>
       ) : (

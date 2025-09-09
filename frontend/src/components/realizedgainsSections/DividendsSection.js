@@ -260,10 +260,11 @@ export default function DividendsSection({ dividendTransactionsData, selectedYea
       </Grid>
 
 
-      <Box sx={{ maxHeight: 600, width: '100%' }}>
+      <Box sx={{ width: '100%' }}>
         <DataGrid
           rows={rows}
           columns={columns}
+          autoHeight
           initialState={{
             pagination: { paginationModel: { pageSize: 10 } },
             sorting: {
@@ -272,7 +273,6 @@ export default function DividendsSection({ dividendTransactionsData, selectedYea
           }}
           pageSizeOptions={[10, 25, 50]}
           disableRowSelectionOnClick
-          sx={{ height: 'auto' }}
           localeText={ptPT.components.MuiDataGrid.defaultProps.localeText}
         />
       </Box>

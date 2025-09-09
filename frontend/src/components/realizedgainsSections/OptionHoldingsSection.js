@@ -57,10 +57,11 @@ export default function OptionHoldingsSection({ holdingsData }) {
   return (
     <Paper elevation={0} sx={{ p: 2, mb: 3, border: 'none' }}>
       <Typography variant="h6" sx={{ mb: 2 }}>Posições em Opções</Typography>
-      <Box sx={{ height: 400, width: '100%' }}>
+      <Box sx={{ width: '100%' }}>
         <DataGrid
           rows={rows}
           columns={columns}
+          autoHeight
           initialState={{
             pagination: { paginationModel: { pageSize: 10 } },
             sorting: { sortModel: [{ field: 'open_amount_eur', sort: 'desc' }] },

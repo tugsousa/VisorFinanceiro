@@ -48,6 +48,39 @@ export const generateColorPalette = (count, type = 'background') => {
 };
 
 /**
+ * Generates a palette of distinct red tones.
+ * @param {number} count - The number of colors to generate.
+ * @param {string} type - 'background' or 'border'.
+ * @returns {string[]} An array of HSLA or HSL color strings.
+ */
+export const generateRedTonePalette = (count, type = 'background') => {
+  if (count <= 0) return [];
+
+  const palette = [];
+  const baseHue = 0; // Red
+  const saturation = 75; // A strong but not overly neon saturation
+  const startLightness = 40; // Start with a darker red
+  const endLightness = 70;   // Go up to a lighter, softer red
+  
+  // Create a step to evenly distribute lightness across the number of colors needed
+  const lightnessStep = (count > 1) ? (endLightness - startLightness) / (count - 1) : 0;
+
+  for (let i = 0; i < count; i++) {
+    const lightness = startLightness + (i * lightnessStep);
+    if (type === 'background') {
+      // Background colors with some transparency
+      palette.push(`hsla(${baseHue}, ${saturation}%, ${lightness}%, 0.8)`);
+    } else { // 'border'
+      // Border colors are fully opaque and slightly darker
+      palette.push(`hsl(${baseHue}, ${saturation}%, ${lightness - 10}%)`);
+    }
+  }
+
+  return palette;
+};
+
+
+/**
  * Extracts a base name from a product string, typically the first word (e.g., stock ticker).
  * @param {string} productName - The full product name.
  * @returns {string} The extracted base name or 'Unknown'.
