@@ -1,11 +1,11 @@
 # Stage 1: The build environment
-FROM golang:1.23-alpine AS builder
+FROM golang:1.24-alpine AS builder
 
 WORKDIR /app
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
-RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o rumoclaro-backend .
+RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o visorfinanceiro-backend .
 
 # ---
 
@@ -33,7 +33,7 @@ COPY data ./data
 COPY db/migrations ./db/migrations
 
 # Copy the pre-built binary from the "builder" stage.
-COPY --from=builder /app/rumoclaro-backend .
+COPY --from=builder /app/visorfinanceiro-backend .
 
 # Change ownership of the entire app directory to the non-root user.
 # This ensures read access to migrations and write access to the db volume mount point.
@@ -46,4 +46,4 @@ USER appuser
 EXPOSE 8080
 
 # The command to run when the container starts.
-CMD ["./rumoclaro-backend"]
+CMD ["./visorfinanceiro-backend"]
