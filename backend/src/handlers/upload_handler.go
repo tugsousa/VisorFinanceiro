@@ -9,11 +9,13 @@ import (
 	"strings"
 
 	"github.com/username/taxfolio/backend/src/config"
+	"github.com/username/taxfolio/backend/src/database"
 	"github.com/username/taxfolio/backend/src/logger"
+	"github.com/username/taxfolio/backend/src/model"
 	"github.com/username/taxfolio/backend/src/models"
 	"github.com/username/taxfolio/backend/src/security/validation"
 	"github.com/username/taxfolio/backend/src/services"
-	"github.com/username/taxfolio/backend/src/utils" // Import utils package
+	"github.com/username/taxfolio/backend/src/utils"
 )
 
 type UploadHandler struct {
@@ -33,14 +35,28 @@ func (h *UploadHandler) HandleUpload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// --- ENFORCE UPLOAD LIMIT ---
+	user, err := model.GetUserByID(database.DB, userID)
+	if err != nil {
+		logger.L.Error("Failed to get user for upload limit check", "userID", userID, "error", err)
+		utils.SendJSONError(w, "Failed to verify user permissions", http.StatusInternalServerError)
+		return
+	}
+
+	const uploadLimit = 10 // Define your limit
+	if user.UploadCount >= uploadLimit {
+		logger.L.Warn("User has reached upload limit", "userID", userID, "uploadCount", user.UploadCount)
+		utils.SendJSONError(w, "You have reached the maximum number of file uploads. Please delete existing data to upload new files.", http.StatusForbidden)
+		return
+	}
+	// --- END OF CHECK ---
+
 	if err := r.ParseMultipartForm(config.Cfg.MaxUploadSizeBytes); err != nil {
 		logger.L.Warn("Failed to parse multipart form or request too large", "userID", userID, "error", err, "limit", config.Cfg.MaxUploadSizeBytes)
 		utils.SendJSONError(w, fmt.Sprintf("Failed to parse form or request too large (max %d MB)", config.Cfg.MaxUploadSizeBytes/(1024*1024)), http.StatusBadRequest)
 		return
 	}
 
-	// --- Read the new 'source' field from the form ---
-	// The `source` is sent as a regular form value alongside the file.
 	source := r.FormValue("source")
 	if source == "" {
 		logger.L.Warn("Upload request missing 'source' field", "userID", userID)
@@ -81,7 +97,6 @@ func (h *UploadHandler) HandleUpload(w http.ResponseWriter, r *http.Request) {
 
 	logger.L.Info("Processing upload request", "userID", userID, "filename", fileHeader.Filename)
 
-	// --- Pass the 'source' to the service ---
 	result, err := h.uploadService.ProcessUpload(file, userID, source)
 	if err != nil {
 		if errors.Is(err, validation.ErrValidationFailed) {
@@ -99,6 +114,15 @@ func (h *UploadHandler) HandleUpload(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
+
+	// --- INCREMENT UPLOAD COUNT ON SUCCESS ---
+	_, errUpdate := database.DB.Exec("UPDATE users SET upload_count = upload_count + 1 WHERE id = ?", userID)
+	if errUpdate != nil {
+		// This is not a critical error for the user, as the upload succeeded.
+		// We just log it and continue.
+		logger.L.Error("Failed to increment user upload count after successful upload", "userID", userID, "error", errUpdate)
+	}
+	// --- END OF INCREMENT ---
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)

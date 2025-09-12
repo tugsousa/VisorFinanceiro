@@ -5,6 +5,7 @@ CREATE TABLE IF NOT EXISTS users (
     password TEXT NOT NULL,
     email TEXT NOT NULL UNIQUE,
     auth_provider TEXT DEFAULT 'local',
+    upload_count INTEGER DEFAULT 0,
     is_email_verified BOOLEAN DEFAULT FALSE,
     email_verification_token TEXT,
     email_verification_token_expires_at TIMESTAMP,

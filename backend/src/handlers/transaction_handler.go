@@ -1,3 +1,4 @@
+// backend/src/handlers/transaction_handler.go
 package handlers
 
 import (
@@ -79,10 +80,35 @@ func (h *TransactionHandler) HandleDeleteAllProcessedTransactions(w http.Respons
 	}
 	logger.L.Info("Handling DeleteAllProcessedTransactions", "userID", userID)
 
-	result, err := database.DB.Exec("DELETE FROM processed_transactions WHERE user_id = ?", userID)
+	// Use a transaction to ensure atomicity
+	txDB, err := database.DB.Begin()
+	if err != nil {
+		logger.L.Error("Failed to begin transaction for data deletion", "userID", userID, "error", err)
+		utils.SendJSONError(w, "Failed to delete data", http.StatusInternalServerError)
+		return
+	}
+	defer txDB.Rollback() // Rollback on any error
+
+	// 1. Delete transactions
+	result, err := txDB.Exec("DELETE FROM processed_transactions WHERE user_id = ?", userID)
 	if err != nil {
 		logger.L.Error("Error deleting all processed transactions from DB", "userID", userID, "error", err)
 		utils.SendJSONError(w, fmt.Sprintf("Error deleting transactions for userID %d: %v", userID, err), http.StatusInternalServerError)
+		return
+	}
+
+	// 2. Reset the user's upload count
+	_, err = txDB.Exec("UPDATE users SET upload_count = 0 WHERE id = ?", userID)
+	if err != nil {
+		logger.L.Error("Failed to reset upload count for user", "userID", userID, "error", err)
+		utils.SendJSONError(w, "Failed to reset upload count", http.StatusInternalServerError)
+		return
+	}
+
+	// 3. Commit the transaction if all operations were successful
+	if err := txDB.Commit(); err != nil {
+		logger.L.Error("Failed to commit transaction for data deletion", "userID", userID, "error", err)
+		utils.SendJSONError(w, "Failed to finalize data deletion", http.StatusInternalServerError)
 		return
 	}
 
@@ -90,7 +116,7 @@ func (h *TransactionHandler) HandleDeleteAllProcessedTransactions(w http.Respons
 	if err != nil {
 		logger.L.Error("Error getting rows affected after deleting all transactions", "userID", userID, "error", err)
 	} else {
-		logger.L.Info("Successfully deleted all processed transactions", "userID", userID, "rowsAffected", rowsAffected)
+		logger.L.Info("Successfully deleted all processed transactions and reset upload count", "userID", userID, "rowsAffected", rowsAffected)
 	}
 
 	h.uploadService.InvalidateUserCache(userID)

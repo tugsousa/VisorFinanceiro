@@ -15,7 +15,7 @@ import { generateRedTonePalette } from '../../utils/chartUtils';
 // Register all necessary components for Chart.js
 ChartJS.register(ArcElement, CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend);
 
-// --- CHANGE START: Added translation map ---
+// Added translation map ---
 const categoryTranslations = {
     'Trade Commission': 'Comissões de transação',
     'Brokerage Fee': 'Custo corretagem',
@@ -23,7 +23,6 @@ const categoryTranslations = {
 
 // Helper function to translate a category, falling back to the original if not found
 const translateCategory = (category) => categoryTranslations[category] || category;
-// --- CHANGE END ---
 
 
 const columns = [
@@ -77,9 +76,8 @@ export default function FeesSection({ feeData, selectedYear }) {
 
         // For Time Series Chart
         const timeSeriesMap = {};
-        // --- CHANGE START: Translate categories when creating the Set ---
+        // Translate categories when creating the Set ---
         const categories = new Set(feeData.map(f => translateCategory(f.category)));
-        // --- CHANGE END ---
 
         feeData.forEach(fee => {
             const absAmount = Math.abs(fee.amount_eur);
@@ -87,10 +85,9 @@ export default function FeesSection({ feeData, selectedYear }) {
             // By Source
             sourceMap[fee.source] = (sourceMap[fee.source] || 0) + absAmount;
             
-            // --- CHANGE START: Use translated category for grouping ---
+            // Use translated category for grouping ---
             const translatedCat = translateCategory(fee.category);
             categoryMap[translatedCat] = (categoryMap[translatedCat] || 0) + absAmount;
-            // --- CHANGE END ---
 
             // By Time (Yearly or Monthly)
             const key = selectedYear === ALL_YEARS_OPTION ? getYearString(fee.date) : getMonthIndex(fee.date);
@@ -100,9 +97,8 @@ export default function FeesSection({ feeData, selectedYear }) {
                  timeSeriesMap[key] = {};
                  categories.forEach(cat => timeSeriesMap[key][cat] = 0);
             }
-            // --- CHANGE START: Use translated category for time series ---
+            // Use translated category for time series ---
             timeSeriesMap[key][translatedCat] = (timeSeriesMap[key][translatedCat] || 0) + absAmount;
-            // --- CHANGE END ---
         });
 
         // --- Chart Data Preparation ---
@@ -154,6 +150,14 @@ export default function FeesSection({ feeData, selectedYear }) {
             })),
         };
 
+        const maxThickness = 60;
+        const smallDataSetThreshold = 5;
+        if (timeSeries.labels.length > 0 && timeSeries.labels.length <= smallDataSetThreshold) {
+            timeSeries.datasets.forEach(dataset => {
+                dataset.maxBarThickness = maxThickness;
+            });
+        }
+
         return { bySource, byCategory, timeSeries };
     }, [feeData, selectedYear]);
 
@@ -194,13 +198,12 @@ export default function FeesSection({ feeData, selectedYear }) {
         );
     }
 
-    // --- CHANGE START: Translate categories for the DataGrid ---
+    // Translate categories for the DataGrid ---
     const rows = feeData.map((fee, index) => ({
         id: `${fee.date}-${fee.description}-${index}`,
         ...fee,
         category: translateCategory(fee.category),
     }));
-    // --- CHANGE END ---
 
     return (
         <Paper elevation={0} sx={{ p: 2, mb: 3, border: 'none' }}>

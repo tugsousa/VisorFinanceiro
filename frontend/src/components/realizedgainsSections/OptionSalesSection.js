@@ -144,6 +144,10 @@ export default function OptionSalesSection({ optionSalesData, selectedYear }) {
             };
         }
 
+        if (timeSeriesChart.labels.length > 0 && timeSeriesChart.labels.length <= smallDataSetThreshold) {
+            timeSeriesChart.datasets[0].maxBarThickness = maxThickness;
+        }
+
         return { salesByProductChartData: productChart, salesByTimeSeriesChartData: timeSeriesChart };
     }, [optionSalesData, selectedYear]);
 
