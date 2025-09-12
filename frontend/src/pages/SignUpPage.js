@@ -57,10 +57,10 @@ function SignUpPage() {
     <AuthModal>
       <Box sx={{ width: '100%', maxWidth: 400 }}>
         <Typography component="h1" variant="h5" sx={{ fontWeight: 'bold' }}>
-          Bem-vindo a RumoClaro
+          Bem-vindo ao VisorFinanceiro
         </Typography>
         <Typography variant="body2" color="text.secondary" sx={{ mt: 1, mb: 3 }}>
-          Crie uma conta para começar a usar a RumoClaro.
+          Crie uma conta para começar a usar o VisorFinanceiro.
         </Typography>
 
         {pageSuccessMessage && (

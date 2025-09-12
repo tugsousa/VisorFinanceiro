@@ -41,7 +41,7 @@ const ContactInformationPage = () => {
                   Email
                 </Typography>
                 <MuiLink 
-                  href="mailto:geral@rumoclaro.pt" 
+                  href="mailto:geral@visorfinanceiro.pt" 
                   variant="h6" 
                   underline="hover"
                   sx={{ 
@@ -50,7 +50,7 @@ const ContactInformationPage = () => {
                     wordBreak: 'break-all'
                   }}
                 >
-                  geral@rumoclaro.pt
+                  geral@visorfinanceiro.pt
                 </MuiLink>
               </Box>
             </Stack>

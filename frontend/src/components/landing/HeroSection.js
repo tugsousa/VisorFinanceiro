@@ -41,7 +41,7 @@ const HeroSection = () => {
                         Simplifica os teus impostos e gere o teu portfólio com clareza.
                     </Typography>
                     <Typography variant="h6" color="text.secondary" sx={{ mb: 4 }}>
-                        O RumoClaro transforma os extratos complexos do teu broker em relatórios visuais e dados prontos a utilizar na tua declaração de IRS. Poupa tempo, evita erros e assume o controlo dos teus investimentos.
+                        O VisorFinanceiro transforma os extratos complexos do teu broker em relatórios visuais e dados prontos a utilizar na tua declaração de IRS. Poupa tempo, evita erros e assume o controlo dos teus investimentos.
                     </Typography>
                     <Button
                         component={RouterLink}
@@ -77,7 +77,7 @@ const HeroSection = () => {
                     >
                         <img 
                             src={heroImageSrc} 
-                            alt="Dashboard do Rumo Claro" 
+                            alt="Dashboard do Visor Financeiro" 
                             style={{ 
                                 width: '100%', 
                                 height: '100%',
@@ -116,7 +116,7 @@ const HeroSection = () => {
                     </IconButton>
                     <img
                         src={heroImageSrc}
-                        alt="Dashboard do Rumo Claro em tamanho expandido"
+                        alt="Dashboard do Visor Financeiro em tamanho expandido"
                         style={{
                             maxWidth: '90vw',
                             maxHeight: '90vh',

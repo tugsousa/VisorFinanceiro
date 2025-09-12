@@ -67,7 +67,7 @@ export default function Layout({ children }) {
                   color: '#6a6a62',
                 }}
               >
-                RumoClaro
+                VisorFinanceiro
               </Typography>
             </Box>
 
@@ -186,7 +186,7 @@ export default function Layout({ children }) {
           <Typography variant="body2" color="text.secondary" align="center">
             {'© '}
             {new Date().getFullYear()}
-            {' Rumo Claro. Todos os direitos reservados.'}
+            {' Visor Financeiro. Todos os direitos reservados.'}
           </Typography>
           <Box sx={{ display: 'flex', justifyContent: 'center', gap: 2, mt: 1 }}>
             <MuiLink component={RouterLink} to="/policies/privacy-policy" variant="body2">
@@ -208,7 +208,7 @@ export default function Layout({ children }) {
         buttonText="Aceitar"
         declineButtonText="Rejeitar"
         enableDeclineButton
-        cookieName="rumoclaro-cookie-consent"
+        cookieName="visorfinanceiro-cookie-consent"
         style={{ background: "#2B373B", fontSize: "14px" }}
         buttonStyle={{ color: "#4e503b", fontSize: "15px", background: "#f1f1f1", borderRadius: "3px" }}
         declineButtonStyle={{ background: "#7a7a7a", color: "white", fontSize: "15px", borderRadius: "3px" }}

@@ -32,7 +32,7 @@ const HowItWorksSection = () => {
         <Step
           number="2"
           title="Análise Automática"
-          text="O RumoClaro processa as tuas transações, aplicando as taxas de câmbio necessárias."
+          text="O VisorFinanceiro processa as tuas transações, aplicando as taxas de câmbio necessárias."
           //imageName="icon-processing.png" // TODO: Crie e adicione esta imagem/ícone
         />
         <Step

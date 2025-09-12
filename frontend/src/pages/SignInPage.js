@@ -65,7 +65,7 @@ function SignInPage() {
     <AuthModal>
       <Box sx={{ width: '100%', textAlign: 'left' }}>
         <Typography component="h1" variant="h5" sx={{ fontWeight: 'bold' }}>
-          Bem-vindo a RumoClaro
+          Bem-vindo a VisorFinanceiro
         </Typography>
         <Typography variant="body2" color="text.secondary" sx={{ mt: 1, mb: 2 }}>
           Entre com a sua conta local ou através da sua conta Google.

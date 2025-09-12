@@ -21,7 +21,7 @@ const TrustSection = () => {
           A tua privacidade é a nossa prioridade
         </Typography>
         <Typography variant="h6" align="center" color="text.secondary" sx={{ mb: 6 }}>
-          Sabemos que os teus dados são sensíveis. No RumoClaro, levamos a segurança muito a sério.
+          Sabemos que os teus dados são sensíveis. No VisorFinanceiro, levamos a segurança muito a sério.
         </Typography>
         <Grid container spacing={4}>
           <TrustPoint

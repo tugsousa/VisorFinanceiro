@@ -1,16 +1,9 @@
 # caddy/Caddyfile
 
-rumoclaro.pt, www.rumoclaro.pt {
-    # This block creates a "matcher" named @www that is true
-    # only when the request's host is "www.rumoclaro.pt".
-    @www host www.rumoclaro.pt
-    
-    # If the request matches @www, send a permanent redirect (301)
-    # to the same path on the main domain.
-    redir @www https://rumoclaro.pt{uri} permanent
+visorfinanceiro.pt, www.visorfinanceiro.pt {
+    @www host www.visorfinanceiro.pt
+    redir @www https://visorfinanceiro.pt{uri} permanent
 
-    # The rest of your configuration remains the same.
-    # Caddy will apply it to requests for rumoclaro.pt.
     handle /api/* {
         reverse_proxy backend:8080
     }

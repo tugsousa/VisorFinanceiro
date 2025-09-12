@@ -33,14 +33,14 @@ type EmailTemplate struct {
 // Email templates are now centralized.
 var emailTemplates = map[string]EmailTemplate{
 	"verification": {
-		Subject:  "Confirme o seu endereço de e-mail para o RumoClaro",
-		TextBody: `Olá {{.Username}}, Bem-vindo ao RumoClaro! Por favor, confirme o seu endereço de e-mail clicando no link abaixo: {{.Link}} Se não criou uma conta com este endereço de e-mail, por favor ignore esta mensagem. Obrigado, A equipa do RumoClaro`,
-		HTMLBody: `<html><body style="font-family: Arial, sans-serif; line-height: 1.6;"><p>Olá {{.Username}},</p><p>Bem-vindo ao RumoClaro! Por favor, confirme o seu endereço de e-mail clicando no link abaixo:</p><p><a href="{{.Link}}" target="_blank" style="color: #1a73e8; text-decoration: none; font-weight: bold; padding: 10px 15px; border: 1px solid #1a73e8; border-radius: 4px; background-color: #e8f0fe;">Confirmar endereço de e-mail</a></p><p>Se o botão acima não funcionar, pode copiar e colar o seguinte URL na barra de endereços do seu navegador.</p><p><a href="{{.Link}}" target="_blank" style="color: #1a73e8;">{{.Link}}</a></p><p>Se não criou uma conta com este endereço de e-mail, por favor ignore este e-mail.</p><p>Obrigado,<br>A equipa do RumoClaro</p></body></html>`,
+		Subject:  "Confirme o seu endereço de e-mail para o VisorFinanceiro",
+		TextBody: `Olá {{.Username}}, Bem-vindo ao VisorFinanceiro! Por favor, confirme o seu endereço de e-mail clicando no link abaixo: {{.Link}} Se não criou uma conta com este endereço de e-mail, por favor ignore esta mensagem. Obrigado, A equipa do VisorFinanceiro`,
+		HTMLBody: `<html><body style="font-family: Arial, sans-serif; line-height: 1.6;"><p>Olá {{.Username}},</p><p>Bem-vindo ao VisorFinanceiro! Por favor, confirme o seu endereço de e-mail clicando no link abaixo:</p><p><a href="{{.Link}}" target="_blank" style="color: #1a73e8; text-decoration: none; font-weight: bold; padding: 10px 15px; border: 1px solid #1a73e8; border-radius: 4px; background-color: #e8f0fe;">Confirmar endereço de e-mail</a></p><p>Se o botão acima não funcionar, pode copiar e colar o seguinte URL na barra de endereços do seu navegador.</p><p><a href="{{.Link}}" target="_blank" style="color: #1a73e8;">{{.Link}}</a></p><p>Se não criou uma conta com este endereço de e-mail, por favor ignore este e-mail.</p><p>Obrigado,<br>A equipa do VisorFinanceiro</p></body></html>`,
 	},
 	"passwordReset": {
-		Subject:  "Pedido de redefinição da palavra-passe para o RumoClaro",
-		TextBody: `Olá {{.Username}}, Recebemos um pedido para repor a palavra-passe da sua conta RumoClaro. Por favor, clique no seguinte link para repor a sua palavra-passe: {{.Link}} Se não pediu a reposição da palavra-passe, por favor ignore este e-mail. Este link expira em {{.Expiry}}. Obrigado, A equipa do RumoClaro`,
-		HTMLBody: `<html><body style="font-family: Arial, sans-serif; line-height: 1.6;"><p>Olá {{.Username}},</p><p>Recebemos um pedido para repor a palavra-passe da sua conta RumoClaro. Por favor, clique no seguinte link para repor a sua palavra-passe:</p><p><a href="{{.Link}}" target="_blank" style="color: #1a73e8; text-decoration: none; font-weight: bold; padding: 10px 15px; border: 1px solid #1a73e8; border-radius: 4px; background-color: #e8f0fe;">Redefinir palavra-passe</a></p><p>Se o botão acima não funcionar, copie e cole este link no seu navegador:</p><p><a href="{{.Link}}" target="_blank" style="color: #1a73e8;">{{.Link}}</a></p><p>Se não solicitou esta reposição, por favor ignore este e-mail. Este link irá expirar dentro de {{.Expiry}}.</p><p>Obrigado,<br>A equipa do RumoClaro</p></body></html>`,
+		Subject:  "Pedido de redefinição da palavra-passe para o VisorFinanceiro",
+		TextBody: `Olá {{.Username}}, Recebemos um pedido para repor a palavra-passe da sua conta VisorFinanceiro. Por favor, clique no seguinte link para repor a sua palavra-passe: {{.Link}} Se não pediu a reposição da palavra-passe, por favor ignore este e-mail. Este link expira em {{.Expiry}}. Obrigado, A equipa do VisorFinanceiro`,
+		HTMLBody: `<html><body style="font-family: Arial, sans-serif; line-height: 1.6;"><p>Olá {{.Username}},</p><p>Recebemos um pedido para repor a palavra-passe da sua conta VisorFinanceiro. Por favor, clique no seguinte link para repor a sua palavra-passe:</p><p><a href="{{.Link}}" target="_blank" style="color: #1a73e8; text-decoration: none; font-weight: bold; padding: 10px 15px; border: 1px solid #1a73e8; border-radius: 4px; background-color: #e8f0fe;">Redefinir palavra-passe</a></p><p>Se o botão acima não funcionar, copie e cole este link no seu navegador:</p><p><a href="{{.Link}}" target="_blank" style="color: #1a73e8;">{{.Link}}</a></p><p>Se não solicitou esta reposição, por favor ignore este e-mail. Este link irá expirar dentro de {{.Expiry}}.</p><p>Obrigado,<br>A equipa do VisorFinanceiro</p></body></html>`,
 	},
 }
 
@@ -99,7 +99,7 @@ func (s *SMTPEmailService) send(toEmail, subject, textBody, htmlBody string) err
 
 	// Generate a unique boundary
 	n, _ := rand.Int(rand.Reader, big.NewInt(1000000000))
-	boundary := "rumoclaro-boundary-" + n.String()
+	boundary := "visorfinanceiro-boundary-" + n.String()
 
 	// Construct the headers
 	header := make(map[string]string)

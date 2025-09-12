@@ -24,13 +24,13 @@ const PrivacyPolicyPage = () => {
 
       <Section title="O Nosso Compromisso" number={1}>
         <Typography variant="body1" paragraph>
-          O Rumo Claro é uma ferramenta concebida para o ajudar a gerir o seu portefólio de investimentos e a simplificar as suas obrigações fiscais. A sua privacidade e a segurança dos seus dados são a nossa máxima prioridade. Esta página descreve as nossas políticas relativas à recolha, utilização e proteção das suas informações. Ao utilizar o nosso Serviço, concorda com as práticas descritas nesta política.
+          O VisorFinanceiro é uma ferramenta concebida para o ajudar a gerir o seu portefólio de investimentos e a simplificar as suas obrigações fiscais. A sua privacidade e a segurança dos seus dados são a nossa máxima prioridade. Esta página descreve as nossas políticas relativas à recolha, utilização e proteção das suas informações. Ao utilizar o nosso Serviço, concorda com as práticas descritas nesta política.
         </Typography>
       </Section>
 
       <Section title="Recolha e Utilização de Dados" number={2}>
         <Typography variant="body1" paragraph>
-          Para fornecer as funcionalidades do Rumo Claro, recolhemos dois tipos de informação:
+          Para fornecer as funcionalidades do VisorFinanceiro, recolhemos dois tipos de informação:
         </Typography>
         <List dense sx={{ pl: 2, mb: 2 }}>
           <ListItem>
@@ -107,7 +107,7 @@ const PrivacyPolicyPage = () => {
       
       <Section title="Contacto" number={8}>
         <Typography variant="body1" paragraph>
-          Se tiver alguma questão sobre a nossa Política de Privacidade, contacte-nos através do e-mail: <MuiLink href="mailto:geral@rumoclaro.pt">geral@rumoclaro.pt</MuiLink>.
+          Se tiver alguma questão sobre a nossa Política de Privacidade, contacte-nos através do e-mail: <MuiLink href="mailto:geral@visorfinanceiro.pt">geral@visorfinanceiro.pt</MuiLink>.
         </Typography>
       </Section>
 

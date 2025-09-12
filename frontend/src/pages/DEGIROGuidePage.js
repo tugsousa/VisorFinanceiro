@@ -99,8 +99,8 @@ const DEGIROGuidePage = () => {
                 <Divider component="li" />
                 <GuideStep
                     number="4"
-                    title="Enviar para a RumoClaro"
-                    text="Boa! Agora que já tens o ficheiro CSV, volta à página de upload da RumoClaro e envia o documento que descarregaste. Vamos tratar das tuas transações por ti."
+                    title="Enviar para o VisorFinanceiro"
+                    text="Boa! Agora que já tens o ficheiro CSV, volta à página de upload do VisorFinanceiro e envia o documento que descarregaste. Vamos tratar das tuas transações por ti."
                 />
             </List>
 

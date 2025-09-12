@@ -14,7 +14,7 @@ const TermsOfServicePage = () => {
 
       <Box sx={{ my: 3 }}>
         <Typography variant="body1" paragraph>
-          Bem-vindo ao Rumo Claro! Estes Termos de Serviço regem o seu acesso e utilização da nossa plataforma. Por favor, leia-os atentamente antes de usar o nosso serviço.
+          Bem-vindo ao VisorFinanceiro! Estes Termos de Serviço regem o seu acesso e utilização da nossa plataforma. Por favor, leia-os atentamente antes de usar o nosso serviço.
         </Typography>
 
         <Typography variant="h6" component="h2" sx={{ mt: 4 }} gutterBottom>1. Aceitação dos Termos</Typography>
@@ -26,7 +26,7 @@ const TermsOfServicePage = () => {
 
         <Typography variant="h6" component="h2" gutterBottom>2. Descrição do Serviço</Typography>
         <Typography variant="body1" paragraph>
-          O Rumo Claro é uma ferramenta desenhada para o ajudar a analisar as suas transações financeiras e a organizar a informação para a sua declaração de impostos em Portugal. O serviço permite:
+          O VisorFinanceiro é uma ferramenta desenhada para o ajudar a analisar as suas transações financeiras e a organizar a informação para a sua declaração de impostos em Portugal. O serviço permite:
         </Typography>
         <List dense>
           <ListItem>
@@ -44,7 +44,7 @@ const TermsOfServicePage = () => {
 
         <Typography variant="h6" component="h2" gutterBottom>3. Isenção de Responsabilidade e Limitação de Responsabilidade</Typography>
         <Typography variant="body1" paragraph sx={{ mt: 2 }}>
-          AVISO IMPORTANTE: O Rumo Claro é uma ferramenta de auxílio e para fins informativos. NÃO constitui aconselhamento financeiro, de investimento ou fiscal.
+          AVISO IMPORTANTE: O VisorFinanceiro é uma ferramenta de auxílio e para fins informativos. NÃO constitui aconselhamento financeiro, de investimento ou fiscal.
           A lógica da ferramenta foi extensivamente verificada. No entanto, isto não implica a ausência de erros ou bugs. As informações e cálculos fornecidos pela plataforma:
         </Typography>
         <List dense>
@@ -59,14 +59,14 @@ const TermsOfServicePage = () => {
           </ListItem>
         </List>
         <Typography variant="body1" paragraph>
-          A utilização dos dados gerados pelo Rumo Claro para o preenchimento da sua declaração de IRS ou para qualquer outra finalidade é da sua inteira e exclusiva responsabilidade. Em nenhuma circunstância o Rumo Claro, os seus criadores ou afiliados serão responsáveis por quaisquer perdas, danos ou coimas resultantes do uso da informação fornecida.
+          A utilização dos dados gerados pelo VisorFinanceiro para o preenchimento da sua declaração de IRS ou para qualquer outra finalidade é da sua inteira e exclusiva responsabilidade. Em nenhuma circunstância o VisorFinanceiro, os seus criadores ou afiliados serão responsáveis por quaisquer perdas, danos ou coimas resultantes do uso da informação fornecida.
         </Typography>
 
         <Divider sx={{ my: 4 }} />
 
         <Typography variant="h6" component="h2" gutterBottom>4. Contas de Utilizador</Typography>
         <Typography variant="body1" paragraph>
-          Ao registar-se no Rumo Claro, você concorda em:
+          Ao registar-se no VisorFinanceiro, você concorda em:
         </Typography>
         <List dense>
           <ListItem>
@@ -84,7 +84,7 @@ const TermsOfServicePage = () => {
 
         <Typography variant="h6" component="h2" gutterBottom>5. Propriedade dos Dados</Typography>
         <Typography variant="body1" paragraph>
-          O Serviço e o seu conteúdo original (software, design, texto) são propriedade do Rumo Claro. Os dados financeiros que você carrega e os resultados gerados a partir deles são sua propriedade. Você concede-nos apenas uma licença limitada para processar esses dados com o único propósito de lhe fornecer as funcionalidades do Serviço.
+          O Serviço e o seu conteúdo original (software, design, texto) são propriedade do VisorFinanceiro. Os dados financeiros que você carrega e os resultados gerados a partir deles são sua propriedade. Você concede-nos apenas uma licença limitada para processar esses dados com o único propósito de lhe fornecer as funcionalidades do Serviço.
         </Typography>
 
         <Divider sx={{ my: 4 }} />
@@ -101,7 +101,7 @@ const TermsOfServicePage = () => {
 
         <Typography variant="h6" component="h2" gutterBottom>7. Contacto</Typography>
         <Typography variant="body1" paragraph>
-          Para qualquer questão sobre estes Termos de Serviço, por favor contacte-nos através do email: <Link href="mailto:geral@rumoclaro.pt">geral@rumoclaro.pt</Link>.
+          Para qualquer questão sobre estes Termos de Serviço, por favor contacte-nos através do email: <Link href="mailto:geral@visorfinanceiro.pt">geral@visorfinanceiro.pt</Link>.
         </Typography>
       </Box>
     </Container>

@@ -9,7 +9,7 @@ const FinalCTASection = () => {
     <Box sx={{ py: { xs: 4, md: 8 }, textAlign: 'center' }}>
       <Container maxWidth="md">
         <Typography variant="h4" component="h2" sx={{ fontWeight: 'bold', mb: 2 }}>
-          Pronto para ter um RumoClaro nos teus investimentos?
+          Pronto para ter um VisorFinanceiro nos teus investimentos?
         </Typography>
         <Typography variant="h6" color="text.secondary" sx={{ mb: 4 }}>
           Cria a tua conta gratuita e junta-te a outros investidores que já simplificaram a vida financeira e fiscal.

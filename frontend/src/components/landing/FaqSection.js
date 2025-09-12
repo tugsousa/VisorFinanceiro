@@ -25,8 +25,8 @@ const FaqSection = () => {
       </Typography>
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
         <FaqItem
-          question="O RumoClaro tem algum custo?"
-          answer="De momento, o RumoClaro é totalmente gratuito. Estamos focados em construir a melhor ferramenta possível para a comunidade de investidores em Portugal."
+          question="O VisorFinanceiro tem algum custo?"
+          answer="De momento, o VisorFinanceiro é totalmente gratuito. Estamos focados em construir a melhor ferramenta possível para a comunidade de investidores em Portugal."
         />
         <FaqItem
           question="Que corretoras são suportadas?"

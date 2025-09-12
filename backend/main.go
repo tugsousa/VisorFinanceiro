@@ -58,8 +58,8 @@ func enableCORS(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		origin := r.Header.Get("Origin")
 		allowedOrigins := map[string]bool{
-			"http://localhost:3000": true,
-			"https://rumoclaro.pt":  true,
+			"http://localhost:3000":      true,
+			"https://visorfinanceiro.pt": true,
 		}
 
 		if allowedOrigins[origin] {
@@ -84,7 +84,7 @@ func enableCORS(next http.Handler) http.Handler {
 func main() {
 	config.LoadConfig()
 	logger.InitLogger(config.Cfg.LogLevel)
-	logger.L.Info("RumoClaro backend server starting...")
+	logger.L.Info("VisorFinanceiro backend server starting...")
 
 	if config.Cfg.JWTSecret == "" || len(config.Cfg.JWTSecret) < 32 {
 		logger.L.Error("JWT_SECRET configuration invalid. Must be at least 32 bytes.")
@@ -153,7 +153,7 @@ func main() {
 
 	r.Get("/", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]string{"message": "RumoClaro Backend is running"})
+		json.NewEncoder(w).Encode(map[string]string{"message": "VisorFinanceiro Backend is running"})
 	})
 
 	// API routes
