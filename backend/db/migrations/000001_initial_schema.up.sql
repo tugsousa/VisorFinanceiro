@@ -10,6 +10,7 @@ CREATE TABLE IF NOT EXISTS users (
     email_verification_token_expires_at TIMESTAMP,
     password_reset_token TEXT,
     password_reset_token_expires_at TIMESTAMP,
+    upload_count INTEGER DEFAULT 0,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );

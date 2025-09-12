@@ -153,9 +153,9 @@ func GetUserByID(db *sql.DB, id int64) (*User, error) {
 }
 
 func GetUserByUsername(db *sql.DB, username string) (*User, error) {
-	// CORREÇÃO: Adicionado `auth_provider` à query
+	// CORREÇÃO: Adicionado `upload_count` à query
 	query := `
-	SELECT id, username, email, password, auth_provider, is_email_verified, 
+	SELECT id, username, email, password, auth_provider, upload_count, is_email_verified, 
 	       email_verification_token, email_verification_token_expires_at,
 	       password_reset_token, password_reset_token_expires_at,
 	       created_at, updated_at
@@ -163,16 +163,17 @@ func GetUserByUsername(db *sql.DB, username string) (*User, error) {
 	WHERE username = ?`
 	row := db.QueryRow(query, username)
 	var user User
-	var authProvider sql.NullString // CORREÇÃO: Adicionada variável para ler da DB
+	var authProvider sql.NullString
 	var emailVerificationToken sql.NullString
 	var emailVerificationTokenExpiresAt sql.NullTime
 	var passwordResetToken sql.NullString
 	var passwordResetTokenExpiresAt sql.NullTime
 
-	// CORREÇÃO: Adicionado `&authProvider` ao Scan
+	// CORREÇÃO: Adicionado `&user.UploadCount` ao Scan
 	err := row.Scan(
 		&user.ID, &user.Username, &user.Email, &user.Password,
 		&authProvider,
+		&user.UploadCount,
 		&user.IsEmailVerified,
 		&emailVerificationToken, &emailVerificationTokenExpiresAt,
 		&passwordResetToken, &passwordResetTokenExpiresAt,
@@ -204,9 +205,9 @@ func GetUserByUsername(db *sql.DB, username string) (*User, error) {
 }
 
 func GetUserByEmail(db *sql.DB, email string) (*User, error) {
-	// CORREÇÃO: Adicionado `auth_provider` à query
+	// CORREÇÃO: Adicionado `upload_count` à query
 	query := `
-	SELECT id, username, email, password, auth_provider, is_email_verified, 
+	SELECT id, username, email, password, auth_provider, upload_count, is_email_verified, 
 	       email_verification_token, email_verification_token_expires_at,
 	       password_reset_token, password_reset_token_expires_at,
 	       created_at, updated_at
@@ -214,16 +215,17 @@ func GetUserByEmail(db *sql.DB, email string) (*User, error) {
 	WHERE email = ?`
 	row := db.QueryRow(query, email)
 	var user User
-	var authProvider sql.NullString // CORREÇÃO: Adicionada variável para ler da DB
+	var authProvider sql.NullString
 	var emailVerificationToken sql.NullString
 	var emailVerificationTokenExpiresAt sql.NullTime
 	var passwordResetToken sql.NullString
 	var passwordResetTokenExpiresAt sql.NullTime
 
-	// CORREÇÃO: Adicionado `&authProvider` ao Scan
+	// CORREÇÃO: Adicionado `&user.UploadCount` ao Scan
 	err := row.Scan(
 		&user.ID, &user.Username, &user.Email, &user.Password,
 		&authProvider,
+		&user.UploadCount,
 		&user.IsEmailVerified,
 		&emailVerificationToken, &emailVerificationTokenExpiresAt,
 		&passwordResetToken, &passwordResetTokenExpiresAt,

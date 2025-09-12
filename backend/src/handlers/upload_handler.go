@@ -46,14 +46,13 @@ func (h *UploadHandler) HandleUpload(w http.ResponseWriter, r *http.Request) {
 	const uploadLimit = 10 // Define your limit
 	if user.UploadCount >= uploadLimit {
 		logger.L.Warn("User has reached upload limit", "userID", userID, "uploadCount", user.UploadCount)
-		utils.SendJSONError(w, "You have reached the maximum number of file uploads. Please delete existing data to upload new files.", http.StatusForbidden)
+		utils.SendJSONError(w, "Atingiste o número máximo de carregamentos de ficheiros. Por favor, elimine os dados existentes para carregar novos ficheiros.", http.StatusForbidden)
 		return
 	}
-	// --- END OF CHECK ---
 
 	if err := r.ParseMultipartForm(config.Cfg.MaxUploadSizeBytes); err != nil {
 		logger.L.Warn("Failed to parse multipart form or request too large", "userID", userID, "error", err, "limit", config.Cfg.MaxUploadSizeBytes)
-		utils.SendJSONError(w, fmt.Sprintf("Failed to parse form or request too large (max %d MB)", config.Cfg.MaxUploadSizeBytes/(1024*1024)), http.StatusBadRequest)
+		utils.SendJSONError(w, fmt.Sprintf("Falha ao processar ou o ficheiro é demasiado grande (max %d MB)", config.Cfg.MaxUploadSizeBytes/(1024*1024)), http.StatusBadRequest)
 		return
 	}
 
@@ -75,7 +74,7 @@ func (h *UploadHandler) HandleUpload(w http.ResponseWriter, r *http.Request) {
 
 	if fileHeader.Size > config.Cfg.MaxUploadSizeBytes {
 		logger.L.Warn("Uploaded file header reports size too large", "userID", userID, "fileSize", fileHeader.Size, "limit", config.Cfg.MaxUploadSizeBytes)
-		utils.SendJSONError(w, fmt.Sprintf("File too large, max %d MB (header check)", config.Cfg.MaxUploadSizeBytes/(1024*1024)), http.StatusBadRequest)
+		utils.SendJSONError(w, fmt.Sprintf("Ficheiro demasiado grande, max %d MB (header check)", config.Cfg.MaxUploadSizeBytes/(1024*1024)), http.StatusBadRequest)
 		return
 	}
 
