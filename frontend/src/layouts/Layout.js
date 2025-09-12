@@ -186,7 +186,7 @@ export default function Layout({ children }) {
           <Typography variant="body2" color="text.secondary" align="center">
             {'© '}
             {new Date().getFullYear()}
-            {' Visor Financeiro. Todos os direitos reservados.'}
+            {' VisorFinanceiro. Todos os direitos reservados.'}
           </Typography>
           <Box sx={{ display: 'flex', justifyContent: 'center', gap: 2, mt: 1 }}>
             <MuiLink component={RouterLink} to="/policies/privacy-policy" variant="body2">
