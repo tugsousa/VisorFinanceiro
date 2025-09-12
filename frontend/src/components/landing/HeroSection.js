@@ -77,7 +77,7 @@ const HeroSection = () => {
                     >
                         <img 
                             src={heroImageSrc} 
-                            alt="Dashboard do Visor Financeiro" 
+                            alt="Dashboard do VisorFinanceiro" 
                             style={{ 
                                 width: '100%', 
                                 height: '100%',
