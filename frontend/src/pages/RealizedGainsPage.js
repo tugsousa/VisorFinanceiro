@@ -1,7 +1,8 @@
+// frontend/src/pages/RealizedGainsPage.js
 import React, { useState, useEffect } from 'react';
 import {
   Typography, Box, FormControl, InputLabel, Select, MenuItem,
-  Paper, CircularProgress, Grid, Alert, Tabs, Tab, Card, CardContent
+  Paper, CircularProgress, Grid, Alert, Tabs, Tab, Card, CardContent, Tooltip
 } from '@mui/material';
 import { useAuth } from '../context/AuthContext';
 import { useRealizedGains } from '../hooks/useRealizedGains';
@@ -180,13 +181,37 @@ export default function RealizedGainsPage() {
             <Grid item xs={12}>
                 <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
                   {selectedYear === ALL_YEARS_OPTION && (
-                    <KeyMetricCard title="L/P Não Realizado" value={unrealizedStockPL || 0} icon={<TrendingUpIcon />} />
+                    <Tooltip title="Diferença entre o custo de aquisição e o valor de mercado atual das suas posições em aberto." placement="top">
+                      <Box sx={{ flex: '1 1 0', minWidth: 140 }}>
+                        <KeyMetricCard title="L/P Não Realizado" value={unrealizedStockPL || 0} icon={<TrendingUpIcon />} />
+                      </Box>
+                    </Tooltip>
                   )}
-                  <KeyMetricCard title="L/P de Ações" value={summaryData.stockPL} icon={<ShowChartIcon />} />
-                  <KeyMetricCard title="L/P de Opções" value={summaryData.optionPL} icon={<CandlestickChartIcon />} />
-                  <KeyMetricCard title="Dividendos" value={summaryData.dividendPL} icon={<AttachMoneyIcon />} />
-                  <KeyMetricCard title="Taxas e Comissões" value={summaryData.totalTaxesAndCommissions} icon={<RequestQuoteIcon />} />
-                  <KeyMetricCard title="Total L/P" value={summaryData.totalPL} icon={<AccountBalanceWalletIcon />} />
+                  <Tooltip title="Lucro ou prejuízo total realizado com a venda de ações no período selecionado." placement="top">
+                    <Box sx={{ flex: '1 1 0', minWidth: 140 }}>
+                      <KeyMetricCard title="L/P de Ações" value={summaryData.stockPL} icon={<ShowChartIcon />} />
+                    </Box>
+                  </Tooltip>
+                  <Tooltip title="Lucro ou prejuízo total realizado com o fecho de posições de opções no período selecionado." placement="top">
+                    <Box sx={{ flex: '1 1 0', minWidth: 140 }}>
+                      <KeyMetricCard title="L/P de Opções" value={summaryData.optionPL} icon={<CandlestickChartIcon />} />
+                    </Box>
+                  </Tooltip>
+                  <Tooltip title="Montante líquido recebido em dividendos (após impostos na fonte)." placement="top">
+                    <Box sx={{ flex: '1 1 0', minWidth: 140 }}>
+                      <KeyMetricCard title="Dividendos" value={summaryData.dividendPL} icon={<AttachMoneyIcon />} />
+                    </Box>
+                  </Tooltip>
+                  <Tooltip title="Soma de todas as taxas, comissões e impostos sobre dividendos pagos no período." placement="top">
+                    <Box sx={{ flex: '1 1 0', minWidth: 140 }}>
+                      <KeyMetricCard title="Taxas e Comissões" value={summaryData.totalTaxesAndCommissions} icon={<RequestQuoteIcon />} />
+                    </Box>
+                  </Tooltip>
+                  <Tooltip title="Soma de todos os lucros e perdas. Na vista 'Total', inclui também o L/P não realizado." placement="top">
+                    <Box sx={{ flex: '1 1 0', minWidth: 140 }}>
+                      <KeyMetricCard title="Total L/P" value={summaryData.totalPL} icon={<AccountBalanceWalletIcon />} />
+                    </Box>
+                  </Tooltip>
                 </Box>
             </Grid>
             <Grid item xs={12}>
@@ -229,7 +254,6 @@ export default function RealizedGainsPage() {
             isGroupedFetching={isGroupedDataLoading}
             isDetailedFetching={isLoading}
           />
-          {/* CORREÇÃO: A renderização agora baseia-se na presença de dados no array filtrado */}
           {filteredData.OptionHoldings && filteredData.OptionHoldings.length > 0 && (
             <OptionHoldingsSection holdingsData={filteredData.OptionHoldings} />
           )}
