@@ -125,28 +125,7 @@ export const useRealizedGains = (token, selectedYear) => {
         };
     }, [allData, selectedYear, isLoading]);
 
-    const summaryPLs = useMemo(() => {
-        const stockPL = (filteredData.StockSaleDetails || []).reduce((sum, sale) => sum + (sale.Delta || 0), 0);
-        const optionPL = (filteredData.OptionSaleDetails || []).reduce((sum, sale) => sum + (sale.delta || 0), 0);
-        let dividendPL = 0;
-        const dividendSummary = allData.dividendSummary || {};
-
-        if (selectedYear === ALL_YEARS_OPTION || !selectedYear) {
-            Object.values(dividendSummary).forEach(yearData => {
-                Object.values(yearData).forEach(countryData => {
-                    dividendPL += (countryData.gross_amt || 0) + (countryData.taxed_amt || 0);
-                });
-            });
-        } else if (dividendSummary[selectedYear]) {
-            Object.values(dividendSummary[selectedYear]).forEach(countryData => {
-                dividendPL += (countryData.gross_amt || 0) + (countryData.taxed_amt || 0);
-            });
-        }
-
-        const totalPL = stockPL + optionPL + dividendPL;
-        return { stockPL, optionPL, dividendPL, totalPL };
-    }, [filteredData, allData.dividendSummary, selectedYear]);
-    
+    // **FIX:** Moved unrealizedStockPL calculation before summaryData
     const unrealizedStockPL = useMemo(() => {
         if (!currentHoldingsValueQuery.data || currentHoldingsValueQuery.data.length === 0 || selectedYear !== ALL_YEARS_OPTION) {
             return 0;
@@ -158,6 +137,46 @@ export const useRealizedGains = (token, selectedYear) => {
         }, { marketValue: 0, costBasis: 0 });
         return totals.marketValue - totals.costBasis;
     }, [currentHoldingsValueQuery.data, selectedYear]);
+
+    const summaryData = useMemo(() => {
+        const defaultResult = { stockPL: 0, optionPL: 0, dividendPL: 0, totalTaxesAndCommissions: 0, totalPL: 0 };
+        if (isLoading || !allData) return defaultResult;
+
+        const stockPL = (filteredData.StockSaleDetails || []).reduce((sum, sale) => sum + (sale.Delta || 0), 0);
+        const optionPL = (filteredData.OptionSaleDetails || []).reduce((sum, sale) => sum + (sale.delta || 0), 0);
+        
+        let dividendGross = 0;
+        let dividendTax = 0; // Will be a negative number
+        const dividendSummary = allData.dividendSummary || {};
+
+        if (selectedYear === ALL_YEARS_OPTION || !selectedYear) {
+            Object.values(dividendSummary).forEach(yearData => {
+                Object.values(yearData).forEach(countryData => {
+                    dividendGross += (countryData.gross_amt || 0);
+                    dividendTax += (countryData.taxed_amt || 0);
+                });
+            });
+        } else if (dividendSummary[selectedYear]) {
+            Object.values(dividendSummary[selectedYear]).forEach(countryData => {
+                dividendGross += (countryData.gross_amt || 0);
+                dividendTax += (countryData.taxed_amt || 0);
+            });
+        }
+
+        const dividendPL = dividendGross + dividendTax;
+
+        const totalFeesAndCommissions = (filteredData.FeeDetails || []).reduce((sum, fee) => sum + (fee.amount_eur || 0), 0);
+        
+        const totalTaxesAndCommissions = totalFeesAndCommissions + dividendTax;
+
+        let totalPL = stockPL + optionPL + dividendPL + totalFeesAndCommissions;
+
+        // If the "Total" filter is active, add the unrealized P/L to the grand total.
+        if (selectedYear === ALL_YEARS_OPTION) {
+            totalPL += unrealizedStockPL;
+        }
+        return { stockPL, optionPL, dividendPL, totalTaxesAndCommissions, totalPL };
+    }, [filteredData, allData.dividendSummary, selectedYear, isLoading, allData, unrealizedStockPL]);
 
     const holdingsForGroupedView = useMemo(() => {
         const currentYear = new Date().getFullYear().toString();
@@ -221,7 +240,7 @@ export const useRealizedGains = (token, selectedYear) => {
     return {
         allData,
         filteredData,
-        summaryPLs,
+        summaryData,
         unrealizedStockPL,
         derivedDividendTaxSummary,
         availableYears,
