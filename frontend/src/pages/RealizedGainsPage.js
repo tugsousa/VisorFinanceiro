@@ -13,6 +13,7 @@ import CandlestickChartIcon from '@mui/icons-material/CandlestickChart';
 import AttachMoneyIcon from '@mui/icons-material/AttachMoney';
 import AccountBalanceWalletIcon from '@mui/icons-material/AccountBalanceWallet';
 import TrendingUpIcon from '@mui/icons-material/TrendingUp';
+import RequestQuoteIcon from '@mui/icons-material/RequestQuote';
 
 import StockHoldingsSection from '../components/realizedgainsSections/StockHoldingsSection';
 import OptionHoldingsSection from '../components/realizedgainsSections/OptionHoldingsSection';
@@ -82,7 +83,7 @@ export default function RealizedGainsPage() {
   const {
     allData,
     filteredData,
-    summaryPLs,
+    summaryData,
     unrealizedStockPL,
     derivedDividendTaxSummary,
     availableYears,
@@ -179,12 +180,13 @@ export default function RealizedGainsPage() {
             <Grid item xs={12}>
                 <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
                   {selectedYear === ALL_YEARS_OPTION && (
-                    <KeyMetricCard title="L/P Não Realizado" value={unrealizedStockPL} icon={<TrendingUpIcon />} />
+                    <KeyMetricCard title="L/P Não Realizado" value={unrealizedStockPL || 0} icon={<TrendingUpIcon />} />
                   )}
-                  <KeyMetricCard title="L/P de Ações" value={summaryPLs.stockPL} icon={<ShowChartIcon />} />
-                  <KeyMetricCard title="L/P de Opções" value={summaryPLs.optionPL} icon={<CandlestickChartIcon />} />
-                  <KeyMetricCard title="Dividendos" value={summaryPLs.dividendPL} icon={<AttachMoneyIcon />} />
-                  <KeyMetricCard title="Total L/P" value={summaryPLs.totalPL} icon={<AccountBalanceWalletIcon />} />
+                  <KeyMetricCard title="L/P de Ações" value={summaryData.stockPL} icon={<ShowChartIcon />} />
+                  <KeyMetricCard title="L/P de Opções" value={summaryData.optionPL} icon={<CandlestickChartIcon />} />
+                  <KeyMetricCard title="Dividendos" value={summaryData.dividendPL} icon={<AttachMoneyIcon />} />
+                  <KeyMetricCard title="Taxas e Comissões" value={summaryData.totalTaxesAndCommissions} icon={<RequestQuoteIcon />} />
+                  <KeyMetricCard title="Total L/P" value={summaryData.totalPL} icon={<AccountBalanceWalletIcon />} />
                 </Box>
             </Grid>
             <Grid item xs={12}>
