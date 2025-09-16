@@ -197,12 +197,12 @@ export default function RealizedGainsPage() {
                       <KeyMetricCard title="L/P de Opções" value={summaryData.optionPL} icon={<CandlestickChartIcon />} />
                     </Box>
                   </Tooltip>
-                  <Tooltip title="Montante líquido recebido em dividendos (após impostos na fonte)." placement="top">
+                  <Tooltip title="Montante bruto recebido em dividendos (não estão incluídos impostos retidos na fonte)." placement="top">
                     <Box sx={{ flex: '1 1 0', minWidth: 140 }}>
                       <KeyMetricCard title="Dividendos" value={summaryData.dividendPL} icon={<AttachMoneyIcon />} />
                     </Box>
                   </Tooltip>
-                  <Tooltip title="Soma de todas as taxas, comissões e impostos sobre dividendos pagos no período." placement="top">
+                  <Tooltip title="Soma de todas as taxas, comissões relativos ao broker pagos no período selecionado." placement="top">
                     <Box sx={{ flex: '1 1 0', minWidth: 140 }}>
                       <KeyMetricCard title="Taxas e Comissões" value={summaryData.totalTaxesAndCommissions} icon={<RequestQuoteIcon />} />
                     </Box>

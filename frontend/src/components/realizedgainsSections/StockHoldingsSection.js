@@ -5,6 +5,7 @@ import { DataGrid } from '@mui/x-data-grid';
 import { ptPT } from '@mui/x-data-grid/locales';
 import { parseDateRobust } from '../../utils/dateUtils';
 import { formatCurrency } from '../../utils/formatUtils';
+import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 
 // Helper functions
 const renderUnrealizedPLCell = (params) => {
@@ -21,7 +22,14 @@ const renderMarketValueCell = (params) => {
   if (typeof value !== 'number') return '';
   const formattedValue = formatCurrency(value);
   if (status === 'UNAVAILABLE') {
-    return (<Tooltip title="Preço atual indisponível. A usar o valor de compra." placement="top"><span>{`${formattedValue} *`}</span></Tooltip>);
+    return (
+      <Tooltip title="Preço atual indisponível. O valor de mercado foi estimado usando o custo de aquisição." placement="top">
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 0.5, cursor: 'help' }}>
+          <span>{formattedValue}</span>
+          <InfoOutlinedIcon sx={{ fontSize: '1rem', color: 'text.secondary' }} />
+        </Box>
+      </Tooltip>
+    );
   }
   return formattedValue;
 };
