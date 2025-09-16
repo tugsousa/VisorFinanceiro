@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"math"
 	"net/http"
 	"strings"
 
@@ -107,7 +108,8 @@ func (h *PortfolioHandler) HandleGetCurrentHoldingsValue(w http.ResponseWriter, 
 		priceInfo, found := prices[isin]
 
 		currentPrice := 0.0
-		marketValue := holding.TotalCostBasisEUR // Default to cost basis
+		// CORREÇÃO: Default market value to the ABSOLUTE cost basis.
+		marketValue := math.Abs(holding.TotalCostBasisEUR)
 		status := "UNAVAILABLE"
 
 		// If we found a live price, override the fallback values
@@ -118,10 +120,11 @@ func (h *PortfolioHandler) HandleGetCurrentHoldingsValue(w http.ResponseWriter, 
 		}
 
 		response = append(response, HoldingWithValue{
-			ISIN:              holding.ISIN,
-			ProductName:       holding.ProductName,
-			Quantity:          holding.TotalQuantity,
-			TotalCostBasisEUR: holding.TotalCostBasisEUR,
+			ISIN:        holding.ISIN,
+			ProductName: holding.ProductName,
+			Quantity:    holding.TotalQuantity,
+			// CORREÇÃO: Ensure cost basis sent to frontend is always positive.
+			TotalCostBasisEUR: math.Abs(holding.TotalCostBasisEUR),
 			CurrentPriceEUR:   currentPrice,
 			MarketValueEUR:    marketValue,
 			Status:            status,

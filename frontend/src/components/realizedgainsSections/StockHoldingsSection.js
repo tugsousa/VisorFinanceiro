@@ -5,7 +5,7 @@ import { DataGrid } from '@mui/x-data-grid';
 import { ptPT } from '@mui/x-data-grid/locales';
 import { parseDateRobust } from '../../utils/dateUtils';
 import { formatCurrency } from '../../utils/formatUtils';
-import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
+import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 
 // Helper functions
 const renderUnrealizedPLCell = (params) => {
@@ -16,22 +16,28 @@ const renderUnrealizedPLCell = (params) => {
   return (<Box sx={{ color: textColor, fontWeight: '500' }}>{formatCurrency(value)}</Box>);
 };
 
-const renderMarketValueCell = (params) => {
+const renderCurrentPriceCell = (params) => {
   const { value, status, isFetching } = params;
   if (isFetching) { return <CircularProgress size={20} />; }
-  if (typeof value !== 'number') return '';
-  const formattedValue = formatCurrency(value);
   if (status === 'UNAVAILABLE') {
     return (
       <Tooltip title="Preço atual indisponível. O valor de mercado foi estimado usando o custo de aquisição." placement="top">
         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 0.5, cursor: 'help' }}>
-          <span>{formattedValue}</span>
-          <InfoOutlinedIcon sx={{ fontSize: '1rem', color: 'text.secondary' }} />
+          <span>N/A</span>
+          <WarningAmberIcon sx={{ fontSize: '1.1rem', color: 'warning.main' }} />
         </Box>
       </Tooltip>
     );
   }
-  return formattedValue;
+  if (typeof value !== 'number') return 'N/A';
+  return formatCurrency(value);
+};
+
+const renderMarketValueCell = (params) => {
+    const { value, isFetching } = params;
+    if (isFetching) { return <CircularProgress size={20} />; }
+    if (typeof value !== 'number') return '';
+    return formatCurrency(value);
 };
 
 // Colunas para a vista DETALHADA
@@ -51,9 +57,23 @@ const groupedColumnsCurrent = [
   { field: 'isin', headerName: 'ISIN', width: 130 },
   { field: 'quantity', headerName: 'Qtd', type: 'number', width: 40, align: 'right', headerAlign: 'right' },
   { field: 'total_cost_basis_eur', headerName: 'Custo Total (€)', type: 'number', width: 140, align: 'right', headerAlign: 'right', valueFormatter: (value) => formatCurrency(value) },
-  {   field: 'current_price_eur', headerName: 'Preço Atual (€)', type: 'number', width: 150, align: 'right', headerAlign: 'right', valueFormatter: (value) => formatCurrency(value) },
-  { field: 'marketValueEUR', headerName: 'Valor de Mercado (€)', type: 'number', width: 180, align: 'right', headerAlign: 'right',
-    renderCell: (params) => renderMarketValueCell({ value: params.value, status: params.row.status, isFetching: params.row.isFetching })
+  {
+    field: 'current_price_eur',
+    headerName: 'Preço Atual (€)',
+    type: 'number',
+    width: 150,
+    align: 'right',
+    headerAlign: 'right',
+    renderCell: (params) => renderCurrentPriceCell({ value: params.value, status: params.row.status, isFetching: params.row.isFetching })
+  },
+  {
+    field: 'marketValueEUR',
+    headerName: 'Valor de Mercado (€)',
+    type: 'number',
+    width: 180,
+    align: 'right',
+    headerAlign: 'right',
+    renderCell: (params) => renderMarketValueCell({ value: params.value, isFetching: params.row.isFetching })
   },
   { field: 'unrealizedPL', headerName: 'L/P Não Realizado (€)', type: 'number', width: 180, align: 'right', headerAlign: 'right',
     renderCell: (params) => renderUnrealizedPLCell({ value: params.value, isFetching: params.row.isFetching })
