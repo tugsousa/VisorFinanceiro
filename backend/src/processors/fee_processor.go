@@ -19,12 +19,17 @@ func (p *feeProcessorImpl) Process(transactions []models.ProcessedTransaction) [
 	for _, tx := range transactions {
 		// Case 1: Dedicated Fee Transactions (e.g., Degiro "custo de conectividade")
 		if tx.TransactionType == "FEE" {
+			category := "Brokerage Fee" // Default
+			if tx.TransactionSubType == "INTEREST" {
+				category = "Interest"
+			}
+
 			feeDetails = append(feeDetails, models.FeeDetail{
 				Date:        tx.Date,
 				Description: tx.ProductName,
 				AmountEUR:   tx.AmountEUR, // This is already calculated in EUR
 				Source:      tx.Source,
-				Category:    "Brokerage Fee",
+				Category:    category,
 			})
 		}
 
