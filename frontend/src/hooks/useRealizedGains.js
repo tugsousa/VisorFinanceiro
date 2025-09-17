@@ -17,7 +17,6 @@ import { getYearString, extractYearsFromData } from '../utils/dateUtils';
 import { calculateCombinedAggregatedMetricsByISIN } from '../utils/aggregationUtils';
 
 export const useRealizedGains = (token, selectedYear) => {
-    // ... (a chamada useQueries permanece igual) ...
     const results = useQueries({
         queries: [
             { queryKey: ['stockSales', token], queryFn: apiFetchStockSales, enabled: !!token, staleTime: 1000 * 60 * 5, select: (res) => res.data || [] },
@@ -58,42 +57,29 @@ export const useRealizedGains = (token, selectedYear) => {
         currentHoldingsValueQuery.data, feesQuery.data, allTransactionsQuery.data
     ]);
 
-
-    // --- LÓGICA DE CÁLCULO ATUALIZADA ---
     const portfolioMetrics = useMemo(() => {
         if (isLoading || !allData.CurrentHoldingsValue || !allData.AllTransactions) {
             return { totalPortfolioValue: 0, totalDeposits: 0, totalWithdrawals: 0, portfolioReturn: 0 };
         }
-
-        // 1. Valor de Mercado Atual: A soma do valor de todas as posições abertas.
         const totalPortfolioValue = allData.CurrentHoldingsValue.reduce(
             (sum, holding) => sum + (holding.market_value_eur || 0), 0
         );
-
-        // 2. Total de Depósitos e Levantamentos: Calculado a partir de todas as transações.
         const cashFlows = allData.AllTransactions.reduce((acc, tx) => {
             if (tx.transaction_type === 'CASH') {
                 if (tx.transaction_subtype === 'DEPOSIT') {
                     acc.deposits += tx.amount_eur || 0;
                 } else if (tx.transaction_subtype === 'WITHDRAWAL') {
-                    acc.withdrawals += tx.amount_eur || 0; // O valor já é negativo
+                    acc.withdrawals += tx.amount_eur || 0;
                 }
             }
             return acc;
         }, { deposits: 0, withdrawals: 0 });
-
         const { deposits: totalDeposits, withdrawals: totalWithdrawals } = cashFlows;
-        
-        // 3. Crescimento Total do Portfólio em €
-        // (Valor Final + Levantamentos) - Depósitos. Como levantamentos já são negativos, somamos.
         const totalGrowth = (totalPortfolioValue + Math.abs(totalWithdrawals)) - totalDeposits;
-
-        // 4. Rentabilidade Total (%)
         let portfolioReturn = 0;
         if (totalDeposits > 0) {
             portfolioReturn = (totalGrowth / totalDeposits) * 100;
         }
-
         return {
             totalPortfolioValue,
             totalDeposits,
@@ -101,9 +87,7 @@ export const useRealizedGains = (token, selectedYear) => {
             portfolioReturn,
         };
     }, [isLoading, allData]);
-    // --- FIM DA LÓGICA ATUALIZADA ---
 
-    // ... (o resto do ficheiro permanece exatamente igual)
     const availableYears = useMemo(() => {
         if (isLoading || !allData) return [ALL_YEARS_OPTION];
         const dateAccessors = { stockSales: 'SaleDate', optionSales: 'close_date', DividendTaxResult: null };
@@ -130,10 +114,21 @@ export const useRealizedGains = (token, selectedYear) => {
         );
     }, [allData, isLoading]);
 
+    // START OF FIX: Calculate metrics scoped to the selected year
+    const periodSpecificAggregatedMetricsByISIN = useMemo(() => {
+        if (isLoading || !allData || selectedYear === ALL_YEARS_OPTION || selectedYear === NO_YEAR_SELECTED) {
+            return {};
+        }
+        const yearlyTransactions = (allData.AllTransactions || []).filter(tx => getYearString(tx.date) === selectedYear);
+        const yearlyStockSales = (allData.StockSaleDetails || []).filter(sale => getYearString(sale.SaleDate) === selectedYear);
+        
+        return calculateCombinedAggregatedMetricsByISIN(yearlyTransactions, yearlyStockSales);
+    }, [allData, selectedYear, isLoading]);
+    // END OF FIX
+
     const periodSpecificData = useMemo(() => {
         const defaultStructure = { stockSales: [], optionSales: [], dividendTransactions: [], fees: [], optionHoldings: [] };
         if (isLoading || !allData) return defaultStructure;
-
         const dataSet = {
             stockSales: allData.StockSaleDetails || [],
             optionSales: allData.OptionSaleDetails || [],
@@ -141,10 +136,8 @@ export const useRealizedGains = (token, selectedYear) => {
             fees: allData.FeeDetails || [],
             optionHoldings: allData.OptionHoldings || [],
         };
-        
         if (selectedYear === ALL_YEARS_OPTION || selectedYear === NO_YEAR_SELECTED) return dataSet;
         const currentYear = new Date().getFullYear().toString();
-        
         return {
             stockSales: dataSet.stockSales.filter(s => getYearString(s.SaleDate) === selectedYear),
             optionSales: dataSet.optionSales.filter(o => getYearString(o.close_date) === selectedYear),
@@ -155,12 +148,18 @@ export const useRealizedGains = (token, selectedYear) => {
     }, [allData, selectedYear, isLoading]);
 
     const holdingsForGroupedView = useMemo(() => {
-        const currentYear = new Date().getFullYear().toString();
-        const isCurrentView = selectedYear === ALL_YEARS_OPTION || selectedYear === currentYear;
+        const currentSystemYear = new Date().getFullYear().toString();
+        const isCurrentOrTotalView = selectedYear === ALL_YEARS_OPTION || selectedYear === currentSystemYear;
+
+        // START OF FIX: Select which metrics to use based on the view
+        const metricsToUse = isCurrentOrTotalView
+            ? aggregatedLifetimeMetricsByISIN
+            : periodSpecificAggregatedMetricsByISIN;
+        // END OF FIX
 
         let baseHoldings = [];
 
-        if (isCurrentView) {
+        if (isCurrentOrTotalView) {
             baseHoldings = (allData.CurrentHoldingsValue || []).map(holding => ({
                 ...holding,
                 marketValueEUR: holding.market_value_eur,
@@ -182,9 +181,15 @@ export const useRealizedGains = (token, selectedYear) => {
 
         return baseHoldings.map(holding => ({
             ...holding,
-            ...(aggregatedLifetimeMetricsByISIN[holding.isin] || { totalRealizedStockPL: 0, totalDividends: 0, totalCommissions: 0 })
+            ...(metricsToUse[holding.isin] || { totalRealizedStockPL: 0, totalDividends: 0, totalCommissions: 0 })
         }));
-    }, [selectedYear, allData.CurrentHoldingsValue, allData.StockHoldingsByYear, aggregatedLifetimeMetricsByISIN]);
+    }, [
+        selectedYear, 
+        allData.CurrentHoldingsValue, 
+        allData.StockHoldingsByYear, 
+        aggregatedLifetimeMetricsByISIN,
+        periodSpecificAggregatedMetricsByISIN // FIX: Added new dependency
+    ]);
     
     const unrealizedStockPL = useMemo(() => {
         if (!allData.CurrentHoldingsValue || selectedYear !== ALL_YEARS_OPTION) {
