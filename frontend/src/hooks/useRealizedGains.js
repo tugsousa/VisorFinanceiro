@@ -10,14 +10,14 @@ import {
     apiFetchOptionHoldings,
     apiFetchCurrentHoldingsValue,
     apiFetchFees,
-    apiFetchProcessedTransactions // Import the new API function
+    apiFetchProcessedTransactions
 } from '../api/apiService';
 import { ALL_YEARS_OPTION, NO_YEAR_SELECTED } from '../constants';
 import { getYearString, extractYearsFromData } from '../utils/dateUtils';
-// Import the new, more accurate utility function
 import { calculateCombinedAggregatedMetricsByISIN } from '../utils/aggregationUtils';
 
 export const useRealizedGains = (token, selectedYear) => {
+    // ... (a chamada useQueries permanece igual) ...
     const results = useQueries({
         queries: [
             { queryKey: ['stockSales', token], queryFn: apiFetchStockSales, enabled: !!token, staleTime: 1000 * 60 * 5, select: (res) => res.data || [] },
@@ -28,7 +28,6 @@ export const useRealizedGains = (token, selectedYear) => {
             { queryKey: ['optionHoldings', token], queryFn: apiFetchOptionHoldings, enabled: !!token, staleTime: 1000 * 60 * 5, select: (res) => res.data || [] },
             { queryKey: ['currentHoldingsValue', token], queryFn: apiFetchCurrentHoldingsValue, enabled: !!token, staleTime: 1000 * 60 * 5, select: (res) => res.data || [] },
             { queryKey: ['fees', token], queryFn: apiFetchFees, enabled: !!token, staleTime: 1000 * 60 * 5, select: (res) => res.data || [] },
-            // Add a query to fetch ALL processed transactions
             { queryKey: ['allProcessedTransactions', token], queryFn: apiFetchProcessedTransactions, enabled: !!token, staleTime: 1000 * 60 * 5, select: (res) => res.data || [] },
         ]
     });
@@ -36,7 +35,7 @@ export const useRealizedGains = (token, selectedYear) => {
     const [
         stockSalesQuery, optionSalesQuery, dividendSummaryQuery,
         dividendTransactionsQuery, stockHoldingsByYearQuery, optionHoldingsQuery,
-        currentHoldingsValueQuery, feesQuery, allTransactionsQuery // Destructure the new query result
+        currentHoldingsValueQuery, feesQuery, allTransactionsQuery
     ] = results;
 
     const isLoading = results.some(q => q.isLoading);
@@ -52,13 +51,59 @@ export const useRealizedGains = (token, selectedYear) => {
         OptionHoldings: optionHoldingsQuery.data,
         FeeDetails: feesQuery.data,
         CurrentHoldingsValue: currentHoldingsValueQuery.data,
-        AllTransactions: allTransactionsQuery.data, // Add all transactions to the main data object
+        AllTransactions: allTransactionsQuery.data,
     }), [
         stockSalesQuery.data, optionSalesQuery.data, dividendSummaryQuery.data,
         dividendTransactionsQuery.data, stockHoldingsByYearQuery.data, optionHoldingsQuery.data,
         currentHoldingsValueQuery.data, feesQuery.data, allTransactionsQuery.data
     ]);
 
+
+    // --- LÓGICA DE CÁLCULO ATUALIZADA ---
+    const portfolioMetrics = useMemo(() => {
+        if (isLoading || !allData.CurrentHoldingsValue || !allData.AllTransactions) {
+            return { totalPortfolioValue: 0, totalDeposits: 0, totalWithdrawals: 0, portfolioReturn: 0 };
+        }
+
+        // 1. Valor de Mercado Atual: A soma do valor de todas as posições abertas.
+        const totalPortfolioValue = allData.CurrentHoldingsValue.reduce(
+            (sum, holding) => sum + (holding.market_value_eur || 0), 0
+        );
+
+        // 2. Total de Depósitos e Levantamentos: Calculado a partir de todas as transações.
+        const cashFlows = allData.AllTransactions.reduce((acc, tx) => {
+            if (tx.transaction_type === 'CASH') {
+                if (tx.transaction_subtype === 'DEPOSIT') {
+                    acc.deposits += tx.amount_eur || 0;
+                } else if (tx.transaction_subtype === 'WITHDRAWAL') {
+                    acc.withdrawals += tx.amount_eur || 0; // O valor já é negativo
+                }
+            }
+            return acc;
+        }, { deposits: 0, withdrawals: 0 });
+
+        const { deposits: totalDeposits, withdrawals: totalWithdrawals } = cashFlows;
+        
+        // 3. Crescimento Total do Portfólio em €
+        // (Valor Final + Levantamentos) - Depósitos. Como levantamentos já são negativos, somamos.
+        const totalGrowth = (totalPortfolioValue + Math.abs(totalWithdrawals)) - totalDeposits;
+
+        // 4. Rentabilidade Total (%)
+        let portfolioReturn = 0;
+        if (totalDeposits > 0) {
+            portfolioReturn = (totalGrowth / totalDeposits) * 100;
+        }
+
+        return {
+            totalPortfolioValue,
+            totalDeposits,
+            totalWithdrawals,
+            portfolioReturn,
+        };
+    }, [isLoading, allData]);
+    // --- FIM DA LÓGICA ATUALIZADA ---
+
+    // ... (o resto do ficheiro permanece exatamente igual)
     const availableYears = useMemo(() => {
         if (isLoading || !allData) return [ALL_YEARS_OPTION];
         const dateAccessors = { stockSales: 'SaleDate', optionSales: 'close_date', DividendTaxResult: null };
@@ -76,7 +121,6 @@ export const useRealizedGains = (token, selectedYear) => {
         return [ALL_YEARS_OPTION, ...sortedYears];
     }, [allData, isLoading]);
 
-    // Use the new, more accurate aggregation function
     const aggregatedLifetimeMetricsByISIN = useMemo(() => {
         if (isLoading || !allData) return {};
         return calculateCombinedAggregatedMetricsByISIN(
@@ -142,7 +186,6 @@ export const useRealizedGains = (token, selectedYear) => {
         }));
     }, [selectedYear, allData.CurrentHoldingsValue, allData.StockHoldingsByYear, aggregatedLifetimeMetricsByISIN]);
     
-    // ... (The rest of the hook: unrealizedStockPL, summaryData, holdingsChartData remains the same)
     const unrealizedStockPL = useMemo(() => {
         if (!allData.CurrentHoldingsValue || selectedYear !== ALL_YEARS_OPTION) {
             return 0;
@@ -168,10 +211,7 @@ export const useRealizedGains = (token, selectedYear) => {
         const dividendPL = gross + tax;
         const totalFeesAndCommissions = (periodSpecificData.fees || []).reduce((sum, f) => sum + (f.amount_eur || 0), 0);
         
-        // --- START OF CORRECTION ---
-        // The dividend tax is already included in `dividendPL`. This metric should only reflect fees and commissions.
         const totalTaxesAndCommissions = totalFeesAndCommissions; 
-        // --- END OF CORRECTION ---
 
         let totalPL = stockPL + optionPL + dividendPL + totalFeesAndCommissions;
         if (selectedYear === ALL_YEARS_OPTION) {
@@ -209,5 +249,6 @@ export const useRealizedGains = (token, selectedYear) => {
         availableYears, holdingsChartData, holdingsForGroupedView,
         isHoldingsValueFetching: currentHoldingsValueQuery.isFetching,
         isLoading, isError, error,
+        portfolioMetrics,
     };
 };
