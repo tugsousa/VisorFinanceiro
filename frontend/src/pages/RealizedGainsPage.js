@@ -163,9 +163,11 @@ export default function RealizedGainsPage() {
                     <Tooltip title="Montante líquido recebido em dividendos (após impostos retidos na fonte) no período selecionado." placement="top">
                       <Box sx={{ flex: '1 1 0', minWidth: 140 }}><KeyMetricCard title="Dividendos" value={summaryData.dividendPL} icon={<AttachMoneyIcon />} /></Box>
                     </Tooltip>
-                    <Tooltip title="Soma de todas as taxas, comissões e impostos sobre dividendos pagos no período selecionado." placement="top">
-                      <Box sx={{ flex: '1 1 0', minWidth: 140 }}><KeyMetricCard title="Taxas e Impostos" value={summaryData.totalTaxesAndCommissions} icon={<RequestQuoteIcon />} /></Box>
+                    {/* --- START OF CORRECTION --- */}
+                    <Tooltip title="Soma de todas as taxas e comissões pagas no período selecionado." placement="top">
+                      <Box sx={{ flex: '1 1 0', minWidth: 140 }}><KeyMetricCard title="Taxas e Comissões" value={summaryData.totalTaxesAndCommissions} icon={<RequestQuoteIcon />} /></Box>
                     </Tooltip>
+                    {/* --- END OF CORRECTION --- */}
                     <Tooltip title="Soma de todos os lucros e perdas. Na vista 'Total', inclui também o L/P não realizado." placement="top">
                       <Box sx={{ flex: '1 1 0', minWidth: 140 }}><KeyMetricCard title="Total L/P" value={summaryData.totalPL} icon={<AccountBalanceWalletIcon />} /></Box>
                     </Tooltip>
