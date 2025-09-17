@@ -9,22 +9,7 @@ import { formatCurrency } from '../../utils/formatUtils';
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend);
 
-// Helper function to create a gradient for the bar fills
-const createGradient = (ctx, chartArea, isPositive) => {
-  const gradient = ctx.createLinearGradient(0, chartArea.bottom, 0, chartArea.top);
-  if (isPositive) {
-    // Use a sophisticated green gradient
-    gradient.addColorStop(0, 'rgba(46, 204, 113, 0.4)');
-    gradient.addColorStop(1, 'rgba(39, 174, 96, 0.8)');
-  } else {
-    // Use a more muted, professional red gradient
-    gradient.addColorStop(0, 'rgba(231, 76, 60, 0.4)');
-    gradient.addColorStop(1, 'rgba(192, 57, 43, 0.8)');
-  }
-  return gradient;
-};
-
-const OverallPLChart = ({ stockSaleDetails, optionSaleDetails, dividendTaxResultForChart, selectedYear }) => {
+const OverallPLChart = ({ stockSaleDetails, optionSaleDetails, dividendTaxResultForChart, feesData, selectedYear }) => {
   const { chartData, yearlyPLDataForTooltip } = useMemo(() => {
     const yearlyPL = {};
     const allYearsInData = new Set();
@@ -33,7 +18,7 @@ const OverallPLChart = ({ stockSaleDetails, optionSaleDetails, dividendTaxResult
       const year = getYearString(sale.SaleDate);
       if (year && sale.Delta != null) {
         allYearsInData.add(year);
-        if (!yearlyPL[year]) yearlyPL[year] = { stocks: 0, options: 0, dividends: 0, total: 0 };
+        if (!yearlyPL[year]) yearlyPL[year] = { stocks: 0, options: 0, dividends: 0, fees: 0, total: 0 };
         yearlyPL[year].stocks += sale.Delta;
         yearlyPL[year].total += sale.Delta;
       }
@@ -43,7 +28,7 @@ const OverallPLChart = ({ stockSaleDetails, optionSaleDetails, dividendTaxResult
       const year = getYearString(sale.close_date);
       if (year && sale.delta != null) {
         allYearsInData.add(year);
-        if (!yearlyPL[year]) yearlyPL[year] = { stocks: 0, options: 0, dividends: 0, total: 0 };
+        if (!yearlyPL[year]) yearlyPL[year] = { stocks: 0, options: 0, dividends: 0, fees: 0, total: 0 };
         yearlyPL[year].options += sale.delta;
         yearlyPL[year].total += sale.delta;
       }
@@ -53,7 +38,7 @@ const OverallPLChart = ({ stockSaleDetails, optionSaleDetails, dividendTaxResult
     Object.entries(dividendData).forEach(([year, countries]) => {
       if (year) {
         allYearsInData.add(year);
-        if (!yearlyPL[year]) yearlyPL[year] = { stocks: 0, options: 0, dividends: 0, total: 0 };
+        if (!yearlyPL[year]) yearlyPL[year] = { stocks: 0, options: 0, dividends: 0, fees: 0, total: 0 };
         let yearDividendNet = 0;
         Object.values(countries).forEach(countryData => {
           yearDividendNet += (countryData.gross_amt || 0) + (countryData.taxed_amt || 0);
@@ -61,6 +46,16 @@ const OverallPLChart = ({ stockSaleDetails, optionSaleDetails, dividendTaxResult
         yearlyPL[year].dividends += yearDividendNet;
         yearlyPL[year].total += yearDividendNet;
       }
+    });
+
+    (feesData || []).forEach(fee => {
+        const year = getYearString(fee.date);
+        if (year && fee.amount_eur != null) {
+            allYearsInData.add(year);
+            if(!yearlyPL[year]) yearlyPL[year] = { stocks: 0, options: 0, dividends: 0, fees: 0, total: 0 };
+            yearlyPL[year].fees += fee.amount_eur;
+            yearlyPL[year].total += fee.amount_eur;
+        }
     });
 
     const sortedYears = Array.from(allYearsInData).sort((a, b) => a.localeCompare(b));
@@ -82,8 +77,8 @@ const OverallPLChart = ({ stockSaleDetails, optionSaleDetails, dividendTaxResult
       const singleYearData = yearlyPL[selectedYear];
       if (!singleYearData) return { chartData: { labels: [], datasets: [] }, yearlyPLDataForTooltip: {} };
       
-      const labels = ['L/P de Ações', 'L/P de Opções', 'Dividendos'];
-      const dataset = generateDataset([singleYearData.stocks, singleYearData.options, singleYearData.dividends]);
+      const labels = ['L/P de Ações', 'L/P de Opções', 'Dividendos', 'Taxas e Comissões'];
+      const dataset = generateDataset([singleYearData.stocks, singleYearData.options, singleYearData.dividends, singleYearData.fees]);
       dataset.label = `L/P para ${selectedYear}`;
 
       if (labels.length <= smallDataSetThreshold) {
@@ -108,7 +103,7 @@ const OverallPLChart = ({ stockSaleDetails, optionSaleDetails, dividendTaxResult
       chartData: { labels: sortedYears, datasets: [yearlyDataset] },
       yearlyPLDataForTooltip: yearlyPL,
     };
-  }, [stockSaleDetails, optionSaleDetails, dividendTaxResultForChart, selectedYear]);
+  }, [stockSaleDetails, optionSaleDetails, dividendTaxResultForChart, feesData, selectedYear]);
 
   const chartOptions = useMemo(() => ({
     responsive: true,
@@ -142,6 +137,7 @@ const OverallPLChart = ({ stockSaleDetails, optionSaleDetails, dividendTaxResult
                 `  Ações: ${formatCurrency(yearData.stocks)}`,
                 `  Opções: ${formatCurrency(yearData.options)}`,
                 `  Dividendos: ${formatCurrency(yearData.dividends)}`,
+                `  Taxas: ${formatCurrency(yearData.fees)}`,
               ];
             }
             return `Valor: ${formatCurrency(context.parsed.y)}`;

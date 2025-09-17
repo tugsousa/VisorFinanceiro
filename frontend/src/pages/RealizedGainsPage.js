@@ -154,10 +154,10 @@ export default function RealizedGainsPage() {
             <Grid item xs={12}>
               <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
                 <Tooltip title="Lucro ou prejuízo total realizado com a venda de ações no período selecionado." placement="top">
-                  <Box sx={{ flex: '1 1 0', minWidth: 140 }}><KeyMetricCard title="L/P de Ações" value={summaryData.stockPL} icon={<ShowChartIcon />} /></Box>
+                  <Box sx={{ flex: '1 1 0', minWidth: 140 }}><KeyMetricCard title="Resultado Ações" value={summaryData.stockPL} icon={<ShowChartIcon />} /></Box>
                 </Tooltip>
                 <Tooltip title="Lucro ou prejuízo total realizado com o fecho de posições de opções no período selecionado." placement="top">
-                  <Box sx={{ flex: '1 1 0', minWidth: 140 }}><KeyMetricCard title="L/P de Opções" value={summaryData.optionPL} icon={<CandlestickChartIcon />} /></Box>
+                  <Box sx={{ flex: '1 1 0', minWidth: 140 }}><KeyMetricCard title="Resultado Opções" value={summaryData.optionPL} icon={<CandlestickChartIcon />} /></Box>
                 </Tooltip>
                 <Tooltip title="Montante líquido recebido em dividendos (após impostos retidos na fonte) no período selecionado." placement="top">
                   <Box sx={{ flex: '1 1 0', minWidth: 140 }}><KeyMetricCard title="Dividendos" value={summaryData.dividendPL} icon={<AttachMoneyIcon />} /></Box>
@@ -167,16 +167,16 @@ export default function RealizedGainsPage() {
                 </Tooltip>
                 {selectedYear === ALL_YEARS_OPTION && (<>
                   <Tooltip title="Diferença entre o custo de aquisição e o valor de mercado atual das suas posições em aberto." placement="top">
-                    <Box sx={{ flex: '1 1 0', minWidth: 140 }}><KeyMetricCard title="L/P Não Realizado" value={unrealizedStockPL || 0} icon={<TrendingUpIcon />} /></Box>
+                    <Box sx={{ flex: '1 1 0', minWidth: 140 }}><KeyMetricCard title="P/L em Aberto" value={unrealizedStockPL || 0} icon={<TrendingUpIcon />} /></Box>
                   </Tooltip>
                   <Tooltip title="Rentabilidade total do portfólio desde o início, considerando o valor atual, lucros realizados e capital investido." placement="top">
                     <Box sx={{ flex: '1 1 0', minWidth: 140 }}>
-                      <KeyMetricCard title="Total L/P (%)" value={portfolioMetrics.portfolioReturn} icon={<PercentIcon />} isPercentage={true} />
+                      <KeyMetricCard title="Retorno Total (%)" value={portfolioMetrics.portfolioReturn} icon={<PercentIcon />} isPercentage={true} />
                     </Box>
                   </Tooltip>
                 </>)}
-                <Tooltip title="Soma de todos os lucros e perdas. Na vista 'Total', inclui também o L/P não realizado." placement="top">
-                  <Box sx={{ flex: '1 1 0', minWidth: 140 }}><KeyMetricCard title="Total L/P" value={summaryData.totalPL} icon={<AccountBalanceWalletIcon />} /></Box>
+                <Tooltip title="Resultado líquido do período (Ganhos - Custos). Na vista 'Total', inclui também o 'P/L em Aberto'." placement="top">
+                  <Box sx={{ flex: '1 1 0', minWidth: 140 }}><KeyMetricCard title="Retorno Total" value={summaryData.totalPL} icon={<AccountBalanceWalletIcon />} /></Box>
                 </Tooltip>
               </Box>
             </Grid>
@@ -189,12 +189,25 @@ export default function RealizedGainsPage() {
           <Grid item xs={12} lg={7} container spacing={3} alignContent="flex-start">
             <Grid item xs={12}>
               <Paper elevation={0} sx={{ p: 2, height: 350, borderRadius: 3 }}>
-                <OverallPLChart stockSaleDetails={allData.StockSaleDetails} optionSaleDetails={allData.OptionSaleDetails} dividendTaxResultForChart={derivedDividendTaxSummary} selectedYear={selectedYear} />
+                <OverallPLChart 
+                  stockSaleDetails={allData.StockSaleDetails} 
+                  optionSaleDetails={allData.OptionSaleDetails} 
+                  dividendTaxResultForChart={derivedDividendTaxSummary} 
+                  feesData={allData.FeeDetails}
+                  selectedYear={selectedYear} 
+                />
               </Paper>
             </Grid>
             <Grid item xs={12}>
               <Paper elevation={0} sx={{ p: 2, height: 350, borderRadius: 3 }}>
-                <PLContributionChart stockSaleDetails={allData.StockSaleDetails} optionSaleDetails={allData.OptionSaleDetails} dividendTaxResultForChart={derivedDividendTaxSummary} dividendTransactionsList={allData.DividendTransactionsList} selectedYear={selectedYear} />
+                <PLContributionChart 
+                    stockSaleDetails={allData.StockSaleDetails} 
+                    optionSaleDetails={allData.OptionSaleDetails} 
+                    dividendTaxResultForChart={derivedDividendTaxSummary} 
+                    dividendTransactionsList={allData.DividendTransactionsList} 
+                    feesData={periodSpecificData.fees} 
+                    selectedYear={selectedYear} 
+                />
               </Paper>
             </Grid>
           </Grid>
