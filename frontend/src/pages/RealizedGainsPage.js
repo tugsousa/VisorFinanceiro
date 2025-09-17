@@ -95,11 +95,23 @@ export default function RealizedGainsPage() {
   }, [availableYears, selectedYear, isLoading, isError]);
 
   const detailedHoldingsForView = useMemo(() => {
-    if (!allData.StockHoldingsByYear) return [];
-    if (selectedYear === ALL_YEARS_OPTION) {
-      return Object.values(allData.StockHoldingsByYear).flat();
+    const holdingsByYear = allData.StockHoldingsByYear;
+    if (!holdingsByYear || Object.keys(holdingsByYear).length === 0) {
+      return [];
     }
-    return allData.StockHoldingsByYear[selectedYear] || [];
+
+    const currentSystemYear = new Date().getFullYear().toString();
+
+    // If "Total" or the current system year is selected, show the most recent snapshot available.
+    // This correctly represents the current portfolio's detailed lots.
+    if (selectedYear === ALL_YEARS_OPTION || selectedYear === currentSystemYear) {
+      // Find the latest year with data by sorting keys descending
+      const latestYear = Object.keys(holdingsByYear).sort((a, b) => b.localeCompare(a))[0];
+      return holdingsByYear[latestYear] || [];
+    }
+
+    // For any other historical year, show the data for that specific year.
+    return holdingsByYear[selectedYear] || [];
   }, [allData.StockHoldingsByYear, selectedYear]);
 
 
