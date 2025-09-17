@@ -19,6 +19,7 @@ ChartJS.register(ArcElement, CategoryScale, LinearScale, BarElement, Title, Tool
 const categoryTranslations = {
     'Trade Commission': 'Comissões de transação',
     'Brokerage Fee': 'Custo corretagem',
+    'Interest': 'Juros',
 };
 
 // Helper function to translate a category, falling back to the original if not found

@@ -135,6 +135,11 @@ func classifyDeGiroTransaction(raw RawTransaction) (txType, subType, buySell, pr
 	desc := strings.TrimSpace(strings.ReplaceAll(raw.Description, "\u00A0", " "))
 	lowerDesc := strings.ToLower(desc)
 
+	// Handle Juros (Interest)
+	if strings.EqualFold(lowerDesc, "juros") {
+		return "FEE", "INTEREST", "", desc, 0, 0
+	}
+
 	// --- FIX START: Distinguish between trade commissions and other fees ---
 	if strings.Contains(lowerDesc, "comissões de transação") {
 		// This is a commission linked to a trade. We don't create a separate transaction for it.
