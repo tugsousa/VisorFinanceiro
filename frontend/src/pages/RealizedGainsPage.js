@@ -9,6 +9,9 @@ import { useRealizedGains } from '../hooks/useRealizedGains';
 import { UI_TEXT, ALL_YEARS_OPTION } from '../constants';
 import { formatCurrency } from '../utils/formatUtils';
 
+// --- INÍCIO DA CORREÇÃO ---
+// Importações em falta
+import PercentIcon from '@mui/icons-material/Percent';
 import ShowChartIcon from '@mui/icons-material/ShowChart';
 import CandlestickChartIcon from '@mui/icons-material/CandlestickChart';
 import AttachMoneyIcon from '@mui/icons-material/AttachMoney';
@@ -25,6 +28,8 @@ import OverallPLChart from '../components/realizedgainsSections/OverallPLChart';
 import HoldingsAllocationChart from '../components/realizedgainsSections/HoldingsAllocationChart';
 import PLContributionChart from '../components/realizedgainsSections/PLContributionChart';
 import FeesSection from '../components/realizedgainsSections/FeesSection';
+// --- FIM DA CORREÇÃO ---
+
 
 const isDataEmpty = (data) => {
   if (!data) return true;
@@ -41,10 +46,11 @@ const isDataEmpty = (data) => {
   );
 };
 
-const KeyMetricCard = ({ title, value, icon }) => {
+const KeyMetricCard = ({ title, value, icon, isPercentage = false }) => {
   const isPositive = value >= 0;
   const bgColor = isPositive ? 'rgba(76, 175, 80, 0.1)' : 'rgba(244, 67, 54, 0.1)';
   const textColor = isPositive ? 'success.main' : 'error.main';
+  const formattedValue = isPercentage ? `${value.toFixed(2)}%` : formatCurrency(value);
 
   return (
     <Card elevation={0} sx={{ display: 'flex', alignItems: 'center', p: 1.5, bgcolor: bgColor, borderRadius: 2, minWidth: 140, flex: '1 1 0' }}>
@@ -54,7 +60,7 @@ const KeyMetricCard = ({ title, value, icon }) => {
       <Box>
         <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 0.2 }}>{title}</Typography>
         <Typography variant="subtitle1" sx={{ fontWeight: 'bold', color: textColor }}>
-          {formatCurrency(value)}
+          {formattedValue}
         </Typography>
       </Box>
     </Card>
@@ -79,6 +85,7 @@ export default function RealizedGainsPage() {
     isLoading,
     isError,
     error,
+    portfolioMetrics,
   } = useRealizedGains(token, selectedYear);
 
   useEffect(() => {
@@ -86,16 +93,13 @@ export default function RealizedGainsPage() {
       setSelectedYear(ALL_YEARS_OPTION);
     }
   }, [availableYears, selectedYear, isLoading, isError]);
-  
-  // **BUG FIX**: Create a memoized value for the detailed holdings view.
+
   const detailedHoldingsForView = useMemo(() => {
-      if (!allData.StockHoldingsByYear) return [];
-      if (selectedYear === ALL_YEARS_OPTION) {
-        // When "Total" is selected, flatten all purchase lots from all years into one array.
-        return Object.values(allData.StockHoldingsByYear).flat();
-      }
-      // For a specific year, return only that year's lots.
-      return allData.StockHoldingsByYear[selectedYear] || [];
+    if (!allData.StockHoldingsByYear) return [];
+    if (selectedYear === ALL_YEARS_OPTION) {
+      return Object.values(allData.StockHoldingsByYear).flat();
+    }
+    return allData.StockHoldingsByYear[selectedYear] || [];
   }, [allData.StockHoldingsByYear, selectedYear]);
 
 
@@ -145,60 +149,63 @@ export default function RealizedGainsPage() {
       </Tabs>
 
       {currentTab === 'overview' && (
-         <Grid container spacing={3}>
-            <Grid item xs={12} lg={5} container spacing={3} alignContent="flex-start">
-              <Grid item xs={12}>
-                  <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
-                    {selectedYear === ALL_YEARS_OPTION && (
-                      <Tooltip title="Diferença entre o custo de aquisição e o valor de mercado atual das suas posições em aberto." placement="top">
-                        <Box sx={{ flex: '1 1 0', minWidth: 140 }}><KeyMetricCard title="L/P Não Realizado" value={unrealizedStockPL || 0} icon={<TrendingUpIcon />} /></Box>
-                      </Tooltip>
-                    )}
-                    <Tooltip title="Lucro ou prejuízo total realizado com a venda de ações no período selecionado." placement="top">
-                      <Box sx={{ flex: '1 1 0', minWidth: 140 }}><KeyMetricCard title="L/P de Ações" value={summaryData.stockPL} icon={<ShowChartIcon />} /></Box>
-                    </Tooltip>
-                    <Tooltip title="Lucro ou prejuízo total realizado com o fecho de posições de opções no período selecionado." placement="top">
-                      <Box sx={{ flex: '1 1 0', minWidth: 140 }}><KeyMetricCard title="L/P de Opções" value={summaryData.optionPL} icon={<CandlestickChartIcon />} /></Box>
-                    </Tooltip>
-                    <Tooltip title="Montante líquido recebido em dividendos (após impostos retidos na fonte) no período selecionado." placement="top">
-                      <Box sx={{ flex: '1 1 0', minWidth: 140 }}><KeyMetricCard title="Dividendos" value={summaryData.dividendPL} icon={<AttachMoneyIcon />} /></Box>
-                    </Tooltip>
-                    {/* --- START OF CORRECTION --- */}
-                    <Tooltip title="Soma de todas as taxas e comissões pagas no período selecionado." placement="top">
-                      <Box sx={{ flex: '1 1 0', minWidth: 140 }}><KeyMetricCard title="Taxas e Comissões" value={summaryData.totalTaxesAndCommissions} icon={<RequestQuoteIcon />} /></Box>
-                    </Tooltip>
-                    {/* --- END OF CORRECTION --- */}
-                    <Tooltip title="Soma de todos os lucros e perdas. Na vista 'Total', inclui também o L/P não realizado." placement="top">
-                      <Box sx={{ flex: '1 1 0', minWidth: 140 }}><KeyMetricCard title="Total L/P" value={summaryData.totalPL} icon={<AccountBalanceWalletIcon />} /></Box>
-                    </Tooltip>
-                  </Box>
-              </Grid>
-              <Grid item xs={12}>
-                <Paper elevation={0} sx={{ p: 3, height: 400, borderRadius: 3, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <HoldingsAllocationChart chartData={holdingsChartData} />
-                </Paper>
-              </Grid>
+        <Grid container spacing={3}>
+          <Grid item xs={12} lg={5} container spacing={3} alignContent="flex-start">
+            <Grid item xs={12}>
+              <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
+                <Tooltip title="Lucro ou prejuízo total realizado com a venda de ações no período selecionado." placement="top">
+                  <Box sx={{ flex: '1 1 0', minWidth: 140 }}><KeyMetricCard title="L/P de Ações" value={summaryData.stockPL} icon={<ShowChartIcon />} /></Box>
+                </Tooltip>
+                <Tooltip title="Lucro ou prejuízo total realizado com o fecho de posições de opções no período selecionado." placement="top">
+                  <Box sx={{ flex: '1 1 0', minWidth: 140 }}><KeyMetricCard title="L/P de Opções" value={summaryData.optionPL} icon={<CandlestickChartIcon />} /></Box>
+                </Tooltip>
+                <Tooltip title="Montante líquido recebido em dividendos (após impostos retidos na fonte) no período selecionado." placement="top">
+                  <Box sx={{ flex: '1 1 0', minWidth: 140 }}><KeyMetricCard title="Dividendos" value={summaryData.dividendPL} icon={<AttachMoneyIcon />} /></Box>
+                </Tooltip>
+                <Tooltip title="Soma de todas as taxas e comissões pagas no período selecionado." placement="top">
+                  <Box sx={{ flex: '1 1 0', minWidth: 140 }}><KeyMetricCard title="Taxas e Comissões" value={summaryData.totalTaxesAndCommissions} icon={<RequestQuoteIcon />} /></Box>
+                </Tooltip>
+                {selectedYear === ALL_YEARS_OPTION && (<>
+                  <Tooltip title="Diferença entre o custo de aquisição e o valor de mercado atual das suas posições em aberto." placement="top">
+                    <Box sx={{ flex: '1 1 0', minWidth: 140 }}><KeyMetricCard title="L/P Não Realizado" value={unrealizedStockPL || 0} icon={<TrendingUpIcon />} /></Box>
+                  </Tooltip>
+                  <Tooltip title="Rentabilidade total do portfólio desde o início, considerando o valor atual, lucros realizados e capital investido." placement="top">
+                    <Box sx={{ flex: '1 1 0', minWidth: 140 }}>
+                      <KeyMetricCard title="Total L/P (%)" value={portfolioMetrics.portfolioReturn} icon={<PercentIcon />} isPercentage={true} />
+                    </Box>
+                  </Tooltip>
+                </>)}
+                <Tooltip title="Soma de todos os lucros e perdas. Na vista 'Total', inclui também o L/P não realizado." placement="top">
+                  <Box sx={{ flex: '1 1 0', minWidth: 140 }}><KeyMetricCard title="Total L/P" value={summaryData.totalPL} icon={<AccountBalanceWalletIcon />} /></Box>
+                </Tooltip>
+              </Box>
             </Grid>
-            <Grid item xs={12} lg={7} container spacing={3} alignContent="flex-start">
-              <Grid item xs={12}>
-                <Paper elevation={0} sx={{ p: 2, height: 350, borderRadius: 3 }}>
-                  <OverallPLChart stockSaleDetails={allData.StockSaleDetails} optionSaleDetails={allData.OptionSaleDetails} dividendTaxResultForChart={derivedDividendTaxSummary} selectedYear={selectedYear} />
-                </Paper>
-              </Grid>
-              <Grid item xs={12}>
-                <Paper elevation={0} sx={{ p: 2, height: 350, borderRadius: 3 }}>
-                  <PLContributionChart stockSaleDetails={allData.StockSaleDetails} optionSaleDetails={allData.OptionSaleDetails} dividendTaxResultForChart={derivedDividendTaxSummary} dividendTransactionsList={allData.DividendTransactionsList} selectedYear={selectedYear} />
-                </Paper>
-              </Grid>
+            <Grid item xs={12}>
+              <Paper elevation={0} sx={{ p: 3, height: 400, borderRadius: 3, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <HoldingsAllocationChart chartData={holdingsChartData} />
+              </Paper>
             </Grid>
           </Grid>
+          <Grid item xs={12} lg={7} container spacing={3} alignContent="flex-start">
+            <Grid item xs={12}>
+              <Paper elevation={0} sx={{ p: 2, height: 350, borderRadius: 3 }}>
+                <OverallPLChart stockSaleDetails={allData.StockSaleDetails} optionSaleDetails={allData.OptionSaleDetails} dividendTaxResultForChart={derivedDividendTaxSummary} selectedYear={selectedYear} />
+              </Paper>
+            </Grid>
+            <Grid item xs={12}>
+              <Paper elevation={0} sx={{ p: 2, height: 350, borderRadius: 3 }}>
+                <PLContributionChart stockSaleDetails={allData.StockSaleDetails} optionSaleDetails={allData.OptionSaleDetails} dividendTaxResultForChart={derivedDividendTaxSummary} dividendTransactionsList={allData.DividendTransactionsList} selectedYear={selectedYear} />
+              </Paper>
+            </Grid>
+          </Grid>
+        </Grid>
       )}
 
       {currentTab === 'holdings' && (
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
           <StockHoldingsSection
             groupedData={holdingsForGroupedView}
-            detailedData={detailedHoldingsForView} // Pass the corrected detailed data
+            detailedData={detailedHoldingsForView}
             isGroupedFetching={isGroupedHoldingsLoading}
             isDetailedFetching={isLoading}
           />
