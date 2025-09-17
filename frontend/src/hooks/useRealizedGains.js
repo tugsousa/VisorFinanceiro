@@ -167,7 +167,11 @@ export const useRealizedGains = (token, selectedYear) => {
 
         const dividendPL = gross + tax;
         const totalFeesAndCommissions = (periodSpecificData.fees || []).reduce((sum, f) => sum + (f.amount_eur || 0), 0);
-        const totalTaxesAndCommissions = totalFeesAndCommissions + tax;
+        
+        // --- START OF CORRECTION ---
+        // The dividend tax is already included in `dividendPL`. This metric should only reflect fees and commissions.
+        const totalTaxesAndCommissions = totalFeesAndCommissions; 
+        // --- END OF CORRECTION ---
 
         let totalPL = stockPL + optionPL + dividendPL + totalFeesAndCommissions;
         if (selectedYear === ALL_YEARS_OPTION) {
