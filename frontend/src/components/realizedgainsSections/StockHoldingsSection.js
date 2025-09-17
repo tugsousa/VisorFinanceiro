@@ -7,19 +7,17 @@ import { parseDateRobust } from '../../utils/dateUtils';
 import { formatCurrency } from '../../utils/formatUtils';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 
-// Helper functions
-const renderUnrealizedPLCell = (params) => {
-  const { value, isFetching } = params;
-  if (isFetching) { return <CircularProgress size={20} />; }
+// Helper functions for rendering cells
+const renderUnrealizedPLCell = ({ value, row }) => {
+  if (row.isFetching) { return <CircularProgress size={20} />; }
   if (typeof value !== 'number') return '';
   const textColor = value >= 0 ? 'success.main' : 'error.main';
   return (<Box sx={{ color: textColor, fontWeight: '500' }}>{formatCurrency(value)}</Box>);
 };
 
-const renderCurrentPriceCell = (params) => {
-  const { value, status, isFetching } = params;
-  if (isFetching) { return <CircularProgress size={20} />; }
-  if (status === 'UNAVAILABLE') {
+const renderCurrentPriceCell = ({ value, row }) => {
+  if (row.isFetching) { return <CircularProgress size={20} />; }
+  if (row.status === 'UNAVAILABLE') {
     return (
       <Tooltip title="Preço atual indisponível. O valor de mercado foi estimado usando o custo de aquisição." placement="top">
         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 0.5, cursor: 'help' }}>
@@ -29,18 +27,27 @@ const renderCurrentPriceCell = (params) => {
       </Tooltip>
     );
   }
-  if (typeof value !== 'number') return 'N/A';
-  return formatCurrency(value);
+  return typeof value === 'number' ? formatCurrency(value) : 'N/A';
 };
 
-const renderMarketValueCell = (params) => {
-    const { value, isFetching } = params;
-    if (isFetching) { return <CircularProgress size={20} />; }
-    if (typeof value !== 'number') return '';
-    return formatCurrency(value);
+const renderMarketValueCell = ({ value, row }) => {
+    if (row.isFetching) { return <CircularProgress size={20} />; }
+    return typeof value === 'number' ? formatCurrency(value) : '';
 };
 
-// Colunas para a vista DETALHADA
+const renderLifetimeMetricCell = ({ value }) => {
+    const numValue = value || 0;
+    const textColor = numValue >= 0 ? 'success.main' : 'error.main';
+    return <Box sx={{ color: textColor }}>{formatCurrency(numValue)}</Box>;
+};
+
+const renderCommissionCell = ({ value }) => {
+    const numValue = Math.abs(value || 0);
+    // Commissions are a cost, so we show them as negative.
+    return <Box sx={{ color: 'error.main' }}>{formatCurrency(-numValue)}</Box>
+}
+
+// Columns for DETAILED view (no changes)
 const detailedColumns = [
   { field: 'product_name', headerName: 'Produto', flex: 1, minWidth: 200 },
   { field: 'isin', headerName: 'ISIN', width: 130 },
@@ -51,54 +58,33 @@ const detailedColumns = [
   { field: 'buy_currency', headerName: 'Moeda', width: 90 },
 ];
 
-// Colunas para a vista AGRUPADA (CURRENT holdings)
+// Columns for GROUPED CURRENT view (with new "Comissões" column)
 const groupedColumnsCurrent = [
   { field: 'product_name', headerName: 'Produto', flex: 1, minWidth: 200 },
-  { field: 'isin', headerName: 'ISIN', width: 130 },
-  { field: 'quantity', headerName: 'Qtd', type: 'number', width: 40, align: 'right', headerAlign: 'right' },
+  { field: 'quantity', headerName: 'Qtd', type: 'number', width: 80, align: 'right', headerAlign: 'right' },
   { field: 'total_cost_basis_eur', headerName: 'Custo Total (€)', type: 'number', width: 140, align: 'right', headerAlign: 'right', valueFormatter: (value) => formatCurrency(value) },
-  {
-    field: 'current_price_eur',
-    headerName: 'Preço Atual (€)',
-    type: 'number',
-    width: 150,
-    align: 'right',
-    headerAlign: 'right',
-    renderCell: (params) => renderCurrentPriceCell({ value: params.value, status: params.row.status, isFetching: params.row.isFetching })
-  },
-  {
-    field: 'marketValueEUR',
-    headerName: 'Valor de Mercado (€)',
-    type: 'number',
-    width: 180,
-    align: 'right',
-    headerAlign: 'right',
-    renderCell: (params) => renderMarketValueCell({ value: params.value, isFetching: params.row.isFetching })
-  },
-  { field: 'unrealizedPL', headerName: 'L/P Não Realizado (€)', type: 'number', width: 180, align: 'right', headerAlign: 'right',
-    renderCell: (params) => renderUnrealizedPLCell({ value: params.value, isFetching: params.row.isFetching })
-  },
+  { field: 'current_price_eur', headerName: 'Preço Atual (€)', type: 'number', width: 150, align: 'right', headerAlign: 'right', renderCell: renderCurrentPriceCell },
+  { field: 'marketValueEUR', headerName: 'Valor de Mercado (€)', type: 'number', width: 180, align: 'right', headerAlign: 'right', renderCell: renderMarketValueCell },
+  { field: 'unrealizedPL', headerName: 'L/P Não Realizado (€)', type: 'number', width: 180, align: 'right', headerAlign: 'right', renderCell: renderUnrealizedPLCell },
+  { field: 'totalDividends', headerName: 'Dividendos (Total)', type: 'number', width: 160, align: 'right', headerAlign: 'right', renderCell: renderLifetimeMetricCell },
+  { field: 'totalRealizedStockPL', headerName: 'L/P Ações (Total)', type: 'number', width: 160, align: 'right', headerAlign: 'right', renderCell: renderLifetimeMetricCell },
+  { field: 'totalCommissions', headerName: 'Comissões (Total)', type: 'number', width: 160, align: 'right', headerAlign: 'right', renderCell: renderCommissionCell },
 ];
 
-// Colunas para a vista AGRUPADA (HISTORICAL holdings)
+// Columns for GROUPED HISTORICAL view (with new "Comissões" column)
 const groupedColumnsHistorical = [
     { field: 'product_name', headerName: 'Produto', flex: 1, minWidth: 200 },
-    { field: 'isin', headerName: 'ISIN', width: 130 },
     { field: 'quantity', headerName: 'Qtd', type: 'number', width: 110, align: 'right', headerAlign: 'right' },
     { field: 'total_cost_basis_eur', headerName: 'Custo Total (€)', type: 'number', width: 140, align: 'right', headerAlign: 'right', valueFormatter: (value) => formatCurrency(value) },
+    { field: 'totalDividends', headerName: 'Dividendos (Hist.)', type: 'number', width: 160, align: 'right', headerAlign: 'right', renderCell: renderLifetimeMetricCell },
+    { field: 'totalRealizedStockPL', headerName: 'L/P Ações (Hist.)', type: 'number', width: 160, align: 'right', headerAlign: 'right', renderCell: renderLifetimeMetricCell },
+    { field: 'totalCommissions', headerName: 'Comissões (Hist.)', type: 'number', width: 160, align: 'right', headerAlign: 'right', renderCell: renderCommissionCell },
 ];
 
 export default function StockHoldingsSection({ groupedData, detailedData, isGroupedFetching, isDetailedFetching }) {
   const [viewMode, setViewMode] = useState('grouped');
 
-  const handleViewChange = (event, newViewMode) => {
-    if (newViewMode !== null) {
-      setViewMode(newViewMode);
-    }
-  };
-  
   const isGroupedDataHistorical = groupedData?.[0]?.isHistorical === true;
-  
   const groupedColumns = isGroupedDataHistorical ? groupedColumnsHistorical : groupedColumnsCurrent;
 
   const groupedRows = useMemo(() => {
@@ -106,18 +92,23 @@ export default function StockHoldingsSection({ groupedData, detailedData, isGrou
     return groupedData.map(item => ({
       id: item.isin,
       ...item,
-      marketValueEUR: !item.isHistorical ? item.market_value_eur : undefined,
-      unrealizedPL: !item.isHistorical ? (item.market_value_eur - item.total_cost_basis_eur) : undefined,
+      unrealizedPL: !item.isHistorical ? (item.marketValueEUR - item.total_cost_basis_eur) : undefined,
       isFetching: isGroupedFetching,
     }));
   }, [groupedData, isGroupedFetching]);
 
   const detailedRows = useMemo(() => {
     if (!detailedData) return [];
-    return detailedData.map((holding, index) => ({
-      id: `${holding.isin}-${holding.buy_date}-${index}`,
-      ...holding,
-    }));
+    // ============================ BUG FIX IS HERE ============================
+    // We add a .filter(holding => holding) to safely remove any null or
+    // undefined entries from the array before we try to map over it.
+    return detailedData
+      .filter(holding => holding)
+      .map((holding, index) => ({
+        id: `${holding.isin}-${holding.buy_date}-${index}`,
+        ...holding,
+      }));
+    // =======================================================================
   }, [detailedData]);
   
   const noData = viewMode === 'grouped' 
@@ -136,15 +127,9 @@ export default function StockHoldingsSection({ groupedData, detailedData, isGrou
     <Paper elevation={0} sx={{ p: 2, mb: 3, border: 'none' }}>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
         <Typography variant="h6">Posições em Ações</Typography>
-        <ToggleButtonGroup
-          value={viewMode}
-          exclusive
-          onChange={handleViewChange}
-          aria-label="Stock holdings view mode"
-          size="small"
-        >
-          <ToggleButton value="grouped" aria-label="grouped view">Agrupado</ToggleButton>
-          <ToggleButton value="detailed" aria-label="detailed view">Detalhado</ToggleButton>
+        <ToggleButtonGroup value={viewMode} exclusive onChange={(e, newMode) => newMode && setViewMode(newMode)} size="small">
+          <ToggleButton value="grouped">Agrupado</ToggleButton>
+          <ToggleButton value="detailed">Detalhado</ToggleButton>
         </ToggleButtonGroup>
       </Box>
 
@@ -155,10 +140,7 @@ export default function StockHoldingsSection({ groupedData, detailedData, isGrou
             columns={detailedColumns}
             loading={isDetailedFetching}
             autoHeight
-            initialState={{
-              pagination: { paginationModel: { pageSize: 10 } },
-              sorting: { sortModel: [{ field: 'buy_date', sort: 'desc' }] },
-            }}
+            initialState={{ pagination: { paginationModel: { pageSize: 10 } }, sorting: { sortModel: [{ field: 'buy_date', sort: 'desc' }] } }}
             pageSizeOptions={[10, 25, 50]}
             disableRowSelectionOnClick
             localeText={ptPT.components.MuiDataGrid.defaultProps.localeText}
@@ -169,10 +151,7 @@ export default function StockHoldingsSection({ groupedData, detailedData, isGrou
             columns={groupedColumns}
             loading={isGroupedFetching}
             autoHeight
-            initialState={{
-              pagination: { paginationModel: { pageSize: 10 } },
-              sorting: { sortModel: [{ field: 'marketValueEUR', sort: 'desc' }] },
-            }}
+            initialState={{ pagination: { paginationModel: { pageSize: 10 } }, sorting: { sortModel: [{ field: 'marketValueEUR', sort: 'desc' }] } }}
             pageSizeOptions={[10, 25, 50]}
             disableRowSelectionOnClick
             localeText={ptPT.components.MuiDataGrid.defaultProps.localeText}

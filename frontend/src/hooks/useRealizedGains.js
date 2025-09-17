@@ -9,10 +9,13 @@ import {
     apiFetchStockHoldings,
     apiFetchOptionHoldings,
     apiFetchCurrentHoldingsValue,
-    apiFetchFees
+    apiFetchFees,
+    apiFetchProcessedTransactions // Import the new API function
 } from '../api/apiService';
 import { ALL_YEARS_OPTION, NO_YEAR_SELECTED } from '../constants';
 import { getYearString, extractYearsFromData } from '../utils/dateUtils';
+// Import the new, more accurate utility function
+import { calculateCombinedAggregatedMetricsByISIN } from '../utils/aggregationUtils';
 
 export const useRealizedGains = (token, selectedYear) => {
     const results = useQueries({
@@ -24,19 +27,16 @@ export const useRealizedGains = (token, selectedYear) => {
             { queryKey: ['stockHoldingsByYear', token], queryFn: apiFetchStockHoldings, enabled: !!token, staleTime: 1000 * 60 * 5, select: (res) => res.data || {} },
             { queryKey: ['optionHoldings', token], queryFn: apiFetchOptionHoldings, enabled: !!token, staleTime: 1000 * 60 * 5, select: (res) => res.data || [] },
             { queryKey: ['currentHoldingsValue', token], queryFn: apiFetchCurrentHoldingsValue, enabled: !!token, staleTime: 1000 * 60 * 5, select: (res) => res.data || [] },
-            { queryKey: ['fees', token], queryFn: apiFetchFees, enabled: !!token, staleTime: 1000 * 60 * 5, select: (res) => res.data || [] }
+            { queryKey: ['fees', token], queryFn: apiFetchFees, enabled: !!token, staleTime: 1000 * 60 * 5, select: (res) => res.data || [] },
+            // Add a query to fetch ALL processed transactions
+            { queryKey: ['allProcessedTransactions', token], queryFn: apiFetchProcessedTransactions, enabled: !!token, staleTime: 1000 * 60 * 5, select: (res) => res.data || [] },
         ]
     });
 
     const [
-        stockSalesQuery,
-        optionSalesQuery,
-        dividendSummaryQuery,
-        dividendTransactionsQuery,
-        stockHoldingsByYearQuery,
-        optionHoldingsQuery,
-        currentHoldingsValueQuery,
-        feesQuery
+        stockSalesQuery, optionSalesQuery, dividendSummaryQuery,
+        dividendTransactionsQuery, stockHoldingsByYearQuery, optionHoldingsQuery,
+        currentHoldingsValueQuery, feesQuery, allTransactionsQuery // Destructure the new query result
     ] = results;
 
     const isLoading = results.some(q => q.isLoading);
@@ -48,33 +48,27 @@ export const useRealizedGains = (token, selectedYear) => {
         OptionSaleDetails: optionSalesQuery.data,
         dividendSummary: dividendSummaryQuery.data,
         DividendTransactionsList: dividendTransactionsQuery.data,
-        StockHoldings: stockHoldingsByYearQuery.data,
+        StockHoldingsByYear: stockHoldingsByYearQuery.data,
         OptionHoldings: optionHoldingsQuery.data,
-        FeeDetails: feesQuery.data
+        FeeDetails: feesQuery.data,
+        CurrentHoldingsValue: currentHoldingsValueQuery.data,
+        AllTransactions: allTransactionsQuery.data, // Add all transactions to the main data object
     }), [
-        stockSalesQuery.data,
-        optionSalesQuery.data,
-        dividendSummaryQuery.data,
-        dividendTransactionsQuery.data,
-        stockHoldingsByYearQuery.data,
-        optionHoldingsQuery.data,
-        feesQuery.data
+        stockSalesQuery.data, optionSalesQuery.data, dividendSummaryQuery.data,
+        dividendTransactionsQuery.data, stockHoldingsByYearQuery.data, optionHoldingsQuery.data,
+        currentHoldingsValueQuery.data, feesQuery.data, allTransactionsQuery.data
     ]);
 
     const availableYears = useMemo(() => {
         if (isLoading || !allData) return [ALL_YEARS_OPTION];
-        const dateAccessors = {
-            stockSales: 'SaleDate',
-            optionSales: 'close_date',
-            DividendTaxResult: null,
-        };
+        const dateAccessors = { stockSales: 'SaleDate', optionSales: 'close_date', DividendTaxResult: null };
         const dataForYearExtraction = {
             stockSales: allData.StockSaleDetails,
             optionSales: allData.OptionSaleDetails,
             DividendTaxResult: allData.dividendSummary,
         };
         const yearsFromUtil = extractYearsFromData(dataForYearExtraction, dateAccessors);
-        const stockHoldingYears = allData.StockHoldings ? Object.keys(allData.StockHoldings) : [];
+        const stockHoldingYears = allData.StockHoldingsByYear ? Object.keys(allData.StockHoldingsByYear) : [];
         const allYearsSet = new Set([...yearsFromUtil, ...stockHoldingYears]);
         const sortedYears = Array.from(allYearsSet)
             .filter(y => y && y !== ALL_YEARS_OPTION && y !== NO_YEAR_SELECTED)
@@ -82,173 +76,134 @@ export const useRealizedGains = (token, selectedYear) => {
         return [ALL_YEARS_OPTION, ...sortedYears];
     }, [allData, isLoading]);
 
-    const filteredData = useMemo(() => {
-        const defaultStructure = {
-            StockHoldings: [], OptionHoldings: [], StockSaleDetails: [],
-            OptionSaleDetails: [], DividendTransactionsList: [],
-            FeeDetails: []
-        };
+    // Use the new, more accurate aggregation function
+    const aggregatedLifetimeMetricsByISIN = useMemo(() => {
+        if (isLoading || !allData) return {};
+        return calculateCombinedAggregatedMetricsByISIN(
+            allData.AllTransactions,
+            allData.StockSaleDetails,
+            allData.OptionSaleDetails
+        );
+    }, [allData, isLoading]);
+
+    const periodSpecificData = useMemo(() => {
+        const defaultStructure = { stockSales: [], optionSales: [], dividendTransactions: [], fees: [], optionHoldings: [] };
         if (isLoading || !allData) return defaultStructure;
 
-        let holdingsForSelectedPeriod = [];
-        if (allData.StockHoldings) {
-            if (selectedYear === ALL_YEARS_OPTION) {
-                const latestYear = Object.keys(allData.StockHoldings).sort().pop();
-                holdingsForSelectedPeriod = allData.StockHoldings[latestYear] || [];
-            } else {
-                holdingsForSelectedPeriod = allData.StockHoldings[selectedYear] || [];
-            }
-        }
-        
         const dataSet = {
-            StockHoldings: holdingsForSelectedPeriod,
-            OptionHoldings: allData.OptionHoldings || [],
-            StockSaleDetails: allData.StockSaleDetails || [],
-            OptionSaleDetails: allData.OptionSaleDetails || [],
-            DividendTransactionsList: allData.DividendTransactionsList || [],
-            FeeDetails: allData.FeeDetails || []
+            stockSales: allData.StockSaleDetails || [],
+            optionSales: allData.OptionSaleDetails || [],
+            dividendTransactions: allData.DividendTransactionsList || [],
+            fees: allData.FeeDetails || [],
+            optionHoldings: allData.OptionHoldings || [],
         };
-
-        if (selectedYear === ALL_YEARS_OPTION || !selectedYear) return dataSet;
         
-        // CORREÇÃO: A lógica agora permite que as Posições em Opções apareçam para o ano atual.
+        if (selectedYear === ALL_YEARS_OPTION || selectedYear === NO_YEAR_SELECTED) return dataSet;
         const currentYear = new Date().getFullYear().toString();
-        const showOptionHoldings = selectedYear === currentYear;
-
+        
         return {
-            ...dataSet,
-            OptionHoldings: showOptionHoldings ? dataSet.OptionHoldings : [],
-            StockSaleDetails: dataSet.StockSaleDetails.filter(s => getYearString(s.SaleDate) === selectedYear),
-            OptionSaleDetails: dataSet.OptionSaleDetails.filter(o => getYearString(o.close_date) === selectedYear),
-            DividendTransactionsList: dataSet.DividendTransactionsList.filter(tx => getYearString(tx.date) === selectedYear),
-            FeeDetails: dataSet.FeeDetails.filter(fee => getYearString(fee.date) === selectedYear)
+            stockSales: dataSet.stockSales.filter(s => getYearString(s.SaleDate) === selectedYear),
+            optionSales: dataSet.optionSales.filter(o => getYearString(o.close_date) === selectedYear),
+            dividendTransactions: dataSet.dividendTransactions.filter(tx => getYearString(tx.date) === selectedYear),
+            fees: dataSet.fees.filter(fee => getYearString(fee.date) === selectedYear),
+            optionHoldings: selectedYear === currentYear ? dataSet.optionHoldings : [],
         };
     }, [allData, selectedYear, isLoading]);
-
-    // **FIX:** Moved unrealizedStockPL calculation before summaryData
-    const unrealizedStockPL = useMemo(() => {
-        if (!currentHoldingsValueQuery.data || currentHoldingsValueQuery.data.length === 0 || selectedYear !== ALL_YEARS_OPTION) {
-            return 0;
-        }
-        const totals = currentHoldingsValueQuery.data.reduce((acc, holding) => {
-            acc.marketValue += holding.market_value_eur || 0;
-            acc.costBasis += Math.abs(holding.total_cost_basis_eur || 0);
-            return acc;
-        }, { marketValue: 0, costBasis: 0 });
-        return totals.marketValue - totals.costBasis;
-    }, [currentHoldingsValueQuery.data, selectedYear]);
-
-    const summaryData = useMemo(() => {
-        const defaultResult = { stockPL: 0, optionPL: 0, dividendPL: 0, totalTaxesAndCommissions: 0, totalPL: 0 };
-        if (isLoading || !allData) return defaultResult;
-
-        const stockPL = (filteredData.StockSaleDetails || []).reduce((sum, sale) => sum + (sale.Delta || 0), 0);
-        const optionPL = (filteredData.OptionSaleDetails || []).reduce((sum, sale) => sum + (sale.delta || 0), 0);
-        
-        let dividendGross = 0;
-        let dividendTax = 0; // Will be a negative number
-        const dividendSummary = allData.dividendSummary || {};
-
-        if (selectedYear === ALL_YEARS_OPTION || !selectedYear) {
-            Object.values(dividendSummary).forEach(yearData => {
-                Object.values(yearData).forEach(countryData => {
-                    dividendGross += (countryData.gross_amt || 0);
-                    dividendTax += (countryData.taxed_amt || 0);
-                });
-            });
-        } else if (dividendSummary[selectedYear]) {
-            Object.values(dividendSummary[selectedYear]).forEach(countryData => {
-                dividendGross += (countryData.gross_amt || 0);
-                dividendTax += (countryData.taxed_amt || 0);
-            });
-        }
-
-        const dividendPL = dividendGross + dividendTax;
-
-        const totalFeesAndCommissions = (filteredData.FeeDetails || []).reduce((sum, fee) => sum + (fee.amount_eur || 0), 0);
-        
-        const totalTaxesAndCommissions = totalFeesAndCommissions + dividendTax;
-
-        let totalPL = stockPL + optionPL + dividendPL + totalFeesAndCommissions;
-
-        // If the "Total" filter is active, add the unrealized P/L to the grand total.
-        if (selectedYear === ALL_YEARS_OPTION) {
-            totalPL += unrealizedStockPL;
-        }
-        return { stockPL, optionPL, dividendPL, totalTaxesAndCommissions, totalPL };
-    }, [filteredData, allData.dividendSummary, selectedYear, isLoading, allData, unrealizedStockPL]);
 
     const holdingsForGroupedView = useMemo(() => {
         const currentYear = new Date().getFullYear().toString();
         const isCurrentView = selectedYear === ALL_YEARS_OPTION || selectedYear === currentYear;
 
+        let baseHoldings = [];
+
         if (isCurrentView) {
-            if (!currentHoldingsValueQuery.data) return [];
-            return currentHoldingsValueQuery.data.map(holding => ({
+            baseHoldings = (allData.CurrentHoldingsValue || []).map(holding => ({
                 ...holding,
+                marketValueEUR: holding.market_value_eur,
                 total_cost_basis_eur: Math.abs(holding.total_cost_basis_eur),
                 isHistorical: false,
             }));
-        }
-
-        if (allData.StockHoldings && allData.StockHoldings[selectedYear]) {
-            const historicalLots = allData.StockHoldings[selectedYear];
-            const groupedHoldingsMap = historicalLots.reduce((acc, lot) => {
-                const isin = lot.isin || 'UNKNOWN';
-                if (!acc[isin]) {
-                    acc[isin] = { isin: isin, product_name: lot.product_name, quantity: 0, total_cost_basis_eur: 0, isHistorical: true };
+        } else if (allData.StockHoldingsByYear && allData.StockHoldingsByYear[selectedYear]) {
+            const historicalLots = allData.StockHoldingsByYear[selectedYear];
+            const groupedMap = historicalLots.reduce((acc, lot) => {
+                if (!acc[lot.isin]) {
+                    acc[lot.isin] = { isin: lot.isin, product_name: lot.product_name, quantity: 0, total_cost_basis_eur: 0, isHistorical: true };
                 }
-                acc[isin].quantity += lot.quantity;
-                acc[isin].total_cost_basis_eur += Math.abs(lot.buy_amount_eur);
+                acc[lot.isin].quantity += lot.quantity;
+                acc[lot.isin].total_cost_basis_eur += Math.abs(lot.buy_amount_eur);
                 return acc;
             }, {});
-            return Object.values(groupedHoldingsMap);
+            baseHoldings = Object.values(groupedMap);
         }
-        return [];
-    }, [selectedYear, currentHoldingsValueQuery.data, allData.StockHoldings]);
+
+        return baseHoldings.map(holding => ({
+            ...holding,
+            ...(aggregatedLifetimeMetricsByISIN[holding.isin] || { totalRealizedStockPL: 0, totalDividends: 0, totalCommissions: 0 })
+        }));
+    }, [selectedYear, allData.CurrentHoldingsValue, allData.StockHoldingsByYear, aggregatedLifetimeMetricsByISIN]);
+    
+    // ... (The rest of the hook: unrealizedStockPL, summaryData, holdingsChartData remains the same)
+    const unrealizedStockPL = useMemo(() => {
+        if (!allData.CurrentHoldingsValue || selectedYear !== ALL_YEARS_OPTION) {
+            return 0;
+        }
+        const totals = allData.CurrentHoldingsValue.reduce((acc, h) => {
+            acc.marketValue += h.market_value_eur || 0;
+            acc.costBasis += Math.abs(h.total_cost_basis_eur || 0);
+            return acc;
+        }, { marketValue: 0, costBasis: 0 });
+        return totals.marketValue - totals.costBasis;
+    }, [allData.CurrentHoldingsValue, selectedYear]);
+
+    const summaryData = useMemo(() => {
+        const stockPL = (periodSpecificData.stockSales || []).reduce((sum, s) => sum + (s.Delta || 0), 0);
+        const optionPL = (periodSpecificData.optionSales || []).reduce((sum, s) => sum + (s.delta || 0), 0);
+        
+        const { gross, tax } = (periodSpecificData.dividendTransactions || []).reduce((acc, tx) => {
+            if (tx.transaction_subtype === 'TAX') acc.tax += tx.amount_eur || 0;
+            else acc.gross += tx.amount_eur || 0;
+            return acc;
+        }, { gross: 0, tax: 0 });
+
+        const dividendPL = gross + tax;
+        const totalFeesAndCommissions = (periodSpecificData.fees || []).reduce((sum, f) => sum + (f.amount_eur || 0), 0);
+        const totalTaxesAndCommissions = totalFeesAndCommissions + tax;
+
+        let totalPL = stockPL + optionPL + dividendPL + totalFeesAndCommissions;
+        if (selectedYear === ALL_YEARS_OPTION) {
+            totalPL += unrealizedStockPL;
+        }
+
+        return { stockPL, optionPL, dividendPL, totalTaxesAndCommissions, totalPL };
+    }, [periodSpecificData, selectedYear, unrealizedStockPL]);
 
     const holdingsChartData = useMemo(() => {
-        const dataForChart = holdingsForGroupedView;
-        if (!dataForChart || dataForChart.length === 0) return null;
-
-        const isHistorical = dataForChart[0]?.isHistorical === true;
-        const holdingsForChart = dataForChart.map(holding => ({
-            name: holding.product_name,
-            value: isHistorical ? holding.total_cost_basis_eur : holding.market_value_eur,
-        }));
-        
-        holdingsForChart.sort((a, b) => b.value - a.value);
+        if (!holdingsForGroupedView || holdingsForGroupedView.length === 0) return null;
+        const isHistorical = holdingsForGroupedView[0]?.isHistorical;
+        const chartItems = holdingsForGroupedView.map(h => ({
+            name: h.product_name,
+            value: isHistorical ? h.total_cost_basis_eur : h.marketValueEUR,
+        })).sort((a, b) => b.value - a.value);
 
         const topN = 7;
-        const topHoldings = holdingsForChart.slice(0, topN);
-        const otherHoldings = holdingsForChart.slice(topN);
+        const top = chartItems.slice(0, topN);
+        const other = chartItems.slice(topN);
+        const labels = top.map(item => item.name);
+        const data = top.map(item => item.value);
 
-        const labels = topHoldings.map(item => item.name);
-        const data = topHoldings.map(item => item.value);
-
-        if (otherHoldings.length > 0) {
-            const othersValue = otherHoldings.reduce((sum, item) => sum + item.value, 0);
+        if (other.length > 0) {
             labels.push('Outros');
-            data.push(othersValue);
+            data.push(other.reduce((sum, item) => sum + item.value, 0));
         }
 
         return { labels, datasets: [{ data }] };
     }, [holdingsForGroupedView]);
-    
-    const derivedDividendTaxSummary = dividendSummaryQuery.data;
 
     return {
-        allData,
-        filteredData,
-        summaryData,
-        unrealizedStockPL,
-        derivedDividendTaxSummary,
-        availableYears,
-        holdingsChartData,
-        holdingsForGroupedView,
+        allData, periodSpecificData, summaryData, unrealizedStockPL,
+        derivedDividendTaxSummary: allData.dividendSummary,
+        availableYears, holdingsChartData, holdingsForGroupedView,
         isHoldingsValueFetching: currentHoldingsValueQuery.isFetching,
-        isLoading,
-        isError,
-        error,
+        isLoading, isError, error,
     };
 };
