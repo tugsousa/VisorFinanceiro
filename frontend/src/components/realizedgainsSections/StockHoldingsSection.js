@@ -1,4 +1,3 @@
-// frontend/src/components/realizedgainsSections/StockHoldingsSection.js
 import React, { useState, useMemo } from 'react';
 import { Typography, Paper, Box, ToggleButtonGroup, ToggleButton, Tooltip, CircularProgress } from '@mui/material';
 import { DataGrid } from '@mui/x-data-grid';
@@ -13,6 +12,14 @@ const renderUnrealizedPLCell = ({ value, row }) => {
   if (typeof value !== 'number') return '';
   const textColor = value >= 0 ? 'success.main' : 'error.main';
   return (<Box sx={{ color: textColor, fontWeight: '500' }}>{formatCurrency(value)}</Box>);
+};
+
+const renderUnrealizedPLPercentageCell = ({ value, row }) => {
+  if (row.isFetching) { return <CircularProgress size={20} />; }
+  if (typeof value !== 'number' || isNaN(value)) return '';
+  const textColor = value >= 0 ? 'success.main' : 'error.main';
+  const formattedValue = `${value.toFixed(2)}%`;
+  return (<Box sx={{ color: textColor, fontWeight: '500' }}>{formattedValue}</Box>);
 };
 
 const renderCurrentPriceCell = ({ value, row }) => {
@@ -66,6 +73,15 @@ const groupedColumnsCurrent = [
   { field: 'current_price_eur', headerName: 'Preço Atual (€)', type: 'number', width: 150, align: 'right', headerAlign: 'right', renderCell: renderCurrentPriceCell },
   { field: 'marketValueEUR', headerName: 'Valor de Mercado (€)', type: 'number', width: 180, align: 'right', headerAlign: 'right', renderCell: renderMarketValueCell },
   { field: 'unrealizedPL', headerName: 'L/P Não Realizado (€)', type: 'number', width: 180, align: 'right', headerAlign: 'right', renderCell: renderUnrealizedPLCell },
+  { 
+    field: 'unrealizedPLPercentage', 
+    headerName: 'L/P Não Realizado (%)', 
+    type: 'number', 
+    width: 180, 
+    align: 'right', 
+    headerAlign: 'right', 
+    renderCell: renderUnrealizedPLPercentageCell 
+  },
   { field: 'totalDividends', headerName: 'Dividendos (Total)', type: 'number', width: 160, align: 'right', headerAlign: 'right', renderCell: renderLifetimeMetricCell },
   { field: 'totalRealizedStockPL', headerName: 'L/P Ações (Total)', type: 'number', width: 160, align: 'right', headerAlign: 'right', renderCell: renderLifetimeMetricCell },
   { field: 'totalCommissions', headerName: 'Comissões (Total)', type: 'number', width: 160, align: 'right', headerAlign: 'right', renderCell: renderCommissionCell },
@@ -89,13 +105,24 @@ export default function StockHoldingsSection({ groupedData, detailedData, isGrou
 
   const groupedRows = useMemo(() => {
     if (!groupedData) return [];
-    return groupedData.map(item => ({
-      id: item.isin,
-      ...item,
-      unrealizedPL: !item.isHistorical ? (item.marketValueEUR - item.total_cost_basis_eur) : undefined,
-      isFetching: isGroupedFetching,
-    }));
-  }, [groupedData, isGroupedFetching]);
+    return groupedData.map(item => {
+        const unrealizedPL = !item.isHistorical ? (item.marketValueEUR - item.total_cost_basis_eur) : undefined;
+        let unrealizedPLPercentage;
+        if (unrealizedPL !== undefined && item.total_cost_basis_eur > 0) {
+            unrealizedPLPercentage = (unrealizedPL / item.total_cost_basis_eur) * 100;
+        } else {
+            unrealizedPLPercentage = undefined;
+        }
+
+        return {
+            id: item.isin,
+            ...item,
+            unrealizedPL,
+            unrealizedPLPercentage,
+            isFetching: isGroupedFetching,
+        };
+    });
+}, [groupedData, isGroupedFetching]);
 
   const detailedRows = useMemo(() => {
     if (!detailedData) return [];

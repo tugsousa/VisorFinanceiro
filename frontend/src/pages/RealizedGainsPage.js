@@ -137,7 +137,7 @@ export default function RealizedGainsPage() {
 
       <Tabs value={currentTab} onChange={handleTabChange} aria-label="portfolio analysis sections" variant="scrollable" scrollButtons="auto" sx={{ mb: 5, borderBottom: 1, borderColor: 'divider' }}>
         <Tab label="Visão Geral" value="overview" />
-        <Tab label="Ativos" value="holdings" />
+        <Tab label="Carteira" value="holdings" />
         <Tab label="Vendas de Ações" value="stock-sales" />
         <Tab label="Vendas de Opções" value="option-sales" />
         <Tab label="Dividendos" value="dividends" />
