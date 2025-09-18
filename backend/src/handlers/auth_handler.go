@@ -27,6 +27,47 @@ func isAdmin(email string) bool {
 	return false
 }
 
+// updateUserLoginInfo updates user's login stats and records the login event.
+// This will be called from both local and Google login handlers.
+func updateUserLoginInfo(userID int64, r *http.Request) {
+	tx, err := database.DB.Begin()
+	if err != nil {
+		logger.L.Error("Failed to begin transaction for login info update", "userID", userID, "error", err)
+		return
+	}
+	defer tx.Rollback() // Rollback on error
+
+	// 1. Update the users table
+	_, err = tx.Exec(`
+		UPDATE users 
+		SET 
+			login_count = login_count + 1, 
+			last_login_at = CURRENT_TIMESTAMP, 
+			last_login_ip = ?
+		WHERE id = ?`,
+		r.RemoteAddr, userID,
+	)
+	if err != nil {
+		logger.L.Error("Failed to update users table on login", "userID", userID, "error", err)
+		return
+	}
+
+	// 2. Insert into login_history
+	_, err = tx.Exec(`
+		INSERT INTO login_history (user_id, ip_address, user_agent) 
+		VALUES (?, ?, ?)`,
+		userID, r.RemoteAddr, r.UserAgent(),
+	)
+	if err != nil {
+		logger.L.Error("Failed to insert into login_history", "userID", userID, "error", err)
+		return
+	}
+
+	if err := tx.Commit(); err != nil {
+		logger.L.Error("Failed to commit transaction for login info update", "userID", userID, "error", err)
+	}
+}
+
 func (h *UserHandler) RegisterUserHandler(w http.ResponseWriter, r *http.Request) {
 	var credentials struct {
 		Username string `json:"username"`
@@ -197,6 +238,10 @@ func (h *UserHandler) LoginUserHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// --- NEW: Update Login Info ---
+	updateUserLoginInfo(user.ID, r)
+	// --- END NEW ---
+
 	// Preencher a informação de admin
 	user.IsAdmin = isAdmin(user.Email)
 
@@ -246,6 +291,7 @@ func (h *UserHandler) LoginUserHandler(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// ... (rest of file is unchanged) ...
 func (h *UserHandler) RefreshTokenHandler(w http.ResponseWriter, r *http.Request) {
 	var requestBody struct {
 		RefreshToken string `json:"refresh_token"`

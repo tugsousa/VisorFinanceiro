@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"net/http"
 	"regexp"
@@ -29,8 +30,6 @@ var (
 	oauthStateString  = "random-string-for-security"
 )
 
-// UserHandler now acts as a receiver for methods defined across
-// multiple files in this package (auth_handler.go, oauth_handler.go, etc.).
 type UserHandler struct {
 	authService  *security.AuthService
 	emailService services.EmailService
@@ -43,7 +42,6 @@ func NewUserHandler(authService *security.AuthService, emailService services.Ema
 	}
 }
 
-// sendJSONError is a helper used by multiple handlers in this package.
 func sendJSONError(w http.ResponseWriter, message string, statusCode int) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(statusCode)
@@ -51,7 +49,6 @@ func sendJSONError(w http.ResponseWriter, message string, statusCode int) {
 	json.NewEncoder(w).Encode(map[string]string{"error": message})
 }
 
-// VerifyEmailHandler remains here as a general, non-grouped user action.
 func (h *UserHandler) VerifyEmailHandler(w http.ResponseWriter, r *http.Request) {
 	token := r.URL.Query().Get("token")
 	if token == "" {
@@ -90,13 +87,11 @@ func (h *UserHandler) VerifyEmailHandler(w http.ResponseWriter, r *http.Request)
 	json.NewEncoder(w).Encode(map[string]string{"message": "Email verified successfully! You can now log in."})
 }
 
-// GetUserIDFromContext is used by the middleware and other handlers.
 func GetUserIDFromContext(ctx context.Context) (int64, bool) {
 	userID, ok := ctx.Value(userIDContextKey).(int64)
 	return userID, ok
 }
 
-// min is a small helper function.
 func min(a, b int) int {
 	if a < b {
 		return a
@@ -104,9 +99,8 @@ func min(a, b int) int {
 	return b
 }
 
-// --- NOVAS FUNÇÕES DE ADMIN ---
+// --- ADMIN FUNCTIONS ---
 
-// AdminMiddleware verifica se o utilizador autenticado é um administrador.
 func (h *UserHandler) AdminMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		userID, ok := GetUserIDFromContext(r.Context())
@@ -139,53 +133,136 @@ func (h *UserHandler) AdminMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-// Structs para a resposta da API de admin
+// Structs for the new Admin Dashboard API response
+type TimeSeriesDataPoint struct {
+	Date  string `json:"date"`
+	Count int    `json:"count"`
+}
+
 type AdminStats struct {
-	TotalUsers  int          `json:"totalUsers"`
-	RecentUsers []SimpleUser `json:"recentUsers"`
+	TotalUsers         int                   `json:"totalUsers"`
+	DailyActiveUsers   int                   `json:"dailyActiveUsers"`
+	MonthlyActiveUsers int                   `json:"monthlyActiveUsers"`
+	TotalUploads       int                   `json:"totalUploads"`
+	TotalTransactions  int                   `json:"totalTransactions"`
+	UsersPerDay        []TimeSeriesDataPoint `json:"usersPerDay"`
+	UploadsPerDay      []TimeSeriesDataPoint `json:"uploadsPerDay"`
+	TransactionsPerDay []TimeSeriesDataPoint `json:"transactionsPerDay"`
+	ActiveUsersPerDay  []TimeSeriesDataPoint `json:"activeUsersPerDay"`
 }
 
-type SimpleUser struct {
-	ID        int64     `json:"id"`
-	Username  string    `json:"username"`
-	Email     string    `json:"email"`
-	CreatedAt time.Time `json:"createdAt"`
+type AdminUserView struct {
+	ID                  int64          `json:"id"`
+	Username            string         `json:"username"`
+	Email               string         `json:"email"`
+	AuthProvider        string         `json:"auth_provider"`
+	CreatedAt           time.Time      `json:"created_at"`
+	TotalUploadCount    int            `json:"total_upload_count"`
+	CurrentFileCount    int            `json:"upload_count"`
+	DistinctBrokerCount int            `json:"distinct_broker_count"`
+	PortfolioValueEUR   float64        `json:"portfolio_value_eur"`
+	Top5Holdings        string         `json:"top_5_holdings"` // JSON string
+	LastLoginAt         model.NullTime `json:"last_login_at"`
+	LastLoginIP         string         `json:"last_login_ip"`
+	LoginCount          int            `json:"login_count"`
 }
 
-// HandleGetAdminStats obtém estatísticas básicas para o dashboard de admin.
-func (h *UserHandler) HandleGetAdminStats(w http.ResponseWriter, r *http.Request) {
-	var totalUsers int
-	err := database.DB.QueryRow("SELECT COUNT(*) FROM users").Scan(&totalUsers)
+// Generic helper for time series queries
+func queryTimeSeries(query string) ([]TimeSeriesDataPoint, error) {
+	rows, err := database.DB.Query(query)
 	if err != nil {
-		logger.L.Error("Failed to get total users for admin stats", "error", err)
-		sendJSONError(w, "Failed to get total users", http.StatusInternalServerError)
-		return
-	}
-
-	rows, err := database.DB.Query("SELECT id, username, email, created_at FROM users ORDER BY created_at DESC LIMIT 20")
-	if err != nil {
-		logger.L.Error("Failed to get recent users for admin stats", "error", err)
-		sendJSONError(w, "Failed to get recent users", http.StatusInternalServerError)
-		return
+		return nil, err
 	}
 	defer rows.Close()
 
-	var recentUsers []SimpleUser
+	var results []TimeSeriesDataPoint
 	for rows.Next() {
-		var u SimpleUser
-		if err := rows.Scan(&u.ID, &u.Username, &u.Email, &u.CreatedAt); err != nil {
-			logger.L.Error("Failed to scan user row for admin stats", "error", err)
-			sendJSONError(w, "Failed to scan user row", http.StatusInternalServerError)
-			return
+		var point TimeSeriesDataPoint
+		if err := rows.Scan(&point.Date, &point.Count); err != nil {
+			return nil, err
 		}
-		recentUsers = append(recentUsers, u)
+		results = append(results, point)
 	}
+	return results, nil
+}
 
-	stats := AdminStats{
-		TotalUsers:  totalUsers,
-		RecentUsers: recentUsers,
+func (h *UserHandler) HandleGetAdminStats(w http.ResponseWriter, r *http.Request) {
+	var stats AdminStats
+	var err error
+
+	// Simple counts
+	_ = database.DB.QueryRow("SELECT COUNT(*) FROM users").Scan(&stats.TotalUsers)
+	_ = database.DB.QueryRow("SELECT COUNT(*) FROM login_history WHERE DATE(login_at) = DATE('now')").Scan(&stats.DailyActiveUsers)
+	_ = database.DB.QueryRow("SELECT COUNT(DISTINCT user_id) FROM login_history WHERE login_at >= date('now', '-30 days')").Scan(&stats.MonthlyActiveUsers)
+	_ = database.DB.QueryRow("SELECT COUNT(*) FROM uploads_history").Scan(&stats.TotalUploads)
+	_ = database.DB.QueryRow("SELECT COUNT(*) FROM processed_transactions").Scan(&stats.TotalTransactions)
+
+	// Time series data
+	stats.UsersPerDay, err = queryTimeSeries("SELECT DATE(created_at) as date, COUNT(*) as count FROM users GROUP BY date ORDER BY date ASC")
+	if err != nil {
+		logger.L.Error("Failed to get users per day", "error", err)
+	}
+	stats.UploadsPerDay, err = queryTimeSeries("SELECT DATE(uploaded_at) as date, COUNT(*) as count FROM uploads_history GROUP BY date ORDER BY date ASC")
+	if err != nil {
+		logger.L.Error("Failed to get uploads per day", "error", err)
+	}
+	stats.TransactionsPerDay, err = queryTimeSeries("SELECT DATE(SUBSTR(date, 7, 4) || '-' || SUBSTR(date, 4, 2) || '-' || SUBSTR(date, 1, 2)) as date, COUNT(*) as count FROM processed_transactions GROUP BY date ORDER BY date ASC")
+	if err != nil {
+		logger.L.Error("Failed to get transactions per day", "error", err)
+	}
+	stats.ActiveUsersPerDay, err = queryTimeSeries("SELECT DATE(login_at) as date, COUNT(DISTINCT user_id) as count FROM login_history GROUP BY date ORDER BY date ASC")
+	if err != nil {
+		logger.L.Error("Failed to get active users per day", "error", err)
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(stats)
+}
+
+func (h *UserHandler) HandleGetAdminUsers(w http.ResponseWriter, r *http.Request) {
+	query := `
+		SELECT 
+			u.id, u.username, u.email, u.auth_provider, u.created_at,
+			u.total_upload_count, u.upload_count,
+			(SELECT COUNT(DISTINCT source) FROM processed_transactions WHERE user_id = u.id) as distinct_broker_count,
+			u.portfolio_value_eur, u.top_5_holdings,
+			u.last_login_at, u.last_login_ip, u.login_count
+		FROM users u
+		ORDER BY u.created_at DESC
+	`
+
+	rows, err := database.DB.Query(query)
+	if err != nil {
+		logger.L.Error("Failed to get admin user list", "error", err)
+		sendJSONError(w, "Failed to retrieve user list", http.StatusInternalServerError)
+		return
+	}
+	defer rows.Close()
+
+	var users []AdminUserView
+	for rows.Next() {
+		var u AdminUserView
+		var lastLoginIP, topHoldings sql.NullString
+		var lastLoginAt sql.NullTime
+
+		if err := rows.Scan(
+			&u.ID, &u.Username, &u.Email, &u.AuthProvider, &u.CreatedAt,
+			&u.TotalUploadCount, &u.CurrentFileCount, &u.DistinctBrokerCount,
+			&u.PortfolioValueEUR, &topHoldings,
+			&lastLoginAt, &lastLoginIP, &u.LoginCount,
+		); err != nil {
+			logger.L.Error("Failed to scan admin user row", "error", err)
+			sendJSONError(w, "Failed to process user data", http.StatusInternalServerError)
+			return
+		}
+
+		u.LastLoginAt = model.NullTime(lastLoginAt)
+		u.LastLoginIP = lastLoginIP.String
+		u.Top5Holdings = topHoldings.String
+
+		users = append(users, u)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(users)
 }

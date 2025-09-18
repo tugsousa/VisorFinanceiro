@@ -41,7 +41,6 @@ const modalStyle = {
   overflowY: 'auto'
 };
 
-// A helper function to wrap the API call with a single retry attempt.
 const uploadWithRetry = async (formData, onUploadProgress) => {
     const MAX_ATTEMPTS = 2;
     let lastError = null;
@@ -50,24 +49,21 @@ const uploadWithRetry = async (formData, onUploadProgress) => {
         try {
             console.log(`Upload attempt ${attempt}...`);
             const response = await apiUploadFile(formData, onUploadProgress);
-            return response; // Success, return the response
+            return response;
         } catch (err) {
             lastError = err;
             console.error(`Upload attempt ${attempt} failed:`, err);
             
-            // Do not retry for client-side errors (e.g., 400 Bad Request, 403 Forbidden)
             if (err.response && err.response.status < 500) {
                 throw lastError;
             }
 
-            // If it's the last attempt, throw the error. Otherwise, wait before retrying.
             if (attempt < MAX_ATTEMPTS) {
                 console.log("Waiting 1 second before retrying...");
                 await new Promise(resolve => setTimeout(resolve, 1000));
             }
         }
     }
-    // If all attempts fail, throw the last recorded error.
     throw lastError;
 };
 
@@ -77,7 +73,7 @@ const UploadPage = () => {
 
     const [selectedFile, setSelectedFile] = useState(null);
     const [uploadProgress, setUploadProgress] = useState(0);
-    const [uploadStatus, setUploadStatus] = useState('idle'); // 'idle', 'uploading', 'processing', 'success', 'error'
+    const [uploadStatus, setUploadStatus] = useState('idle');
     const [fileError, setFileError] = useState(null);
     const [isDragActive, setIsDragActive] = useState(false);
     const fileInputRef = useRef(null);
@@ -96,15 +92,19 @@ const UploadPage = () => {
         }
     };
     
+    // --- START OF CORRECTION ---
+    // This logic is now cleaner and more robust.
     const handleFileSelected = useCallback(async (file) => {
         resetState();
         if (!file) return;
 
+        // 1. Client-side validation
         const fileName = file.name.toLowerCase();
         const isCsv = fileName.endsWith('.csv');
         const isXml = fileName.endsWith('.xml');
+        const brokerType = isCsv ? 'degiro' : (isXml ? 'ibkr' : null);
 
-        if (!isCsv && !isXml) {
+        if (!brokerType) {
             setFileError('Tipo de ficheiro inválido. Por favor, carregue um ficheiro .csv (Degiro) ou .xml (IBKR).');
             setUploadStatus('error');
             return;
@@ -118,11 +118,12 @@ const UploadPage = () => {
 
         setSelectedFile(file);
         
-        const brokerType = isCsv ? 'degiro' : 'ibkr';
+        // 2. Prepare FormData
         const formData = new FormData();
         formData.append('file', file);
-        formData.append('source', brokerType);
+        formData.append('source', brokerType); // Explicitly set the source
 
+        // 3. Attempt upload
         try {
             setUploadStatus('uploading');
             setFileError(null);
@@ -131,16 +132,14 @@ const UploadPage = () => {
                 if (progressEvent.total) {
                     const progress = Math.round((progressEvent.loaded * 100) / progressEvent.total);
                     setUploadProgress(progress);
-                    // When file transfer is complete, switch to processing state
                     if (progress === 100) {
                         setUploadStatus('processing');
                     }
                 }
             });
 
-            // This part is only reached after the server responds successfully
             setUploadStatus('success');
-            await queryClient.invalidateQueries(); // Invalidate all queries to refetch data
+            await queryClient.invalidateQueries();
             await refreshUserDataCheck();
 
         } catch (err) {
@@ -148,6 +147,7 @@ const UploadPage = () => {
             setFileError(err.response?.data?.error || err.message || 'Falha no carregamento. Por favor tente de novo.');
         }
     }, [token, queryClient, refreshUserDataCheck]);
+    // --- END OF CORRECTION ---
 
     const handleDragEnter = (e) => { e.preventDefault(); e.stopPropagation(); setIsDragActive(true); };
     const handleDragLeave = (e) => { e.preventDefault(); e.stopPropagation(); setIsDragActive(false); };
@@ -203,7 +203,6 @@ const UploadPage = () => {
                             type="file"
                             hidden
                             onChange={handleFileInputChange}
-                            //accept=".csv,.xml"
                         />
                         <UploadFileIcon sx={{ fontSize: 50, mb: 2 }} />
                         <Typography variant="h6">Arraste e solte o seu ficheiro aqui</Typography>
