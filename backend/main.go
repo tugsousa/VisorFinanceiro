@@ -121,10 +121,15 @@ func main() {
 	cashMovementProcessor := processors.NewCashMovementProcessor()
 	feeProcessor := processors.NewFeeProcessor()
 
+	// START OF MODIFICATION
+	// Pass the priceService instance to the NewUploadService constructor.
 	uploadService := services.NewUploadService(
 		transactionProcessor, dividendProcessor, stockProcessor,
-		optionProcessor, cashMovementProcessor, feeProcessor, reportCache,
+		optionProcessor, cashMovementProcessor, feeProcessor,
+		priceService, // Add priceService here
+		reportCache,
 	)
+	// END OF MODIFICATION
 
 	uploadHandler := handlers.NewUploadHandler(uploadService)
 	portfolioHandler := handlers.NewPortfolioHandler(uploadService, priceService)

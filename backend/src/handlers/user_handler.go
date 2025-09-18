@@ -178,10 +178,18 @@ func queryTimeSeries(query string) ([]TimeSeriesDataPoint, error) {
 	var results []TimeSeriesDataPoint
 	for rows.Next() {
 		var point TimeSeriesDataPoint
-		if err := rows.Scan(&point.Date, &point.Count); err != nil {
+		// START OF CORRECTION
+		// Scan into a nullable string to prevent errors if the DB returns NULL for a date.
+		var nullableDate sql.NullString
+		if err := rows.Scan(&nullableDate, &point.Count); err != nil {
 			return nil, err
 		}
-		results = append(results, point)
+		// Only add the point to our results if the date was valid (not NULL).
+		if nullableDate.Valid {
+			point.Date = nullableDate.String
+			results = append(results, point)
+		}
+		// END OF CORRECTION
 	}
 	return results, nil
 }
@@ -198,22 +206,27 @@ func (h *UserHandler) HandleGetAdminStats(w http.ResponseWriter, r *http.Request
 	_ = database.DB.QueryRow("SELECT COUNT(*) FROM processed_transactions").Scan(&stats.TotalTransactions)
 
 	// Time series data
-	stats.UsersPerDay, err = queryTimeSeries("SELECT DATE(created_at) as date, COUNT(*) as count FROM users GROUP BY date ORDER BY date ASC")
+	// START OF CORRECTION
+	// Added WHERE clauses to filter out rows that could result in a NULL date,
+	// which was causing the SQL scan error.
+	stats.UsersPerDay, err = queryTimeSeries("SELECT DATE(created_at) as date, COUNT(*) as count FROM users WHERE created_at IS NOT NULL GROUP BY date ORDER BY date ASC")
 	if err != nil {
 		logger.L.Error("Failed to get users per day", "error", err)
 	}
-	stats.UploadsPerDay, err = queryTimeSeries("SELECT DATE(uploaded_at) as date, COUNT(*) as count FROM uploads_history GROUP BY date ORDER BY date ASC")
+	stats.UploadsPerDay, err = queryTimeSeries("SELECT DATE(uploaded_at) as date, COUNT(*) as count FROM uploads_history WHERE uploaded_at IS NOT NULL GROUP BY date ORDER BY date ASC")
 	if err != nil {
 		logger.L.Error("Failed to get uploads per day", "error", err)
 	}
-	stats.TransactionsPerDay, err = queryTimeSeries("SELECT DATE(SUBSTR(date, 7, 4) || '-' || SUBSTR(date, 4, 2) || '-' || SUBSTR(date, 1, 2)) as date, COUNT(*) as count FROM processed_transactions GROUP BY date ORDER BY date ASC")
+	// This query is more complex. We ensure the constructed date is not NULL.
+	stats.TransactionsPerDay, err = queryTimeSeries("SELECT DATE(SUBSTR(date, 7, 4) || '-' || SUBSTR(date, 4, 2) || '-' || SUBSTR(date, 1, 2)) as date, COUNT(*) as count FROM processed_transactions WHERE DATE(SUBSTR(date, 7, 4) || '-' || SUBSTR(date, 4, 2) || '-' || SUBSTR(date, 1, 2)) IS NOT NULL GROUP BY date ORDER BY date ASC")
 	if err != nil {
 		logger.L.Error("Failed to get transactions per day", "error", err)
 	}
-	stats.ActiveUsersPerDay, err = queryTimeSeries("SELECT DATE(login_at) as date, COUNT(DISTINCT user_id) as count FROM login_history GROUP BY date ORDER BY date ASC")
+	stats.ActiveUsersPerDay, err = queryTimeSeries("SELECT DATE(login_at) as date, COUNT(DISTINCT user_id) as count FROM login_history WHERE login_at IS NOT NULL GROUP BY date ORDER BY date ASC")
 	if err != nil {
 		logger.L.Error("Failed to get active users per day", "error", err)
 	}
+	// END OF CORRECTION
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(stats)
