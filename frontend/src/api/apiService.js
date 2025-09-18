@@ -207,5 +207,5 @@ export const apiCheckUserHasData = () => apiClient.get(API_ENDPOINTS.USER_HAS_DA
 export const apiDeleteTransactions = (criteria) => apiClient.delete(API_ENDPOINTS.DELETE_TRANSACTIONS, { data: criteria });
 export const apiVerifyEmail = (token) => apiClient.get(`${API_ENDPOINTS.AUTH_VERIFY_EMAIL}?token=${token}`);
 export const apiFetchFees = () => apiClient.get(API_ENDPOINTS.FEES_DATA);
-
+export const apiAddManualTransaction = (transactionData) => apiClient.post('/api/transactions/manual', transactionData);
 export default apiClient;

@@ -2,16 +2,20 @@
 package handlers
 
 import (
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/username/taxfolio/backend/src/database"
 	"github.com/username/taxfolio/backend/src/logger"
 	"github.com/username/taxfolio/backend/src/models"
+	"github.com/username/taxfolio/backend/src/processors"
 	"github.com/username/taxfolio/backend/src/services"
 	"github.com/username/taxfolio/backend/src/utils"
 )
@@ -26,6 +30,8 @@ func NewTransactionHandler(uploadService services.UploadService) *TransactionHan
 	}
 }
 
+// NOTE: I am now reverting HandleGetProcessedTransactions back to its original, simpler form,
+// as the root cause of NULLs is being fixed at the point of entry.
 func (h *TransactionHandler) HandleGetProcessedTransactions(w http.ResponseWriter, r *http.Request) {
 	userID, ok := GetUserIDFromContext(r.Context())
 	if !ok {
@@ -74,14 +80,11 @@ func (h *TransactionHandler) HandleGetProcessedTransactions(w http.ResponseWrite
 	}
 }
 
-// DeleteRequest define a estrutura para o corpo do pedido de eliminação.
 type DeleteRequest struct {
 	Type   string   `json:"type"`
 	Values []string `json:"values"`
 }
 
-// HandleDeleteAllProcessedTransactions foi atualizado para HandleDeleteTransactions para maior clareza.
-// Lida com a eliminação de transações com base nos critérios fornecidos ('all', 'source', 'year').
 func (h *TransactionHandler) HandleDeleteAllProcessedTransactions(w http.ResponseWriter, r *http.Request) {
 	userID, ok := GetUserIDFromContext(r.Context())
 	if !ok {
@@ -135,7 +138,6 @@ func (h *TransactionHandler) HandleDeleteAllProcessedTransactions(w http.Respons
 			utils.SendJSONError(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		// Assumindo que o formato da data na BD é 'DD-MM-YYYY'
 		result, err = txDB.Exec("DELETE FROM processed_transactions WHERE user_id = ? AND SUBSTR(date, 7, 4) = ?", userID, req.Values[0])
 	default:
 		err = fmt.Errorf("invalid deletion type specified")
@@ -149,7 +151,6 @@ func (h *TransactionHandler) HandleDeleteAllProcessedTransactions(w http.Respons
 		return
 	}
 
-	// Recalcula o upload_count com base nas fontes distintas restantes
 	var newUploadCount int
 	err = txDB.QueryRow("SELECT COUNT(DISTINCT source) FROM processed_transactions WHERE user_id = ?", userID).Scan(&newUploadCount)
 	if err != nil {
@@ -178,4 +179,120 @@ func (h *TransactionHandler) HandleDeleteAllProcessedTransactions(w http.Respons
 	logger.L.Info("User cache invalidated after deleting transactions", "userID", userID)
 
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// ManualTransactionRequest is updated with all new fields
+type ManualTransactionRequest struct {
+	Date               string  `json:"date"`
+	Source             string  `json:"source"`
+	ProductName        string  `json:"product_name"`
+	ISIN               string  `json:"isin"`
+	TransactionType    string  `json:"transaction_type"`
+	TransactionSubType string  `json:"transaction_subtype"`
+	BuySell            string  `json:"buy_sell"`
+	Quantity           float64 `json:"quantity"`
+	Price              float64 `json:"price"`
+	Commission         float64 `json:"commission"`
+	Currency           string  `json:"currency"`
+	OrderID            string  `json:"order_id"`
+}
+
+func (h *TransactionHandler) HandleAddManualTransaction(w http.ResponseWriter, r *http.Request) {
+	userID, ok := GetUserIDFromContext(r.Context())
+	if !ok {
+		utils.SendJSONError(w, "authentication required", http.StatusUnauthorized)
+		return
+	}
+
+	var req ManualTransactionRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		utils.SendJSONError(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	if req.ProductName == "" || req.Date == "" || req.Source == "" {
+		utils.SendJSONError(w, "Product name, date, and source are required", http.StatusBadRequest)
+		return
+	}
+
+	transactionDate, err := time.Parse("2006-01-02", req.Date)
+	if err != nil {
+		utils.SendJSONError(w, "Invalid date format, expected YYYY-MM-DD", http.StatusBadRequest)
+		return
+	}
+
+	exchangeRate, err := processors.GetExchangeRate(req.Currency, transactionDate)
+	if err != nil {
+		logger.L.Warn("Could not get exchange rate for manual transaction", "error", err)
+		exchangeRate = 1.0
+	}
+
+	amount := req.Quantity * req.Price
+	if req.BuySell == "BUY" {
+		amount = -amount
+	}
+
+	amountEUR := amount
+	if exchangeRate != 0 {
+		amountEUR = amount / exchangeRate
+	}
+
+	countryCode := utils.GetCountryCodeString(req.ISIN)
+
+	// Auto-generate a description to ensure it's not NULL
+	description := fmt.Sprintf("Manual Entry: %s %f %s @ %f %s", req.BuySell, req.Quantity, req.ProductName, req.Price, req.Currency)
+
+	hashInput := fmt.Sprintf("%s-%s", description, time.Now().String())
+	hash := sha256.Sum256([]byte(hashInput))
+	hashId := hex.EncodeToString(hash[:])
+
+	stmt, err := database.DB.Prepare(`
+        INSERT INTO processed_transactions 
+        (user_id, date, source, product_name, isin, quantity, original_quantity, price, 
+        transaction_type, transaction_subtype, buy_sell, description, amount, currency, 
+        commission, order_id, exchange_rate, amount_eur, country_code, input_string, hash_id) 
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `)
+	if err != nil {
+		logger.L.Error("Failed to prepare statement for manual transaction", "error", err)
+		utils.SendJSONError(w, "Failed to save transaction", http.StatusInternalServerError)
+		return
+	}
+	defer stmt.Close()
+
+	_, err = stmt.Exec(
+		userID,
+		transactionDate.Format("02-01-2006"),
+		req.Source,
+		req.ProductName,
+		req.ISIN,
+		int(req.Quantity),
+		int(req.Quantity),
+		req.Price,
+		req.TransactionType,
+		req.TransactionSubType,
+		req.BuySell,
+		description, // Use auto-generated description
+		amount,
+		req.Currency,
+		req.Commission,
+		req.OrderID,
+		exchangeRate,
+		amountEUR,
+		countryCode,
+		description, // Use the same for input_string
+		hashId,
+	)
+
+	if err != nil {
+		logger.L.Error("Failed to insert manual transaction", "userID", userID, "error", err)
+		utils.SendJSONError(w, "Failed to save transaction", http.StatusInternalServerError)
+		return
+	}
+
+	h.uploadService.InvalidateUserCache(userID)
+	logger.L.Info("Manual transaction added and cache invalidated", "userID", userID)
+
+	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(map[string]string{"message": "Transaction added successfully"})
 }

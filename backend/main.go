@@ -185,6 +185,9 @@ func main() {
 			r.Post("/upload", uploadHandler.HandleUpload)
 			r.Get("/realizedgains-data", uploadHandler.HandleGetRealizedGainsData)
 			r.Get("/transactions/processed", txHandler.HandleGetProcessedTransactions)
+			// START OF NEW CODE
+			r.Post("/transactions/manual", txHandler.HandleAddManualTransaction)
+			// END OF NEW CODE
 			r.Get("/holdings/current-value", portfolioHandler.HandleGetCurrentHoldingsValue)
 			r.Get("/holdings/stocks", portfolioHandler.HandleGetStockHoldings)
 			r.Get("/holdings/options", portfolioHandler.HandleGetOptionHoldings)
