@@ -2,8 +2,10 @@
 package services
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
+	"sort"
 	"strings"
 	"time"
 
@@ -32,6 +34,8 @@ const (
 	CacheCleanupInterval   = 30 * time.Minute
 )
 
+// START OF MODIFICATION
+// Add priceService to the implementation struct
 type uploadServiceImpl struct {
 	transactionProcessor  *processors.TransactionProcessor
 	dividendProcessor     processors.DividendProcessor
@@ -39,9 +43,11 @@ type uploadServiceImpl struct {
 	optionProcessor       processors.OptionProcessor
 	cashMovementProcessor processors.CashMovementProcessor
 	feeProcessor          processors.FeeProcessor
+	priceService          PriceService // Added this field
 	reportCache           *cache.Cache
 }
 
+// Update the constructor to accept the priceService
 func NewUploadService(
 	transactionProcessor *processors.TransactionProcessor,
 	dividendProcessor processors.DividendProcessor,
@@ -49,6 +55,7 @@ func NewUploadService(
 	optionProcessor processors.OptionProcessor,
 	cashMovementProcessor processors.CashMovementProcessor,
 	feeProcessor processors.FeeProcessor,
+	priceService PriceService, // Added this parameter
 	reportCache *cache.Cache,
 ) UploadService {
 	return &uploadServiceImpl{
@@ -58,9 +65,12 @@ func NewUploadService(
 		optionProcessor:       optionProcessor,
 		cashMovementProcessor: cashMovementProcessor,
 		feeProcessor:          feeProcessor,
+		priceService:          priceService, // Assign the service
 		reportCache:           reportCache,
 	}
 }
+
+// END OF MODIFICATION
 
 // Modified ProcessUpload signature to accept filename and size for history tracking
 func (s *uploadServiceImpl) ProcessUpload(fileReader io.Reader, userID int64, source, filename string, filesize int64) (*UploadResult, error) {
@@ -144,11 +154,130 @@ func (s *uploadServiceImpl) ProcessUpload(fileReader io.Reader, userID int64, so
 		return nil, fmt.Errorf("error committing transactions: %w", err)
 	}
 
-	s.InvalidateUserCache(userID)
+	// START OF MODIFICATION
+	// After a successful upload and commit, trigger the portfolio metrics update.
+	// We run this in a goroutine so it doesn't block the HTTP response to the user.
+	if insertedCount > 0 {
+		go func() {
+			logger.L.Info("Triggering portfolio metrics update after upload", "userID", userID)
+			// Invalidate first to ensure the next calculation uses fresh DB data
+			s.InvalidateUserCache(userID)
+			if err := s.updateUserPortfolioMetrics(userID); err != nil {
+				logger.L.Error("Failed to update user portfolio metrics asynchronously", "userID", userID, "error", err)
+			}
+		}()
+	} else {
+		s.InvalidateUserCache(userID)
+	}
+	// END OF MODIFICATION
 
 	logger.L.Info("ProcessUpload END", "userID", userID, "duration", time.Since(overallStartTime))
 	return s.GetLatestUploadResult(userID)
 }
+
+// START OF NEW FUNCTION
+// updateUserPortfolioMetrics calculates and updates the user's portfolio value and top holdings.
+func (s *uploadServiceImpl) updateUserPortfolioMetrics(userID int64) error {
+	logger.L.Debug("Starting portfolio metrics calculation", "userID", userID)
+
+	// 1. Get current stock holdings. This will use the cache if available.
+	_, holdingsByYear, err := s.getStockData(userID)
+	if err != nil {
+		return fmt.Errorf("could not get stock holdings for metrics update: %w", err)
+	}
+
+	// Find the latest year's holdings for the current portfolio snapshot.
+	latestYear := ""
+	for year := range holdingsByYear {
+		if latestYear == "" || year > latestYear {
+			latestYear = year
+		}
+	}
+	currentLots := holdingsByYear[latestYear]
+	if len(currentLots) == 0 {
+		logger.L.Info("User has no current holdings, setting portfolio value to 0", "userID", userID)
+		_, err := database.DB.Exec("UPDATE users SET portfolio_value_eur = 0, top_5_holdings = '[]' WHERE id = ?", userID)
+		return err
+	}
+
+	// 2. Aggregate holdings by ISIN to get total quantities.
+	type aggregatedHolding struct {
+		ISIN        string
+		ProductName string
+		Quantity    int
+	}
+	groupedHoldings := make(map[string]aggregatedHolding)
+	for _, lot := range currentLots {
+		agg, exists := groupedHoldings[lot.ISIN]
+		if !exists {
+			agg = aggregatedHolding{ISIN: lot.ISIN, ProductName: lot.ProductName}
+		}
+		agg.Quantity += lot.Quantity
+		groupedHoldings[lot.ISIN] = agg
+	}
+
+	// 3. Get current prices.
+	uniqueISINs := make([]string, 0, len(groupedHoldings))
+	for isin := range groupedHoldings {
+		uniqueISINs = append(uniqueISINs, isin)
+	}
+	prices, err := s.priceService.GetCurrentPrices(uniqueISINs)
+	if err != nil {
+		// Log as a warning because some prices might fail, but we can proceed with what we have.
+		logger.L.Warn("Could not fetch all prices for metrics update", "userID", userID, "error", err)
+	}
+
+	// 4. Calculate market value and total portfolio value.
+	type holdingWithValue struct {
+		Name  string  `json:"name"`
+		Value float64 `json:"value"`
+	}
+	var valuedHoldings []holdingWithValue
+	totalPortfolioValue := 0.0
+
+	for isin, holding := range groupedHoldings {
+		priceInfo, found := prices[isin]
+		if found && priceInfo.Status == "OK" {
+			marketValue := priceInfo.Price * float64(holding.Quantity)
+			totalPortfolioValue += marketValue
+			valuedHoldings = append(valuedHoldings, holdingWithValue{
+				Name:  holding.ProductName,
+				Value: marketValue,
+			})
+		}
+	}
+
+	// 5. Sort to find top 5 holdings.
+	sort.Slice(valuedHoldings, func(i, j int) bool {
+		return valuedHoldings[i].Value > valuedHoldings[j].Value
+	})
+
+	top5 := valuedHoldings
+	if len(top5) > 5 {
+		top5 = top5[:5]
+	}
+
+	// 6. Marshal top 5 to JSON.
+	top5JSON, err := json.Marshal(top5)
+	if err != nil {
+		return fmt.Errorf("failed to marshal top 5 holdings to JSON: %w", err)
+	}
+
+	// 7. Update the database.
+	logger.L.Info("Updating user portfolio metrics in DB", "userID", userID, "portfolioValue", totalPortfolioValue, "top5Count", len(top5))
+	_, err = database.DB.Exec(
+		"UPDATE users SET portfolio_value_eur = ?, top_5_holdings = ? WHERE id = ?",
+		totalPortfolioValue, string(top5JSON), userID,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to update users table with portfolio metrics: %w", err)
+	}
+
+	logger.L.Debug("Successfully updated portfolio metrics", "userID", userID)
+	return nil
+}
+
+// END OF NEW FUNCTION
 
 // ... (rest of file is unchanged) ...
 func (s *uploadServiceImpl) InvalidateUserCache(userID int64) {
