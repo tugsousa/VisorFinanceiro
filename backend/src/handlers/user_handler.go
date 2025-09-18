@@ -5,8 +5,10 @@ import (
 	"encoding/json"
 	"net/http"
 	"regexp"
+	"strings"
 	"time"
 
+	"github.com/username/taxfolio/backend/src/config"
 	"github.com/username/taxfolio/backend/src/database"
 	"github.com/username/taxfolio/backend/src/logger"
 	"github.com/username/taxfolio/backend/src/model"
@@ -20,7 +22,7 @@ type contextKey string
 const userIDContextKey contextKey = "userID"
 
 var emailRegex = regexp.MustCompile(`^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$`)
-var passwordRegex = regexp.MustCompile(`^.{6,}$`) // Basic: at least 6 characters
+var passwordRegex = regexp.MustCompile(`^.{6,}$`)
 
 var (
 	googleOauthConfig *oauth2.Config
@@ -100,4 +102,90 @@ func min(a, b int) int {
 		return a
 	}
 	return b
+}
+
+// --- NOVAS FUNÇÕES DE ADMIN ---
+
+// AdminMiddleware verifica se o utilizador autenticado é um administrador.
+func (h *UserHandler) AdminMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		userID, ok := GetUserIDFromContext(r.Context())
+		if !ok {
+			sendJSONError(w, "Authentication required", http.StatusUnauthorized)
+			return
+		}
+
+		user, err := model.GetUserByID(database.DB, userID)
+		if err != nil {
+			sendJSONError(w, "User not found", http.StatusNotFound)
+			return
+		}
+
+		isUserAdmin := false
+		for _, adminEmail := range config.Cfg.AdminEmails {
+			if strings.EqualFold(user.Email, adminEmail) {
+				isUserAdmin = true
+				break
+			}
+		}
+
+		if !isUserAdmin {
+			logger.L.Warn("Admin access denied for user", "userID", user.ID, "email", user.Email)
+			sendJSONError(w, "Forbidden: Administrator access required", http.StatusForbidden)
+			return
+		}
+
+		next.ServeHTTP(w, r)
+	})
+}
+
+// Structs para a resposta da API de admin
+type AdminStats struct {
+	TotalUsers  int          `json:"totalUsers"`
+	RecentUsers []SimpleUser `json:"recentUsers"`
+}
+
+type SimpleUser struct {
+	ID        int64     `json:"id"`
+	Username  string    `json:"username"`
+	Email     string    `json:"email"`
+	CreatedAt time.Time `json:"createdAt"`
+}
+
+// HandleGetAdminStats obtém estatísticas básicas para o dashboard de admin.
+func (h *UserHandler) HandleGetAdminStats(w http.ResponseWriter, r *http.Request) {
+	var totalUsers int
+	err := database.DB.QueryRow("SELECT COUNT(*) FROM users").Scan(&totalUsers)
+	if err != nil {
+		logger.L.Error("Failed to get total users for admin stats", "error", err)
+		sendJSONError(w, "Failed to get total users", http.StatusInternalServerError)
+		return
+	}
+
+	rows, err := database.DB.Query("SELECT id, username, email, created_at FROM users ORDER BY created_at DESC LIMIT 20")
+	if err != nil {
+		logger.L.Error("Failed to get recent users for admin stats", "error", err)
+		sendJSONError(w, "Failed to get recent users", http.StatusInternalServerError)
+		return
+	}
+	defer rows.Close()
+
+	var recentUsers []SimpleUser
+	for rows.Next() {
+		var u SimpleUser
+		if err := rows.Scan(&u.ID, &u.Username, &u.Email, &u.CreatedAt); err != nil {
+			logger.L.Error("Failed to scan user row for admin stats", "error", err)
+			sendJSONError(w, "Failed to scan user row", http.StatusInternalServerError)
+			return
+		}
+		recentUsers = append(recentUsers, u)
+	}
+
+	stats := AdminStats{
+		TotalUsers:  totalUsers,
+		RecentUsers: recentUsers,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(stats)
 }

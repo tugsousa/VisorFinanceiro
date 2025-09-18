@@ -3,34 +3,32 @@ package model
 import (
 	"database/sql"
 	"errors"
-	"time"
-
 	"log"
+	"time"
 
 	"golang.org/x/crypto/bcrypt"
 )
 
 type User struct {
-	ID           int64     `json:"id"` // Changed to int64 to match GetUserIDFromContext
-	Username     string    `json:"username"`
-	Email        string    `json:"email"`
-	Password     string    `json:"-"`
-	AuthProvider string    `json:"auth_provider,omitempty"`
-	UploadCount  int       `json:"-"`
-	CreatedAt    time.Time `json:"created_at"`
-	UpdatedAt    time.Time `json:"updated_at"`
-
+	ID                              int64     `json:"id"`
+	Username                        string    `json:"username"`
+	Email                           string    `json:"email"`
+	Password                        string    `json:"-"`
+	AuthProvider                    string    `json:"auth_provider,omitempty"`
+	UploadCount                     int       `json:"-"`
+	CreatedAt                       time.Time `json:"created_at"`
+	UpdatedAt                       time.Time `json:"updated_at"`
 	IsEmailVerified                 bool      `json:"is_email_verified"`
 	EmailVerificationToken          string    `json:"-"`
 	EmailVerificationTokenExpiresAt time.Time `json:"-"`
-
-	PasswordResetToken          string    `json:"-"`
-	PasswordResetTokenExpiresAt time.Time `json:"-"`
+	PasswordResetToken              string    `json:"-"`
+	PasswordResetTokenExpiresAt     time.Time `json:"-"`
+	IsAdmin                         bool      `json:"is_admin"` // Campo para lógica de negócio, não persistido no DB
 }
 
 type Session struct {
 	ID           int       `json:"id"`
-	UserID       int64     `json:"user_id"` // Changed to int64
+	UserID       int64     `json:"user_id"`
 	Token        string    `json:"token"`
 	RefreshToken string    `json:"refresh_token"`
 	UserAgent    string    `json:"user_agent"`
@@ -57,12 +55,10 @@ func (u *User) CreateUser(db *sql.DB) error {
 	now := time.Now()
 	u.CreatedAt = now
 	u.UpdatedAt = now
-	// CORREÇÃO: Garante que 'local' é o padrão se nenhum AuthProvider for definido
 	if u.AuthProvider == "" {
 		u.AuthProvider = "local"
 	}
 
-	// CORREÇÃO: Adicionado `auth_provider` à query
 	query := `
 	INSERT INTO users (username, email, password, auth_provider, is_email_verified, email_verification_token, email_verification_token_expires_at, password_reset_token, password_reset_token_expires_at, created_at, updated_at)
 	VALUES (?, ?, ?, ?, ?, ?, ?, NULL, NULL, ?, ?)`
@@ -83,7 +79,7 @@ func (u *User) CreateUser(db *sql.DB) error {
 		u.Username,
 		u.Email,
 		u.Password,
-		u.AuthProvider, // CORREÇÃO: Adicionado o valor do AuthProvider
+		u.AuthProvider,
 		u.IsEmailVerified,
 		u.EmailVerificationToken,
 		emailTokenExpiresArg,
@@ -117,7 +113,6 @@ func GetUserByID(db *sql.DB, id int64) (*User, error) {
 	var passwordResetToken sql.NullString
 	var passwordResetTokenExpiresAt sql.NullTime
 
-	// CORREÇÃO: Adicionado `&authProvider` ao Scan
 	err := row.Scan(
 		&user.ID, &user.Username, &user.Email, &user.Password,
 		&authProvider,
@@ -133,7 +128,6 @@ func GetUserByID(db *sql.DB, id int64) (*User, error) {
 		}
 		return nil, err
 	}
-	// CORREÇÃO: Atribuído o valor lido da DB à struct
 	if authProvider.Valid {
 		user.AuthProvider = authProvider.String
 	}
@@ -153,7 +147,6 @@ func GetUserByID(db *sql.DB, id int64) (*User, error) {
 }
 
 func GetUserByUsername(db *sql.DB, username string) (*User, error) {
-	// CORREÇÃO: Adicionado `upload_count` à query
 	query := `
 	SELECT id, username, email, password, auth_provider, upload_count, is_email_verified, 
 	       email_verification_token, email_verification_token_expires_at,
@@ -169,7 +162,6 @@ func GetUserByUsername(db *sql.DB, username string) (*User, error) {
 	var passwordResetToken sql.NullString
 	var passwordResetTokenExpiresAt sql.NullTime
 
-	// CORREÇÃO: Adicionado `&user.UploadCount` ao Scan
 	err := row.Scan(
 		&user.ID, &user.Username, &user.Email, &user.Password,
 		&authProvider,
@@ -185,7 +177,6 @@ func GetUserByUsername(db *sql.DB, username string) (*User, error) {
 		}
 		return nil, err
 	}
-	// CORREÇÃO: Atribuído o valor lido da DB à struct
 	if authProvider.Valid {
 		user.AuthProvider = authProvider.String
 	}
@@ -205,7 +196,6 @@ func GetUserByUsername(db *sql.DB, username string) (*User, error) {
 }
 
 func GetUserByEmail(db *sql.DB, email string) (*User, error) {
-	// CORREÇÃO: Adicionado `upload_count` à query
 	query := `
 	SELECT id, username, email, password, auth_provider, upload_count, is_email_verified, 
 	       email_verification_token, email_verification_token_expires_at,
@@ -221,7 +211,6 @@ func GetUserByEmail(db *sql.DB, email string) (*User, error) {
 	var passwordResetToken sql.NullString
 	var passwordResetTokenExpiresAt sql.NullTime
 
-	// CORREÇÃO: Adicionado `&user.UploadCount` ao Scan
 	err := row.Scan(
 		&user.ID, &user.Username, &user.Email, &user.Password,
 		&authProvider,
@@ -237,7 +226,6 @@ func GetUserByEmail(db *sql.DB, email string) (*User, error) {
 		}
 		return nil, err
 	}
-	// CORREÇÃO: Atribuído o valor lido da DB à struct
 	if authProvider.Valid {
 		user.AuthProvider = authProvider.String
 	}
@@ -257,7 +245,6 @@ func GetUserByEmail(db *sql.DB, email string) (*User, error) {
 }
 
 func GetUserByVerificationToken(db *sql.DB, token string) (*User, error) {
-	// CORREÇÃO: Adicionado `auth_provider` à query
 	query := `
 	SELECT id, username, email, password, auth_provider, is_email_verified, 
 	       email_verification_token, email_verification_token_expires_at, 
@@ -267,13 +254,12 @@ func GetUserByVerificationToken(db *sql.DB, token string) (*User, error) {
 	WHERE email_verification_token = ?`
 	row := db.QueryRow(query, token)
 	var user User
-	var authProvider sql.NullString // CORREÇÃO: Adicionada variável para ler da DB
+	var authProvider sql.NullString
 	var emailVerificationTokenFromDB sql.NullString
 	var emailVerificationTokenExpiresAt sql.NullTime
 	var passwordResetToken sql.NullString
 	var passwordResetTokenExpiresAt sql.NullTime
 
-	// CORREÇÃO: Adicionado `&authProvider` ao Scan
 	err := row.Scan(
 		&user.ID, &user.Username, &user.Email, &user.Password,
 		&authProvider,
@@ -288,7 +274,6 @@ func GetUserByVerificationToken(db *sql.DB, token string) (*User, error) {
 		}
 		return nil, err
 	}
-	// CORREÇÃO: Atribuído o valor lido da DB à struct
 	if authProvider.Valid {
 		user.AuthProvider = authProvider.String
 	}
@@ -377,7 +362,6 @@ func (u *User) UpdateUserVerificationToken(db *sql.DB, token string, expiresAt t
 }
 
 func GetUserByPasswordResetToken(db *sql.DB, token string) (*User, error) {
-	// CORREÇÃO: Adicionado `auth_provider` à query
 	query := `
 	SELECT id, username, email, password, auth_provider, is_email_verified, 
 	       email_verification_token, email_verification_token_expires_at,
@@ -387,13 +371,12 @@ func GetUserByPasswordResetToken(db *sql.DB, token string) (*User, error) {
 	WHERE password_reset_token = ? AND password_reset_token_expires_at > ?`
 	row := db.QueryRow(query, token, time.Now())
 	var user User
-	var authProvider sql.NullString // CORREÇÃO: Adicionada variável para ler da DB
+	var authProvider sql.NullString
 	var emailVerificationToken sql.NullString
 	var emailVerificationTokenExpiresAt sql.NullTime
 	var passwordResetTokenFromDB sql.NullString
 	var passwordResetTokenExpiresAt sql.NullTime
 
-	// CORREÇÃO: Adicionado `&authProvider` ao Scan
 	err := row.Scan(
 		&user.ID, &user.Username, &user.Email, &user.Password,
 		&authProvider,
@@ -408,7 +391,6 @@ func GetUserByPasswordResetToken(db *sql.DB, token string) (*User, error) {
 		}
 		return nil, err
 	}
-	// CORREÇÃO: Atribuído o valor lido da DB à struct
 	if authProvider.Valid {
 		user.AuthProvider = authProvider.String
 	}

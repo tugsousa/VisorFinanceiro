@@ -185,9 +185,7 @@ func main() {
 			r.Post("/upload", uploadHandler.HandleUpload)
 			r.Get("/realizedgains-data", uploadHandler.HandleGetRealizedGainsData)
 			r.Get("/transactions/processed", txHandler.HandleGetProcessedTransactions)
-			// START OF NEW CODE
 			r.Post("/transactions/manual", txHandler.HandleAddManualTransaction)
-			// END OF NEW CODE
 			r.Get("/holdings/current-value", portfolioHandler.HandleGetCurrentHoldingsValue)
 			r.Get("/holdings/stocks", portfolioHandler.HandleGetStockHoldings)
 			r.Get("/holdings/options", portfolioHandler.HandleGetOptionHoldings)
@@ -200,6 +198,12 @@ func main() {
 			r.Get("/user/has-data", userHandler.HandleCheckUserData)
 			r.Post("/user/change-password", userHandler.ChangePasswordHandler)
 			r.Post("/user/delete-account", userHandler.DeleteAccountHandler)
+
+			// Admin Routes
+			r.Group(func(r chi.Router) {
+				r.Use(userHandler.AdminMiddleware) // Protects routes within this group
+				r.Get("/admin/stats", userHandler.HandleGetAdminStats)
+			})
 		})
 	})
 

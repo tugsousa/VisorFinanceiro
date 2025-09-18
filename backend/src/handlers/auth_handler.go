@@ -17,6 +17,16 @@ import (
 	"github.com/username/taxfolio/backend/src/model"
 )
 
+// Helper function to check if an email belongs to an admin.
+func isAdmin(email string) bool {
+	for _, adminEmail := range config.Cfg.AdminEmails {
+		if strings.EqualFold(email, adminEmail) {
+			return true
+		}
+	}
+	return false
+}
+
 func (h *UserHandler) RegisterUserHandler(w http.ResponseWriter, r *http.Request) {
 	var credentials struct {
 		Username string `json:"username"`
@@ -90,7 +100,7 @@ func (h *UserHandler) RegisterUserHandler(w http.ResponseWriter, r *http.Request
 		Username:                        credentials.Username,
 		Email:                           credentials.Email,
 		Password:                        hashedPassword,
-		AuthProvider:                    "local", // CORREÇÃO: Definir explicitamente como 'local'
+		AuthProvider:                    "local",
 		IsEmailVerified:                 false,
 		EmailVerificationToken:          verificationToken,
 		EmailVerificationTokenExpiresAt: tokenExpiry,
@@ -187,6 +197,9 @@ func (h *UserHandler) LoginUserHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Preencher a informação de admin
+	user.IsAdmin = isAdmin(user.Email)
+
 	userIDStr := fmt.Sprintf("%d", user.ID)
 	accessToken, err := h.authService.GenerateToken(userIDStr)
 	if err != nil {
@@ -222,6 +235,7 @@ func (h *UserHandler) LoginUserHandler(w http.ResponseWriter, r *http.Request) {
 		"username":      user.Username,
 		"email":         user.Email,
 		"auth_provider": user.AuthProvider,
+		"is_admin":      user.IsAdmin, // Adicionar o campo is_admin
 	}
 
 	w.Header().Set("Content-Type", "application/json")
