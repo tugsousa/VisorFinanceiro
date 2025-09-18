@@ -15,6 +15,8 @@ import (
 	"github.com/username/taxfolio/backend/src/processors"
 )
 
+// ... (constants remain the same) ...
+
 const (
 	// Long-lived caches for full calculation results
 	ckAllStockSales       = "res_all_stock_sales_user_%d"
@@ -60,7 +62,8 @@ func NewUploadService(
 	}
 }
 
-func (s *uploadServiceImpl) ProcessUpload(fileReader io.Reader, userID int64, source string) (*UploadResult, error) {
+// Modified ProcessUpload signature to accept filename and size for history tracking
+func (s *uploadServiceImpl) ProcessUpload(fileReader io.Reader, userID int64, source, filename string, filesize int64) (*UploadResult, error) {
 	overallStartTime := time.Now()
 	logger.L.Info("ProcessUpload START", "userID", userID, "source", source)
 
@@ -79,7 +82,7 @@ func (s *uploadServiceImpl) ProcessUpload(fileReader io.Reader, userID int64, so
 		return s.GetLatestUploadResult(userID)
 	}
 
-	// --- Database Insertion ---
+	// --- Database Transaction ---
 	dbTx, err := database.DB.Begin()
 	if err != nil {
 		return nil, fmt.Errorf("error beginning database transaction: %w", err)
@@ -92,6 +95,7 @@ func (s *uploadServiceImpl) ProcessUpload(fileReader io.Reader, userID int64, so
 	}
 	defer stmt.Close()
 
+	insertedCount := 0
 	for _, tx := range newlyProcessedTxs {
 		_, err := stmt.Exec(userID, tx.Date, tx.Source, tx.ProductName, tx.ISIN, tx.Quantity, tx.OriginalQuantity, tx.Price, tx.TransactionType, tx.TransactionSubType, tx.BuySell, tx.Description, tx.Amount, tx.Currency, tx.Commission, tx.OrderID, tx.ExchangeRate, tx.AmountEUR, tx.CountryCode, tx.InputString, tx.HashId)
 		if err != nil {
@@ -101,21 +105,52 @@ func (s *uploadServiceImpl) ProcessUpload(fileReader io.Reader, userID int64, so
 			}
 			return nil, fmt.Errorf("error inserting transaction (OrderID: %s): %w", tx.OrderID, err)
 		}
+		insertedCount++
 	}
+
+	// --- NEW: Update User and Upload History ---
+	if insertedCount > 0 {
+		// 1. Record this specific upload event
+		_, err = dbTx.Exec(`
+			INSERT INTO uploads_history (user_id, source, filename, file_size, transaction_count) 
+			VALUES (?, ?, ?, ?, ?)`,
+			userID, source, filename, filesize, insertedCount,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to record upload in history: %w", err)
+		}
+
+		// 2. Recalculate distinct sources and update user stats
+		var newUploadCount int
+		err = dbTx.QueryRow("SELECT COUNT(DISTINCT source) FROM processed_transactions WHERE user_id = ?", userID).Scan(&newUploadCount)
+		if err != nil {
+			return nil, fmt.Errorf("failed to recount distinct sources for user: %w", err)
+		}
+
+		// 3. Update the user's main counters
+		_, err = dbTx.Exec(`
+			UPDATE users 
+			SET total_upload_count = total_upload_count + 1, upload_count = ?
+			WHERE id = ?`,
+			newUploadCount, userID,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to update user upload counts: %w", err)
+		}
+	}
+	// --- END NEW ---
 
 	if err := dbTx.Commit(); err != nil {
 		return nil, fmt.Errorf("error committing transactions: %w", err)
 	}
 
-	// --- Invalidate Caches ---
-	// This simple strategy ensures data consistency. The next request will trigger a full, correct recalculation.
 	s.InvalidateUserCache(userID)
 
 	logger.L.Info("ProcessUpload END", "userID", userID, "duration", time.Since(overallStartTime))
 	return s.GetLatestUploadResult(userID)
 }
 
-// InvalidateUserCache clears all cached data for a user, forcing a complete rebuild on the next request.
+// ... (rest of file is unchanged) ...
 func (s *uploadServiceImpl) InvalidateUserCache(userID int64) {
 	keysToDelete := []string{
 		fmt.Sprintf(ckAllStockSales, userID),

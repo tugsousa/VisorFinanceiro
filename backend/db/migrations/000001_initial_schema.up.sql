@@ -1,20 +1,57 @@
 -- 000001_initial_schema.up.sql
+
+-- Main users table with added tracking fields
 CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     username TEXT NOT NULL UNIQUE,
     password TEXT NOT NULL,
     email TEXT NOT NULL UNIQUE,
     auth_provider TEXT DEFAULT 'local',
+    
+    -- Verification & Reset Tokens
     is_email_verified BOOLEAN DEFAULT FALSE,
     email_verification_token TEXT,
     email_verification_token_expires_at TIMESTAMP,
     password_reset_token TEXT,
     password_reset_token_expires_at TIMESTAMP,
-    upload_count INTEGER DEFAULT 0,
+
+    -- KPI Fields for Admin Dashboard
+    upload_count INTEGER DEFAULT 0, -- Current number of distinct sources
+    total_upload_count INTEGER DEFAULT 0, -- Cumulative uploads over all time
+    login_count INTEGER DEFAULT 0,
+    last_login_at TIMESTAMP,
+    last_login_ip TEXT,
+    portfolio_value_eur REAL DEFAULT 0,
+    top_5_holdings TEXT, -- Stored as JSON: '[{"name": "AAPL", "value": 15000}, ...]'
+
+    -- Timestamps
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Login history for tracking DAU/MAU and user activity
+CREATE TABLE IF NOT EXISTS login_history (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    login_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    ip_address TEXT,
+    user_agent TEXT,
+    FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+-- Upload history for tracking uploads over time
+CREATE TABLE IF NOT EXISTS uploads_history (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    uploaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    source TEXT NOT NULL,
+    filename TEXT,
+    file_size INTEGER,
+    transaction_count INTEGER,
+    FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+-- Sessions table for authentication
 CREATE TABLE IF NOT EXISTS sessions (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER NOT NULL,
@@ -25,9 +62,10 @@ CREATE TABLE IF NOT EXISTS sessions (
     is_blocked BOOLEAN DEFAULT FALSE,
     expires_at TIMESTAMP,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY(user_id) REFERENCES users(id)
+    FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 
+-- Processed transactions from user uploads
 CREATE TABLE IF NOT EXISTS processed_transactions (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER NOT NULL,
@@ -51,16 +89,17 @@ CREATE TABLE IF NOT EXISTS processed_transactions (
     country_code TEXT,
     input_string TEXT,
     hash_id TEXT,
-    FOREIGN KEY(user_id) REFERENCES users(id),
+    FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,
     UNIQUE(user_id, hash_id)
 );
 
+-- Mapping and pricing cache tables
 CREATE TABLE IF NOT EXISTS isin_ticker_map (
     isin TEXT PRIMARY KEY NOT NULL,
     ticker_symbol TEXT NOT NULL,
     exchange TEXT,
     currency TEXT NOT NULL,
-    company_name TEXT, -- Including the column from your manual migration
+    company_name TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     last_checked_at TIMESTAMP
 );

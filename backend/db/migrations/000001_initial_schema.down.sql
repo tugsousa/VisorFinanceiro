@@ -1,6 +1,8 @@
 -- 000001_initial_schema.down.sql
-DROP TABLE daily_prices;
-DROP TABLE isin_ticker_map;
-DROP TABLE processed_transactions;
-DROP TABLE sessions;
-DROP TABLE users;
+DROP TABLE IF EXISTS daily_prices;
+DROP TABLE IF EXISTS isin_ticker_map;
+DROP TABLE IF EXISTS processed_transactions;
+DROP TABLE IF EXISTS sessions;
+DROP TABLE IF EXISTS uploads_history;
+DROP TABLE IF EXISTS login_history;
+DROP TABLE IF EXISTS users;

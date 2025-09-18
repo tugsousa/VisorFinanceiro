@@ -6,20 +6,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
-	"strings"
-
-	// "log" // Replaced with slog from logger package
 	"net/http"
 	"time"
 
-	// To access CSRF key from config
-	"github.com/username/taxfolio/backend/src/logger" // Use new logger
+	"github.com/username/taxfolio/backend/src/logger"
 )
 
 func GetCSRFToken(w http.ResponseWriter, r *http.Request) {
 	logger.L.Debug("Generating CSRF token", "remoteAddr", r.RemoteAddr)
-	// logger.L.Debug("Request headers for CSRF token generation", "headers", r.Header) // Can be verbose
-
 	token := generateRandomToken()
 	logger.L.Debug("Generated CSRF token value (first 5 chars for brevity)", "tokenPrefix", token[:5])
 
@@ -54,34 +48,31 @@ func generateRandomToken() string {
 func CSRFMiddleware(csrfKey []byte) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if r.Method == "OPTIONS" {
-				logger.L.Debug("Skipping CSRF validation for OPTIONS preflight request", "path", r.URL.Path)
-				w.WriteHeader(http.StatusOK)
-				return
-			}
-
-			// Adjusted path checking for flexibility
-			actualPath := r.URL.Path
-			if strings.HasPrefix(actualPath, "/api/auth/") { // Example if middleware is applied at /api/
-				actualPath = strings.TrimPrefix(actualPath, "/api/auth")
-			} else if strings.HasPrefix(actualPath, "/auth/") { // Example if middleware is applied at / (and path is /auth/csrf)
-				actualPath = strings.TrimPrefix(actualPath, "/auth")
-			}
-
-			if r.Method == "GET" && (actualPath == "/csrf" || actualPath == "csrf") {
-				logger.L.Debug("Skipping CSRF validation for CSRF token endpoint", "path", r.URL.Path, "adjustedPath", actualPath)
+			// --- START OF CORRECTION ---
+			// Exempt "safe" methods from CSRF protection as per web standards.
+			// This prevents errors on GET requests which shouldn't be state-changing.
+			switch r.Method {
+			case "GET", "HEAD", "OPTIONS":
+				// Specifically log the reason for skipping
+				if r.Method == "OPTIONS" {
+					logger.L.Debug("Skipping CSRF validation for OPTIONS preflight request", "path", r.URL.Path)
+				} else {
+					logger.L.Debug("Skipping CSRF validation for safe method", "method", r.Method, "path", r.URL.Path)
+				}
 				next.ServeHTTP(w, r)
 				return
 			}
+			// --- END OF CORRECTION ---
 
+			// CSRF validation for state-changing methods (POST, PUT, DELETE, PATCH)
 			headerToken := r.Header.Get("X-CSRF-Token")
-			cookie, errCookie := r.Cookie("_gorilla_csrf") // Renamed err to errCookie for clarity
+			cookie, errCookie := r.Cookie("_gorilla_csrf")
 
-			logger.L.Debug("CSRF validation attempt",
+			logger.L.Debug("CSRF validation attempt for state-changing method",
 				"method", r.Method,
 				"path", r.URL.Path,
 				"headerTokenExists", headerToken != "",
-				"cookieError", errCookie, // Use errCookie
+				"cookieError", errCookie,
 			)
 
 			if headerToken != "" && errCookie == nil && headerToken == cookie.Value {
@@ -89,7 +80,6 @@ func CSRFMiddleware(csrfKey []byte) func(http.Handler) http.Handler {
 				return
 			}
 
-			// Corrected logging arguments for slog
 			var cookieValForLog string
 			if errCookie == nil {
 				cookieValForLog = cookie.Value
@@ -97,7 +87,6 @@ func CSRFMiddleware(csrfKey []byte) func(http.Handler) http.Handler {
 				cookieValForLog = "N/A"
 			}
 
-			// Capture the cookie error to pass to slog if it's not nil
 			var cookieErrorForLog interface{}
 			if errCookie != nil {
 				cookieErrorForLog = errCookie.Error()
@@ -107,8 +96,8 @@ func CSRFMiddleware(csrfKey []byte) func(http.Handler) http.Handler {
 				slog.String("method", r.Method),
 				slog.String("url", r.URL.String()),
 				slog.String("headerToken", headerToken),
-				slog.String("cookieValue", cookieValForLog), // Use the prepared string
-				slog.Any("cookieError", cookieErrorForLog),  // Use the prepared error
+				slog.String("cookieValue", cookieValForLog),
+				slog.Any("cookieError", cookieErrorForLog),
 				slog.String("origin", r.Header.Get("Origin")),
 				slog.String("referer", r.Header.Get("Referer")),
 			)

@@ -25,9 +25,7 @@ import (
 	"golang.org/x/time/rate"
 )
 
-// proxyHeadersMiddleware inspects proxy headers to determine if the original
-// request was HTTPS, and updates the request object accordingly. This is crucial
-// for security features (like Secure cookies) to work correctly behind a reverse proxy.
+// ... (middleware functions remain the same) ...
 func proxyHeadersMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("X-Forwarded-Proto") == "https" {
@@ -114,8 +112,6 @@ func main() {
 	authService := security.NewAuthService(config.Cfg.JWTSecret)
 	emailService := services.NewEmailService()
 	userHandler := handlers.NewUserHandler(authService, emailService)
-
-	// Instantiate the new price service
 	priceService := services.NewPriceService()
 
 	transactionProcessor := processors.NewTransactionProcessor()
@@ -126,17 +122,11 @@ func main() {
 	feeProcessor := processors.NewFeeProcessor()
 
 	uploadService := services.NewUploadService(
-		transactionProcessor,
-		dividendProcessor,
-		stockProcessor,
-		optionProcessor,
-		cashMovementProcessor,
-		feeProcessor,
-		reportCache,
+		transactionProcessor, dividendProcessor, stockProcessor,
+		optionProcessor, cashMovementProcessor, feeProcessor, reportCache,
 	)
 
 	uploadHandler := handlers.NewUploadHandler(uploadService)
-	// Pass both services to the PortfolioHandler constructor
 	portfolioHandler := handlers.NewPortfolioHandler(uploadService, priceService)
 	dividendHandler := handlers.NewDividendHandler(uploadService)
 	txHandler := handlers.NewTransactionHandler(uploadService)
@@ -145,7 +135,6 @@ func main() {
 	logger.L.Info("Configuring routes...")
 	r := chi.NewRouter()
 
-	// Global middleware
 	r.Use(middleware.Recoverer)
 	r.Use(proxyHeadersMiddleware)
 	r.Use(enableCORS)
@@ -156,7 +145,6 @@ func main() {
 		json.NewEncoder(w).Encode(map[string]string{"message": "VisorFinanceiro Backend is running"})
 	})
 
-	// API routes
 	r.Route("/api", func(r chi.Router) {
 		// Public auth routes
 		r.Group(func(r chi.Router) {
@@ -201,12 +189,14 @@ func main() {
 
 			// Admin Routes
 			r.Group(func(r chi.Router) {
-				r.Use(userHandler.AdminMiddleware) // Protects routes within this group
+				r.Use(userHandler.AdminMiddleware)
 				r.Get("/admin/stats", userHandler.HandleGetAdminStats)
+				r.Get("/admin/users", userHandler.HandleGetAdminUsers) // New endpoint for user table
 			})
 		})
 	})
 
+	// ... (server startup remains the same) ...
 	r.NotFound(func(w http.ResponseWriter, r *http.Request) {
 		if !strings.HasPrefix(r.URL.Path, "/api/") {
 			logger.L.Warn("Root level path not found", "method", r.Method, "path", r.URL.Path)
