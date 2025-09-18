@@ -16,6 +16,7 @@ import (
 	"github.com/username/taxfolio/backend/src/logger"
 	"github.com/username/taxfolio/backend/src/models"
 	"github.com/username/taxfolio/backend/src/processors"
+	"github.com/username/taxfolio/backend/src/security/validation" // Import validation
 	"github.com/username/taxfolio/backend/src/services"
 	"github.com/username/taxfolio/backend/src/utils"
 )
@@ -200,31 +201,73 @@ type ManualTransactionRequest struct {
 func (h *TransactionHandler) HandleAddManualTransaction(w http.ResponseWriter, r *http.Request) {
 	userID, ok := GetUserIDFromContext(r.Context())
 	if !ok {
-		utils.SendJSONError(w, "authentication required", http.StatusUnauthorized)
+		utils.SendJSONError(w, "Autenticação necessária.", http.StatusUnauthorized)
 		return
 	}
 
 	var req ManualTransactionRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		utils.SendJSONError(w, "Invalid request body", http.StatusBadRequest)
+		utils.SendJSONError(w, "Pedido inválido.", http.StatusBadRequest)
 		return
 	}
 
-	if req.ProductName == "" || req.Date == "" || req.Source == "" {
-		utils.SendJSONError(w, "Product name, date, and source are required", http.StatusBadRequest)
+	// --- START: Detailed Validation ---
+	if err := validation.ValidateStringNotEmpty(req.Date, "Data"); err != nil {
+		utils.SendJSONError(w, "O campo 'Data' é obrigatório.", http.StatusBadRequest)
 		return
 	}
-
 	transactionDate, err := time.Parse("2006-01-02", req.Date)
 	if err != nil {
-		utils.SendJSONError(w, "Invalid date format, expected YYYY-MM-DD", http.StatusBadRequest)
+		utils.SendJSONError(w, "Formato de data inválido. Use AAAA-MM-DD.", http.StatusBadRequest)
 		return
 	}
+
+	if err := validation.ValidateStringNotEmpty(req.Source, "Origem"); err != nil {
+		utils.SendJSONError(w, "O campo 'Origem' é obrigatório.", http.StatusBadRequest)
+		return
+	}
+	if err := validation.ValidateAlphanumericWithSpaces(req.Source, "Origem"); err != nil {
+		utils.SendJSONError(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	if err := validation.ValidateStringNotEmpty(req.ProductName, "Nome do Produto"); err != nil {
+		utils.SendJSONError(w, "O campo 'Nome do Produto' é obrigatório.", http.StatusBadRequest)
+		return
+	}
+	if err := validation.ValidateAlphanumericWithSpaces(req.ProductName, "Nome do Produto"); err != nil {
+		utils.SendJSONError(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	if err := validation.ValidateStringNotEmpty(req.ISIN, "ISIN"); err != nil {
+		utils.SendJSONError(w, "O campo 'ISIN' é obrigatório.", http.StatusBadRequest)
+		return
+	}
+	if err := validation.ValidateAlphanumericWithSpaces(req.ISIN, "ISIN"); err != nil { // Basic check, can be stricter
+		utils.SendJSONError(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	// Validate required numeric fields
+	if req.Quantity <= 0 {
+		utils.SendJSONError(w, "A 'Quantidade' deve ser um número positivo.", http.StatusBadRequest)
+		return
+	}
+	if req.Price <= 0 {
+		utils.SendJSONError(w, "O 'Preço' deve ser um número positivo.", http.StatusBadRequest)
+		return
+	}
+	if req.Commission < 0 {
+		utils.SendJSONError(w, "A 'Comissão' não pode ser negativa.", http.StatusBadRequest)
+		return
+	}
+	// --- END: Detailed Validation ---
 
 	exchangeRate, err := processors.GetExchangeRate(req.Currency, transactionDate)
 	if err != nil {
 		logger.L.Warn("Could not get exchange rate for manual transaction", "error", err)
-		exchangeRate = 1.0
+		exchangeRate = 1.0 // Fallback to 1.0 if API fails
 	}
 
 	amount := req.Quantity * req.Price
@@ -233,13 +276,12 @@ func (h *TransactionHandler) HandleAddManualTransaction(w http.ResponseWriter, r
 	}
 
 	amountEUR := amount
-	if exchangeRate != 0 {
+	if req.Currency != "EUR" && exchangeRate != 0 {
 		amountEUR = amount / exchangeRate
 	}
 
 	countryCode := utils.GetCountryCodeString(req.ISIN)
 
-	// Auto-generate a description to ensure it's not NULL
 	description := fmt.Sprintf("Manual Entry: %s %f %s @ %f %s", req.BuySell, req.Quantity, req.ProductName, req.Price, req.Currency)
 
 	hashInput := fmt.Sprintf("%s-%s", description, time.Now().String())
@@ -255,7 +297,7 @@ func (h *TransactionHandler) HandleAddManualTransaction(w http.ResponseWriter, r
     `)
 	if err != nil {
 		logger.L.Error("Failed to prepare statement for manual transaction", "error", err)
-		utils.SendJSONError(w, "Failed to save transaction", http.StatusInternalServerError)
+		utils.SendJSONError(w, "Falha ao guardar a transação.", http.StatusInternalServerError)
 		return
 	}
 	defer stmt.Close()
@@ -272,7 +314,7 @@ func (h *TransactionHandler) HandleAddManualTransaction(w http.ResponseWriter, r
 		req.TransactionType,
 		req.TransactionSubType,
 		req.BuySell,
-		description, // Use auto-generated description
+		description,
 		amount,
 		req.Currency,
 		req.Commission,
@@ -280,13 +322,13 @@ func (h *TransactionHandler) HandleAddManualTransaction(w http.ResponseWriter, r
 		exchangeRate,
 		amountEUR,
 		countryCode,
-		description, // Use the same for input_string
+		description,
 		hashId,
 	)
 
 	if err != nil {
 		logger.L.Error("Failed to insert manual transaction", "userID", userID, "error", err)
-		utils.SendJSONError(w, "Failed to save transaction", http.StatusInternalServerError)
+		utils.SendJSONError(w, "Falha ao guardar a transação.", http.StatusInternalServerError)
 		return
 	}
 
@@ -294,5 +336,5 @@ func (h *TransactionHandler) HandleAddManualTransaction(w http.ResponseWriter, r
 	logger.L.Info("Manual transaction added and cache invalidated", "userID", userID)
 
 	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(map[string]string{"message": "Transaction added successfully"})
+	json.NewEncoder(w).Encode(map[string]string{"message": "Transação adicionada com sucesso"})
 }

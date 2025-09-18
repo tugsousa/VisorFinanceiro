@@ -1,4 +1,4 @@
-// backend/src/validation/field_validator.go
+// backend/src/security/validation/field_validator.go
 package validation
 
 import (
@@ -50,6 +50,21 @@ func ValidateStringRegex(s string, pattern *regexp.Regexp, fieldName, formatDesc
 	}
 	return nil
 }
+
+// --- NEW FUNCTION ---
+// ValidateAlphanumericWithSpaces checks if a string contains only letters, numbers, and spaces.
+func ValidateAlphanumericWithSpaces(s, fieldName string) error {
+	// This regex allows uppercase letters, lowercase letters, numbers, and spaces.
+	// The `^` and `$` anchors ensure the entire string must match.
+	// Use `*` to allow empty strings (to be caught by ValidateStringNotEmpty separately) or `+` to require at least one character.
+	pattern := regexp.MustCompile(`^[a-zA-Z0-9 ]*$`)
+	if !pattern.MatchString(s) {
+		return fmt.Errorf("%w: o campo '%s' deve conter apenas letras, números e espaços", ErrValidationFailed, fieldName)
+	}
+	return nil
+}
+
+// --- END OF NEW FUNCTION ---
 
 // --- Numeric Validators ---
 
