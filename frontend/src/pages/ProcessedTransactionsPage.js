@@ -9,6 +9,10 @@ import { useAuth } from '../context/AuthContext';
 import { UI_TEXT } from '../constants';
 import { parseDateRobust } from '../utils/dateUtils';
 import DeleteTransactionsModal from '../components/DeleteTransactionsModal';
+// START OF NEW CODE
+import AddTransactionModal from '../components/AddTransactionModal';
+import AddCircleOutlineIcon from '@mui/icons-material/AddCircleOutline';
+// END OF NEW CODE
 
 const fetchProcessedTransactions = async () => {
   const response = await apiFetchProcessedTransactions();
@@ -87,6 +91,9 @@ const ProcessedTransactionsPage = () => {
   });
 
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  // START OF NEW CODE
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  // END OF NEW CODE
 
   const deleteTransactionsMutation = useMutation({
     mutationFn: (criteria) => apiDeleteTransactions(criteria),
@@ -137,7 +144,16 @@ const ProcessedTransactionsPage = () => {
       </Typography>
       
       {processedTransactions.length > 0 && !transactionsLoading && (
-        <Box sx={{ mb: 2, display: 'flex', justifyContent: 'flex-end' }}>
+        // START OF MODIFIED CODE
+        <Box sx={{ mb: 2, display: 'flex', justifyContent: 'flex-end', gap: 2 }}>
+          <Button
+            variant="contained"
+            color="primary"
+            startIcon={<AddCircleOutlineIcon />}
+            onClick={() => setIsAddModalOpen(true)}
+          >
+            Adicionar Transação
+          </Button>
           <Button
             variant="contained"
             color="error"
@@ -147,6 +163,7 @@ const ProcessedTransactionsPage = () => {
             {deleteTransactionsMutation.isPending ? <CircularProgress size={24} color="inherit" /> : "Eliminar Transações"}
           </Button>
         </Box>
+        // END OF MODIFIED CODE
       )}
 
       {processedTransactions.length > 0 ? (
@@ -183,6 +200,13 @@ const ProcessedTransactionsPage = () => {
         isDeleting={deleteTransactionsMutation.isPending}
         deleteError={deleteError}
       />
+      
+      {/* START OF NEW CODE */}
+      <AddTransactionModal
+        open={isAddModalOpen}
+        onClose={() => setIsAddModalOpen(false)}
+      />
+      {/* END OF NEW CODE */}
     </Box>
   );
 };
