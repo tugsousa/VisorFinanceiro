@@ -1,3 +1,4 @@
+// backend/src/handlers/oauth_handler.go
 package handlers
 
 import (
@@ -7,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strings" // Importe o pacote strings
 
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
@@ -32,6 +34,7 @@ func (h *UserHandler) HandleGoogleLogin(w http.ResponseWriter, r *http.Request) 
 	http.Redirect(w, r, url, http.StatusTemporaryRedirect)
 }
 
+// --- FUNÇÃO MODIFICADA ---
 func (h *UserHandler) HandleGoogleCallback(w http.ResponseWriter, r *http.Request) {
 	if r.FormValue("state") != oauthStateString {
 		logger.L.Warn("Invalid OAuth state from Google callback")
@@ -82,12 +85,11 @@ func (h *UserHandler) HandleGoogleCallback(w http.ResponseWriter, r *http.Reques
 	// Lógica para encontrar ou criar o utilizador
 	user, err := model.GetUserByEmail(database.DB, googleUser.Email)
 	if err != nil { // Utilizador não existe, vamos criá-lo
-		// CORREÇÃO: Usar o email como username para garantir unicidade e definir o AuthProvider
 		newUser := &model.User{
-			Username:        googleUser.Email, // Usar email como username garante unicidade
+			Username:        googleUser.Email,
 			Email:           googleUser.Email,
-			Password:        "",       // Sem password para logins OAuth
-			AuthProvider:    "google", // Definir o provedor
+			Password:        "",
+			AuthProvider:    "google",
 			IsEmailVerified: true,
 		}
 
@@ -99,13 +101,46 @@ func (h *UserHandler) HandleGoogleCallback(w http.ResponseWriter, r *http.Reques
 		user = newUser
 
 	} else { // Utilizador já existe
-		// CORREÇÃO: Verificar se a conta existente é local (tem password)
 		if user.AuthProvider == "local" || user.Password != "" {
 			logger.L.Warn("Google login attempt for existing local account", "email", user.Email)
 			http.Redirect(w, r, "/signin?error=email_already_exists_local", http.StatusTemporaryRedirect)
 			return
 		}
 	}
+
+	// --- INÍCIO DA CORREÇÃO ---
+	// 1. Verificar se o utilizador é admin
+	isUserAdmin := false
+	for _, adminEmail := range config.Cfg.AdminEmails {
+		if strings.EqualFold(user.Email, adminEmail) {
+			isUserAdmin = true
+			break
+		}
+	}
+
+	// 2. Criar uma struct personalizada para enviar ao frontend
+	userForFrontend := struct {
+		ID           int64  `json:"id"`
+		Username     string `json:"username"`
+		Email        string `json:"email"`
+		AuthProvider string `json:"auth_provider"`
+		IsAdmin      bool   `json:"is_admin"`
+	}{
+		ID:           user.ID,
+		Username:     user.Username,
+		Email:        user.Email,
+		AuthProvider: user.AuthProvider,
+		IsAdmin:      isUserAdmin, // Incluir o status de admin
+	}
+
+	// 3. Converter a nossa struct para JSON
+	userJSON, err := json.Marshal(userForFrontend)
+	if err != nil {
+		logger.L.Error("Failed to marshal custom user object for frontend", "error", err)
+		http.Redirect(w, r, "/signin?error=user_data_build_failed", http.StatusTemporaryRedirect)
+		return
+	}
+	// --- FIM DA CORREÇÃO ---
 
 	// Gerar o nosso próprio token JWT para o frontend
 	appToken, err := h.authService.GenerateToken(fmt.Sprintf("%d", user.ID))
@@ -115,10 +150,10 @@ func (h *UserHandler) HandleGoogleCallback(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	// Redirecionar para uma página de callback no frontend com o token
+	// Redirecionar para uma página de callback no frontend com o token e o nosso JSON de utilizador
 	redirectURL := fmt.Sprintf("%s/auth/google/callback?token=%s&user=%s",
-		config.Cfg.FrontendBaseURL, // <-- USE THE CONFIG VARIABLE
+		config.Cfg.FrontendBaseURL,
 		appToken,
-		url.QueryEscape(string(contents)))
+		url.QueryEscape(string(userJSON))) // Usar o nosso JSON personalizado
 	http.Redirect(w, r, redirectURL, http.StatusTemporaryRedirect)
 }

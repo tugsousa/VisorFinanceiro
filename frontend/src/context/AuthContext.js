@@ -177,26 +177,21 @@ export const AuthProvider = ({ children }) => {
     }
   };
   
-  // --- NOVA FUNÇÃO PARA O CALLBACK DO GOOGLE ---
-  const loginWithGoogleToken = useCallback(async (appToken, googleUserData) => {
+  // --- FUNÇÃO CORRIGIDA ---
+  const loginWithGoogleToken = useCallback(async (appToken, userDataFromBackend) => {
     setIsAuthActionLoading(true);
     setCheckingData(true);
     setAuthError(null);
 
-    // O backend já validou, agora apenas guardamos o estado no frontend
-    const appUser = {
-        id: googleUserData.id, // O backend deve garantir que temos um ID
-        username: googleUserData.name,
-        email: googleUserData.email
-    };
-
-    setUser(appUser);
+    // Usa diretamente o objeto de utilizador que o backend enviou.
+    // Este objeto já contém 'id', 'username', 'email', 'auth_provider', e 'is_admin'.
+    setUser(userDataFromBackend);
     setToken(appToken);
     setRefreshTokenState(null); // O Google Auth não usa o nosso sistema de refresh token
 
     localStorage.setItem('auth_token', appToken);
-    localStorage.setItem('user', JSON.stringify(appUser));
-    localStorage.removeItem('refresh_token'); // Limpar refresh token antigo se houver
+    localStorage.setItem('user', JSON.stringify(userDataFromBackend)); // Guarda o objeto correto
+    localStorage.removeItem('refresh_token');
 
     await checkUserData();
     
@@ -224,7 +219,7 @@ export const AuthProvider = ({ children }) => {
         register,
         login,
         logout,
-        loginWithGoogleToken, // Expor a nova função
+        loginWithGoogleToken, // Expor a função
         fetchCsrfToken: fetchCsrfTokenAndUpdateService,
         refreshUserDataCheck: checkUserData,
         performLogout,

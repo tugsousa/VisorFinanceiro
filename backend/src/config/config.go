@@ -4,6 +4,7 @@ import (
 	"log"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/joho/godotenv"
@@ -51,6 +52,9 @@ type AppConfig struct {
 
 	// Frontend URL for reference (e.g., CORS, redirects)
 	FrontendBaseURL string
+
+	// Admin Users
+	AdminEmails []string
 }
 
 // Cfg is a global instance of the AppConfig.
@@ -101,17 +105,7 @@ func LoadConfig() {
 	}
 
 	// --- URL Derivation Logic ---
-	// This is the new, refactored approach to handle URLs.
-	// We get one base URL for the frontend and one for the public-facing backend API,
-	// then construct the specific URLs from them.
-
-	// The base URL of the frontend application (e.g., for links in emails).
-	// In local dev, this is typically http://localhost:3000. In prod, https://rumoclaro.pt.
 	frontendBaseURL := getEnv("APP_BASE_URL", "http://localhost:3000")
-
-	// The public-facing base URL of the backend API (e.g., for OAuth callbacks).
-	// In local dev, this is http://localhost:8080. In prod, https://rumoclaro.pt.
-	// We use REACT_APP_API_BASE_URL as the variable name for consistency with the frontend build process.
 	apiBaseURL := getEnv("REACT_APP_API_BASE_URL", "http://localhost:8080")
 
 	// Derive specific URLs from the base URLs.
@@ -123,7 +117,7 @@ func LoadConfig() {
 	Cfg = &AppConfig{
 		// Core
 		Port:         getEnv("PORT", "8080"),
-		DatabasePath: getEnv("DATABASE_PATH", "./rumoclaro.db"),
+		DatabasePath: getEnv("DATABASE_PATH", "./visorfinanceiro.db"),
 		LogLevel:     getEnv("LOG_LEVEL", "info"),
 
 		// Security
@@ -139,7 +133,7 @@ func LoadConfig() {
 		// Email
 		EmailServiceProvider: getEnv("EMAIL_SERVICE_PROVIDER", "smtp"),
 		SenderEmail:          getEnv("SENDER_EMAIL", "noreply@example.com"),
-		SenderName:           getEnv("SENDER_NAME", "Rumoclaro App"),
+		SenderName:           getEnv("SENDER_NAME", "VisorFinanceiro"),
 		SMTPServer:           getEnv("SMTP_SERVER", ""),
 		SMTPPort:             getEnvAsInt("SMTP_PORT", 587),
 		SMTPUser:             getEnv("SMTP_USER", ""),
@@ -156,10 +150,14 @@ func LoadConfig() {
 		GoogleClientID:     getEnv("GOOGLE_CLIENT_ID", ""),
 		GoogleClientSecret: getEnv("GOOGLE_CLIENT_SECRET", ""),
 		GoogleRedirectURL:  googleRedirectURL,
+
+		// Admin Users
+		AdminEmails: getAdminEmails("ADMIN_EMAILS"),
 	}
 
 	log.Printf("Configuration loaded: Port=%s, LogLevel=%s, DBPath=%s, FrontendURL=%s",
 		Cfg.Port, Cfg.LogLevel, Cfg.DatabasePath, Cfg.FrontendBaseURL)
+	log.Printf("Admin emails loaded: %d", len(Cfg.AdminEmails))
 }
 
 // getEnv retrieves an environment variable or returns a fallback value.
@@ -175,7 +173,6 @@ func getEnv(key, fallback string) string {
 func getEnvAsInt(key string, fallback int) int {
 	valueStr := getEnv(key, "")
 	if valueStr == "" {
-		// The getEnv function already logs the fallback, so no need to log here again.
 		return fallback
 	}
 	if value, err := strconv.Atoi(valueStr); err == nil {
@@ -189,7 +186,6 @@ func getEnvAsInt(key string, fallback int) int {
 func getEnvAsDuration(key string, fallback time.Duration) time.Duration {
 	valueStr := getEnv(key, "")
 	if valueStr == "" {
-		// The getEnv function already logs the fallback.
 		return fallback
 	}
 	if value, err := time.ParseDuration(valueStr); err == nil {
@@ -197,4 +193,17 @@ func getEnvAsDuration(key string, fallback time.Duration) time.Duration {
 	}
 	log.Printf("Invalid duration value for %s ('%s'), using default: %s", key, valueStr, fallback.String())
 	return fallback
+}
+
+// getAdminEmails retrieves and parses the comma-separated list of admin emails.
+func getAdminEmails(key string) []string {
+	emailsStr := getEnv(key, "")
+	if emailsStr == "" {
+		return []string{}
+	}
+	emails := strings.Split(emailsStr, ",")
+	for i, email := range emails {
+		emails[i] = strings.TrimSpace(email)
+	}
+	return emails
 }
