@@ -1,77 +1,75 @@
 // frontend/src/pages/ProcessedTransactionsPage.js
 import React, { useState } from 'react';
-import { Typography, Box, Paper, Alert, CircularProgress } from '@mui/material';
-import { Button, Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle } from '@mui/material';
+import { Typography, Box, Paper, Alert, CircularProgress, Button } from '@mui/material';
 import { DataGrid } from '@mui/x-data-grid';
 import { ptPT } from '@mui/x-data-grid/locales';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { apiFetchProcessedTransactions, apiDeleteAllTransactions } from '../api/apiService';
+import { apiFetchProcessedTransactions, apiDeleteTransactions } from '../api/apiService';
 import { useAuth } from '../context/AuthContext';
 import { UI_TEXT } from '../constants';
-import { parseDateRobust } from '../utils/dateUtils'; // Import the robust date parser
+import { parseDateRobust } from '../utils/dateUtils';
+import DeleteTransactionsModal from '../components/DeleteTransactionsModal';
 
 const fetchProcessedTransactions = async () => {
   const response = await apiFetchProcessedTransactions();
-  return response.data || [];
+  return (response.data || []).map(tx => ({ ...tx, id: tx.hash_id || `${tx.date}-${tx.order_id}-${Math.random()}` }));
 };
 
-// Define columns for the DataGrid outside the component for performance
 const columns = [
-  { 
-    field: 'date',
-    headerName: 'Data', 
-    width: 110,
-    type: 'date',
-    valueGetter: (value) => parseDateRobust(value),
-    valueFormatter: (value) => {
-      if (!value) return '';
-      const day = String(value.getDate()).padStart(2, '0');
-      const month = String(value.getMonth() + 1).padStart(2, '0');
-      const year = value.getFullYear();
-      return `${day}-${month}-${year}`;
-    }
-  },
-  { field: 'source', headerName: 'Origem', width: 90 },
-  { field: 'product_name', headerName: 'Produto', flex: 1, minWidth: 200 },
-  { field: 'transaction_type', headerName: 'Tipo', width: 110 },
-    { field: 'transaction_subtype', headerName: 'Subtipo', width: 110 }, // Changed from 'TransactionSubType'
-  { field: 'buy_sell', headerName: 'Ação', width: 90 },
-  { field: 'quantity', headerName: 'Qtd.', type: 'number', width: 80, align: 'right', headerAlign: 'right' },
-  { 
-    field: 'price',
-    headerName: 'Preço', 
-    type: 'number', 
-    width: 110,
-    align: 'right', headerAlign: 'right',
-    valueFormatter: (value) => typeof value === 'number' ? value.toFixed(4) : ''
-  },
-  { 
-    field: 'amount',
-    headerName: 'Montante (Orig.)', 
-    type: 'number', 
-    width: 130,
-    align: 'right', headerAlign: 'right',
-    valueFormatter: (value) => typeof value === 'number' ? value.toFixed(2) : ''
-  },
-  { field: 'currency', headerName: 'Moeda', width: 80 },
-  { 
-    field: 'exchange_rate',
-    headerName: 'Câmbio', 
-    type: 'number', 
-    width: 100,
-    align: 'right', headerAlign: 'right',
-    valueFormatter: (value) => typeof value === 'number' ? value.toFixed(4) : ''
-  },
-  { 
-    field: 'amount_eur',
-    headerName: 'Montante (€)', 
-    type: 'number', 
-    width: 130,
-    align: 'right', headerAlign: 'right',
-    valueFormatter: (value) => typeof value === 'number' ? value.toFixed(2) : ''
-  },
+    { 
+      field: 'date',
+      headerName: 'Data', 
+      width: 110,
+      type: 'date',
+      valueGetter: (value) => parseDateRobust(value),
+      valueFormatter: (value) => {
+        if (!value) return '';
+        const day = String(value.getDate()).padStart(2, '0');
+        const month = String(value.getMonth() + 1).padStart(2, '0');
+        const year = value.getFullYear();
+        return `${day}-${month}-${year}`;
+      }
+    },
+    { field: 'source', headerName: 'Origem', width: 90 },
+    { field: 'product_name', headerName: 'Produto', flex: 1, minWidth: 200 },
+    { field: 'transaction_type', headerName: 'Tipo', width: 110 },
+    { field: 'transaction_subtype', headerName: 'Subtipo', width: 110 },
+    { field: 'buy_sell', headerName: 'Ação', width: 90 },
+    { field: 'quantity', headerName: 'Qtd.', type: 'number', width: 80, align: 'right', headerAlign: 'right' },
+    { 
+      field: 'price',
+      headerName: 'Preço', 
+      type: 'number', 
+      width: 110,
+      align: 'right', headerAlign: 'right',
+      valueFormatter: (value) => typeof value === 'number' ? value.toFixed(4) : ''
+    },
+    { 
+      field: 'amount',
+      headerName: 'Montante (Orig.)', 
+      type: 'number', 
+      width: 130,
+      align: 'right', headerAlign: 'right',
+      valueFormatter: (value) => typeof value === 'number' ? value.toFixed(2) : ''
+    },
+    { field: 'currency', headerName: 'Moeda', width: 80 },
+    { 
+      field: 'exchange_rate',
+      headerName: 'Câmbio', 
+      type: 'number', 
+      width: 100,
+      align: 'right', headerAlign: 'right',
+      valueFormatter: (value) => typeof value === 'number' ? value.toFixed(4) : ''
+    },
+    { 
+      field: 'amount_eur',
+      headerName: 'Montante (€)', 
+      type: 'number', 
+      width: 130,
+      align: 'right', headerAlign: 'right',
+      valueFormatter: (value) => typeof value === 'number' ? value.toFixed(2) : ''
+    },
 ];
-
 
 const ProcessedTransactionsPage = () => {
   const { token, refreshUserDataCheck } = useAuth();
@@ -88,34 +86,36 @@ const ProcessedTransactionsPage = () => {
     enabled: !!token,
   });
 
-  const [showDeleteConfirmDialog, setShowDeleteConfirmDialog] = useState(false);
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
 
   const deleteTransactionsMutation = useMutation({
-    mutationFn: apiDeleteAllTransactions,
+    mutationFn: (criteria) => apiDeleteTransactions(criteria),
     onSuccess: () => {
       queryClient.invalidateQueries();
       refreshUserDataCheck();
-      setShowDeleteConfirmDialog(false);
+      setIsDeleteModalOpen(false);
     },
     onError: (error) => {
       console.error("Error deleting transactions:", error);
-      setShowDeleteConfirmDialog(false);
     },
   });
 
-  const handleDeleteAllClick = () => {
-    setShowDeleteConfirmDialog(true);
+  const handleDeleteClick = () => {
+    setIsDeleteModalOpen(true);
   };
 
-  const handleConfirmDeleteAll = () => {
-    deleteTransactionsMutation.mutate();
+  const handleConfirmDelete = (criteria) => {
+    deleteTransactionsMutation.mutate(criteria);
   };
 
-  const handleCloseDeleteConfirmDialog = () => {
-    setShowDeleteConfirmDialog(false);
+  const handleCloseDeleteModal = () => {
+    if (!deleteTransactionsMutation.isPending) {
+        setIsDeleteModalOpen(false);
+    }
   };
 
   const transactionsError = isTransactionsError ? (transactionsErrorObj?.message || UI_TEXT.errorLoadingData) : null;
+  const deleteError = deleteTransactionsMutation.isError ? (deleteTransactionsMutation.error.response?.data?.error || deleteTransactionsMutation.error.message || "Falha a excluir as transações.") : null;
 
   if (transactionsLoading) {
     return (
@@ -126,7 +126,7 @@ const ProcessedTransactionsPage = () => {
     );
   }
 
-  if (transactionsError && !deleteTransactionsMutation.isPending) {
+  if (transactionsError) {
     return <Alert severity="error" sx={{ my: 2, mx: { xs: 2, sm: 3 } }}>{transactionsError}</Alert>;
   }
   
@@ -141,10 +141,10 @@ const ProcessedTransactionsPage = () => {
           <Button
             variant="contained"
             color="error"
-            onClick={handleDeleteAllClick}
+            onClick={handleDeleteClick}
             disabled={deleteTransactionsMutation.isPending || transactionsLoading}
           >
-            {deleteTransactionsMutation.isPending ? <CircularProgress size={24} color="inherit" /> : "Eliminar todas as transações"}
+            {deleteTransactionsMutation.isPending ? <CircularProgress size={24} color="inherit" /> : "Eliminar Transações"}
           </Button>
         </Box>
       )}
@@ -157,7 +157,7 @@ const ProcessedTransactionsPage = () => {
             autoHeight
             initialState={{
               pagination: {
-                paginationModel: { pageSize: 50, page: 0 },
+                paginationModel: { pageSize: 10, page: 0 },
               },
               sorting: {
                 sortModel: [{ field: 'date', sort: 'desc' }],
@@ -175,32 +175,14 @@ const ProcessedTransactionsPage = () => {
         </Typography>
       )}
 
-      <Dialog
-        open={showDeleteConfirmDialog}
-        onClose={handleCloseDeleteConfirmDialog}
-        aria-labelledby="alert-dialog-title"
-        aria-describedby="alert-dialog-description"
-      >
-        <DialogTitle id="alert-dialog-title">{"Confirmar exclusão"}</DialogTitle>
-        <DialogContent>
-          <DialogContentText id="alert-dialog-description">
-            Tem a certeza de que deseja excluir todas as transações processadas? Esta ação não pode ser revertida.
-          </DialogContentText>
-          {deleteTransactionsMutation.isError && (
-            <Alert severity="error" sx={{ mt: 2 }}>
-              {deleteTransactionsMutation.error.response?.data?.error || deleteTransactionsMutation.error.message || "Falha a excluir as transações."}
-            </Alert>
-          )}
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={handleCloseDeleteConfirmDialog} color="primary" disabled={deleteTransactionsMutation.isPending}>
-            Cancelar
-          </Button>
-          <Button onClick={handleConfirmDeleteAll} color="error" autoFocus disabled={deleteTransactionsMutation.isPending}>
-            {deleteTransactionsMutation.isPending ? <CircularProgress size={24} /> : "Excluir tudo"}
-          </Button>
-        </DialogActions>
-      </Dialog>
+      <DeleteTransactionsModal
+        open={isDeleteModalOpen}
+        onClose={handleCloseDeleteModal}
+        onConfirm={handleConfirmDelete}
+        availableTransactions={processedTransactions}
+        isDeleting={deleteTransactionsMutation.isPending}
+        deleteError={deleteError}
+      />
     </Box>
   );
 };

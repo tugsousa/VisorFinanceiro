@@ -2,10 +2,12 @@
 package handlers
 
 import (
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
+	"strings"
 
 	"github.com/username/taxfolio/backend/src/database"
 	"github.com/username/taxfolio/backend/src/logger"
@@ -72,55 +74,108 @@ func (h *TransactionHandler) HandleGetProcessedTransactions(w http.ResponseWrite
 	}
 }
 
+// DeleteRequest define a estrutura para o corpo do pedido de eliminação.
+type DeleteRequest struct {
+	Type   string   `json:"type"`
+	Values []string `json:"values"`
+}
+
+// HandleDeleteAllProcessedTransactions foi atualizado para HandleDeleteTransactions para maior clareza.
+// Lida com a eliminação de transações com base nos critérios fornecidos ('all', 'source', 'year').
 func (h *TransactionHandler) HandleDeleteAllProcessedTransactions(w http.ResponseWriter, r *http.Request) {
 	userID, ok := GetUserIDFromContext(r.Context())
 	if !ok {
-		utils.SendJSONError(w, "authentication required or user ID not found in context", http.StatusUnauthorized)
+		utils.SendJSONError(w, "authentication required", http.StatusUnauthorized)
 		return
 	}
-	logger.L.Info("Handling DeleteAllProcessedTransactions", "userID", userID)
 
-	// Use a transaction to ensure atomicity
+	var req DeleteRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		utils.SendJSONError(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	logger.L.Info("Handling DeleteTransactions request", "userID", userID, "type", req.Type, "values", req.Values)
+
 	txDB, err := database.DB.Begin()
 	if err != nil {
 		logger.L.Error("Failed to begin transaction for data deletion", "userID", userID, "error", err)
 		utils.SendJSONError(w, "Failed to delete data", http.StatusInternalServerError)
 		return
 	}
-	defer txDB.Rollback() // Rollback on any error
+	defer func() {
+		if p := recover(); p != nil {
+			txDB.Rollback()
+			panic(p)
+		} else if err != nil {
+			txDB.Rollback()
+		}
+	}()
 
-	// 1. Delete transactions
-	result, err := txDB.Exec("DELETE FROM processed_transactions WHERE user_id = ?", userID)
-	if err != nil {
-		logger.L.Error("Error deleting all processed transactions from DB", "userID", userID, "error", err)
-		utils.SendJSONError(w, fmt.Sprintf("Error deleting transactions for userID %d: %v", userID, err), http.StatusInternalServerError)
+	var result sql.Result
+	switch req.Type {
+	case "all":
+		result, err = txDB.Exec("DELETE FROM processed_transactions WHERE user_id = ?", userID)
+	case "source":
+		if len(req.Values) == 0 {
+			err = fmt.Errorf("source values cannot be empty for type 'source'")
+			utils.SendJSONError(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		query := "DELETE FROM processed_transactions WHERE user_id = ? AND source IN (?" + strings.Repeat(",?", len(req.Values)-1) + ")"
+		args := make([]interface{}, len(req.Values)+1)
+		args[0] = userID
+		for i, v := range req.Values {
+			args[i+1] = v
+		}
+		result, err = txDB.Exec(query, args...)
+	case "year":
+		if len(req.Values) != 1 {
+			err = fmt.Errorf("exactly one year value is required for type 'year'")
+			utils.SendJSONError(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		// Assumindo que o formato da data na BD é 'DD-MM-YYYY'
+		result, err = txDB.Exec("DELETE FROM processed_transactions WHERE user_id = ? AND SUBSTR(date, 7, 4) = ?", userID, req.Values[0])
+	default:
+		err = fmt.Errorf("invalid deletion type specified")
+		utils.SendJSONError(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	// 2. Reset the user's upload count
-	_, err = txDB.Exec("UPDATE users SET upload_count = 0 WHERE id = ?", userID)
 	if err != nil {
-		logger.L.Error("Failed to reset upload count for user", "userID", userID, "error", err)
-		utils.SendJSONError(w, "Failed to reset upload count", http.StatusInternalServerError)
+		logger.L.Error("Error executing delete statement", "userID", userID, "type", req.Type, "error", err)
+		utils.SendJSONError(w, "Failed to delete transactions", http.StatusInternalServerError)
 		return
 	}
 
-	// 3. Commit the transaction if all operations were successful
-	if err := txDB.Commit(); err != nil {
+	// Recalcula o upload_count com base nas fontes distintas restantes
+	var newUploadCount int
+	err = txDB.QueryRow("SELECT COUNT(DISTINCT source) FROM processed_transactions WHERE user_id = ?", userID).Scan(&newUploadCount)
+	if err != nil {
+		logger.L.Error("Failed to recount distinct sources for user", "userID", userID, "error", err)
+		utils.SendJSONError(w, "Failed to update user metadata", http.StatusInternalServerError)
+		return
+	}
+
+	_, err = txDB.Exec("UPDATE users SET upload_count = ? WHERE id = ?", newUploadCount, userID)
+	if err != nil {
+		logger.L.Error("Failed to update upload count for user", "userID", userID, "error", err)
+		utils.SendJSONError(w, "Failed to update upload count", http.StatusInternalServerError)
+		return
+	}
+
+	if err = txDB.Commit(); err != nil {
 		logger.L.Error("Failed to commit transaction for data deletion", "userID", userID, "error", err)
 		utils.SendJSONError(w, "Failed to finalize data deletion", http.StatusInternalServerError)
 		return
 	}
 
-	rowsAffected, err := result.RowsAffected()
-	if err != nil {
-		logger.L.Error("Error getting rows affected after deleting all transactions", "userID", userID, "error", err)
-	} else {
-		logger.L.Info("Successfully deleted all processed transactions and reset upload count", "userID", userID, "rowsAffected", rowsAffected)
-	}
+	rowsAffected, _ := result.RowsAffected()
+	logger.L.Info("Successfully deleted transactions and updated upload count", "userID", userID, "type", req.Type, "rowsAffected", rowsAffected, "newUploadCount", newUploadCount)
 
 	h.uploadService.InvalidateUserCache(userID)
-	logger.L.Info("User cache invalidated after deleting all transactions", "userID", userID)
+	logger.L.Info("User cache invalidated after deleting transactions", "userID", userID)
 
 	w.WriteHeader(http.StatusNoContent)
 }
