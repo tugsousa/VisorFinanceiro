@@ -20,9 +20,13 @@ import ContactInformationPage from './pages/policies/ContactInformationPage';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { CircularProgress, Box } from '@mui/material';
 import GoogleAuthCallbackPage from './pages/GoogleAuthCallbackPage';
-import AdminDashboardPage from './pages/AdminDashboardPage'; // Importar a nova página
+import AdminDashboardPage from './pages/AdminDashboardPage';
+// --- INÍCIO DA NOVA IMPORTAÇÃO ---
+// NOTA: Terá de criar este ficheiro `UserDetailPage.js` na sua pasta `src/pages/`.
+import UserDetailPage from './pages/UserDetailPage'; 
+// --- FIM DA NOVA IMPORTAÇÃO ---
 
-// Componente para determinar a página inicial com base no estado de autenticação
+
 const HomePage = () => {
     const { user, isInitialAuthLoading } = useAuth();
     if (isInitialAuthLoading) {
@@ -35,10 +39,8 @@ const HomePage = () => {
     return user ? <Navigate to="/dashboard" replace /> : <LandingPage />;
 };
 
-// Componente para proteger rotas que exigem autenticação
 const ProtectedRoute = ({ children }) => {
     const { user, isInitialAuthLoading } = useAuth();
-
     if (isInitialAuthLoading) {
         return (
             <Box display="flex" justifyContent="center" alignItems="center" minHeight="80vh">
@@ -46,17 +48,14 @@ const ProtectedRoute = ({ children }) => {
             </Box>
         );
     }
-
     if (!user) {
         return <Navigate to="/signin" replace />;
     }
     return children;
 };
 
-// Componente para rotas públicas que não devem ser acessíveis a utilizadores autenticados
 const PublicRoute = ({ children }) => {
     const { user, isInitialAuthLoading } = useAuth();
-
     if (isInitialAuthLoading) {
         return (
             <Box display="flex" justifyContent="center" alignItems="center" minHeight="80vh">
@@ -64,18 +63,14 @@ const PublicRoute = ({ children }) => {
             </Box>
         );
     }
-
     if (user) {
         return <Navigate to="/dashboard" replace />;
     }
-
     return children;
 };
 
-// --- NOVO COMPONENTE DE ROTA DE ADMIN ---
 const AdminRoute = ({ children }) => {
     const { user, isInitialAuthLoading } = useAuth();
-
     if (isInitialAuthLoading) {
         return (
             <Box display="flex" justifyContent="center" alignItems="center" minHeight="80vh">
@@ -83,16 +78,12 @@ const AdminRoute = ({ children }) => {
             </Box>
         );
     }
-
     if (!user) {
         return <Navigate to="/signin" replace />;
     }
-
     if (!user.is_admin) {
-        // Redireciona para o dashboard normal se não for admin
         return <Navigate to="/dashboard" replace />;
     }
-
     return children;
 };
 
@@ -105,31 +96,29 @@ function App() {
                     <Routes>
                         <Route path="/" element={<HomePage />} />
 
-                        {/* Rotas Públicas */}
                         <Route path="/signin" element={<PublicRoute><SignInPage /></PublicRoute>} />
                         <Route path="/signup" element={<PublicRoute><SignUpPage /></PublicRoute>} />
                         <Route path="/request-password-reset" element={<PublicRoute><RequestPasswordResetPage /></PublicRoute>} />
                         <Route path="/reset-password" element={<PublicRoute><ResetPasswordPage /></PublicRoute>} />
                         <Route path="/auth/google/callback" element={<GoogleAuthCallbackPage />} />
 
-                        {/* Rotas de Informação */}
                         <Route path="/verify-email" element={<VerifyEmailPage />} />
                         <Route path="/policies/privacy-policy" element={<PrivacyPolicyPage />} />
                         <Route path="/policies/terms-of-service" element={<TermsOfServicePage />} />
                         <Route path="/policies/contact-information" element={<ContactInformationPage />} />
 
-                        {/* Rotas Protegidas */}
                         <Route path="/dashboard" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
                         <Route path="/upload" element={<ProtectedRoute><UploadPage /></ProtectedRoute>} />
                         <Route path="/realizedgains" element={<ProtectedRoute><RealizedGainsPage /></ProtectedRoute>} />
                         <Route path="/tax" element={<ProtectedRoute><TaxPage /></ProtectedRoute>} />
                         <Route path="/transactions" element={<ProtectedRoute><ProcessedTransactionsPage /></ProtectedRoute>} />
                         <Route path="/settings" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
-
-                        {/* --- NOVA ROTA DE ADMIN --- */}
+                        
+                        {/* --- ROTAS DE ADMIN ATUALIZADAS --- */}
                         <Route path="/admin" element={<AdminRoute><AdminDashboardPage /></AdminRoute>} />
+                        <Route path="/admin/users/:userId" element={<AdminRoute><UserDetailPage /></AdminRoute>} />
+                        {/* --- FIM DAS ROTAS DE ADMIN ATUALIZADAS --- */}
 
-                        {/* Rota "Not Found" */}
                         <Route path="*" element={<NotFoundPage />} />
                     </Routes>
                 </Layout>

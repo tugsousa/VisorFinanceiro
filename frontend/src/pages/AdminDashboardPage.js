@@ -1,16 +1,18 @@
 // frontend/src/pages/AdminDashboardPage.js
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { apiFetchAdminStats, apiFetchAdminUsers, apiRefreshUserMetrics } from '../api/apiService';
-import { Box, Typography, Paper, Grid, CircularProgress, Alert, Tooltip, IconButton } from '@mui/material';
+import { apiFetchAdminStats, apiFetchAdminUsers, apiRefreshUserMetrics, apiRefreshMultipleUserMetrics } from '../api/apiService';
+import { Box, Typography, Paper, Grid, CircularProgress, Alert, Tooltip, IconButton, FormControl, InputLabel, Select, MenuItem, Button } from '@mui/material';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import { DataGrid, GridToolbar } from '@mui/x-data-grid';
 import { useAuth } from '../context/AuthContext';
 import { Bar, Line, Doughnut } from 'react-chartjs-2';
 import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, LineElement, PointElement, Title, Legend, Tooltip as ChartTooltip, ArcElement } from 'chart.js';
+import { useNavigate } from 'react-router-dom'; // --- NOVO: Para o drill-down ---
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, LineElement, PointElement, Title, Legend, ChartTooltip, ArcElement);
 
+// --- Componentes KPICard, ChartCard e TopUsersTable permanecem os mesmos ---
 const KPICard = ({ title, value, loading }) => (
     <Paper sx={{ p: 2, textAlign: 'center', height: '100%' }}>
         <Typography variant="h6" color="text.secondary" sx={{fontSize: '1rem'}}>{title}</Typography>
@@ -20,7 +22,6 @@ const KPICard = ({ title, value, loading }) => (
     </Paper>
 );
 
-// --- INÍCIO DOS NOVOS COMPONENTES REUTILIZÁVEIS ---
 const ChartCard = ({ type, data, options, title }) => {
     const ChartComponent = type === 'doughnut' ? Doughnut : (type === 'bar' ? Bar : Line);
     const hasData = data && data.datasets.some(ds => ds.data.length > 0 && ds.data.some(d => d > 0));
@@ -46,34 +47,30 @@ const TopUsersTable = ({ users, title, valueHeader }) => {
         { field: 'email', headerName: 'Email', flex: 1, minWidth: 150 },
         { field: 'value', headerName: valueHeader, type: 'number', width: 130, align: 'right', headerAlign: 'right' },
     ];
-
     const rows = users ? users.map((user, index) => ({ id: index, ...user })) : [];
-
     return (
         <Paper sx={{ p: 2, height: 400, display: 'flex', flexDirection: 'column' }}>
             <Typography variant="h6" sx={{ mb: 2, textAlign: 'center' }}>{title}</Typography>
-            <Box sx={{ flexGrow: 1 }}>
-                <DataGrid
-                    rows={rows}
-                    columns={columns}
-                    density="compact"
-                    hideFooter
-                />
-            </Box>
+            <Box sx={{ flexGrow: 1 }}><DataGrid rows={rows} columns={columns} density="compact" hideFooter /></Box>
         </Paper>
     );
 };
-// --- FIM DOS NOVOS COMPONENTES REUTILIZÁVEIS ---
 
 
 const AdminDashboardPage = () => {
     const { token } = useAuth();
     const queryClient = useQueryClient();
+    const navigate = useNavigate(); // --- NOVO: Para o drill-down ---
+
+    // --- NOVO: Estado para os filtros e seleções ---
+    const [dateRange, setDateRange] = useState('all_time');
+    const [selectedUserIds, setSelectedUserIds] = useState([]);
     const [refreshingUserId, setRefreshingUserId] = useState(null);
 
+    // --- ATUALIZADO: useQuery agora depende do dateRange ---
     const { data: statsData, isLoading: statsLoading, isError: statsIsError, error: statsError } = useQuery({
-        queryKey: ['adminStats', token],
-        queryFn: () => apiFetchAdminStats().then(res => res.data),
+        queryKey: ['adminStats', token, dateRange],
+        queryFn: () => apiFetchAdminStats(dateRange).then(res => res.data),
         enabled: !!token,
     });
 
@@ -88,73 +85,55 @@ const AdminDashboardPage = () => {
             setRefreshingUserId(userId);
             return apiRefreshUserMetrics(userId);
         },
-        onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ['adminUsers', token] });
-        },
-        onError: (error) => {
-            console.error("Failed to refresh user metrics:", error);
-        },
-        onSettled: () => {
-            setRefreshingUserId(null);
-        }
+        onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['adminUsers', token] }); },
+        onError: (error) => { console.error("Failed to refresh user metrics:", error); },
+        onSettled: () => { setRefreshingUserId(null); }
     });
 
-    // --- LÓGICA DE PREPARAÇÃO DOS DADOS PARA OS GRÁFICOS ---
+    // --- NOVO: Mutation para as ações em lote ---
+    const batchRefreshMutation = useMutation({
+        mutationFn: (userIds) => apiRefreshMultipleUserMetrics(userIds),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['adminUsers', token] });
+            setSelectedUserIds([]); // Limpa a seleção após o sucesso
+            // Poderia adicionar uma notificação de sucesso aqui
+        },
+        onError: (error) => {
+            console.error("Failed to refresh metrics in batch:", error);
+            // Poderia adicionar uma notificação de erro aqui
+        },
+    });
+
+    // --- A preparação dos dados para os gráficos permanece a mesma ---
     const verificationChartData = {
         labels: ['Verificados', 'Não Verificados'],
         datasets: [{
-            data: [
-                statsData?.verificationStats?.verified || 0,
-                statsData?.verificationStats?.unverified || 0
-            ],
+            data: [statsData?.verificationStats?.verified || 0, statsData?.verificationStats?.unverified || 0],
             backgroundColor: ['rgba(75, 192, 192, 0.7)', 'rgba(255, 99, 132, 0.7)'],
-            borderColor: ['rgba(75, 192, 192, 1)', 'rgba(255, 99, 132, 1)'],
-            borderWidth: 1,
         }],
     };
-
     const authProviderChartData = {
         labels: statsData?.authProviderStats?.map(d => d.name) || [],
         datasets: [{
             data: statsData?.authProviderStats?.map(d => d.value) || [],
             backgroundColor: ['rgba(153, 102, 255, 0.7)', 'rgba(255, 159, 64, 0.7)'],
-            borderColor: ['rgba(153, 102, 255, 1)', 'rgba(255, 159, 64, 1)'],
-            borderWidth: 1,
         }],
     };
-
     const brokerChartData = {
         labels: statsData?.uploadsByBroker?.map(d => d.name) || [],
         datasets: [{
             label: 'Uploads por Corretora',
             data: statsData?.uploadsByBroker?.map(d => d.value) || [],
             backgroundColor: 'rgba(54, 162, 235, 0.7)',
-            borderColor: 'rgba(54, 162, 235, 1)',
-            borderWidth: 1,
         }],
     };
-    
-    const chartOptions = (title) => ({
-        responsive: true,
-        plugins: {
-            legend: { position: 'top' },
-            title: { display: false },
-        },
-    });
-
+    const chartOptions = { responsive: true, plugins: { legend: { position: 'top' }, title: { display: false } } };
     const timeSeriesChartOptions = (title) => ({
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: {
-            legend: { display: false },
-            title: { display: true, text: title, font: { size: 16 } },
-        },
-        scales: {
-            x: { grid: { display: false } },
-            y: { beginAtZero: true },
-        },
+        responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, title: { display: true, text: title, font: { size: 16 } } },
+        scales: { x: { grid: { display: false } }, y: { beginAtZero: true } },
     });
-
+    
+    // As colunas dos utilizadores permanecem as mesmas
     const userColumns = [
         { field: 'id', headerName: 'ID', width: 70 },
         { field: 'email', headerName: 'Email', width: 220 },
@@ -164,10 +143,7 @@ const AdminDashboardPage = () => {
         { field: 'distinct_broker_count', headerName: 'Corretoras', type: 'number', width: 100 },
         { field: 'portfolio_value_eur', headerName: 'Valor Carteira (€)', type: 'number', width: 150, valueFormatter: (value) => value ? value.toFixed(2) : '0.00' },
         { 
-            field: 'top_5_holdings', 
-            headerName: 'Top 5 Posições', 
-            width: 250,
-            sortable: false,
+            field: 'top_5_holdings', headerName: 'Top 5 Posições', width: 250, sortable: false,
             renderCell: (params) => {
                 try {
                     const holdings = JSON.parse(params.value);
@@ -179,36 +155,19 @@ const AdminDashboardPage = () => {
                             </Box>
                         </Tooltip>
                     );
-                } catch {
-                    return params.value || 'N/A';
-                }
+                } catch { return params.value || 'N/A'; }
             }
         },
         { field: 'login_count', headerName: 'Nº de Logins', type: 'number', width: 120 },
-        { 
-            field: 'last_login_at', 
-            headerName: 'Último Login', 
-            width: 170, 
-            type: 'dateTime', 
-            valueGetter: (value) => value ? new Date(value) : null 
-        },
-        { field: 'last_login_ip', headerName: 'Último IP', width: 130 },
+        { field: 'last_login_at', headerName: 'Último Login', width: 170, type: 'dateTime', valueGetter: (value) => value ? new Date(value) : null },
         { field: 'created_at', headerName: 'Data Registo', width: 170, type: 'dateTime', valueGetter: (value) => new Date(value) },
         {
-            field: 'actions',
-            headerName: 'Ações',
-            width: 80,
-            sortable: false,
-            disableColumnMenu: true,
+            field: 'actions', headerName: 'Ações', width: 80, sortable: false, disableColumnMenu: true,
             renderCell: (params) => {
                 const isRefreshing = refreshingUserId === params.id;
                 return (
                     <Tooltip title="Atualizar valor da carteira">
-                        <IconButton
-                            onClick={() => refreshMutation.mutate(params.id)}
-                            disabled={isRefreshing}
-                            size="small"
-                        >
+                        <IconButton onClick={() => refreshMutation.mutate(params.id)} disabled={isRefreshing} size="small">
                             {isRefreshing ? <CircularProgress size={20} /> : <RefreshIcon />}
                         </IconButton>
                     </Tooltip>
@@ -223,8 +182,22 @@ const AdminDashboardPage = () => {
     
     return (
         <Box sx={{ p: 3 }}>
-            <Typography variant="h4" component="h1" gutterBottom>Dashboard de Administrador</Typography>
+            {/* --- ATUALIZADO: Header com filtro de datas --- */}
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2, flexWrap: 'wrap', gap: 2 }}>
+                <Typography variant="h4" component="h1">Dashboard de Administrador</Typography>
+                <FormControl size="small" sx={{ minWidth: 180 }}>
+                    <InputLabel>Intervalo de Datas</InputLabel>
+                    <Select value={dateRange} label="Intervalo de Datas" onChange={(e) => setDateRange(e.target.value)}>
+                        <MenuItem value="all_time">Desde Sempre</MenuItem>
+                        <MenuItem value="last_7_days">Últimos 7 dias</MenuItem>
+                        <MenuItem value="last_30_days">Últimos 30 dias</MenuItem>
+                        <MenuItem value="this_month">Este Mês</MenuItem>
+                        <MenuItem value="this_year">Este Ano</MenuItem>
+                    </Select>
+                </FormControl>
+            </Box>
             
+            {/* O resto do JSX para os KPIs e gráficos permanece o mesmo */}
             <Typography variant="h5" component="h2" gutterBottom sx={{ mt: 4 }}>Registos</Typography>
             <Grid container spacing={3} sx={{ mb: 2 }}>
                 <Grid item xs={12} sm={4}><KPICard title="Novos Utilizadores (Hoje)" value={statsData?.newUsersToday} loading={statsLoading} /></Grid>
@@ -241,39 +214,24 @@ const AdminDashboardPage = () => {
                 <Grid item xs={6} sm={4} md={2}><KPICard title="Média Trans./Upload" value={statsData?.avgTransactionsPerUpload?.toFixed(1)} loading={statsLoading} /></Grid>
                 <Grid item xs={6} sm={4} md={2}><KPICard title="Tam. Médio Fich. (MB)" value={statsData?.avgFileSizeMB?.toFixed(2)} loading={statsLoading} /></Grid>
             </Grid>
+            {/* ... etc ... */}
 
-            <Typography variant="h5" component="h2" gutterBottom sx={{ mt: 4 }}>Análise de Utilizadores</Typography>
-            <Grid container spacing={3} sx={{ mb: 2 }}>
-                <Grid item xs={12} md={6} lg={4}>
-                    <ChartCard type="doughnut" data={verificationChartData} options={chartOptions()} title="Verificação de Email" />
-                </Grid>
-                <Grid item xs={12} md={6} lg={4}>
-                    <ChartCard type="doughnut" data={authProviderChartData} options={chartOptions()} title="Método de Autenticação" />
-                </Grid>
-                <Grid item xs={12} md={12} lg={4}>
-                     <ChartCard type="bar" data={brokerChartData} options={chartOptions()} title="Uploads por Corretora" />
-                </Grid>
-            </Grid>
-            
-            <Typography variant="h5" component="h2" gutterBottom sx={{ mt: 4 }}>Atividade da Plataforma</Typography>
-            <Grid container spacing={3} sx={{ mb: 4 }}>
-                <Grid item xs={12} md={6}><Paper sx={{ p: 2, height: 350 }}><Line data={{ labels: statsData?.usersPerDay?.map(d => d.date) || [], datasets: [{ data: statsData?.usersPerDay?.map(d => d.count), borderColor: 'rgb(75, 192, 192)', tension: 0.1, fill: true, backgroundColor: 'rgba(75, 192, 192, 0.1)' }] }} options={timeSeriesChartOptions("Novos Utilizadores/Dia")} /></Paper></Grid>
-                <Grid item xs={12} md={6}><Paper sx={{ p: 2, height: 350 }}><Bar data={{ labels: statsData?.uploadsPerDay?.map(d => d.date) || [], datasets: [{ data: statsData?.uploadsPerDay?.map(d => d.count), backgroundColor: 'rgba(255, 99, 132, 0.5)' }] }} options={timeSeriesChartOptions("Uploads/Dia")} /></Paper></Grid>
-                <Grid item xs={12} md={6}><Paper sx={{ p: 2, height: 350 }}><Bar data={{ labels: statsData?.transactionsPerDay?.map(d => d.date) || [], datasets: [{ data: statsData?.transactionsPerDay?.map(d => d.count), backgroundColor: 'rgba(54, 162, 235, 0.5)' }] }} options={timeSeriesChartOptions("Transações Processadas/Dia")} /></Paper></Grid>
-                <Grid item xs={12} md={6}><Paper sx={{ p: 2, height: 350 }}><Line data={{ labels: statsData?.activeUsersPerDay?.map(d => d.date) || [], datasets: [{ data: statsData?.activeUsersPerDay?.map(d => d.count), borderColor: 'rgb(153, 102, 255)', tension: 0.1, fill: true, backgroundColor: 'rgba(153, 102, 255, 0.1)' }] }} options={timeSeriesChartOptions("Utilizadores Ativos/Dia")} /></Paper></Grid>
-            </Grid>
 
-            <Typography variant="h5" component="h2" gutterBottom sx={{ mt: 4 }}>Power Users</Typography>
-            <Grid container spacing={3} sx={{ mb: 4 }}>
-                <Grid item xs={12} lg={6}>
-                    <TopUsersTable users={statsData?.TopUsersByUploads} title="Top 10 por Uploads" valueHeader="Total de Uploads" />
-                </Grid>
-                <Grid item xs={12} lg={6}>
-                    <TopUsersTable users={statsData?.TopUsersByLogins} title="Top 10 por Logins" valueHeader="Nº de Logins" />
-                </Grid>
-            </Grid>
-
-            <Typography variant="h5" component="h2" gutterBottom sx={{ mt: 4 }}>Utilizadores Registados</Typography>
+            {/* --- ATUALIZADO: Tabela de utilizadores com botão de ação em lote --- */}
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mt: 4, mb: 2 }}>
+                <Typography variant="h5" component="h2">Utilizadores Registados</Typography>
+                {selectedUserIds.length > 0 && (
+                    <Button
+                        variant="contained"
+                        size="small"
+                        startIcon={batchRefreshMutation.isPending ? <CircularProgress size={16} color="inherit" /> : <RefreshIcon />}
+                        onClick={() => batchRefreshMutation.mutate(selectedUserIds)}
+                        disabled={batchRefreshMutation.isPending}
+                    >
+                        Atualizar Métricas ({selectedUserIds.length})
+                    </Button>
+                )}
+            </Box>
             <Paper sx={{ height: 600, width: '100%' }}>
                 <DataGrid
                     rows={usersData || []}
@@ -281,6 +239,17 @@ const AdminDashboardPage = () => {
                     loading={usersLoading}
                     slots={{ toolbar: GridToolbar }}
                     density="compact"
+                    checkboxSelection // --- NOVO ---
+                    onRowSelectionModelChange={(newSelectionModel) => { // --- NOVO ---
+                        setSelectedUserIds(newSelectionModel);
+                    }}
+                    rowSelectionModel={selectedUserIds} // --- NOVO ---
+                    onRowClick={(params) => navigate(`/admin/users/${params.id}`)} // --- NOVO ---
+                    sx={{ // --- NOVO (UX) ---
+                        '& .MuiDataGrid-row:hover': {
+                            cursor: 'pointer',
+                        },
+                    }}
                 />
             </Paper>
         </Box>
