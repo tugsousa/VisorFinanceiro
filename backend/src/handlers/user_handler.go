@@ -1,3 +1,4 @@
+// backend/src/handlers/user_handler.go
 package handlers
 
 import (
@@ -6,9 +7,11 @@ import (
 	"encoding/json"
 	"net/http"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/username/taxfolio/backend/src/config"
 	"github.com/username/taxfolio/backend/src/database"
 	"github.com/username/taxfolio/backend/src/logger"
@@ -30,15 +33,19 @@ var (
 	oauthStateString  = "random-string-for-security"
 )
 
+// UserHandler now includes the UploadService for the metrics refresh
 type UserHandler struct {
-	authService  *security.AuthService
-	emailService services.EmailService
+	authService   *security.AuthService
+	emailService  services.EmailService
+	uploadService services.UploadService
 }
 
-func NewUserHandler(authService *security.AuthService, emailService services.EmailService) *UserHandler {
+// NewUserHandler is updated to accept the uploadService
+func NewUserHandler(authService *security.AuthService, emailService services.EmailService, uploadService services.UploadService) *UserHandler {
 	return &UserHandler{
-		authService:  authService,
-		emailService: emailService,
+		authService:   authService,
+		emailService:  emailService,
+		uploadService: uploadService,
 	}
 }
 
@@ -133,7 +140,6 @@ func (h *UserHandler) AdminMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-// Structs for the new Admin Dashboard API response
 type TimeSeriesDataPoint struct {
 	Date  string `json:"date"`
 	Count int    `json:"count"`
@@ -145,6 +151,9 @@ type AdminStats struct {
 	MonthlyActiveUsers int                   `json:"monthlyActiveUsers"`
 	TotalUploads       int                   `json:"totalUploads"`
 	TotalTransactions  int                   `json:"totalTransactions"`
+	NewUsersToday      int                   `json:"newUsersToday"`
+	NewUsersThisWeek   int                   `json:"newUsersThisWeek"`
+	NewUsersThisMonth  int                   `json:"newUsersThisMonth"`
 	UsersPerDay        []TimeSeriesDataPoint `json:"usersPerDay"`
 	UploadsPerDay      []TimeSeriesDataPoint `json:"uploadsPerDay"`
 	TransactionsPerDay []TimeSeriesDataPoint `json:"transactionsPerDay"`
@@ -152,22 +161,21 @@ type AdminStats struct {
 }
 
 type AdminUserView struct {
-	ID                  int64          `json:"id"`
-	Username            string         `json:"username"`
-	Email               string         `json:"email"`
-	AuthProvider        string         `json:"auth_provider"`
-	CreatedAt           time.Time      `json:"created_at"`
-	TotalUploadCount    int            `json:"total_upload_count"`
-	CurrentFileCount    int            `json:"upload_count"`
-	DistinctBrokerCount int            `json:"distinct_broker_count"`
-	PortfolioValueEUR   float64        `json:"portfolio_value_eur"`
-	Top5Holdings        string         `json:"top_5_holdings"` // JSON string
-	LastLoginAt         model.NullTime `json:"last_login_at"`
-	LastLoginIP         string         `json:"last_login_ip"`
-	LoginCount          int            `json:"login_count"`
+	ID                  int64        `json:"id"`
+	Username            string       `json:"username"`
+	Email               string       `json:"email"`
+	AuthProvider        string       `json:"auth_provider"`
+	CreatedAt           time.Time    `json:"created_at"`
+	TotalUploadCount    int          `json:"total_upload_count"`
+	CurrentFileCount    int          `json:"upload_count"`
+	DistinctBrokerCount int          `json:"distinct_broker_count"`
+	PortfolioValueEUR   float64      `json:"portfolio_value_eur"`
+	Top5Holdings        string       `json:"top_5_holdings"`
+	LastLoginAt         sql.NullTime `json:"last_login_at"`
+	LastLoginIP         string       `json:"last_login_ip"`
+	LoginCount          int          `json:"login_count"`
 }
 
-// Generic helper for time series queries
 func queryTimeSeries(query string) ([]TimeSeriesDataPoint, error) {
 	rows, err := database.DB.Query(query)
 	if err != nil {
@@ -178,18 +186,14 @@ func queryTimeSeries(query string) ([]TimeSeriesDataPoint, error) {
 	var results []TimeSeriesDataPoint
 	for rows.Next() {
 		var point TimeSeriesDataPoint
-		// START OF CORRECTION
-		// Scan into a nullable string to prevent errors if the DB returns NULL for a date.
 		var nullableDate sql.NullString
 		if err := rows.Scan(&nullableDate, &point.Count); err != nil {
 			return nil, err
 		}
-		// Only add the point to our results if the date was valid (not NULL).
 		if nullableDate.Valid {
 			point.Date = nullableDate.String
 			results = append(results, point)
 		}
-		// END OF CORRECTION
 	}
 	return results, nil
 }
@@ -198,17 +202,16 @@ func (h *UserHandler) HandleGetAdminStats(w http.ResponseWriter, r *http.Request
 	var stats AdminStats
 	var err error
 
-	// Simple counts
 	_ = database.DB.QueryRow("SELECT COUNT(*) FROM users").Scan(&stats.TotalUsers)
-	_ = database.DB.QueryRow("SELECT COUNT(*) FROM login_history WHERE DATE(login_at) = DATE('now')").Scan(&stats.DailyActiveUsers)
+	_ = database.DB.QueryRow("SELECT COUNT(DISTINCT user_id) FROM login_history WHERE DATE(login_at) = DATE('now', 'localtime')").Scan(&stats.DailyActiveUsers)
 	_ = database.DB.QueryRow("SELECT COUNT(DISTINCT user_id) FROM login_history WHERE login_at >= date('now', '-30 days')").Scan(&stats.MonthlyActiveUsers)
 	_ = database.DB.QueryRow("SELECT COUNT(*) FROM uploads_history").Scan(&stats.TotalUploads)
-	_ = database.DB.QueryRow("SELECT COUNT(*) FROM processed_transactions").Scan(&stats.TotalTransactions)
+	_ = database.DB.QueryRow("SELECT COALESCE(SUM(transaction_count), 0) FROM uploads_history").Scan(&stats.TotalTransactions)
 
-	// Time series data
-	// START OF CORRECTION
-	// Added WHERE clauses to filter out rows that could result in a NULL date,
-	// which was causing the SQL scan error.
+	_ = database.DB.QueryRow("SELECT COUNT(*) FROM users WHERE DATE(created_at) = DATE('now', 'localtime')").Scan(&stats.NewUsersToday)
+	_ = database.DB.QueryRow("SELECT COUNT(*) FROM users WHERE created_at >= DATE('now', '-7 days')").Scan(&stats.NewUsersThisWeek)
+	_ = database.DB.QueryRow("SELECT COUNT(*) FROM users WHERE created_at >= DATE('now', '-30 days')").Scan(&stats.NewUsersThisMonth)
+
 	stats.UsersPerDay, err = queryTimeSeries("SELECT DATE(created_at) as date, COUNT(*) as count FROM users WHERE created_at IS NOT NULL GROUP BY date ORDER BY date ASC")
 	if err != nil {
 		logger.L.Error("Failed to get users per day", "error", err)
@@ -217,8 +220,8 @@ func (h *UserHandler) HandleGetAdminStats(w http.ResponseWriter, r *http.Request
 	if err != nil {
 		logger.L.Error("Failed to get uploads per day", "error", err)
 	}
-	// This query is more complex. We ensure the constructed date is not NULL.
-	stats.TransactionsPerDay, err = queryTimeSeries("SELECT DATE(SUBSTR(date, 7, 4) || '-' || SUBSTR(date, 4, 2) || '-' || SUBSTR(date, 1, 2)) as date, COUNT(*) as count FROM processed_transactions WHERE DATE(SUBSTR(date, 7, 4) || '-' || SUBSTR(date, 4, 2) || '-' || SUBSTR(date, 1, 2)) IS NOT NULL GROUP BY date ORDER BY date ASC")
+
+	stats.TransactionsPerDay, err = queryTimeSeries("SELECT DATE(uploaded_at) as date, SUM(transaction_count) as count FROM uploads_history WHERE uploaded_at IS NOT NULL GROUP BY date ORDER BY date ASC")
 	if err != nil {
 		logger.L.Error("Failed to get transactions per day", "error", err)
 	}
@@ -226,7 +229,6 @@ func (h *UserHandler) HandleGetAdminStats(w http.ResponseWriter, r *http.Request
 	if err != nil {
 		logger.L.Error("Failed to get active users per day", "error", err)
 	}
-	// END OF CORRECTION
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(stats)
@@ -269,7 +271,7 @@ func (h *UserHandler) HandleGetAdminUsers(w http.ResponseWriter, r *http.Request
 			return
 		}
 
-		u.LastLoginAt = model.NullTime(lastLoginAt)
+		u.LastLoginAt = lastLoginAt
 		u.LastLoginIP = lastLoginIP.String
 		u.Top5Holdings = topHoldings.String
 
@@ -278,4 +280,25 @@ func (h *UserHandler) HandleGetAdminUsers(w http.ResponseWriter, r *http.Request
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(users)
+}
+
+func (h *UserHandler) HandleAdminRefreshUserMetrics(w http.ResponseWriter, r *http.Request) {
+	userIDStr := chi.URLParam(r, "userID")
+	userID, err := strconv.ParseInt(userIDStr, 10, 64)
+	if err != nil {
+		sendJSONError(w, "Invalid user ID format", http.StatusBadRequest)
+		return
+	}
+
+	logger.L.Info("Admin triggered portfolio metrics refresh for user", "targetUserID", userID)
+
+	err = h.uploadService.UpdateUserPortfolioMetrics(userID)
+	if err != nil {
+		logger.L.Error("Failed to refresh user portfolio metrics", "targetUserID", userID, "error", err)
+		sendJSONError(w, "Failed to update portfolio metrics", http.StatusInternalServerError)
+		return
+	}
+
+	logger.L.Info("Successfully refreshed portfolio metrics for user", "targetUserID", userID)
+	w.WriteHeader(http.StatusNoContent)
 }

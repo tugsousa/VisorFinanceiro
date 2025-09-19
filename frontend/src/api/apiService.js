@@ -127,5 +127,6 @@ export const apiFetchDividendTransactions = () => apiClient.get(API_ENDPOINTS.DI
 export const apiFetchFees = () => apiClient.get(API_ENDPOINTS.FEES_DATA);
 export const apiFetchAdminStats = () => apiClient.get('/api/admin/stats');
 export const apiFetchAdminUsers = () => apiClient.get('/api/admin/users');
+export const apiRefreshUserMetrics = (userId) => apiClient.post(`/api/admin/users/${userId}/refresh-metrics`);
 
 export default apiClient;
