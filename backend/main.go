@@ -3,7 +3,7 @@ package main
 
 import (
 	"crypto/tls"
-	"encoding/json"
+	"encoding/json" // Importação adicionada para uso posterior
 	stdlog "log"
 	"net/http"
 	"os"
@@ -25,7 +25,7 @@ import (
 	"golang.org/x/time/rate"
 )
 
-// ... (middleware functions like proxyHeadersMiddleware, rateLimitMiddleware, enableCORS remain the same) ...
+// --- Funções de middleware (proxyHeadersMiddleware, rateLimitMiddleware, enableCORS) permanecem as mesmas ---
 func proxyHeadersMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("X-Forwarded-Proto") == "https" {
@@ -120,8 +120,6 @@ func main() {
 	cashMovementProcessor := processors.NewCashMovementProcessor()
 	feeProcessor := processors.NewFeeProcessor()
 
-	// --- START OF CORRECTION: Initialization Order ---
-	// `uploadService` MUST be initialized before `userHandler` which depends on it.
 	uploadService := services.NewUploadService(
 		transactionProcessor, dividendProcessor, stockProcessor,
 		optionProcessor, cashMovementProcessor, feeProcessor,
@@ -129,10 +127,7 @@ func main() {
 		reportCache,
 	)
 
-	// Now we can initialize `userHandler` and pass `uploadService` to it.
 	userHandler := handlers.NewUserHandler(authService, emailService, uploadService)
-	// --- END OF CORRECTION ---
-
 	uploadHandler := handlers.NewUploadHandler(uploadService)
 	portfolioHandler := handlers.NewPortfolioHandler(uploadService, priceService)
 	dividendHandler := handlers.NewDividendHandler(uploadService)
@@ -199,8 +194,12 @@ func main() {
 				r.Use(userHandler.AdminMiddleware)
 				r.Get("/admin/stats", userHandler.HandleGetAdminStats)
 				r.Get("/admin/users", userHandler.HandleGetAdminUsers)
-				// NEW: The route for the refresh action
 				r.Post("/admin/users/{userID}/refresh-metrics", userHandler.HandleAdminRefreshUserMetrics)
+
+				// --- INÍCIO DAS NOVAS ROTAS DE ADMIN ---
+				r.Get("/admin/users/{userID}", userHandler.HandleGetAdminUserDetails)
+				r.Post("/admin/users/refresh-metrics-batch", userHandler.HandleAdminRefreshMultipleUserMetrics)
+				// --- FIM DAS NOVAS ROTAS DE ADMIN ---
 			})
 		})
 	})

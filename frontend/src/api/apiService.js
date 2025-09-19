@@ -1,4 +1,6 @@
 // frontend/src/api/apiService.js
+
+// --- O CÓDIGO EXISTENTE PERMANECE IGUAL ATÉ ÀS FUNÇÕES DA API ---
 import axios from 'axios';
 import { API_ENDPOINTS } from '../constants';
 
@@ -14,18 +16,13 @@ export const setApiServiceCsrfToken = (token) => {
 
 export const getApiServiceCsrfToken = () => currentCsrfToken;
 
-// --- START OF CORRECTION (Part 1) ---
-// We remove the default Content-Type header from the initial client creation.
-// It will now be set dynamically and correctly by the request interceptor.
 const apiClient = axios.create({
   baseURL: API_URL,
   withCredentials: true,
   headers: {
-    // 'Content-Type': 'application/json', // REMOVED FROM HERE
     'Accept': 'application/json',
   },
 });
-// --- END OF CORRECTION (Part 1) ---
 
 export const fetchAndSetCsrfToken = async () => {
   try {
@@ -48,31 +45,22 @@ export const fetchAndSetCsrfToken = async () => {
 
 apiClient.interceptors.request.use(
   async (config) => {
-    // Add Authorization token if it exists
     const authToken = getAuthToken();
     if (authToken) {
       config.headers['Authorization'] = `Bearer ${authToken}`;
     }
 
-    // --- START OF CORRECTION (Part 2) ---
-    // This is the core logic fix. We dynamically set headers based on request type.
     if (config.data instanceof FormData) {
-      // If the data is FormData, we MUST NOT set the Content-Type header.
-      // The browser needs to set it automatically with a unique boundary string.
-      // We explicitly delete it here to override any potential defaults.
       delete config.headers['Content-Type'];
     } else {
-      // For all other requests (like login, etc.), we ensure the Content-Type is JSON.
       config.headers['Content-Type'] = 'application/json';
     }
-    // --- END OF CORRECTION (Part 2) ---
 
-    // CSRF Token Logic (from previous step, remains correct)
     const method = config.method?.toLowerCase();
     const csrfProtectedMethods = ['post', 'put', 'delete', 'patch'];
     
     if (csrfProtectedMethods.includes(method)) {
-      const csrfTokenToUse = await fetchAndSetCsrfToken();
+      const csrfTokenToUse = getApiServiceCsrfToken() || await fetchAndSetCsrfToken();
       if (csrfTokenToUse) {
         config.headers['X-CSRF-Token'] = csrfTokenToUse;
       } else {
@@ -97,8 +85,7 @@ apiClient.interceptors.response.use(
   (error) => Promise.reject(error)
 );
 
-// --- API Functions (no changes here) ---
-
+// --- FUNÇÕES DE API EXISTENTES ---
 export const apiUploadFile = (formData, onUploadProgress) => 
   apiClient.post(API_ENDPOINTS.UPLOAD, formData, { 
     onUploadProgress 
@@ -125,8 +112,39 @@ export const apiFetchOptionSales = () => apiClient.get(API_ENDPOINTS.OPTION_SALE
 export const apiFetchDividendTaxSummary = () => apiClient.get(API_ENDPOINTS.DIVIDEND_TAX_SUMMARY);
 export const apiFetchDividendTransactions = () => apiClient.get(API_ENDPOINTS.DIVIDEND_TRANSACTIONS);
 export const apiFetchFees = () => apiClient.get(API_ENDPOINTS.FEES_DATA);
-export const apiFetchAdminStats = () => apiClient.get('/api/admin/stats');
 export const apiFetchAdminUsers = () => apiClient.get('/api/admin/users');
 export const apiRefreshUserMetrics = (userId) => apiClient.post(`/api/admin/users/${userId}/refresh-metrics`);
+
+// --- INÍCIO DAS NOVAS FUNÇÕES ---
+
+/**
+ * Busca as estatísticas do dashboard de administrador, com um filtro de data opcional.
+ * @param {string} range - O intervalo de datas (ex: 'all_time', 'last_30_days').
+ * @returns {Promise} A promessa da chamada da API.
+ */
+export const apiFetchAdminStats = (range = 'all_time') => 
+    apiClient.get('/api/admin/stats', {
+        params: {
+            range: range
+        }
+    });
+
+/**
+ * Busca os detalhes completos de um utilizador específico para a vista de drill-down.
+ * @param {string|number} userId - O ID do utilizador.
+ * @returns {Promise} A promessa da chamada da API.
+ */
+export const apiFetchAdminUserDetails = (userId) => apiClient.get(`/api/admin/users/${userId}`);
+
+
+/**
+ * Pede ao backend para atualizar as métricas para múltiplos utilizadores em lote.
+ * @param {Array<string|number>} userIds - Um array com os IDs dos utilizadores.
+ * @returns {Promise} A promessa da chamada da API.
+ */
+export const apiRefreshMultipleUserMetrics = (userIds) => 
+    apiClient.post('/api/admin/users/refresh-metrics-batch', { user_ids: userIds });
+
+// --- FIM DAS NOVAS FUNÇÕES ---
 
 export default apiClient;

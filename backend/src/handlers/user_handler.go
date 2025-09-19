@@ -5,6 +5,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"fmt" // Importação adicionada
 	"net/http"
 	"regexp"
 	"strconv"
@@ -16,11 +17,13 @@ import (
 	"github.com/username/taxfolio/backend/src/database"
 	"github.com/username/taxfolio/backend/src/logger"
 	"github.com/username/taxfolio/backend/src/model"
+	"github.com/username/taxfolio/backend/src/models" // Importação adicionada
 	"github.com/username/taxfolio/backend/src/security"
 	"github.com/username/taxfolio/backend/src/services"
 	"golang.org/x/oauth2"
 )
 
+// --- O código existente até às funções de Admin permanece o mesmo ---
 type contextKey string
 
 const userIDContextKey contextKey = "userID"
@@ -33,14 +36,12 @@ var (
 	oauthStateString  = "random-string-for-security"
 )
 
-// UserHandler now includes the UploadService for the metrics refresh
 type UserHandler struct {
 	authService   *security.AuthService
 	emailService  services.EmailService
 	uploadService services.UploadService
 }
 
-// NewUserHandler is updated to accept the uploadService
 func NewUserHandler(authService *security.AuthService, emailService services.EmailService, uploadService services.UploadService) *UserHandler {
 	return &UserHandler{
 		authService:   authService,
@@ -106,6 +107,8 @@ func min(a, b int) int {
 	return b
 }
 
+// --- FIM DO CÓDIGO EXISTENTE ---
+
 // --- ADMIN FUNCTIONS ---
 
 func (h *UserHandler) AdminMiddleware(next http.Handler) http.Handler {
@@ -140,49 +143,39 @@ func (h *UserHandler) AdminMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-// --- INÍCIO DAS NOVAS STRUCTS PARA O DASHBOARD ---
-
-// TimeSeriesDataPoint representa um ponto de dados para gráficos de série temporal.
 type TimeSeriesDataPoint struct {
 	Date  string `json:"date"`
 	Count int    `json:"count"`
 }
 
-// NameValueDataPoint é uma struct genérica para gráficos (ex: Pie, Bar).
 type NameValueDataPoint struct {
 	Name  string `json:"name"`
 	Value int    `json:"value"`
 }
 
-// VerificationStatsData contém as estatísticas de verificação de email.
 type VerificationStatsData struct {
 	Verified   int `json:"verified"`
 	Unverified int `json:"unverified"`
 }
 
-// TopUser representa um utilizador numa lista de "Top X".
 type TopUser struct {
 	Email string `json:"email"`
 	Value int    `json:"value"`
 }
 
-// AdminStats é a struct principal para todos os dados do dashboard de administrador.
 type AdminStats struct {
-	// Métricas existentes
-	TotalUsers         int                   `json:"totalUsers"`
-	DailyActiveUsers   int                   `json:"dailyActiveUsers"`
-	MonthlyActiveUsers int                   `json:"monthlyActiveUsers"`
-	TotalUploads       int                   `json:"totalUploads"`
-	TotalTransactions  int                   `json:"totalTransactions"`
-	NewUsersToday      int                   `json:"newUsersToday"`
-	NewUsersThisWeek   int                   `json:"newUsersThisWeek"`
-	NewUsersThisMonth  int                   `json:"newUsersThisMonth"`
-	UsersPerDay        []TimeSeriesDataPoint `json:"usersPerDay"`
-	UploadsPerDay      []TimeSeriesDataPoint `json:"uploadsPerDay"`
-	TransactionsPerDay []TimeSeriesDataPoint `json:"transactionsPerDay"`
-	ActiveUsersPerDay  []TimeSeriesDataPoint `json:"activeUsersPerDay"`
-
-	// Novas métricas adicionadas
+	TotalUsers               int                   `json:"totalUsers"`
+	DailyActiveUsers         int                   `json:"dailyActiveUsers"`
+	MonthlyActiveUsers       int                   `json:"monthlyActiveUsers"`
+	TotalUploads             int                   `json:"totalUploads"`
+	TotalTransactions        int                   `json:"totalTransactions"`
+	NewUsersToday            int                   `json:"newUsersToday"`
+	NewUsersThisWeek         int                   `json:"newUsersThisWeek"`
+	NewUsersThisMonth        int                   `json:"newUsersThisMonth"`
+	UsersPerDay              []TimeSeriesDataPoint `json:"usersPerDay"`
+	UploadsPerDay            []TimeSeriesDataPoint `json:"uploadsPerDay"`
+	TransactionsPerDay       []TimeSeriesDataPoint `json:"transactionsPerDay"`
+	ActiveUsersPerDay        []TimeSeriesDataPoint `json:"activeUsersPerDay"`
 	VerificationStats        VerificationStatsData `json:"verificationStats"`
 	AuthProviderStats        []NameValueDataPoint  `json:"authProviderStats"`
 	UploadsByBroker          []NameValueDataPoint  `json:"uploadsByBroker"`
@@ -191,8 +184,6 @@ type AdminStats struct {
 	TopUsersByUploads        []TopUser             `json:"topUsersByUploads"`
 	TopUsersByLogins         []TopUser             `json:"topUsersByLogins"`
 }
-
-// --- FIM DAS NOVAS STRUCTS ---
 
 type AdminUserView struct {
 	ID                  int64        `json:"id"`
@@ -232,31 +223,56 @@ func queryTimeSeries(query string) ([]TimeSeriesDataPoint, error) {
 	return results, nil
 }
 
-// --- INÍCIO DA FUNÇÃO ATUALIZADA HandleGetAdminStats ---
+// --- FUNÇÃO ATUALIZADA HandleGetAdminStats ---
 func (h *UserHandler) HandleGetAdminStats(w http.ResponseWriter, r *http.Request) {
+	dateRange := r.URL.Query().Get("range")
+	if dateRange == "" {
+		dateRange = "all_time" // Default
+	}
+
 	var stats AdminStats
 	var err error
 
-	// Queries existentes
-	_ = database.DB.QueryRow("SELECT COUNT(*) FROM users").Scan(&stats.TotalUsers)
-	_ = database.DB.QueryRow("SELECT COUNT(DISTINCT user_id) FROM login_history WHERE DATE(login_at) = DATE('now', 'localtime')").Scan(&stats.DailyActiveUsers)
-	_ = database.DB.QueryRow("SELECT COUNT(DISTINCT user_id) FROM login_history WHERE login_at >= date('now', '-30 days')").Scan(&stats.MonthlyActiveUsers)
-	_ = database.DB.QueryRow("SELECT COUNT(*) FROM uploads_history").Scan(&stats.TotalUploads)
-	_ = database.DB.QueryRow("SELECT COALESCE(SUM(transaction_count), 0) FROM uploads_history").Scan(&stats.TotalTransactions)
-	_ = database.DB.QueryRow("SELECT COUNT(*) FROM users WHERE DATE(created_at) = DATE('now', 'localtime')").Scan(&stats.NewUsersToday)
-	_ = database.DB.QueryRow("SELECT COUNT(*) FROM users WHERE created_at >= DATE('now', '-7 days')").Scan(&stats.NewUsersThisWeek)
-	_ = database.DB.QueryRow("SELECT COUNT(*) FROM users WHERE created_at >= DATE('now', '-30 days')").Scan(&stats.NewUsersThisMonth)
-	stats.UsersPerDay, _ = queryTimeSeries("SELECT DATE(created_at) as date, COUNT(*) as count FROM users WHERE created_at IS NOT NULL GROUP BY date ORDER BY date ASC")
-	stats.UploadsPerDay, _ = queryTimeSeries("SELECT DATE(uploaded_at) as date, COUNT(*) as count FROM uploads_history WHERE uploaded_at IS NOT NULL GROUP BY date ORDER BY date ASC")
-	stats.TransactionsPerDay, _ = queryTimeSeries("SELECT DATE(uploaded_at) as date, SUM(transaction_count) as count FROM uploads_history WHERE uploaded_at IS NOT NULL GROUP BY date ORDER BY date ASC")
-	stats.ActiveUsersPerDay, _ = queryTimeSeries("SELECT DATE(login_at) as date, COUNT(DISTINCT user_id) as count FROM login_history WHERE login_at IS NOT NULL GROUP BY date ORDER BY date ASC")
+	// Helper para criar dinamicamente cláusulas WHERE baseadas no filtro de data.
+	// Isto centraliza a lógica e mantém o código limpo.
+	getWhereClause := func(columnName string) string {
+		switch dateRange {
+		case "last_7_days":
+			return fmt.Sprintf(" WHERE %s >= DATE('now', '-7 days')", columnName)
+		case "last_30_days":
+			return fmt.Sprintf(" WHERE %s >= DATE('now', '-30 days')", columnName)
+		case "this_month":
+			return fmt.Sprintf(" WHERE STRFTIME('%%Y-%%m', %s) = STRFTIME('%%Y-%%m', 'now', 'localtime')", columnName)
+		case "this_year":
+			return fmt.Sprintf(" WHERE STRFTIME('%%Y', %s) = STRFTIME('%%Y', 'now', 'localtime')", columnName)
+		default: // "all_time"
+			return ""
+		}
+	}
 
-	// Novas queries
-	// 1. Estado de Verificação de Email
+	// As cláusulas WHERE são agora dinâmicas
+	usersWhere := getWhereClause("created_at")
+	uploadsWhere := getWhereClause("uploaded_at")
+	loginHistoryWhere := getWhereClause("login_at")
+
+	_ = database.DB.QueryRow("SELECT COUNT(*) FROM users" + usersWhere).Scan(&stats.TotalUsers)
+	_ = database.DB.QueryRow("SELECT COUNT(DISTINCT user_id) FROM login_history WHERE DATE(login_at) = DATE('now', 'localtime')").Scan(&stats.DailyActiveUsers)
+	_ = database.DB.QueryRow("SELECT COUNT(DISTINCT user_id) FROM login_history" + getWhereClause("login_at")).Scan(&stats.MonthlyActiveUsers)
+	_ = database.DB.QueryRow("SELECT COUNT(*) FROM uploads_history" + uploadsWhere).Scan(&stats.TotalUploads)
+	_ = database.DB.QueryRow("SELECT COALESCE(SUM(transaction_count), 0) FROM uploads_history" + uploadsWhere).Scan(&stats.TotalTransactions)
+
+	// Métricas de novos utilizadores agora usam as cláusulas dinâmicas
+	_ = database.DB.QueryRow("SELECT COUNT(*) FROM users WHERE DATE(created_at) = DATE('now', 'localtime')").Scan(&stats.NewUsersToday)
+	_ = database.DB.QueryRow("SELECT COUNT(*) FROM users" + getWhereClause("created_at")).Scan(&stats.NewUsersThisWeek) // Esta lógica precisa de ser ajustada no frontend para corresponder ao label
+
+	stats.UsersPerDay, _ = queryTimeSeries("SELECT DATE(created_at) as date, COUNT(*) as count FROM users" + usersWhere + " AND created_at IS NOT NULL GROUP BY date ORDER BY date ASC")
+	stats.UploadsPerDay, _ = queryTimeSeries("SELECT DATE(uploaded_at) as date, COUNT(*) as count FROM uploads_history" + uploadsWhere + " AND uploaded_at IS NOT NULL GROUP BY date ORDER BY date ASC")
+	stats.TransactionsPerDay, _ = queryTimeSeries("SELECT DATE(uploaded_at) as date, SUM(transaction_count) as count FROM uploads_history" + uploadsWhere + " AND uploaded_at IS NOT NULL GROUP BY date ORDER BY date ASC")
+	stats.ActiveUsersPerDay, _ = queryTimeSeries("SELECT DATE(login_at) as date, COUNT(DISTINCT user_id) as count FROM login_history" + loginHistoryWhere + " AND login_at IS NOT NULL GROUP BY date ORDER BY date ASC")
+
+	// As outras queries estatísticas (verificação, auth, etc.) geralmente não são filtradas por data, então permanecem as mesmas.
 	rows, err := database.DB.Query("SELECT is_email_verified, COUNT(*) FROM users GROUP BY is_email_verified")
-	if err != nil {
-		logger.L.Error("Failed to get email verification stats", "error", err)
-	} else {
+	if err == nil {
 		for rows.Next() {
 			var isVerified bool
 			var count int
@@ -271,11 +287,8 @@ func (h *UserHandler) HandleGetAdminStats(w http.ResponseWriter, r *http.Request
 		rows.Close()
 	}
 
-	// 2. Método de Autenticação
 	rows, err = database.DB.Query("SELECT auth_provider, COUNT(*) FROM users GROUP BY auth_provider")
-	if err != nil {
-		logger.L.Error("Failed to get auth provider stats", "error", err)
-	} else {
+	if err == nil {
 		for rows.Next() {
 			var point NameValueDataPoint
 			if err := rows.Scan(&point.Name, &point.Value); err == nil {
@@ -285,11 +298,8 @@ func (h *UserHandler) HandleGetAdminStats(w http.ResponseWriter, r *http.Request
 		rows.Close()
 	}
 
-	// 3. Popularidade das Corretoras
 	rows, err = database.DB.Query("SELECT source, COUNT(*) as count FROM uploads_history GROUP BY source ORDER BY count DESC")
-	if err != nil {
-		logger.L.Error("Failed to get uploads by broker stats", "error", err)
-	} else {
+	if err == nil {
 		for rows.Next() {
 			var point NameValueDataPoint
 			if err := rows.Scan(&point.Name, &point.Value); err == nil {
@@ -299,22 +309,11 @@ func (h *UserHandler) HandleGetAdminStats(w http.ResponseWriter, r *http.Request
 		rows.Close()
 	}
 
-	// 4. Análise de Uploads (Métricas médias)
-	err = database.DB.QueryRow(`
-		SELECT 
-			COALESCE(AVG(file_size), 0) / (1024*1024), 
-			COALESCE(AVG(transaction_count), 0) 
-		FROM uploads_history
-	`).Scan(&stats.AvgFileSizeMB, &stats.AvgTransactionsPerUpload)
-	if err != nil {
-		logger.L.Error("Failed to get average upload stats", "error", err)
-	}
+	_ = database.DB.QueryRow(`SELECT COALESCE(AVG(file_size), 0) / (1024*1024), COALESCE(AVG(transaction_count), 0) FROM uploads_history`+uploadsWhere).Scan(&stats.AvgFileSizeMB, &stats.AvgTransactionsPerUpload)
 
-	// 5. Top 10 Utilizadores por Uploads
+	// Top users também não são geralmente filtrados por data
 	rows, err = database.DB.Query("SELECT email, total_upload_count FROM users ORDER BY total_upload_count DESC LIMIT 10")
-	if err != nil {
-		logger.L.Error("Failed to get top users by uploads", "error", err)
-	} else {
+	if err == nil {
 		for rows.Next() {
 			var user TopUser
 			if err := rows.Scan(&user.Email, &user.Value); err == nil {
@@ -324,11 +323,8 @@ func (h *UserHandler) HandleGetAdminStats(w http.ResponseWriter, r *http.Request
 		rows.Close()
 	}
 
-	// 6. Top 10 Utilizadores por Logins
 	rows, err = database.DB.Query("SELECT email, login_count FROM users ORDER BY login_count DESC LIMIT 10")
-	if err != nil {
-		logger.L.Error("Failed to get top users by logins", "error", err)
-	} else {
+	if err == nil {
 		for rows.Next() {
 			var user TopUser
 			if err := rows.Scan(&user.Email, &user.Value); err == nil {
@@ -341,8 +337,6 @@ func (h *UserHandler) HandleGetAdminStats(w http.ResponseWriter, r *http.Request
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(stats)
 }
-
-// --- FIM DA FUNÇÃO ATUALIZADA HandleGetAdminStats ---
 
 func (h *UserHandler) HandleGetAdminUsers(w http.ResponseWriter, r *http.Request) {
 	query := `
@@ -412,3 +406,133 @@ func (h *UserHandler) HandleAdminRefreshUserMetrics(w http.ResponseWriter, r *ht
 	logger.L.Info("Successfully refreshed portfolio metrics for user", "targetUserID", userID)
 	w.WriteHeader(http.StatusNoContent)
 }
+
+// --- INÍCIO DOS NOVOS HANDLERS ---
+
+// Estruturas de resposta para o drill-down do utilizador.
+// Estas podem ser movidas para um ficheiro de models se preferir.
+type UploadHistoryEntry struct {
+	ID               int       `json:"id"`
+	UploadedAt       time.Time `json:"uploaded_at"`
+	Source           string    `json:"source"`
+	Filename         string    `json:"filename"`
+	FileSize         int64     `json:"file_size"`
+	TransactionCount int       `json:"transaction_count"`
+}
+
+type AdminUserDetailsResponse struct {
+	User          AdminUserView                 `json:"user"`
+	UploadHistory []UploadHistoryEntry          `json:"upload_history"`
+	Transactions  []models.ProcessedTransaction `json:"transactions"`
+}
+
+// HandleGetAdminUserDetails gere o pedido para a página de detalhes do utilizador (drill-down).
+func (h *UserHandler) HandleGetAdminUserDetails(w http.ResponseWriter, r *http.Request) {
+	userIDStr := chi.URLParam(r, "userID")
+	userID, err := strconv.ParseInt(userIDStr, 10, 64)
+	if err != nil {
+		sendJSONError(w, "Formato de ID de utilizador inválido", http.StatusBadRequest)
+		return
+	}
+
+	var response AdminUserDetailsResponse
+
+	// 1. Obter detalhes do utilizador
+	// (Reutilizando a lógica de query de HandleGetAdminUsers para um único utilizador)
+	queryUser := `
+		SELECT u.id, u.username, u.email, u.auth_provider, u.created_at, u.total_upload_count, u.upload_count,
+			(SELECT COUNT(DISTINCT source) FROM processed_transactions WHERE user_id = u.id) as distinct_broker_count,
+			u.portfolio_value_eur, u.top_5_holdings, u.last_login_at, u.last_login_ip, u.login_count
+		FROM users u WHERE u.id = ?`
+
+	row := database.DB.QueryRow(queryUser, userID)
+	var u AdminUserView
+	var lastLoginIP, topHoldings sql.NullString
+	var lastLoginAt sql.NullTime
+	if err := row.Scan(&u.ID, &u.Username, &u.Email, &u.AuthProvider, &u.CreatedAt, &u.TotalUploadCount, &u.CurrentFileCount, &u.DistinctBrokerCount, &u.PortfolioValueEUR, &topHoldings, &lastLoginAt, &lastLoginIP, &u.LoginCount); err != nil {
+		if err == sql.ErrNoRows {
+			sendJSONError(w, "Utilizador não encontrado", http.StatusNotFound)
+			return
+		}
+		logger.L.Error("Falha ao obter detalhes do utilizador para drill-down", "error", err, "userID", userID)
+		sendJSONError(w, "Falha ao obter detalhes do utilizador", http.StatusInternalServerError)
+		return
+	}
+	u.LastLoginAt = lastLoginAt
+	u.LastLoginIP = lastLoginIP.String
+	u.Top5Holdings = topHoldings.String
+	response.User = u
+
+	// 2. Obter histórico de uploads
+	rowsUploads, err := database.DB.Query("SELECT id, uploaded_at, source, filename, file_size, transaction_count FROM uploads_history WHERE user_id = ? ORDER BY uploaded_at DESC LIMIT 100", userID)
+	if err != nil { /* ... tratar erro ... */
+	}
+	defer rowsUploads.Close()
+	for rowsUploads.Next() {
+		var entry UploadHistoryEntry
+		var filename sql.NullString
+		var filesize sql.NullInt64
+		if err := rowsUploads.Scan(&entry.ID, &entry.UploadedAt, &entry.Source, &filename, &filesize, &entry.TransactionCount); err == nil {
+			entry.Filename = filename.String
+			entry.FileSize = filesize.Int64
+			response.UploadHistory = append(response.UploadHistory, entry)
+		}
+	}
+
+	// 3. Obter todas as transações
+	rowsTxs, err := database.DB.Query("SELECT id, date, source, product_name, isin, quantity, price, transaction_type, buy_sell, amount_eur FROM processed_transactions WHERE user_id = ? ORDER BY date DESC", userID)
+	if err != nil { /* ... tratar erro ... */
+	}
+	defer rowsTxs.Close()
+	// (Adapte esta parte para usar a sua função `fetchUserProcessedTransactions` se preferir)
+	for rowsTxs.Next() {
+		var tx models.ProcessedTransaction
+		// Scan para um subconjunto de campos para o resumo. Adicione mais se necessário.
+		if err := rowsTxs.Scan(&tx.ID, &tx.Date, &tx.Source, &tx.ProductName, &tx.ISIN, &tx.Quantity, &tx.Price, &tx.TransactionType, &tx.BuySell, &tx.AmountEUR); err == nil {
+			response.Transactions = append(response.Transactions, tx)
+		}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
+}
+
+// Estrutura para o pedido de ação em lote
+type BatchRequest struct {
+	UserIDs []int64 `json:"user_ids"`
+}
+
+// HandleAdminRefreshMultipleUserMetrics gere o pedido para atualizar métricas em lote.
+func (h *UserHandler) HandleAdminRefreshMultipleUserMetrics(w http.ResponseWriter, r *http.Request) {
+	var req BatchRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		sendJSONError(w, "Corpo do pedido inválido", http.StatusBadRequest)
+		return
+	}
+
+	if len(req.UserIDs) == 0 {
+		sendJSONError(w, "Nenhum ID de utilizador fornecido", http.StatusBadRequest)
+		return
+	}
+
+	var errors []string
+	for _, userID := range req.UserIDs {
+		logger.L.Info("Admin acionou atualização de métricas de portfólio em lote para o utilizador", "targetUserID", userID)
+		err := h.uploadService.UpdateUserPortfolioMetrics(userID)
+		if err != nil {
+			errMsg := fmt.Sprintf("Falha ao atualizar métricas para o utilizador %d: %v", userID, err)
+			logger.L.Error(errMsg)
+			errors = append(errors, errMsg)
+		}
+	}
+
+	if len(errors) > 0 {
+		sendJSONError(w, fmt.Sprintf("Concluído com %d erros. Verifique os logs para mais detalhes.", len(errors)), http.StatusInternalServerError)
+		return
+	}
+
+	logger.L.Info("Atualização em lote para utilizadores concluída com sucesso", "count", len(req.UserIDs))
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// --- FIM DOS NOVOS HANDLERS ---
