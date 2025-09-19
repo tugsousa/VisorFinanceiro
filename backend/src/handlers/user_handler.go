@@ -140,12 +140,35 @@ func (h *UserHandler) AdminMiddleware(next http.Handler) http.Handler {
 	})
 }
 
+// --- INÍCIO DAS NOVAS STRUCTS PARA O DASHBOARD ---
+
+// TimeSeriesDataPoint representa um ponto de dados para gráficos de série temporal.
 type TimeSeriesDataPoint struct {
 	Date  string `json:"date"`
 	Count int    `json:"count"`
 }
 
+// NameValueDataPoint é uma struct genérica para gráficos (ex: Pie, Bar).
+type NameValueDataPoint struct {
+	Name  string `json:"name"`
+	Value int    `json:"value"`
+}
+
+// VerificationStatsData contém as estatísticas de verificação de email.
+type VerificationStatsData struct {
+	Verified   int `json:"verified"`
+	Unverified int `json:"unverified"`
+}
+
+// TopUser representa um utilizador numa lista de "Top X".
+type TopUser struct {
+	Email string `json:"email"`
+	Value int    `json:"value"`
+}
+
+// AdminStats é a struct principal para todos os dados do dashboard de administrador.
 type AdminStats struct {
+	// Métricas existentes
 	TotalUsers         int                   `json:"totalUsers"`
 	DailyActiveUsers   int                   `json:"dailyActiveUsers"`
 	MonthlyActiveUsers int                   `json:"monthlyActiveUsers"`
@@ -158,7 +181,18 @@ type AdminStats struct {
 	UploadsPerDay      []TimeSeriesDataPoint `json:"uploadsPerDay"`
 	TransactionsPerDay []TimeSeriesDataPoint `json:"transactionsPerDay"`
 	ActiveUsersPerDay  []TimeSeriesDataPoint `json:"activeUsersPerDay"`
+
+	// Novas métricas adicionadas
+	VerificationStats        VerificationStatsData `json:"verificationStats"`
+	AuthProviderStats        []NameValueDataPoint  `json:"authProviderStats"`
+	UploadsByBroker          []NameValueDataPoint  `json:"uploadsByBroker"`
+	AvgFileSizeMB            float64               `json:"avgFileSizeMB"`
+	AvgTransactionsPerUpload float64               `json:"avgTransactionsPerUpload"`
+	TopUsersByUploads        []TopUser             `json:"topUsersByUploads"`
+	TopUsersByLogins         []TopUser             `json:"topUsersByLogins"`
 }
+
+// --- FIM DAS NOVAS STRUCTS ---
 
 type AdminUserView struct {
 	ID                  int64        `json:"id"`
@@ -198,41 +232,117 @@ func queryTimeSeries(query string) ([]TimeSeriesDataPoint, error) {
 	return results, nil
 }
 
+// --- INÍCIO DA FUNÇÃO ATUALIZADA HandleGetAdminStats ---
 func (h *UserHandler) HandleGetAdminStats(w http.ResponseWriter, r *http.Request) {
 	var stats AdminStats
 	var err error
 
+	// Queries existentes
 	_ = database.DB.QueryRow("SELECT COUNT(*) FROM users").Scan(&stats.TotalUsers)
 	_ = database.DB.QueryRow("SELECT COUNT(DISTINCT user_id) FROM login_history WHERE DATE(login_at) = DATE('now', 'localtime')").Scan(&stats.DailyActiveUsers)
 	_ = database.DB.QueryRow("SELECT COUNT(DISTINCT user_id) FROM login_history WHERE login_at >= date('now', '-30 days')").Scan(&stats.MonthlyActiveUsers)
 	_ = database.DB.QueryRow("SELECT COUNT(*) FROM uploads_history").Scan(&stats.TotalUploads)
 	_ = database.DB.QueryRow("SELECT COALESCE(SUM(transaction_count), 0) FROM uploads_history").Scan(&stats.TotalTransactions)
-
 	_ = database.DB.QueryRow("SELECT COUNT(*) FROM users WHERE DATE(created_at) = DATE('now', 'localtime')").Scan(&stats.NewUsersToday)
 	_ = database.DB.QueryRow("SELECT COUNT(*) FROM users WHERE created_at >= DATE('now', '-7 days')").Scan(&stats.NewUsersThisWeek)
 	_ = database.DB.QueryRow("SELECT COUNT(*) FROM users WHERE created_at >= DATE('now', '-30 days')").Scan(&stats.NewUsersThisMonth)
+	stats.UsersPerDay, _ = queryTimeSeries("SELECT DATE(created_at) as date, COUNT(*) as count FROM users WHERE created_at IS NOT NULL GROUP BY date ORDER BY date ASC")
+	stats.UploadsPerDay, _ = queryTimeSeries("SELECT DATE(uploaded_at) as date, COUNT(*) as count FROM uploads_history WHERE uploaded_at IS NOT NULL GROUP BY date ORDER BY date ASC")
+	stats.TransactionsPerDay, _ = queryTimeSeries("SELECT DATE(uploaded_at) as date, SUM(transaction_count) as count FROM uploads_history WHERE uploaded_at IS NOT NULL GROUP BY date ORDER BY date ASC")
+	stats.ActiveUsersPerDay, _ = queryTimeSeries("SELECT DATE(login_at) as date, COUNT(DISTINCT user_id) as count FROM login_history WHERE login_at IS NOT NULL GROUP BY date ORDER BY date ASC")
 
-	stats.UsersPerDay, err = queryTimeSeries("SELECT DATE(created_at) as date, COUNT(*) as count FROM users WHERE created_at IS NOT NULL GROUP BY date ORDER BY date ASC")
+	// Novas queries
+	// 1. Estado de Verificação de Email
+	rows, err := database.DB.Query("SELECT is_email_verified, COUNT(*) FROM users GROUP BY is_email_verified")
 	if err != nil {
-		logger.L.Error("Failed to get users per day", "error", err)
-	}
-	stats.UploadsPerDay, err = queryTimeSeries("SELECT DATE(uploaded_at) as date, COUNT(*) as count FROM uploads_history WHERE uploaded_at IS NOT NULL GROUP BY date ORDER BY date ASC")
-	if err != nil {
-		logger.L.Error("Failed to get uploads per day", "error", err)
+		logger.L.Error("Failed to get email verification stats", "error", err)
+	} else {
+		for rows.Next() {
+			var isVerified bool
+			var count int
+			if err := rows.Scan(&isVerified, &count); err == nil {
+				if isVerified {
+					stats.VerificationStats.Verified = count
+				} else {
+					stats.VerificationStats.Unverified = count
+				}
+			}
+		}
+		rows.Close()
 	}
 
-	stats.TransactionsPerDay, err = queryTimeSeries("SELECT DATE(uploaded_at) as date, SUM(transaction_count) as count FROM uploads_history WHERE uploaded_at IS NOT NULL GROUP BY date ORDER BY date ASC")
+	// 2. Método de Autenticação
+	rows, err = database.DB.Query("SELECT auth_provider, COUNT(*) FROM users GROUP BY auth_provider")
 	if err != nil {
-		logger.L.Error("Failed to get transactions per day", "error", err)
+		logger.L.Error("Failed to get auth provider stats", "error", err)
+	} else {
+		for rows.Next() {
+			var point NameValueDataPoint
+			if err := rows.Scan(&point.Name, &point.Value); err == nil {
+				stats.AuthProviderStats = append(stats.AuthProviderStats, point)
+			}
+		}
+		rows.Close()
 	}
-	stats.ActiveUsersPerDay, err = queryTimeSeries("SELECT DATE(login_at) as date, COUNT(DISTINCT user_id) as count FROM login_history WHERE login_at IS NOT NULL GROUP BY date ORDER BY date ASC")
+
+	// 3. Popularidade das Corretoras
+	rows, err = database.DB.Query("SELECT source, COUNT(*) as count FROM uploads_history GROUP BY source ORDER BY count DESC")
 	if err != nil {
-		logger.L.Error("Failed to get active users per day", "error", err)
+		logger.L.Error("Failed to get uploads by broker stats", "error", err)
+	} else {
+		for rows.Next() {
+			var point NameValueDataPoint
+			if err := rows.Scan(&point.Name, &point.Value); err == nil {
+				stats.UploadsByBroker = append(stats.UploadsByBroker, point)
+			}
+		}
+		rows.Close()
+	}
+
+	// 4. Análise de Uploads (Métricas médias)
+	err = database.DB.QueryRow(`
+		SELECT 
+			COALESCE(AVG(file_size), 0) / (1024*1024), 
+			COALESCE(AVG(transaction_count), 0) 
+		FROM uploads_history
+	`).Scan(&stats.AvgFileSizeMB, &stats.AvgTransactionsPerUpload)
+	if err != nil {
+		logger.L.Error("Failed to get average upload stats", "error", err)
+	}
+
+	// 5. Top 10 Utilizadores por Uploads
+	rows, err = database.DB.Query("SELECT email, total_upload_count FROM users ORDER BY total_upload_count DESC LIMIT 10")
+	if err != nil {
+		logger.L.Error("Failed to get top users by uploads", "error", err)
+	} else {
+		for rows.Next() {
+			var user TopUser
+			if err := rows.Scan(&user.Email, &user.Value); err == nil {
+				stats.TopUsersByUploads = append(stats.TopUsersByUploads, user)
+			}
+		}
+		rows.Close()
+	}
+
+	// 6. Top 10 Utilizadores por Logins
+	rows, err = database.DB.Query("SELECT email, login_count FROM users ORDER BY login_count DESC LIMIT 10")
+	if err != nil {
+		logger.L.Error("Failed to get top users by logins", "error", err)
+	} else {
+		for rows.Next() {
+			var user TopUser
+			if err := rows.Scan(&user.Email, &user.Value); err == nil {
+				stats.TopUsersByLogins = append(stats.TopUsersByLogins, user)
+			}
+		}
+		rows.Close()
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(stats)
 }
+
+// --- FIM DA FUNÇÃO ATUALIZADA HandleGetAdminStats ---
 
 func (h *UserHandler) HandleGetAdminUsers(w http.ResponseWriter, r *http.Request) {
 	query := `
