@@ -17,25 +17,17 @@ import (
 	"github.com/username/taxfolio/backend/src/processors"
 )
 
-// ... (constants remain the same) ...
-
 const (
-	// Long-lived caches for full calculation results
 	ckAllStockSales       = "res_all_stock_sales_user_%d"
 	ckStockHoldingsByYear = "res_stock_holdings_by_year_user_%d"
 	ckAllFeeDetails       = "res_all_fee_details_user_%d"
-	// TODO: Add result caches for options and dividends when they are refactored
-
-	// Short-lived, aggregate cache
-	ckLatestUploadResult = "agg_latest_upload_result_user_%d"
-	ckDividendSummary    = "agg_dividend_summary_user_%d"
+	ckLatestUploadResult  = "agg_latest_upload_result_user_%d"
+	ckDividendSummary     = "agg_dividend_summary_user_%d"
 
 	DefaultCacheExpiration = 15 * time.Minute
 	CacheCleanupInterval   = 30 * time.Minute
 )
 
-// START OF MODIFICATION
-// Add priceService to the implementation struct
 type uploadServiceImpl struct {
 	transactionProcessor  *processors.TransactionProcessor
 	dividendProcessor     processors.DividendProcessor
@@ -43,11 +35,10 @@ type uploadServiceImpl struct {
 	optionProcessor       processors.OptionProcessor
 	cashMovementProcessor processors.CashMovementProcessor
 	feeProcessor          processors.FeeProcessor
-	priceService          PriceService // Added this field
+	priceService          PriceService
 	reportCache           *cache.Cache
 }
 
-// Update the constructor to accept the priceService
 func NewUploadService(
 	transactionProcessor *processors.TransactionProcessor,
 	dividendProcessor processors.DividendProcessor,
@@ -55,7 +46,7 @@ func NewUploadService(
 	optionProcessor processors.OptionProcessor,
 	cashMovementProcessor processors.CashMovementProcessor,
 	feeProcessor processors.FeeProcessor,
-	priceService PriceService, // Added this parameter
+	priceService PriceService,
 	reportCache *cache.Cache,
 ) UploadService {
 	return &uploadServiceImpl{
@@ -65,14 +56,11 @@ func NewUploadService(
 		optionProcessor:       optionProcessor,
 		cashMovementProcessor: cashMovementProcessor,
 		feeProcessor:          feeProcessor,
-		priceService:          priceService, // Assign the service
+		priceService:          priceService,
 		reportCache:           reportCache,
 	}
 }
 
-// END OF MODIFICATION
-
-// Modified ProcessUpload signature to accept filename and size for history tracking
 func (s *uploadServiceImpl) ProcessUpload(fileReader io.Reader, userID int64, source, filename string, filesize int64) (*UploadResult, error) {
 	overallStartTime := time.Now()
 	logger.L.Info("ProcessUpload START", "userID", userID, "source", source)
@@ -92,7 +80,6 @@ func (s *uploadServiceImpl) ProcessUpload(fileReader io.Reader, userID int64, so
 		return s.GetLatestUploadResult(userID)
 	}
 
-	// --- Database Transaction ---
 	dbTx, err := database.DB.Begin()
 	if err != nil {
 		return nil, fmt.Errorf("error beginning database transaction: %w", err)
@@ -118,9 +105,7 @@ func (s *uploadServiceImpl) ProcessUpload(fileReader io.Reader, userID int64, so
 		insertedCount++
 	}
 
-	// --- NEW: Update User and Upload History ---
 	if insertedCount > 0 {
-		// 1. Record this specific upload event
 		_, err = dbTx.Exec(`
 			INSERT INTO uploads_history (user_id, source, filename, file_size, transaction_count) 
 			VALUES (?, ?, ?, ?, ?)`,
@@ -130,14 +115,12 @@ func (s *uploadServiceImpl) ProcessUpload(fileReader io.Reader, userID int64, so
 			return nil, fmt.Errorf("failed to record upload in history: %w", err)
 		}
 
-		// 2. Recalculate distinct sources and update user stats
 		var newUploadCount int
 		err = dbTx.QueryRow("SELECT COUNT(DISTINCT source) FROM processed_transactions WHERE user_id = ?", userID).Scan(&newUploadCount)
 		if err != nil {
 			return nil, fmt.Errorf("failed to recount distinct sources for user: %w", err)
 		}
 
-		// 3. Update the user's main counters
 		_, err = dbTx.Exec(`
 			UPDATE users 
 			SET total_upload_count = total_upload_count + 1, upload_count = ?
@@ -148,45 +131,39 @@ func (s *uploadServiceImpl) ProcessUpload(fileReader io.Reader, userID int64, so
 			return nil, fmt.Errorf("failed to update user upload counts: %w", err)
 		}
 	}
-	// --- END NEW ---
 
 	if err := dbTx.Commit(); err != nil {
 		return nil, fmt.Errorf("error committing transactions: %w", err)
 	}
 
-	// START OF MODIFICATION
-	// After a successful upload and commit, trigger the portfolio metrics update.
-	// We run this in a goroutine so it doesn't block the HTTP response to the user.
 	if insertedCount > 0 {
 		go func() {
 			logger.L.Info("Triggering portfolio metrics update after upload", "userID", userID)
-			// Invalidate first to ensure the next calculation uses fresh DB data
-			s.InvalidateUserCache(userID)
-			if err := s.updateUserPortfolioMetrics(userID); err != nil {
+			// --- START OF FIX ---
+			// The method call must be capitalized to match the public method.
+			if err := s.UpdateUserPortfolioMetrics(userID); err != nil {
+				// --- END OF FIX ---
 				logger.L.Error("Failed to update user portfolio metrics asynchronously", "userID", userID, "error", err)
 			}
 		}()
 	} else {
 		s.InvalidateUserCache(userID)
 	}
-	// END OF MODIFICATION
 
 	logger.L.Info("ProcessUpload END", "userID", userID, "duration", time.Since(overallStartTime))
 	return s.GetLatestUploadResult(userID)
 }
 
-// START OF NEW FUNCTION
-// updateUserPortfolioMetrics calculates and updates the user's portfolio value and top holdings.
-func (s *uploadServiceImpl) updateUserPortfolioMetrics(userID int64) error {
+func (s *uploadServiceImpl) UpdateUserPortfolioMetrics(userID int64) error {
 	logger.L.Debug("Starting portfolio metrics calculation", "userID", userID)
 
-	// 1. Get current stock holdings. This will use the cache if available.
+	s.InvalidateUserCache(userID)
+
 	_, holdingsByYear, err := s.getStockData(userID)
 	if err != nil {
 		return fmt.Errorf("could not get stock holdings for metrics update: %w", err)
 	}
 
-	// Find the latest year's holdings for the current portfolio snapshot.
 	latestYear := ""
 	for year := range holdingsByYear {
 		if latestYear == "" || year > latestYear {
@@ -200,7 +177,6 @@ func (s *uploadServiceImpl) updateUserPortfolioMetrics(userID int64) error {
 		return err
 	}
 
-	// 2. Aggregate holdings by ISIN to get total quantities.
 	type aggregatedHolding struct {
 		ISIN        string
 		ProductName string
@@ -216,18 +192,15 @@ func (s *uploadServiceImpl) updateUserPortfolioMetrics(userID int64) error {
 		groupedHoldings[lot.ISIN] = agg
 	}
 
-	// 3. Get current prices.
 	uniqueISINs := make([]string, 0, len(groupedHoldings))
 	for isin := range groupedHoldings {
 		uniqueISINs = append(uniqueISINs, isin)
 	}
 	prices, err := s.priceService.GetCurrentPrices(uniqueISINs)
 	if err != nil {
-		// Log as a warning because some prices might fail, but we can proceed with what we have.
 		logger.L.Warn("Could not fetch all prices for metrics update", "userID", userID, "error", err)
 	}
 
-	// 4. Calculate market value and total portfolio value.
 	type holdingWithValue struct {
 		Name  string  `json:"name"`
 		Value float64 `json:"value"`
@@ -247,7 +220,6 @@ func (s *uploadServiceImpl) updateUserPortfolioMetrics(userID int64) error {
 		}
 	}
 
-	// 5. Sort to find top 5 holdings.
 	sort.Slice(valuedHoldings, func(i, j int) bool {
 		return valuedHoldings[i].Value > valuedHoldings[j].Value
 	})
@@ -257,13 +229,11 @@ func (s *uploadServiceImpl) updateUserPortfolioMetrics(userID int64) error {
 		top5 = top5[:5]
 	}
 
-	// 6. Marshal top 5 to JSON.
 	top5JSON, err := json.Marshal(top5)
 	if err != nil {
 		return fmt.Errorf("failed to marshal top 5 holdings to JSON: %w", err)
 	}
 
-	// 7. Update the database.
 	logger.L.Info("Updating user portfolio metrics in DB", "userID", userID, "portfolioValue", totalPortfolioValue, "top5Count", len(top5))
 	_, err = database.DB.Exec(
 		"UPDATE users SET portfolio_value_eur = ?, top_5_holdings = ? WHERE id = ?",
@@ -277,9 +247,7 @@ func (s *uploadServiceImpl) updateUserPortfolioMetrics(userID int64) error {
 	return nil
 }
 
-// END OF NEW FUNCTION
-
-// ... (rest of file is unchanged) ...
+// ... the rest of the file (InvalidateUserCache, getStockData, etc.) remains unchanged ...
 func (s *uploadServiceImpl) InvalidateUserCache(userID int64) {
 	keysToDelete := []string{
 		fmt.Sprintf(ckAllStockSales, userID),
@@ -294,7 +262,6 @@ func (s *uploadServiceImpl) InvalidateUserCache(userID int64) {
 	logger.L.Info("Invalidated all caches for user", "userID", userID)
 }
 
-// getStockData is the central function to populate stock-related caches on a cache miss.
 func (s *uploadServiceImpl) getStockData(userID int64) ([]models.SaleDetail, map[string][]models.PurchaseLot, error) {
 	salesCacheKey := fmt.Sprintf(ckAllStockSales, userID)
 	holdingsByYearCacheKey := fmt.Sprintf(ckStockHoldingsByYear, userID)
@@ -312,7 +279,6 @@ func (s *uploadServiceImpl) getStockData(userID int64) ([]models.SaleDetail, map
 		return nil, nil, err
 	}
 
-	// The processor does the heavy lifting of calculating everything in one pass.
 	allSales, holdingsByYear := s.stockProcessor.Process(allUserTransactions)
 
 	s.reportCache.Set(salesCacheKey, allSales, cache.NoExpiration)
@@ -377,10 +343,8 @@ func (s *uploadServiceImpl) GetFeeDetails(userID int64) ([]models.FeeDetail, err
 		return nil, err
 	}
 
-	// The fee processor does the heavy lifting.
 	feeDetails := s.feeProcessor.Process(allUserTransactions)
 
-	// Set the cache for subsequent requests.
 	s.reportCache.Set(cacheKey, feeDetails, cache.NoExpiration)
 	logger.L.Info("Populated fee details cache from DB", "userID", userID)
 
@@ -399,8 +363,6 @@ func (s *uploadServiceImpl) GetStockHoldings(userID int64) (map[string][]models.
 	}
 	return holdingsByYear, nil
 }
-
-// --- Other methods remain largely unchanged, but will benefit from future refactoring ---
 
 func (s *uploadServiceImpl) GetDividendTaxSummary(userID int64) (models.DividendTaxResult, error) {
 	cacheKey := fmt.Sprintf(ckDividendSummary, userID)
@@ -448,7 +410,6 @@ func (s *uploadServiceImpl) GetDividendTransactions(userID int64) ([]models.Proc
 	return dividends, nil
 }
 
-// fetchUserProcessedTransactions remains the same
 func fetchUserProcessedTransactions(userID int64) ([]models.ProcessedTransaction, error) {
 	logger.L.Debug("Fetching processed transactions from DB", "userID", userID)
 	rows, err := database.DB.Query(`SELECT id, date, source, product_name, isin, quantity, original_quantity, price, transaction_type, transaction_subtype, buy_sell, description, amount, currency, commission, order_id, exchange_rate, amount_eur, country_code, input_string, hash_id FROM processed_transactions WHERE user_id = ? ORDER BY date ASC, id ASC`, userID)

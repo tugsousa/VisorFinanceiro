@@ -25,7 +25,7 @@ import (
 	"golang.org/x/time/rate"
 )
 
-// ... (middleware functions remain the same) ...
+// ... (middleware functions like proxyHeadersMiddleware, rateLimitMiddleware, enableCORS remain the same) ...
 func proxyHeadersMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("X-Forwarded-Proto") == "https" {
@@ -111,7 +111,6 @@ func main() {
 	handlers.InitializeGoogleOAuthConfig()
 	authService := security.NewAuthService(config.Cfg.JWTSecret)
 	emailService := services.NewEmailService()
-	userHandler := handlers.NewUserHandler(authService, emailService)
 	priceService := services.NewPriceService()
 
 	transactionProcessor := processors.NewTransactionProcessor()
@@ -121,15 +120,18 @@ func main() {
 	cashMovementProcessor := processors.NewCashMovementProcessor()
 	feeProcessor := processors.NewFeeProcessor()
 
-	// START OF MODIFICATION
-	// Pass the priceService instance to the NewUploadService constructor.
+	// --- START OF CORRECTION: Initialization Order ---
+	// `uploadService` MUST be initialized before `userHandler` which depends on it.
 	uploadService := services.NewUploadService(
 		transactionProcessor, dividendProcessor, stockProcessor,
 		optionProcessor, cashMovementProcessor, feeProcessor,
-		priceService, // Add priceService here
+		priceService,
 		reportCache,
 	)
-	// END OF MODIFICATION
+
+	// Now we can initialize `userHandler` and pass `uploadService` to it.
+	userHandler := handlers.NewUserHandler(authService, emailService, uploadService)
+	// --- END OF CORRECTION ---
 
 	uploadHandler := handlers.NewUploadHandler(uploadService)
 	portfolioHandler := handlers.NewPortfolioHandler(uploadService, priceService)
@@ -196,12 +198,13 @@ func main() {
 			r.Group(func(r chi.Router) {
 				r.Use(userHandler.AdminMiddleware)
 				r.Get("/admin/stats", userHandler.HandleGetAdminStats)
-				r.Get("/admin/users", userHandler.HandleGetAdminUsers) // New endpoint for user table
+				r.Get("/admin/users", userHandler.HandleGetAdminUsers)
+				// NEW: The route for the refresh action
+				r.Post("/admin/users/{userID}/refresh-metrics", userHandler.HandleAdminRefreshUserMetrics)
 			})
 		})
 	})
 
-	// ... (server startup remains the same) ...
 	r.NotFound(func(w http.ResponseWriter, r *http.Request) {
 		if !strings.HasPrefix(r.URL.Path, "/api/") {
 			logger.L.Warn("Root level path not found", "method", r.Method, "path", r.URL.Path)
