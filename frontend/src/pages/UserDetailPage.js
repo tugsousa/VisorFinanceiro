@@ -36,7 +36,7 @@ const UserDetailPage = () => {
         { field: 'transaction_count', headerName: 'Nº Transações', type: 'number', width: 130 },
         { field: 'file_size', headerName: 'Tamanho (KB)', type: 'number', width: 120, valueFormatter: (value) => (value / 1024).toFixed(2) },
     ];
-    
+
     const transactionColumns = [
         { field: 'date', headerName: 'Data', width: 110, type: 'date', valueGetter: (value) => parseDateRobust(value) },
         { field: 'source', headerName: 'Origem', width: 100 },
@@ -49,7 +49,7 @@ const UserDetailPage = () => {
     if (isLoading) return <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}><CircularProgress /></Box>;
     if (isError) return <Alert severity="error" sx={{ m: 2 }}>{error.message}</Alert>;
     if (!data) return <Alert severity="info" sx={{ m: 2 }}>Utilizador não encontrado.</Alert>;
-    
+
     const { user, upload_history, transactions } = data;
 
     return (
@@ -89,10 +89,11 @@ const UserDetailPage = () => {
 
             <Paper sx={{ p: 3 }}>
                 <Typography variant="h6" gutterBottom>Transações Processadas</Typography>
-                 <Box sx={{ height: 500, width: '100%' }}>
+                <Box sx={{ height: 500, width: '100%' }}>
                     <DataGrid
-                        rows={transactions.map(t => ({...t, id: t.ID}))} // Garante que cada linha tem um `id` único
+                        rows={transactions}
                         columns={transactionColumns}
+                        getRowId={(row) => row.id}
                     />
                 </Box>
             </Paper>

@@ -541,16 +541,29 @@ func (h *UserHandler) HandleGetAdminUserDetails(w http.ResponseWriter, r *http.R
 	}
 
 	// 3. Obter todas as transações
-	rowsTxs, err := database.DB.Query("SELECT id, date, source, product_name, isin, quantity, price, transaction_type, buy_sell, amount_eur FROM processed_transactions WHERE user_id = ? ORDER BY date DESC", userID)
-	if err != nil { /* ... tratar erro ... */
+	rowsTxs, err := database.DB.Query(`
+		SELECT id, date, source, product_name, isin, quantity, original_quantity, price, 
+		       transaction_type, transaction_subtype, buy_sell, description, amount, currency, commission, 
+		       order_id, exchange_rate, amount_eur, country_code, input_string, hash_id
+		FROM processed_transactions WHERE user_id = ? ORDER BY date DESC`, userID)
+	if err != nil {
+		logger.L.Error("Falha ao obter transações para drill-down do utilizador", "error", err, "userID", userID)
+		sendJSONError(w, "Falha ao obter transações do utilizador", http.StatusInternalServerError)
+		return
 	}
 	defer rowsTxs.Close()
-	// (Adapte esta parte para usar a sua função `fetchUserProcessedTransactions` se preferir)
+
 	for rowsTxs.Next() {
 		var tx models.ProcessedTransaction
-		// Scan para um subconjunto de campos para o resumo. Adicione mais se necessário.
-		if err := rowsTxs.Scan(&tx.ID, &tx.Date, &tx.Source, &tx.ProductName, &tx.ISIN, &tx.Quantity, &tx.Price, &tx.TransactionType, &tx.BuySell, &tx.AmountEUR); err == nil {
+		// O Scan foi atualizado para ler todas as colunas da query.
+		if err := rowsTxs.Scan(
+			&tx.ID, &tx.Date, &tx.Source, &tx.ProductName, &tx.ISIN, &tx.Quantity, &tx.OriginalQuantity, &tx.Price,
+			&tx.TransactionType, &tx.TransactionSubType, &tx.BuySell, &tx.Description, &tx.Amount, &tx.Currency,
+			&tx.Commission, &tx.OrderID, &tx.ExchangeRate, &tx.AmountEUR, &tx.CountryCode, &tx.InputString, &tx.HashId,
+		); err == nil {
 			response.Transactions = append(response.Transactions, tx)
+		} else {
+			logger.L.Error("Falha ao ler a linha da transação para drill-down do utilizador", "error", err, "userID", userID)
 		}
 	}
 
