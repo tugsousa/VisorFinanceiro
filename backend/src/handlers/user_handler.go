@@ -350,26 +350,20 @@ func (h *UserHandler) HandleGetAdminStats(w http.ResponseWriter, r *http.Request
 	_ = database.DB.QueryRow(`SELECT COALESCE(AVG(file_size), 0) / (1024*1024), COALESCE(AVG(transaction_count), 0) FROM uploads_history`+uploadsWhere).Scan(&stats.AvgFileSizeMBInPeriod, &stats.AvgTransactionsPerUploadInPeriod)
 
 	// Time series are inherently filtered by date range
-	// --- CORREÇÃO: Utilizar DATE() em vez de SUBSTR para maior robustez ---
-	stats.UsersPerDay, _ = queryTimeSeries("SELECT DATE(created_at) as date, COUNT(*) as count FROM users" + getFilterClause("created_at", "WHERE") + " GROUP BY date ORDER BY date ASC")
-	stats.UploadsPerDay, _ = queryTimeSeries("SELECT DATE(uploaded_at) as date, COUNT(*) as count FROM uploads_history" + getFilterClause("uploaded_at", "WHERE") + " GROUP BY date ORDER BY date ASC")
-	stats.TransactionsPerDay, _ = queryTimeSeries("SELECT DATE(uploaded_at) as date, SUM(transaction_count) as count FROM uploads_history" + getFilterClause("uploaded_at", "WHERE") + " GROUP BY date ORDER BY date ASC")
-	stats.ActiveUsersPerDay, _ = queryTimeSeries("SELECT DATE(login_at) as date, COUNT(DISTINCT user_id) as count FROM login_history" + getFilterClause("login_at", "WHERE") + " GROUP BY date ORDER BY date ASC")
+	// Utiliza SUBSTR nas queries de séries temporais para agrupar corretamente
+	stats.UsersPerDay, _ = queryTimeSeries("SELECT DATE(SUBSTR(created_at, 1, 19)) as date, COUNT(*) as count FROM users" + getFilterClause("created_at", "WHERE") + " GROUP BY date ORDER BY date ASC")
+	stats.UploadsPerDay, _ = queryTimeSeries("SELECT DATE(SUBSTR(uploaded_at, 1, 19)) as date, COUNT(*) as count FROM uploads_history" + getFilterClause("uploaded_at", "WHERE") + " GROUP BY date ORDER BY date ASC")
+	stats.TransactionsPerDay, _ = queryTimeSeries("SELECT DATE(SUBSTR(uploaded_at, 1, 19)) as date, SUM(transaction_count) as count FROM uploads_history" + getFilterClause("uploaded_at", "WHERE") + " GROUP BY date ORDER BY date ASC")
+	stats.ActiveUsersPerDay, _ = queryTimeSeries("SELECT DATE(SUBSTR(login_at, 1, 19)) as date, COUNT(DISTINCT user_id) as count FROM login_history" + getFilterClause("login_at", "WHERE") + " GROUP BY date ORDER BY date ASC")
 
-	// --- All-Time / Static Metrics ---
+	// --- Métricas Gerais / Estáticas ---
 	_ = database.DB.QueryRow("SELECT COUNT(*) FROM users").Scan(&stats.TotalUsers)
-	// --- START OF FIX: Removed 'localtime' ---
-	_ = database.DB.QueryRow("SELECT COUNT(DISTINCT user_id) FROM login_history WHERE DATE(login_at) = DATE('now')").Scan(&stats.DailyActiveUsers)
-	// --- END OF FIX ---
+	_ = database.DB.QueryRow("SELECT COUNT(DISTINCT user_id) FROM login_history WHERE DATE(SUBSTR(login_at, 1, 19)) = DATE('now')").Scan(&stats.DailyActiveUsers)
 	_ = database.DB.QueryRow("SELECT COUNT(*) FROM uploads_history").Scan(&stats.TotalUploads)
 	_ = database.DB.QueryRow("SELECT COALESCE(SUM(transaction_count), 0) FROM uploads_history").Scan(&stats.TotalTransactions)
-	// --- START OF FIX: Removed 'localtime' ---
-	_ = database.DB.QueryRow("SELECT COUNT(*) FROM users WHERE DATE(created_at) = DATE('now')").Scan(&stats.NewUsersToday)
-	// --- END OF FIX ---
-	_ = database.DB.QueryRow("SELECT COUNT(*) FROM users WHERE created_at >= DATE('now', '-7 days')").Scan(&stats.NewUsersThisWeek)
-	// --- START OF FIX: Removed 'localtime' ---
-	_ = database.DB.QueryRow("SELECT COUNT(*) FROM users WHERE STRFTIME('%Y-%m', created_at) = STRFTIME('%Y-%m', 'now')").Scan(&stats.NewUsersThisMonth)
-	// --- END OF FIX ---
+	_ = database.DB.QueryRow("SELECT COUNT(*) FROM users WHERE DATE(SUBSTR(created_at, 1, 19)) = DATE('now')").Scan(&stats.NewUsersToday)
+	_ = database.DB.QueryRow("SELECT COUNT(*) FROM users WHERE DATE(SUBSTR(created_at, 1, 19)) >= DATE('now', '-7 days')").Scan(&stats.NewUsersThisWeek)
+	_ = database.DB.QueryRow("SELECT COUNT(*) FROM users WHERE STRFTIME('%Y-%m', SUBSTR(created_at, 1, 19)) = STRFTIME('%Y-%m', 'now')").Scan(&stats.NewUsersThisMonth)
 	_ = database.DB.QueryRow(`SELECT COALESCE(AVG(file_size), 0) / (1024*1024), COALESCE(AVG(transaction_count), 0) FROM uploads_history`).Scan(&stats.AvgFileSizeMB, &stats.AvgTransactionsPerUpload)
 
 	rows, err := database.DB.Query("SELECT is_email_verified, COUNT(*) FROM users GROUP BY is_email_verified")
