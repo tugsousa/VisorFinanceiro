@@ -156,7 +156,7 @@ type TimeSeriesDataPoint struct {
 
 type NameValueDataPoint struct {
 	Name  string  `json:"name"`
-	Value float64 `json:"value"` // Alterado de int para float64 para suportar decimais
+	Value float64 `json:"value"`
 }
 
 type VerificationStatsData struct {
@@ -329,8 +329,8 @@ func (h *UserHandler) HandleGetAdminStats(w http.ResponseWriter, r *http.Request
 	_ = database.DB.QueryRow("SELECT COUNT(*) FROM users WHERE DATE(created_at) = DATE('now', 'localtime')").Scan(&stats.NewUsersToday)
 	_ = database.DB.QueryRow("SELECT COUNT(*) FROM users" + usersWhere).Scan(&stats.NewUsersThisWeek)
 
-	// CORREÇÃO 1: Usar DATE() que é mais robusto para timestamps do Go.
-	stats.UsersPerDay, _ = queryTimeSeries("SELECT DATE(created_at) as date, COUNT(*) as count FROM users" + getFilterClause("created_at", "WHERE") + " GROUP BY date ORDER BY date ASC")
+	// CORREÇÃO FINAL: Usar SUBSTR para extrair a data de forma robusta.
+	stats.UsersPerDay, _ = queryTimeSeries("SELECT SUBSTR(created_at, 1, 10) as date, COUNT(*) as count FROM users" + getFilterClause("created_at", "WHERE") + " GROUP BY date ORDER BY date ASC")
 	stats.UploadsPerDay, _ = queryTimeSeries("SELECT DATE(uploaded_at) as date, COUNT(*) as count FROM uploads_history" + getFilterClause("uploaded_at", "WHERE") + " GROUP BY date ORDER BY date ASC")
 	stats.TransactionsPerDay, _ = queryTimeSeries("SELECT DATE(uploaded_at) as date, SUM(transaction_count) as count FROM uploads_history" + getFilterClause("uploaded_at", "WHERE") + " GROUP BY date ORDER BY date ASC")
 	stats.ActiveUsersPerDay, _ = queryTimeSeries("SELECT DATE(login_at) as date, COUNT(DISTINCT user_id) as count FROM login_history" + getFilterClause("login_at", "WHERE") + " GROUP BY date ORDER BY date ASC")
@@ -415,7 +415,6 @@ func (h *UserHandler) HandleGetAdminStats(w http.ResponseWriter, r *http.Request
 		rows.Close()
 	}
 
-	// CORREÇÃO 2: Usar ABS() para somar o valor investido como um número positivo.
 	rows, err = database.DB.Query(`
         SELECT p.isin, COALESCE(m.company_name, p.product_name), SUM(ABS(p.amount_eur)) as total_invested
         FROM processed_transactions p
