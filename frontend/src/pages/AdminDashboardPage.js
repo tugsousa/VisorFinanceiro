@@ -199,14 +199,14 @@ const AdminDashboardPage = () => {
             
             {/* O resto do JSX para os KPIs e gráficos permanece o mesmo */}
             <Typography variant="h5" component="h2" gutterBottom sx={{ mt: 4 }}>Registos</Typography>
-            <Grid container spacing={3} sx={{ mb: 2 }}>
+            <Grid container spacing={3} sx={{ mb: 4 }}> {/* <-- MELHORIA DE ESPAÇAMENTO */}
                 <Grid item xs={12} sm={4}><KPICard title="Novos Utilizadores (Hoje)" value={statsData?.newUsersToday} loading={statsLoading} /></Grid>
                 <Grid item xs={12} sm={4}><KPICard title="Novos Utilizadores (7 dias)" value={statsData?.newUsersThisWeek} loading={statsLoading} /></Grid>
                 <Grid item xs={12} sm={4}><KPICard title="Novos Utilizadores (30 dias)" value={statsData?.newUsersThisMonth} loading={statsLoading} /></Grid>
             </Grid>
 
-            <Typography variant="h5" component="h2" gutterBottom sx={{ mt: 4 }}>Métricas Gerais</Typography>
-            <Grid container spacing={2} sx={{ mb: 2 }}>
+            <Typography variant="h5" component="h2" gutterBottom>Métricas Gerais</Typography>
+            <Grid container spacing={2} sx={{ mb: 4 }}> {/* <-- MELHORIA DE ESPAÇAMENTO */}
                 <Grid item xs={6} sm={4} md={2}><KPICard title="Total Utilizadores" value={statsData?.totalUsers} loading={statsLoading} /></Grid>
                 <Grid item xs={6} sm={4} md={2}><KPICard title="DAU" value={statsData?.dailyActiveUsers} loading={statsLoading} /></Grid>
                 <Grid item xs={6} sm={4} md={2}><KPICard title="MAU" value={statsData?.monthlyActiveUsers} loading={statsLoading} /></Grid>
