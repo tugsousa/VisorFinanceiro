@@ -10,9 +10,11 @@ import { Bar, Line, Doughnut } from 'react-chartjs-2';
 import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, LineElement, PointElement, Title, Legend, Tooltip as ChartTooltip, ArcElement } from 'chart.js';
 import { useNavigate } from 'react-router-dom';
 
+// O registo do ChartJS já estava correto.
 ChartJS.register(CategoryScale, LinearScale, BarElement, LineElement, PointElement, Title, Legend, ChartTooltip, ArcElement);
 
-// --- Componentes KPICard, ChartCard e TopUsersTable permanecem os mesmos ---
+// Componentes KPICard, ChartCard e TopUsersTable permanecem os mesmos
+
 const KPICard = ({ title, value, loading }) => (
     <Paper sx={{ p: 2, textAlign: 'center', height: '100%' }}>
         <Typography variant="h6" color="text.secondary" sx={{fontSize: '1rem'}}>{title}</Typography>
@@ -24,7 +26,8 @@ const KPICard = ({ title, value, loading }) => (
 
 const ChartCard = ({ type, data, options, title }) => {
     const ChartComponent = type === 'doughnut' ? Doughnut : (type === 'bar' ? Bar : Line);
-    const hasData = data && data.datasets.some(ds => ds.data.length > 0 && ds.data.some(d => d > 0));
+    // A verificação agora é mais segura: confirma que ds e ds.data existem antes de aceder a .length
+    const hasData = data && data.datasets.some(ds => ds && ds.data && ds.data.length > 0 && ds.data.some(d => d > 0));
 
     return (
         <Paper sx={{ p: 2, height: 350, display: 'flex', flexDirection: 'column' }}>
@@ -56,7 +59,6 @@ const TopUsersTable = ({ users, title, valueHeader }) => {
     );
 };
 
-
 const AdminDashboardPage = () => {
     const { token } = useAuth();
     const queryClient = useQueryClient();
@@ -65,9 +67,7 @@ const AdminDashboardPage = () => {
     const [dateRange, setDateRange] = useState('all_time');
     const [selectedUserIds, setSelectedUserIds] = useState([]);
     const [refreshingUserId, setRefreshingUserId] = useState(null);
-    // --- NOVO: Estado para a paginação ---
     const [paginationModel, setPaginationModel] = useState({ page: 0, pageSize: 25 });
-    // --- NOVO: Estado para a ordenação ---
     const [sortModel, setSortModel] = useState([{ field: 'created_at', sort: 'desc' }]);
 
     const { data: statsData, isLoading: statsLoading, isError: statsIsError, error: statsError } = useQuery({
@@ -76,12 +76,11 @@ const AdminDashboardPage = () => {
         enabled: !!token,
     });
 
-    // --- ATUALIZADO: useQuery agora depende da paginação e ordenação ---
     const { data: usersData, isLoading: usersLoading, isError: usersIsError, error: usersError } = useQuery({
         queryKey: ['adminUsers', token, paginationModel, sortModel],
         queryFn: () => {
             const params = {
-                page: paginationModel.page + 1, // API é 1-based, DataGrid é 0-based
+                page: paginationModel.page + 1,
                 pageSize: paginationModel.pageSize,
                 sortBy: sortModel[0]?.field || 'created_at',
                 order: sortModel[0]?.sort || 'desc',
@@ -89,15 +88,16 @@ const AdminDashboardPage = () => {
             return apiFetchAdminUsers(params).then(res => res.data);
         },
         enabled: !!token,
-        placeholderData: (previousData) => previousData, // Mantém os dados antigos visíveis enquanto carrega novos
+        placeholderData: (previousData) => previousData,
     });
     
+    // As mutações (refreshMutation, batchRefreshMutation) e as colunas (userColumns) continuam iguais.
     const refreshMutation = useMutation({
         mutationFn: (userId) => {
             setRefreshingUserId(userId);
             return apiRefreshUserMetrics(userId);
         },
-        onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['adminUsers', token] }); },
+        onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['adminUsers'] }); }, // Simplificado
         onError: (error) => { console.error("Failed to refresh user metrics:", error); },
         onSettled: () => { setRefreshingUserId(null); }
     });
@@ -105,41 +105,14 @@ const AdminDashboardPage = () => {
     const batchRefreshMutation = useMutation({
         mutationFn: (userIds) => apiRefreshMultipleUserMetrics(userIds),
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ['adminUsers', token] });
+            queryClient.invalidateQueries({ queryKey: ['adminUsers'] });
             setSelectedUserIds([]);
         },
         onError: (error) => { console.error("Failed to refresh metrics in batch:", error); },
     });
 
-    const verificationChartData = {
-        labels: ['Verificados', 'Não Verificados'],
-        datasets: [{
-            data: [statsData?.verificationStats?.verified || 0, statsData?.verificationStats?.unverified || 0],
-            backgroundColor: ['rgba(75, 192, 192, 0.7)', 'rgba(255, 99, 132, 0.7)'],
-        }],
-    };
-    const authProviderChartData = {
-        labels: statsData?.authProviderStats?.map(d => d.name) || [],
-        datasets: [{
-            data: statsData?.authProviderStats?.map(d => d.value) || [],
-            backgroundColor: ['rgba(153, 102, 255, 0.7)', 'rgba(255, 159, 64, 0.7)'],
-        }],
-    };
-    const brokerChartData = {
-        labels: statsData?.uploadsByBroker?.map(d => d.name) || [],
-        datasets: [{
-            label: 'Uploads por Corretora',
-            data: statsData?.uploadsByBroker?.map(d => d.value) || [],
-            backgroundColor: 'rgba(54, 162, 235, 0.7)',
-        }],
-    };
-    const chartOptions = { responsive: true, plugins: { legend: { position: 'top' }, title: { display: false } } };
-    const timeSeriesChartOptions = (title) => ({
-        responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, title: { display: true, text: title, font: { size: 16 } } },
-        scales: { x: { grid: { display: false } }, y: { beginAtZero: true } },
-    });
-    
     const userColumns = [
+      // As colunas existentes estão corretas
         { field: 'id', headerName: 'ID', width: 70 },
         { field: 'email', headerName: 'Email', width: 220 },
         { field: 'auth_provider', headerName: 'Sign-in', width: 100 },
@@ -181,6 +154,48 @@ const AdminDashboardPage = () => {
         }
     ];
 
+    // --- Lógica para os Novos Gráficos ---
+    const timeSeriesChartData = (dataKey, label) => ({
+        labels: statsData?.[dataKey]?.map(d => d.date) || [],
+        datasets: [{ 
+            label, 
+            // Adicionámos `|| []` para garantir que `data` é sempre um array
+            data: statsData?.[dataKey]?.map(d => d.count) || [], 
+            tension: 0.1, 
+            borderColor: 'rgb(75, 192, 192)', 
+            backgroundColor: 'rgba(75, 192, 192, 0.2)', 
+            fill: true 
+        }],
+    });
+
+    const verificationChartData = {
+        labels: ['Verificados', 'Não Verificados'],
+        datasets: [{
+            data: [statsData?.verificationStats?.verified || 0, statsData?.verificationStats?.unverified || 0],
+            backgroundColor: ['rgba(75, 192, 192, 0.7)', 'rgba(255, 99, 132, 0.7)'],
+        }],
+    };
+    const authProviderChartData = {
+        labels: statsData?.authProviderStats?.map(d => d.name) || [],
+        datasets: [{
+            data: statsData?.authProviderStats?.map(d => d.value) || [],
+            backgroundColor: ['rgba(153, 102, 255, 0.7)', 'rgba(255, 159, 64, 0.7)'],
+        }],
+    };
+    const brokerChartData = {
+        labels: statsData?.uploadsByBroker?.map(d => d.name) || [],
+        datasets: [{
+            label: 'Uploads por Corretora',
+            data: statsData?.uploadsByBroker?.map(d => d.value) || [],
+            backgroundColor: 'rgba(54, 162, 235, 0.7)',
+        }],
+    };
+    const chartOptions = { responsive: true, plugins: { legend: { position: 'top' }, title: { display: false } } };
+    const timeSeriesChartOptions = (title) => ({
+        responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, title: { display: true, text: title, font: { size: 16 } } },
+        scales: { x: { grid: { display: false } }, y: { beginAtZero: true } },
+    });
+
     if (statsIsError || usersIsError) {
         return <Alert severity="error">Erro ao carregar dados: {statsError?.message || usersError?.message}</Alert>;
     }
@@ -201,14 +216,7 @@ const AdminDashboardPage = () => {
                 </FormControl>
             </Box>
             
-            <Typography variant="h5" component="h2" gutterBottom sx={{ mt: 4 }}>Registos</Typography>
-            <Grid container spacing={3} sx={{ mb: 4 }}>
-                <Grid item xs={12} sm={4}><KPICard title="Novos Utilizadores (Hoje)" value={statsData?.newUsersToday} loading={statsLoading} /></Grid>
-                <Grid item xs={12} sm={4}><KPICard title="Novos Utilizadores (7 dias)" value={statsData?.newUsersThisWeek} loading={statsLoading} /></Grid>
-                <Grid item xs={12} sm={4}><KPICard title="Novos Utilizadores (30 dias)" value={statsData?.newUsersThisMonth} loading={statsLoading} /></Grid>
-            </Grid>
-
-            <Typography variant="h5" component="h2" gutterBottom>Métricas Gerais</Typography>
+            <Typography variant="h5" component="h2" gutterBottom sx={{ mt: 4 }}>Métricas Gerais ({dateRange.replace(/_/g, ' ')})</Typography>
             <Grid container spacing={2} sx={{ mb: 4 }}>
                 <Grid item xs={6} sm={4} md={2}><KPICard title="Total Utilizadores" value={statsData?.totalUsers} loading={statsLoading} /></Grid>
                 <Grid item xs={6} sm={4} md={2}><KPICard title="DAU" value={statsData?.dailyActiveUsers} loading={statsLoading} /></Grid>
@@ -217,9 +225,22 @@ const AdminDashboardPage = () => {
                 <Grid item xs={6} sm={4} md={2}><KPICard title="Média Trans./Upload" value={statsData?.avgTransactionsPerUpload?.toFixed(1)} loading={statsLoading} /></Grid>
                 <Grid item xs={6} sm={4} md={2}><KPICard title="Tam. Médio Fich. (MB)" value={statsData?.avgFileSizeMB?.toFixed(2)} loading={statsLoading} /></Grid>
             </Grid>
+            
+            <Grid container spacing={3} sx={{ mb: 4 }}>
+                <Grid item xs={12} md={6} lg={4}><ChartCard type="line" data={timeSeriesChartData('activeUsersPerDay', 'Utilizadores Ativos')} options={timeSeriesChartOptions('Utilizadores Ativos por Dia')} title="" /></Grid>
+                <Grid item xs={12} md={6} lg={4}><ChartCard type="line" data={timeSeriesChartData('usersPerDay', 'Novos Utilizadores')} options={timeSeriesChartOptions('Novos Utilizadores por Dia')} title="" /></Grid>
+                <Grid item xs={12} md={6} lg={4}><ChartCard type="line" data={timeSeriesChartData('uploadsPerDay', 'Uploads')} options={timeSeriesChartOptions('Uploads por Dia')} title="" /></Grid>
+                <Grid item xs={12} sm={6} md={3}><ChartCard type="doughnut" data={verificationChartData} options={chartOptions} title="Verificação de Email" /></Grid>
+                <Grid item xs={12} sm={6} md={3}><ChartCard type="doughnut" data={authProviderChartData} options={chartOptions} title="Origem de Contas" /></Grid>
+                <Grid item xs={12} md={6}><ChartCard type="bar" data={brokerChartData} options={chartOptions} title="Uploads por Corretora" /></Grid>
+            </Grid>
+            
+            <Grid container spacing={3} sx={{ mb: 4 }}>
+                <Grid item xs={12} lg={6}><TopUsersTable users={statsData?.topUsersByLogins} title="Top Utilizadores por Nº de Logins" valueHeader="Logins" /></Grid>
+                <Grid item xs={12} lg={6}><TopUsersTable users={statsData?.topUsersByUploads} title="Top Utilizadores por Nº de Uploads" valueHeader="Uploads" /></Grid>
+            </Grid>
 
-
-            {/* --- ATUALIZADO: Tabela de utilizadores agora com paginação do servidor --- */}
+            {/* A tabela de utilizadores com a paginação do servidor */}
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mt: 4, mb: 2 }}>
                 <Typography variant="h5" component="h2">Utilizadores Registados</Typography>
                 {selectedUserIds.length > 0 && (
