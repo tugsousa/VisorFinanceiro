@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"sort"
 	"strings"
 	"time"
@@ -152,6 +153,97 @@ func (s *uploadServiceImpl) ProcessUpload(fileReader io.Reader, userID int64, so
 
 	logger.L.Info("ProcessUpload END", "userID", userID, "duration", time.Since(overallStartTime))
 	return s.GetLatestUploadResult(userID)
+}
+
+// Helper struct for aggregating purchase lots by ISIN, internal to the service.
+type aggregatedHolding struct {
+	ISIN              string
+	ProductName       string
+	TotalQuantity     int
+	TotalCostBasisEUR float64
+}
+
+func (s *uploadServiceImpl) GetCurrentHoldingsWithValue(userID int64) ([]models.HoldingWithValue, error) {
+	// This logic is adapted from the PortfolioHandler
+
+	// 1. Get all individual purchase lots for the latest year available.
+	holdingsByYear, err := s.GetStockHoldings(userID)
+	if err != nil {
+		return nil, fmt.Errorf("error retrieving stock holdings for holdings value calculation: %w", err)
+	}
+
+	latestYear := ""
+	for year := range holdingsByYear {
+		if latestYear == "" || year > latestYear {
+			latestYear = year
+		}
+	}
+	individualLots := holdingsByYear[latestYear]
+	if len(individualLots) == 0 {
+		return []models.HoldingWithValue{}, nil // No holdings to value
+	}
+
+	// 2. Aggregate these lots by ISIN.
+	groupedHoldings := make(map[string]aggregatedHolding)
+	for _, lot := range individualLots {
+		if lot.ISIN == "" {
+			continue // Skip lots without an ISIN
+		}
+
+		agg, exists := groupedHoldings[lot.ISIN]
+		if !exists {
+			agg = aggregatedHolding{
+				ISIN:        lot.ISIN,
+				ProductName: lot.ProductName,
+			}
+		}
+		agg.TotalQuantity += lot.Quantity
+		agg.TotalCostBasisEUR += lot.BuyAmountEUR
+		groupedHoldings[lot.ISIN] = agg
+	}
+
+	// 3. Extract unique ISINs from the aggregated map.
+	uniqueISINs := make([]string, 0, len(groupedHoldings))
+	for isin := range groupedHoldings {
+		if !strings.HasPrefix(strings.ToLower(isin), "unknown") {
+			uniqueISINs = append(uniqueISINs, isin)
+		}
+	}
+
+	// 4. Call the PriceService to get current prices for the unique ISINs.
+	prices, err := s.priceService.GetCurrentPrices(uniqueISINs)
+	if err != nil {
+		logger.L.Warn("Could not fetch some or all current prices for user", "userID", userID, "error", err)
+		// We don't return the error, we proceed and mark prices as unavailable
+	}
+
+	// 5. Combine the aggregated holding data with the price data.
+	response := []models.HoldingWithValue{}
+	for isin, holding := range groupedHoldings {
+		priceInfo, found := prices[isin]
+
+		currentPrice := 0.0
+		marketValue := math.Abs(holding.TotalCostBasisEUR) // Default to cost basis
+		status := "UNAVAILABLE"
+
+		if found && priceInfo.Status == "OK" {
+			status = "OK"
+			currentPrice = priceInfo.Price
+			marketValue = priceInfo.Price * float64(holding.TotalQuantity)
+		}
+
+		response = append(response, models.HoldingWithValue{
+			ISIN:              holding.ISIN,
+			ProductName:       holding.ProductName,
+			Quantity:          holding.TotalQuantity,
+			TotalCostBasisEUR: math.Abs(holding.TotalCostBasisEUR),
+			CurrentPriceEUR:   currentPrice,
+			MarketValueEUR:    marketValue,
+			Status:            status,
+		})
+	}
+
+	return response, nil
 }
 
 func (s *uploadServiceImpl) UpdateUserPortfolioMetrics(userID int64) error {

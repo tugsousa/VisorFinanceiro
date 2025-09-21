@@ -649,10 +649,11 @@ type UploadHistoryEntry struct {
 }
 
 type AdminUserDetailsResponse struct {
-	User          AdminUserView                 `json:"user"`
-	UploadHistory []UploadHistoryEntry          `json:"upload_history"`
-	Transactions  []models.ProcessedTransaction `json:"transactions"`
-	Metrics       *services.UploadResult        `json:"metrics,omitempty"`
+	User            AdminUserView                 `json:"user"`
+	UploadHistory   []UploadHistoryEntry          `json:"upload_history"`
+	Transactions    []models.ProcessedTransaction `json:"transactions"`
+	Metrics         *services.UploadResult        `json:"metrics,omitempty"`
+	CurrentHoldings []models.HoldingWithValue     `json:"current_holdings"`
 }
 
 func (h *UserHandler) HandleGetAdminUserDetails(w http.ResponseWriter, r *http.Request) {
@@ -737,6 +738,15 @@ func (h *UserHandler) HandleGetAdminUserDetails(w http.ResponseWriter, r *http.R
 		response.Metrics = nil
 	} else {
 		response.Metrics = metrics
+	}
+
+	// Fetch and add current holdings with market value
+	currentHoldings, err := h.uploadService.GetCurrentHoldingsWithValue(userID)
+	if err != nil {
+		logger.L.Error("Falha ao obter valor da carteira atual para drill-down do utilizador", "error", err, "userID", userID)
+		response.CurrentHoldings = []models.HoldingWithValue{} // Return empty slice on error
+	} else {
+		response.CurrentHoldings = currentHoldings
 	}
 
 	w.Header().Set("Content-Type", "application/json")

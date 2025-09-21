@@ -39,6 +39,7 @@ type UploadService interface {
 	GetFeeDetails(userID int64) ([]models.FeeDetail, error)
 	InvalidateUserCache(userID int64)
 	UpdateUserPortfolioMetrics(userID int64) error
+	GetCurrentHoldingsWithValue(userID int64) ([]models.HoldingWithValue, error)
 }
 
 type PriceInfo struct {

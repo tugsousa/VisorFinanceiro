@@ -58,11 +58,13 @@ const UserDetailPage = () => {
 
     const { keyMetrics, currentHoldings } = useMemo(() => {
         const defaultResult = { keyMetrics: null, currentHoldings: [] };
-        if (!data || !data.metrics) return defaultResult;
+        if (!data) return defaultResult;
 
-        const metricsData = data.metrics;
+        const metricsData = data.metrics || {};
+        const currentHoldingsData = data.current_holdings || [];
         const allTransactions = data.transactions || [];
 
+        // Cálculos de Lucro/Prejuízo Realizado
         const stockPL = (metricsData.StockSaleDetails || []).reduce((sum, s) => sum + (s.Delta || 0), 0);
         const optionPL = (metricsData.OptionSaleDetails || []).reduce((sum, s) => sum + (s.delta || 0), 0);
         const { gross, tax } = (metricsData.DividendTransactionsList || []).reduce((acc, tx) => {
@@ -73,15 +75,18 @@ const UserDetailPage = () => {
         const dividendPL = gross + tax;
         const totalFeesAndCommissions = (metricsData.FeeDetails || []).reduce((sum, f) => sum + (f.amount_eur || 0), 0);
 
-        const { marketValue, costBasis } = (metricsData.CurrentHoldingsValue || []).reduce((acc, h) => {
+        // Cálculos de Posições Atuais (Não Realizadas) usando os dados corretos da API
+        const { marketValue, costBasis } = currentHoldingsData.reduce((acc, h) => {
             acc.marketValue += h.market_value_eur || 0;
             acc.costBasis += Math.abs(h.total_cost_basis_eur || 0);
             return acc;
         }, { marketValue: 0, costBasis: 0 });
         const unrealizedStockPL = marketValue - costBasis;
 
+        // "Retorno Total (€)" é a soma de todos os ganhos e perdas (realizados e não realizados) menos os custos.
         const totalPL = stockPL + optionPL + dividendPL + totalFeesAndCommissions + unrealizedStockPL;
 
+        // Cálculos de Retorno do Portfólio (%)
         const { totalDeposits, totalWithdrawals } = allTransactions.reduce((acc, tx) => {
             if (tx.transaction_type === 'CASH') {
                 if (tx.transaction_subtype === 'DEPOSIT') acc.totalDeposits += tx.amount_eur || 0;
@@ -89,13 +94,14 @@ const UserDetailPage = () => {
             }
             return acc;
         }, { totalDeposits: 0, totalWithdrawals: 0 });
-
+        
+        // Crescimento total = (Valor Final + Levantamentos) - Depósitos
         const totalGrowth = (marketValue + Math.abs(totalWithdrawals)) - totalDeposits;
         const portfolioReturn = totalDeposits > 0 ? (totalGrowth / totalDeposits) * 100 : 0;
 
         const finalKeyMetrics = { stockPL, optionPL, dividendPL, totalFeesAndCommissions, unrealizedStockPL, totalPL, portfolioReturn };
         
-        const holdings = (metricsData.CurrentHoldingsValue || []).map(h => ({
+        const holdings = currentHoldingsData.map(h => ({
             id: h.isin,
             productName: h.product_name,
             quantity: h.quantity,
@@ -164,7 +170,7 @@ const UserDetailPage = () => {
                     <Grid item xs={12} sm={6} md={3}><StatCard title="ID Utilizador" value={user.id} /></Grid>
                     <Grid item xs={12} sm={6} md={3}><StatCard title="Nº de Logins" value={user.login_count} /></Grid>
                     <Grid item xs={12} sm={6} md={3}><StatCard title="Uploads Totais" value={user.total_upload_count} /></Grid>
-                    <Grid item xs={12} sm={6} md={3}><StatCard title="Valor Carteira" value={formatCurrency(user.portfolio_value_eur)} /></Grid>
+                    <Grid item xs={12} sm={6} md={3}><StatCard title="Valor Carteira (Snapshot)" value={formatCurrency(user.portfolio_value_eur)} /></Grid>
                     <Grid item xs={12} sm={6}><Typography variant="body2"><strong>Data Registo:</strong> {new Date(user.created_at).toLocaleString()}</Typography></Grid>
                     <Grid item xs={12} sm={6}><Typography variant="body2"><strong>Último Login:</strong> {user.last_login_at.Valid ? new Date(user.last_login_at.Time).toLocaleString() : 'N/A'}</Typography></Grid>
                     <Grid item xs={12} sm={6}><Typography variant="body2"><strong>IP Último Login:</strong> {user.last_login_ip || 'N/A'}</Typography></Grid>
@@ -174,7 +180,7 @@ const UserDetailPage = () => {
 
             {keyMetrics && (
                 <Paper sx={{ p: 3, mb: 3 }}>
-                    <Typography variant="h6" gutterBottom>Métricas Chave (Total)</Typography>
+                    <Typography variant="h6" gutterBottom>Métricas Chave (Análise Vitalícia)</Typography>
                     <Divider sx={{ mb: 2 }} />
                     <Grid container spacing={2}>
                         <Grid item xs={12} sm={6} md={3}><KeyMetricCard title="Resultados Ações" value={keyMetrics.stockPL} icon={<ShowChartIcon />} /></Grid>

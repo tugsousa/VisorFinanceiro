@@ -1,5 +1,16 @@
 package models
 
+// HoldingWithValue represents a user's holding with its current market value.
+type HoldingWithValue struct {
+	ISIN              string  `json:"isin"`
+	ProductName       string  `json:"product_name"`
+	Quantity          int     `json:"quantity"`
+	TotalCostBasisEUR float64 `json:"total_cost_basis_eur"`
+	CurrentPriceEUR   float64 `json:"current_price_eur"`
+	MarketValueEUR    float64 `json:"market_value_eur"`
+	Status            string  `json:"status"`
+}
+
 // SaleDetail represents the details of a completed stock sale, matching a purchase.
 type SaleDetail struct {
 	SaleDate         string
