@@ -278,9 +278,13 @@ func (h *UserHandler) HandleGetAdminStats(w http.ResponseWriter, r *http.Request
 		case "last_30_days":
 			return fmt.Sprintf(" WHERE %s >= DATE('now', '-30 days')", columnName)
 		case "this_month":
-			return fmt.Sprintf(" WHERE STRFTIME('%%Y-%%m', %s) = STRFTIME('%%Y-%%m', 'now', 'localtime')", columnName)
+			// --- START OF FIX: Removed 'localtime' ---
+			return fmt.Sprintf(" WHERE STRFTIME('%%Y-%%m', %s) = STRFTIME('%%Y-%%m', 'now')", columnName)
+			// --- END OF FIX ---
 		case "this_year":
-			return fmt.Sprintf(" WHERE STRFTIME('%%Y', %s) = STRFTIME('%%Y', 'now', 'localtime')", columnName)
+			// --- START OF FIX: Removed 'localtime' ---
+			return fmt.Sprintf(" WHERE STRFTIME('%%Y', %s) = STRFTIME('%%Y', 'now')", columnName)
+			// --- END OF FIX ---
 		default:
 			return ""
 		}
@@ -295,9 +299,13 @@ func (h *UserHandler) HandleGetAdminStats(w http.ResponseWriter, r *http.Request
 		case "last_30_days":
 			dateFilter = fmt.Sprintf(" AND %s >= DATE('now', '-30 days')", columnName)
 		case "this_month":
-			dateFilter = fmt.Sprintf(" AND STRFTIME('%%Y-%%m', %s) = STRFTIME('%%Y-%%m', 'now', 'localtime')", columnName)
+			// --- START OF FIX: Removed 'localtime' ---
+			dateFilter = fmt.Sprintf(" AND STRFTIME('%%Y-%%m', %s) = STRFTIME('%%Y-%%m', 'now')", columnName)
+			// --- END OF FIX ---
 		case "this_year":
-			dateFilter = fmt.Sprintf(" AND STRFTIME('%%Y', %s) = STRFTIME('%%Y', 'now', 'localtime')", columnName)
+			// --- START OF FIX: Removed 'localtime' ---
+			dateFilter = fmt.Sprintf(" AND STRFTIME('%%Y', %s) = STRFTIME('%%Y', 'now')", columnName)
+			// --- END OF FIX ---
 		}
 		return baseClause + dateFilter
 	}
@@ -315,9 +323,13 @@ func (h *UserHandler) HandleGetAdminStats(w http.ResponseWriter, r *http.Request
 		case "last_30_days":
 			return fmt.Sprintf(" WHERE %s >= DATE('now', '-30 days')", formattedDate)
 		case "this_month":
-			return fmt.Sprintf(" WHERE STRFTIME('%%Y-%%m', %s) = STRFTIME('%%Y-%%m', 'now', 'localtime')", formattedDate)
+			// --- START OF FIX: Removed 'localtime' ---
+			return fmt.Sprintf(" WHERE STRFTIME('%%Y-%%m', %s) = STRFTIME('%%Y-%%m', 'now')", formattedDate)
+			// --- END OF FIX ---
 		case "this_year":
-			return fmt.Sprintf(" WHERE STRFTIME('%%Y', %s) = STRFTIME('%%Y', 'now', 'localtime')", formattedDate)
+			// --- START OF FIX: Removed 'localtime' ---
+			return fmt.Sprintf(" WHERE STRFTIME('%%Y', %s) = STRFTIME('%%Y', 'now')", formattedDate)
+			// --- END OF FIX ---
 		default:
 			return ""
 		}
@@ -362,12 +374,18 @@ func (h *UserHandler) HandleGetAdminStats(w http.ResponseWriter, r *http.Request
 
 	// --- All-Time / Static Metrics ---
 	_ = database.DB.QueryRow("SELECT COUNT(*) FROM users").Scan(&stats.TotalUsers)
-	_ = database.DB.QueryRow("SELECT COUNT(DISTINCT user_id) FROM login_history WHERE DATE(login_at) = DATE('now', 'localtime')").Scan(&stats.DailyActiveUsers)
+	// --- START OF FIX: Removed 'localtime' ---
+	_ = database.DB.QueryRow("SELECT COUNT(DISTINCT user_id) FROM login_history WHERE DATE(login_at) = DATE('now')").Scan(&stats.DailyActiveUsers)
+	// --- END OF FIX ---
 	_ = database.DB.QueryRow("SELECT COUNT(*) FROM uploads_history").Scan(&stats.TotalUploads)
 	_ = database.DB.QueryRow("SELECT COALESCE(SUM(transaction_count), 0) FROM uploads_history").Scan(&stats.TotalTransactions)
-	_ = database.DB.QueryRow("SELECT COUNT(*) FROM users WHERE DATE(created_at) = DATE('now', 'localtime')").Scan(&stats.NewUsersToday)
+	// --- START OF FIX: Removed 'localtime' ---
+	_ = database.DB.QueryRow("SELECT COUNT(*) FROM users WHERE DATE(created_at) = DATE('now')").Scan(&stats.NewUsersToday)
+	// --- END OF FIX ---
 	_ = database.DB.QueryRow("SELECT COUNT(*) FROM users WHERE created_at >= DATE('now', '-7 days')").Scan(&stats.NewUsersThisWeek)
-	_ = database.DB.QueryRow("SELECT COUNT(*) FROM users WHERE STRFTIME('%Y-%m', created_at) = STRFTIME('%Y-%m', 'now', 'localtime')").Scan(&stats.NewUsersThisMonth)
+	// --- START OF FIX: Removed 'localtime' ---
+	_ = database.DB.QueryRow("SELECT COUNT(*) FROM users WHERE STRFTIME('%Y-%m', created_at) = STRFTIME('%Y-%m', 'now')").Scan(&stats.NewUsersThisMonth)
+	// --- END OF FIX ---
 	_ = database.DB.QueryRow(`SELECT COALESCE(AVG(file_size), 0) / (1024*1024), COALESCE(AVG(transaction_count), 0) FROM uploads_history`).Scan(&stats.AvgFileSizeMB, &stats.AvgTransactionsPerUpload)
 
 	rows, err := database.DB.Query("SELECT is_email_verified, COUNT(*) FROM users GROUP BY is_email_verified")
