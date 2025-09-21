@@ -279,24 +279,40 @@ func (h *UserHandler) HandleGetAdminStats(w http.ResponseWriter, r *http.Request
 		}
 	}
 
+	getFilterClause := func(columnName, prefix string) string {
+		baseClause := fmt.Sprintf(" %s %s IS NOT NULL ", prefix, columnName)
+		dateFilter := ""
+		switch dateRange {
+		case "last_7_days":
+			dateFilter = fmt.Sprintf(" AND %s >= DATE('now', '-7 days')", columnName)
+		case "last_30_days":
+			dateFilter = fmt.Sprintf(" AND %s >= DATE('now', '-30 days')", columnName)
+		case "this_month":
+			dateFilter = fmt.Sprintf(" AND STRFTIME('%%Y-%%m', %s) = STRFTIME('%%Y-%%m', 'now', 'localtime')", columnName)
+		case "this_year":
+			dateFilter = fmt.Sprintf(" AND STRFTIME('%%Y', %s) = STRFTIME('%%Y', 'now', 'localtime')", columnName)
+		}
+		return baseClause + dateFilter
+	}
+
 	usersWhere := getWhereClause("created_at")
 	uploadsWhere := getWhereClause("uploaded_at")
 	loginHistoryWhere := getWhereClause("login_at")
 
 	_ = database.DB.QueryRow("SELECT COUNT(*) FROM users" + usersWhere).Scan(&stats.TotalUsers)
 	_ = database.DB.QueryRow("SELECT COUNT(DISTINCT user_id) FROM login_history WHERE DATE(login_at) = DATE('now', 'localtime')").Scan(&stats.DailyActiveUsers)
-	_ = database.DB.QueryRow("SELECT COUNT(DISTINCT user_id) FROM login_history" + getWhereClause("login_at")).Scan(&stats.MonthlyActiveUsers)
+	_ = database.DB.QueryRow("SELECT COUNT(DISTINCT user_id) FROM login_history" + loginHistoryWhere).Scan(&stats.MonthlyActiveUsers)
 	_ = database.DB.QueryRow("SELECT COUNT(*) FROM uploads_history" + uploadsWhere).Scan(&stats.TotalUploads)
 	_ = database.DB.QueryRow("SELECT COALESCE(SUM(transaction_count), 0) FROM uploads_history" + uploadsWhere).Scan(&stats.TotalTransactions)
 	_ = database.DB.QueryRow("SELECT COUNT(*) FROM users WHERE DATE(created_at) = DATE('now', 'localtime')").Scan(&stats.NewUsersToday)
-	_ = database.DB.QueryRow("SELECT COUNT(*) FROM users" + getWhereClause("created_at")).Scan(&stats.NewUsersThisWeek)
+	_ = database.DB.QueryRow("SELECT COUNT(*) FROM users" + usersWhere).Scan(&stats.NewUsersThisWeek)
 
-	stats.UsersPerDay, _ = queryTimeSeries("SELECT DATE(created_at) as date, COUNT(*) as count FROM users" + usersWhere + " AND created_at IS NOT NULL GROUP BY date ORDER BY date ASC")
-	stats.UploadsPerDay, _ = queryTimeSeries("SELECT DATE(uploaded_at) as date, COUNT(*) as count FROM uploads_history" + uploadsWhere + " AND uploaded_at IS NOT NULL GROUP BY date ORDER BY date ASC")
-	stats.TransactionsPerDay, _ = queryTimeSeries("SELECT DATE(uploaded_at) as date, SUM(transaction_count) as count FROM uploads_history" + uploadsWhere + " AND uploaded_at IS NOT NULL GROUP BY date ORDER BY date ASC")
-	stats.ActiveUsersPerDay, _ = queryTimeSeries("SELECT DATE(login_at) as date, COUNT(DISTINCT user_id) as count FROM login_history" + loginHistoryWhere + " AND login_at IS NOT NULL GROUP BY date ORDER BY date ASC")
-
+	stats.UsersPerDay, _ = queryTimeSeries("SELECT DATE(created_at) as date, COUNT(*) as count FROM users WHERE" + getFilterClause("created_at", ""))
+	stats.UploadsPerDay, _ = queryTimeSeries("SELECT DATE(uploaded_at) as date, COUNT(*) as count FROM uploads_history WHERE" + getFilterClause("uploaded_at", ""))
+	stats.TransactionsPerDay, _ = queryTimeSeries("SELECT DATE(uploaded_at) as date, SUM(transaction_count) as count FROM uploads_history WHERE" + getFilterClause("uploaded_at", ""))
+	stats.ActiveUsersPerDay, _ = queryTimeSeries("SELECT DATE(login_at) as date, COUNT(DISTINCT user_id) as count FROM login_history WHERE" + getFilterClause("login_at", ""))
 	rows, err := database.DB.Query("SELECT is_email_verified, COUNT(*) FROM users GROUP BY is_email_verified")
+
 	if err == nil {
 		for rows.Next() {
 			var isVerified bool
