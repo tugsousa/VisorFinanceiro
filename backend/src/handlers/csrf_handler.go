@@ -48,27 +48,25 @@ func generateRandomToken() string {
 func CSRFMiddleware(csrfKey []byte) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			// --- START OF CORRECTION ---
 			// Exempt "safe" methods from CSRF protection as per web standards.
 			// This prevents errors on GET requests which shouldn't be state-changing.
 			switch r.Method {
 			case "GET", "HEAD", "OPTIONS":
-				// Specifically log the reason for skipping
+				// Regista especificamente o motivo para ignorar a validação
 				if r.Method == "OPTIONS" {
-					logger.L.Debug("Skipping CSRF validation for OPTIONS preflight request", "path", r.URL.Path)
+					logger.L.Debug("A ignorar a validação CSRF para o pedido preflight OPTIONS", "path", r.URL.Path)
 				} else {
-					logger.L.Debug("Skipping CSRF validation for safe method", "method", r.Method, "path", r.URL.Path)
+					logger.L.Debug("A ignorar a validação CSRF para método seguro", "method", r.Method, "path", r.URL.Path)
 				}
 				next.ServeHTTP(w, r)
 				return
 			}
-			// --- END OF CORRECTION ---
 
-			// CSRF validation for state-changing methods (POST, PUT, DELETE, PATCH)
+			// Validação CSRF para métodos que alteram o estado (POST, PUT, DELETE, PATCH)
 			headerToken := r.Header.Get("X-CSRF-Token")
 			cookie, errCookie := r.Cookie("_gorilla_csrf")
 
-			logger.L.Debug("CSRF validation attempt for state-changing method",
+			logger.L.Debug("Tentativa de validação CSRF para método que altera o estado",
 				"method", r.Method,
 				"path", r.URL.Path,
 				"headerTokenExists", headerToken != "",
