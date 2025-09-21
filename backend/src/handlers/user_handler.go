@@ -652,6 +652,7 @@ type AdminUserDetailsResponse struct {
 	User          AdminUserView                 `json:"user"`
 	UploadHistory []UploadHistoryEntry          `json:"upload_history"`
 	Transactions  []models.ProcessedTransaction `json:"transactions"`
+	Metrics       *services.UploadResult        `json:"metrics,omitempty"`
 }
 
 func (h *UserHandler) HandleGetAdminUserDetails(w http.ResponseWriter, r *http.Request) {
@@ -728,6 +729,14 @@ func (h *UserHandler) HandleGetAdminUserDetails(w http.ResponseWriter, r *http.R
 		} else {
 			logger.L.Error("Falha ao ler a linha da transação para drill-down do utilizador", "error", err, "userID", userID)
 		}
+	}
+
+	metrics, err := h.uploadService.GetLatestUploadResult(userID)
+	if err != nil {
+		logger.L.Error("Falha ao obter métricas agregadas para drill-down do utilizador", "error", err, "userID", userID)
+		response.Metrics = nil
+	} else {
+		response.Metrics = metrics
 	}
 
 	w.Header().Set("Content-Type", "application/json")
