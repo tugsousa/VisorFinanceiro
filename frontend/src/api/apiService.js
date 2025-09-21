@@ -112,7 +112,19 @@ export const apiFetchOptionSales = () => apiClient.get(API_ENDPOINTS.OPTION_SALE
 export const apiFetchDividendTaxSummary = () => apiClient.get(API_ENDPOINTS.DIVIDEND_TAX_SUMMARY);
 export const apiFetchDividendTransactions = () => apiClient.get(API_ENDPOINTS.DIVIDEND_TRANSACTIONS);
 export const apiFetchFees = () => apiClient.get(API_ENDPOINTS.FEES_DATA);
-export const apiFetchAdminUsers = () => apiClient.get('/api/admin/users');
+
+// --- ATUALIZAÇÃO AQUI ---
+/**
+ * Busca a lista de utilizadores para o admin com suporte para paginação.
+ * @param {object} params - Objeto com os parâmetros de paginação.
+ * @param {number} params.page - O número da página (1-based).
+ * @param {number} params.pageSize - O número de itens por página.
+ * @param {string} [params.sortBy] - A coluna para ordenação.
+ * @param {string} [params.order] - A direção da ordenação ('ASC' ou 'DESC').
+ * @returns {Promise} A promessa da chamada da API.
+ */
+export const apiFetchAdminUsers = (params) => apiClient.get('/api/admin/users', { params });
+
 export const apiRefreshUserMetrics = (userId) => apiClient.post(`/api/admin/users/${userId}/refresh-metrics`);
 
 // --- INÍCIO DAS NOVAS FUNÇÕES ---

@@ -8,7 +8,7 @@ import { DataGrid, GridToolbar } from '@mui/x-data-grid';
 import { useAuth } from '../context/AuthContext';
 import { Bar, Line, Doughnut } from 'react-chartjs-2';
 import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, LineElement, PointElement, Title, Legend, Tooltip as ChartTooltip, ArcElement } from 'chart.js';
-import { useNavigate } from 'react-router-dom'; // --- NOVO: Para o drill-down ---
+import { useNavigate } from 'react-router-dom';
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, LineElement, PointElement, Title, Legend, ChartTooltip, ArcElement);
 
@@ -60,24 +60,36 @@ const TopUsersTable = ({ users, title, valueHeader }) => {
 const AdminDashboardPage = () => {
     const { token } = useAuth();
     const queryClient = useQueryClient();
-    const navigate = useNavigate(); // --- NOVO: Para o drill-down ---
+    const navigate = useNavigate();
 
-    // --- NOVO: Estado para os filtros e seleções ---
     const [dateRange, setDateRange] = useState('all_time');
     const [selectedUserIds, setSelectedUserIds] = useState([]);
     const [refreshingUserId, setRefreshingUserId] = useState(null);
+    // --- NOVO: Estado para a paginação ---
+    const [paginationModel, setPaginationModel] = useState({ page: 0, pageSize: 25 });
+    // --- NOVO: Estado para a ordenação ---
+    const [sortModel, setSortModel] = useState([{ field: 'created_at', sort: 'desc' }]);
 
-    // --- ATUALIZADO: useQuery agora depende do dateRange ---
     const { data: statsData, isLoading: statsLoading, isError: statsIsError, error: statsError } = useQuery({
         queryKey: ['adminStats', token, dateRange],
         queryFn: () => apiFetchAdminStats(dateRange).then(res => res.data),
         enabled: !!token,
     });
 
+    // --- ATUALIZADO: useQuery agora depende da paginação e ordenação ---
     const { data: usersData, isLoading: usersLoading, isError: usersIsError, error: usersError } = useQuery({
-        queryKey: ['adminUsers', token],
-        queryFn: () => apiFetchAdminUsers().then(res => res.data),
+        queryKey: ['adminUsers', token, paginationModel, sortModel],
+        queryFn: () => {
+            const params = {
+                page: paginationModel.page + 1, // API é 1-based, DataGrid é 0-based
+                pageSize: paginationModel.pageSize,
+                sortBy: sortModel[0]?.field || 'created_at',
+                order: sortModel[0]?.sort || 'desc',
+            };
+            return apiFetchAdminUsers(params).then(res => res.data);
+        },
         enabled: !!token,
+        placeholderData: (previousData) => previousData, // Mantém os dados antigos visíveis enquanto carrega novos
     });
     
     const refreshMutation = useMutation({
@@ -90,21 +102,15 @@ const AdminDashboardPage = () => {
         onSettled: () => { setRefreshingUserId(null); }
     });
 
-    // --- NOVO: Mutation para as ações em lote ---
     const batchRefreshMutation = useMutation({
         mutationFn: (userIds) => apiRefreshMultipleUserMetrics(userIds),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['adminUsers', token] });
-            setSelectedUserIds([]); // Limpa a seleção após o sucesso
-            // Poderia adicionar uma notificação de sucesso aqui
+            setSelectedUserIds([]);
         },
-        onError: (error) => {
-            console.error("Failed to refresh metrics in batch:", error);
-            // Poderia adicionar uma notificação de erro aqui
-        },
+        onError: (error) => { console.error("Failed to refresh metrics in batch:", error); },
     });
 
-    // --- A preparação dos dados para os gráficos permanece a mesma ---
     const verificationChartData = {
         labels: ['Verificados', 'Não Verificados'],
         datasets: [{
@@ -133,7 +139,6 @@ const AdminDashboardPage = () => {
         scales: { x: { grid: { display: false } }, y: { beginAtZero: true } },
     });
     
-    // As colunas dos utilizadores permanecem as mesmas
     const userColumns = [
         { field: 'id', headerName: 'ID', width: 70 },
         { field: 'email', headerName: 'Email', width: 220 },
@@ -167,7 +172,7 @@ const AdminDashboardPage = () => {
                 const isRefreshing = refreshingUserId === params.id;
                 return (
                     <Tooltip title="Atualizar valor da carteira">
-                        <IconButton onClick={() => refreshMutation.mutate(params.id)} disabled={isRefreshing} size="small">
+                        <IconButton onClick={(e) => { e.stopPropagation(); refreshMutation.mutate(params.id); }} disabled={isRefreshing} size="small">
                             {isRefreshing ? <CircularProgress size={20} /> : <RefreshIcon />}
                         </IconButton>
                     </Tooltip>
@@ -182,7 +187,6 @@ const AdminDashboardPage = () => {
     
     return (
         <Box sx={{ p: 3 }}>
-            {/* --- ATUALIZADO: Header com filtro de datas --- */}
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2, flexWrap: 'wrap', gap: 2 }}>
                 <Typography variant="h4" component="h1">Dashboard de Administrador</Typography>
                 <FormControl size="small" sx={{ minWidth: 180 }}>
@@ -197,16 +201,15 @@ const AdminDashboardPage = () => {
                 </FormControl>
             </Box>
             
-            {/* O resto do JSX para os KPIs e gráficos permanece o mesmo */}
             <Typography variant="h5" component="h2" gutterBottom sx={{ mt: 4 }}>Registos</Typography>
-            <Grid container spacing={3} sx={{ mb: 4 }}> {/* <-- MELHORIA DE ESPAÇAMENTO */}
+            <Grid container spacing={3} sx={{ mb: 4 }}>
                 <Grid item xs={12} sm={4}><KPICard title="Novos Utilizadores (Hoje)" value={statsData?.newUsersToday} loading={statsLoading} /></Grid>
                 <Grid item xs={12} sm={4}><KPICard title="Novos Utilizadores (7 dias)" value={statsData?.newUsersThisWeek} loading={statsLoading} /></Grid>
                 <Grid item xs={12} sm={4}><KPICard title="Novos Utilizadores (30 dias)" value={statsData?.newUsersThisMonth} loading={statsLoading} /></Grid>
             </Grid>
 
             <Typography variant="h5" component="h2" gutterBottom>Métricas Gerais</Typography>
-            <Grid container spacing={2} sx={{ mb: 4 }}> {/* <-- MELHORIA DE ESPAÇAMENTO */}
+            <Grid container spacing={2} sx={{ mb: 4 }}>
                 <Grid item xs={6} sm={4} md={2}><KPICard title="Total Utilizadores" value={statsData?.totalUsers} loading={statsLoading} /></Grid>
                 <Grid item xs={6} sm={4} md={2}><KPICard title="DAU" value={statsData?.dailyActiveUsers} loading={statsLoading} /></Grid>
                 <Grid item xs={6} sm={4} md={2}><KPICard title="MAU" value={statsData?.monthlyActiveUsers} loading={statsLoading} /></Grid>
@@ -214,10 +217,9 @@ const AdminDashboardPage = () => {
                 <Grid item xs={6} sm={4} md={2}><KPICard title="Média Trans./Upload" value={statsData?.avgTransactionsPerUpload?.toFixed(1)} loading={statsLoading} /></Grid>
                 <Grid item xs={6} sm={4} md={2}><KPICard title="Tam. Médio Fich. (MB)" value={statsData?.avgFileSizeMB?.toFixed(2)} loading={statsLoading} /></Grid>
             </Grid>
-            {/* ... etc ... */}
 
 
-            {/* --- ATUALIZADO: Tabela de utilizadores com botão de ação em lote --- */}
+            {/* --- ATUALIZADO: Tabela de utilizadores agora com paginação do servidor --- */}
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mt: 4, mb: 2 }}>
                 <Typography variant="h5" component="h2">Utilizadores Registados</Typography>
                 {selectedUserIds.length > 0 && (
@@ -234,22 +236,24 @@ const AdminDashboardPage = () => {
             </Box>
             <Paper sx={{ height: 600, width: '100%' }}>
                 <DataGrid
-                    rows={usersData || []}
+                    rows={usersData?.users || []}
                     columns={userColumns}
+                    rowCount={usersData?.totalRows || 0}
                     loading={usersLoading}
+                    pageSizeOptions={[10, 25, 50, 100]}
+                    paginationModel={paginationModel}
+                    onPaginationModelChange={setPaginationModel}
+                    paginationMode="server"
+                    sortModel={sortModel}
+                    onSortModelChange={setSortModel}
+                    sortingMode="server"
                     slots={{ toolbar: GridToolbar }}
                     density="compact"
-                    checkboxSelection // --- NOVO ---
-                    onRowSelectionModelChange={(newSelectionModel) => { // --- NOVO ---
-                        setSelectedUserIds(newSelectionModel);
-                    }}
-                    rowSelectionModel={selectedUserIds} // --- NOVO ---
-                    onRowClick={(params) => navigate(`/admin/users/${params.id}`)} // --- NOVO ---
-                    sx={{ // --- NOVO (UX) ---
-                        '& .MuiDataGrid-row:hover': {
-                            cursor: 'pointer',
-                        },
-                    }}
+                    checkboxSelection
+                    onRowSelectionModelChange={(newSelectionModel) => setSelectedUserIds(newSelectionModel)}
+                    rowSelectionModel={selectedUserIds}
+                    onRowClick={(params) => navigate(`/admin/users/${params.id}`)}
+                    sx={{ '& .MuiDataGrid-row:hover': { cursor: 'pointer' } }}
                 />
             </Paper>
         </Box>
