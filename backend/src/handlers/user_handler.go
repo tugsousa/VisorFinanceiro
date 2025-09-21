@@ -5,7 +5,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
-	"fmt" // Importação adicionada
+	"fmt"
 	"net/http"
 	"regexp"
 	"strconv"
@@ -13,18 +13,17 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/patrickmn/go-cache" // --- NOVO: Importar go-cache ---
+	"github.com/patrickmn/go-cache"
 	"github.com/username/taxfolio/backend/src/config"
 	"github.com/username/taxfolio/backend/src/database"
 	"github.com/username/taxfolio/backend/src/logger"
 	"github.com/username/taxfolio/backend/src/model"
-	"github.com/username/taxfolio/backend/src/models" // Importação adicionada
+	"github.com/username/taxfolio/backend/src/models"
 	"github.com/username/taxfolio/backend/src/security"
 	"github.com/username/taxfolio/backend/src/services"
 	"golang.org/x/oauth2"
 )
 
-// --- O código existente até às funções de Admin permanece o mesmo ---
 type contextKey string
 
 const userIDContextKey contextKey = "userID"
@@ -41,21 +40,21 @@ type UserHandler struct {
 	authService   *security.AuthService
 	emailService  services.EmailService
 	uploadService services.UploadService
-	cache         *cache.Cache // --- NOVO: Adicionar cache ao handler ---
+	cache         *cache.Cache
 }
 
 type TopStockInfo struct {
 	ISIN        string  `json:"isin"`
 	ProductName string  `json:"productName"`
-	Value       float64 `json:"value"` // Can be total value or trade count
+	Value       float64 `json:"value"`
 }
 
-func NewUserHandler(authService *security.AuthService, emailService services.EmailService, uploadService services.UploadService, reportCache *cache.Cache) *UserHandler { // --- ALTERAÇÃO AQUI ---
+func NewUserHandler(authService *security.AuthService, emailService services.EmailService, uploadService services.UploadService, reportCache *cache.Cache) *UserHandler {
 	return &UserHandler{
 		authService:   authService,
 		emailService:  emailService,
 		uploadService: uploadService,
-		cache:         reportCache, // --- NOVO: Atribuir o cache ---
+		cache:         reportCache,
 	}
 }
 
@@ -156,8 +155,8 @@ type TimeSeriesDataPoint struct {
 }
 
 type NameValueDataPoint struct {
-	Name  string `json:"name"`
-	Value int    `json:"value"`
+	Name  string  `json:"name"`
+	Value float64 `json:"value"` // Alterado de int para float64 para suportar decimais
 }
 
 type VerificationStatsData struct {
@@ -213,7 +212,6 @@ type AdminUserView struct {
 	LoginCount          int          `json:"login_count"`
 }
 
-// --- NOVA: Estrutura para a resposta paginada ---
 type AdminUsersPaginatedResponse struct {
 	Users     []AdminUserView `json:"users"`
 	TotalRows int             `json:"totalRows"`
@@ -241,14 +239,12 @@ func queryTimeSeries(query string) ([]TimeSeriesDataPoint, error) {
 	return results, nil
 }
 
-// --- FUNÇÃO ATUALIZADA HandleGetAdminStats com CACHE ---
 func (h *UserHandler) HandleGetAdminStats(w http.ResponseWriter, r *http.Request) {
 	dateRange := r.URL.Query().Get("range")
 	if dateRange == "" {
 		dateRange = "all_time"
 	}
 
-	// 1. Verificar o cache
 	cacheKey := fmt.Sprintf("admin_stats_%s", dateRange)
 	if cached, found := h.cache.Get(cacheKey); found {
 		logger.L.Info("Admin stats cache hit", "key", cacheKey)
@@ -258,7 +254,6 @@ func (h *UserHandler) HandleGetAdminStats(w http.ResponseWriter, r *http.Request
 	}
 	logger.L.Info("Admin stats cache miss", "key", cacheKey)
 
-	// 2. Se não estiver no cache, calcular como antes
 	var stats AdminStats
 	var err error
 
@@ -293,6 +288,35 @@ func (h *UserHandler) HandleGetAdminStats(w http.ResponseWriter, r *http.Request
 		return baseClause + dateFilter
 	}
 
+	getTransactionsWhereClause := func(alias string) string {
+		dateColumn := "date"
+		if alias != "" {
+			dateColumn = alias + ".date"
+		}
+		formattedDate := fmt.Sprintf("SUBSTR(%s, 7, 4) || '-' || SUBSTR(%s, 4, 2) || '-' || SUBSTR(%s, 1, 2)", dateColumn, dateColumn, dateColumn)
+
+		switch dateRange {
+		case "last_7_days":
+			return fmt.Sprintf(" WHERE %s >= DATE('now', '-7 days')", formattedDate)
+		case "last_30_days":
+			return fmt.Sprintf(" WHERE %s >= DATE('now', '-30 days')", formattedDate)
+		case "this_month":
+			return fmt.Sprintf(" WHERE STRFTIME('%%Y-%%m', %s) = STRFTIME('%%Y-%%m', 'now', 'localtime')", formattedDate)
+		case "this_year":
+			return fmt.Sprintf(" WHERE STRFTIME('%%Y', %s) = STRFTIME('%%Y', 'now', 'localtime')", formattedDate)
+		default:
+			return ""
+		}
+	}
+
+	getTransactionsAdditionalWhereClause := func(alias string) string {
+		whereClause := getTransactionsWhereClause(alias)
+		if whereClause == "" {
+			return " WHERE "
+		}
+		return whereClause + " AND "
+	}
+
 	usersWhere := getWhereClause("created_at")
 	uploadsWhere := getWhereClause("uploaded_at")
 	loginHistoryWhere := getWhereClause("login_at")
@@ -305,12 +329,12 @@ func (h *UserHandler) HandleGetAdminStats(w http.ResponseWriter, r *http.Request
 	_ = database.DB.QueryRow("SELECT COUNT(*) FROM users WHERE DATE(created_at) = DATE('now', 'localtime')").Scan(&stats.NewUsersToday)
 	_ = database.DB.QueryRow("SELECT COUNT(*) FROM users" + usersWhere).Scan(&stats.NewUsersThisWeek)
 
+	// CORREÇÃO 1: Usar DATE() que é mais robusto para timestamps do Go.
 	stats.UsersPerDay, _ = queryTimeSeries("SELECT DATE(created_at) as date, COUNT(*) as count FROM users" + getFilterClause("created_at", "WHERE") + " GROUP BY date ORDER BY date ASC")
 	stats.UploadsPerDay, _ = queryTimeSeries("SELECT DATE(uploaded_at) as date, COUNT(*) as count FROM uploads_history" + getFilterClause("uploaded_at", "WHERE") + " GROUP BY date ORDER BY date ASC")
 	stats.TransactionsPerDay, _ = queryTimeSeries("SELECT DATE(uploaded_at) as date, SUM(transaction_count) as count FROM uploads_history" + getFilterClause("uploaded_at", "WHERE") + " GROUP BY date ORDER BY date ASC")
 	stats.ActiveUsersPerDay, _ = queryTimeSeries("SELECT DATE(login_at) as date, COUNT(DISTINCT user_id) as count FROM login_history" + getFilterClause("login_at", "WHERE") + " GROUP BY date ORDER BY date ASC")
 	rows, err := database.DB.Query("SELECT is_email_verified, COUNT(*) FROM users GROUP BY is_email_verified")
-
 	if err == nil {
 		for rows.Next() {
 			var isVerified bool
@@ -372,13 +396,12 @@ func (h *UserHandler) HandleGetAdminStats(w http.ResponseWriter, r *http.Request
 		rows.Close()
 	}
 
-	// KPI: Total Portfolio Value across all users
 	_ = database.DB.QueryRow("SELECT COALESCE(SUM(portfolio_value_eur), 0) FROM users").Scan(&stats.TotalPortfolioValue)
 
-	// Metric: Total transaction value by broker
 	rows, err = database.DB.Query(`
         SELECT source, COALESCE(SUM(ABS(amount_eur)), 0) as total_value
         FROM processed_transactions
+    ` + getTransactionsWhereClause("") + `
         GROUP BY source
         ORDER BY total_value DESC
     `)
@@ -392,12 +415,12 @@ func (h *UserHandler) HandleGetAdminStats(w http.ResponseWriter, r *http.Request
 		rows.Close()
 	}
 
-	// Metric: Top 10 Stocks by total amount invested (sum of all BUYs in EUR)
+	// CORREÇÃO 2: Usar ABS() para somar o valor investido como um número positivo.
 	rows, err = database.DB.Query(`
-        SELECT p.isin, COALESCE(m.company_name, p.product_name), SUM(p.amount_eur) as total_invested
+        SELECT p.isin, COALESCE(m.company_name, p.product_name), SUM(ABS(p.amount_eur)) as total_invested
         FROM processed_transactions p
         LEFT JOIN isin_ticker_map m ON p.isin = m.isin
-        WHERE p.transaction_type = 'STOCK' AND p.buy_sell = 'BUY'
+    ` + getTransactionsAdditionalWhereClause("p") + ` p.transaction_type = 'STOCK' AND p.buy_sell = 'BUY'
         GROUP BY p.isin, p.product_name
         ORDER BY total_invested DESC
         LIMIT 10
@@ -407,19 +430,18 @@ func (h *UserHandler) HandleGetAdminStats(w http.ResponseWriter, r *http.Request
 			var stock TopStockInfo
 			var companyName sql.NullString
 			if err := rows.Scan(&stock.ISIN, &companyName, &stock.Value); err == nil {
-				stock.ProductName = companyName.String // Use company name if available
+				stock.ProductName = companyName.String
 				stats.TopStocksByValue = append(stats.TopStocksByValue, stock)
 			}
 		}
 		rows.Close()
 	}
 
-	// Metric: Top 10 Most Traded Stocks (by number of transactions)
 	rows, err = database.DB.Query(`
         SELECT p.isin, COALESCE(m.company_name, p.product_name), COUNT(*) as trade_count
         FROM processed_transactions p
         LEFT JOIN isin_ticker_map m ON p.isin = m.isin
-        WHERE p.transaction_type = 'STOCK'
+    ` + getTransactionsAdditionalWhereClause("p") + ` p.transaction_type = 'STOCK'
         GROUP BY p.isin, p.product_name
         ORDER BY trade_count DESC
         LIMIT 10
@@ -436,11 +458,10 @@ func (h *UserHandler) HandleGetAdminStats(w http.ResponseWriter, r *http.Request
 		rows.Close()
 	}
 
-	// Metric: Investment Distribution by Country (based on ISIN)
 	rows, err = database.DB.Query(`
         SELECT country_code, COUNT(*) as count
         FROM processed_transactions
-        WHERE country_code IS NOT NULL AND country_code != '' AND transaction_type = 'STOCK'
+    ` + getTransactionsAdditionalWhereClause("") + ` country_code IS NOT NULL AND country_code != '' AND transaction_type = 'STOCK'
         GROUP BY country_code
         ORDER BY count DESC
         LIMIT 10
@@ -455,16 +476,13 @@ func (h *UserHandler) HandleGetAdminStats(w http.ResponseWriter, r *http.Request
 		rows.Close()
 	}
 
-	// 3. Guardar os resultados no cache antes de responder
 	h.cache.Set(cacheKey, stats, 10*time.Minute)
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(stats)
 }
 
-// --- FUNÇÃO ATUALIZADA HandleGetAdminUsers com PAGINAÇÃO ---
 func (h *UserHandler) HandleGetAdminUsers(w http.ResponseWriter, r *http.Request) {
-	// 1. Extrair e validar parâmetros da query
 	page, _ := strconv.Atoi(r.URL.Query().Get("page"))
 	if page < 1 {
 		page = 1
@@ -482,7 +500,6 @@ func (h *UserHandler) HandleGetAdminUsers(w http.ResponseWriter, r *http.Request
 		order = "DESC"
 	}
 
-	// Whitelist para colunas de ordenação para prevenir SQL injection
 	allowedSortBy := map[string]string{
 		"id":                  "u.id",
 		"email":               "u.email",
@@ -494,12 +511,11 @@ func (h *UserHandler) HandleGetAdminUsers(w http.ResponseWriter, r *http.Request
 	}
 	sortByColumn, ok := allowedSortBy[sortBy]
 	if !ok {
-		sortByColumn = "u.created_at" // Padrão
+		sortByColumn = "u.created_at"
 	}
 
 	offset := (page - 1) * pageSize
 
-	// 2. Query para obter o número total de utilizadores
 	var totalRows int
 	countQuery := "SELECT COUNT(*) FROM users"
 	if err := database.DB.QueryRow(countQuery).Scan(&totalRows); err != nil {
@@ -508,7 +524,6 @@ func (h *UserHandler) HandleGetAdminUsers(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	// 3. Query para obter os dados paginados
 	query := fmt.Sprintf(`
 		SELECT u.id, u.username, u.email, u.auth_provider, u.created_at, u.total_upload_count, u.upload_count,
 			(SELECT COUNT(DISTINCT source) FROM processed_transactions WHERE user_id = u.id) as distinct_broker_count,
@@ -545,7 +560,6 @@ func (h *UserHandler) HandleGetAdminUsers(w http.ResponseWriter, r *http.Request
 		users = append(users, u)
 	}
 
-	// 4. Construir a resposta
 	response := AdminUsersPaginatedResponse{
 		Users:     users,
 		TotalRows: totalRows,
@@ -576,10 +590,6 @@ func (h *UserHandler) HandleAdminRefreshUserMetrics(w http.ResponseWriter, r *ht
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// --- INÍCIO DOS NOVOS HANDLERS ---
-
-// Estruturas de resposta para o drill-down do utilizador.
-// Estas podem ser movidas para um ficheiro de models se preferir.
 type UploadHistoryEntry struct {
 	ID               int       `json:"id"`
 	UploadedAt       time.Time `json:"uploaded_at"`
@@ -595,7 +605,6 @@ type AdminUserDetailsResponse struct {
 	Transactions  []models.ProcessedTransaction `json:"transactions"`
 }
 
-// HandleGetAdminUserDetails gere o pedido para a página de detalhes do utilizador (drill-down).
 func (h *UserHandler) HandleGetAdminUserDetails(w http.ResponseWriter, r *http.Request) {
 	userIDStr := chi.URLParam(r, "userID")
 	userID, err := strconv.ParseInt(userIDStr, 10, 64)
@@ -606,8 +615,6 @@ func (h *UserHandler) HandleGetAdminUserDetails(w http.ResponseWriter, r *http.R
 
 	var response AdminUserDetailsResponse
 
-	// 1. Obter detalhes do utilizador
-	// (Reutilizando a lógica de query de HandleGetAdminUsers para um único utilizador)
 	queryUser := `
 		SELECT u.id, u.username, u.email, u.auth_provider, u.created_at, u.total_upload_count, u.upload_count,
 			(SELECT COUNT(DISTINCT source) FROM processed_transactions WHERE user_id = u.id) as distinct_broker_count,
@@ -632,23 +639,23 @@ func (h *UserHandler) HandleGetAdminUserDetails(w http.ResponseWriter, r *http.R
 	u.Top5Holdings = topHoldings.String
 	response.User = u
 
-	// 2. Obter histórico de uploads
 	rowsUploads, err := database.DB.Query("SELECT id, uploaded_at, source, filename, file_size, transaction_count FROM uploads_history WHERE user_id = ? ORDER BY uploaded_at DESC LIMIT 100", userID)
-	if err != nil { /* ... tratar erro ... */
-	}
-	defer rowsUploads.Close()
-	for rowsUploads.Next() {
-		var entry UploadHistoryEntry
-		var filename sql.NullString
-		var filesize sql.NullInt64
-		if err := rowsUploads.Scan(&entry.ID, &entry.UploadedAt, &entry.Source, &filename, &filesize, &entry.TransactionCount); err == nil {
-			entry.Filename = filename.String
-			entry.FileSize = filesize.Int64
-			response.UploadHistory = append(response.UploadHistory, entry)
+	if err != nil {
+		logger.L.Error("Falha ao obter histórico de uploads para drill-down do utilizador", "error", err, "userID", userID)
+	} else {
+		defer rowsUploads.Close()
+		for rowsUploads.Next() {
+			var entry UploadHistoryEntry
+			var filename sql.NullString
+			var filesize sql.NullInt64
+			if err := rowsUploads.Scan(&entry.ID, &entry.UploadedAt, &entry.Source, &filename, &filesize, &entry.TransactionCount); err == nil {
+				entry.Filename = filename.String
+				entry.FileSize = filesize.Int64
+				response.UploadHistory = append(response.UploadHistory, entry)
+			}
 		}
 	}
 
-	// 3. Obter todas as transações
 	rowsTxs, err := database.DB.Query(`
 		SELECT id, date, source, product_name, isin, quantity, original_quantity, price, 
 		       transaction_type, transaction_subtype, buy_sell, description, amount, currency, commission, 
@@ -663,7 +670,6 @@ func (h *UserHandler) HandleGetAdminUserDetails(w http.ResponseWriter, r *http.R
 
 	for rowsTxs.Next() {
 		var tx models.ProcessedTransaction
-		// O Scan foi atualizado para ler todas as colunas da query.
 		if err := rowsTxs.Scan(
 			&tx.ID, &tx.Date, &tx.Source, &tx.ProductName, &tx.ISIN, &tx.Quantity, &tx.OriginalQuantity, &tx.Price,
 			&tx.TransactionType, &tx.TransactionSubType, &tx.BuySell, &tx.Description, &tx.Amount, &tx.Currency,
@@ -679,12 +685,10 @@ func (h *UserHandler) HandleGetAdminUserDetails(w http.ResponseWriter, r *http.R
 	json.NewEncoder(w).Encode(response)
 }
 
-// Estrutura para o pedido de ação em lote
 type BatchRequest struct {
 	UserIDs []int64 `json:"user_ids"`
 }
 
-// HandleAdminRefreshMultipleUserMetrics gere o pedido para atualizar métricas em lote.
 func (h *UserHandler) HandleAdminRefreshMultipleUserMetrics(w http.ResponseWriter, r *http.Request) {
 	var req BatchRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
