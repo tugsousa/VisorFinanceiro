@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/patrickmn/go-cache" // Import the cache library
+	"github.com/patrickmn/go-cache"
 	"github.com/username/taxfolio/backend/src/logger"
 	"github.com/username/taxfolio/backend/src/models"
 )
@@ -30,10 +30,10 @@ func GetExchangeRate(currency string, date time.Time) (float64, error) {
 	// 1. Check Cache First
 	cacheKey := fmt.Sprintf("rate-%s-%s", currency, date.Format("2006-01-02"))
 	if rate, found := rateCache.Get(cacheKey); found {
-		logger.L.Debug("Exchange rate cache hit", "key", cacheKey)
+		//logger.L.Debug("Exchange rate cache hit", "key", cacheKey)
 		return rate.(float64), nil
 	}
-	logger.L.Debug("Exchange rate cache miss", "key", cacheKey)
+	//logger.L.Debug("Exchange rate cache miss", "key", cacheKey)
 
 	// 2. Fallback Loop: If no rate for today, check yesterday, etc. (up to 7 days)
 	for i := 0; i < 7; i++ {
@@ -84,7 +84,7 @@ func GetExchangeRate(currency string, date time.Time) (float64, error) {
 		}
 
 		// 3. Success: Store in cache and return
-		logger.L.Info("Successfully fetched exchange rate from ECB API", "currency", currency, "requestedDate", date.Format("2006-01-02"), "foundDate", dateStr, "rate", rate)
+		//logger.L.Info("Successfully fetched exchange rate from ECB API", "currency", currency, "requestedDate", date.Format("2006-01-02"), "foundDate", dateStr, "rate", rate)
 		rateCache.Set(cacheKey, rate, cache.DefaultExpiration)
 		return rate, nil
 	}
@@ -111,5 +111,3 @@ func extractRateFromResponse(data models.ECBResponse) (float64, error) {
 
 	return 0, fmt.Errorf("observation value not found in the expected structure")
 }
-
-// Note: The old GetExchangeRate logic and the historicalRates variable can be deleted.

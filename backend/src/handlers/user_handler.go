@@ -116,8 +116,6 @@ func min(a, b int) int {
 	return b
 }
 
-// --- FIM DO CÓDIGO EXISTENTE ---
-
 // --- ADMIN FUNCTIONS ---
 
 func (h *UserHandler) AdminMiddleware(next http.Handler) http.Handler {
@@ -307,10 +305,10 @@ func (h *UserHandler) HandleGetAdminStats(w http.ResponseWriter, r *http.Request
 	_ = database.DB.QueryRow("SELECT COUNT(*) FROM users WHERE DATE(created_at) = DATE('now', 'localtime')").Scan(&stats.NewUsersToday)
 	_ = database.DB.QueryRow("SELECT COUNT(*) FROM users" + usersWhere).Scan(&stats.NewUsersThisWeek)
 
-	stats.UsersPerDay, _ = queryTimeSeries("SELECT DATE(created_at) as date, COUNT(*) as count FROM users WHERE" + getFilterClause("created_at", ""))
-	stats.UploadsPerDay, _ = queryTimeSeries("SELECT DATE(uploaded_at) as date, COUNT(*) as count FROM uploads_history WHERE" + getFilterClause("uploaded_at", ""))
-	stats.TransactionsPerDay, _ = queryTimeSeries("SELECT DATE(uploaded_at) as date, SUM(transaction_count) as count FROM uploads_history WHERE" + getFilterClause("uploaded_at", ""))
-	stats.ActiveUsersPerDay, _ = queryTimeSeries("SELECT DATE(login_at) as date, COUNT(DISTINCT user_id) as count FROM login_history WHERE" + getFilterClause("login_at", ""))
+	stats.UsersPerDay, _ = queryTimeSeries("SELECT DATE(created_at) as date, COUNT(*) as count FROM users" + getFilterClause("created_at", "WHERE") + " GROUP BY date ORDER BY date ASC")
+	stats.UploadsPerDay, _ = queryTimeSeries("SELECT DATE(uploaded_at) as date, COUNT(*) as count FROM uploads_history" + getFilterClause("uploaded_at", "WHERE") + " GROUP BY date ORDER BY date ASC")
+	stats.TransactionsPerDay, _ = queryTimeSeries("SELECT DATE(uploaded_at) as date, SUM(transaction_count) as count FROM uploads_history" + getFilterClause("uploaded_at", "WHERE") + " GROUP BY date ORDER BY date ASC")
+	stats.ActiveUsersPerDay, _ = queryTimeSeries("SELECT DATE(login_at) as date, COUNT(DISTINCT user_id) as count FROM login_history" + getFilterClause("login_at", "WHERE") + " GROUP BY date ORDER BY date ASC")
 	rows, err := database.DB.Query("SELECT is_email_verified, COUNT(*) FROM users GROUP BY is_email_verified")
 
 	if err == nil {
@@ -718,5 +716,3 @@ func (h *UserHandler) HandleAdminRefreshMultipleUserMetrics(w http.ResponseWrite
 	logger.L.Info("Atualização em lote para utilizadores concluída com sucesso", "count", len(req.UserIDs))
 	w.WriteHeader(http.StatusNoContent)
 }
-
-// --- FIM DOS NOVOS HANDLERS ---
