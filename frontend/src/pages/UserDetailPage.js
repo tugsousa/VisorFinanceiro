@@ -1,8 +1,9 @@
-import React, { useMemo } from 'react';
+// frontend/src/pages/UserDetailPage.js
+import React, { useMemo, useState } from 'react'; // NOVO: Adicionado useState
 import { useParams, Link as RouterLink } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { apiFetchAdminUserDetails } from '../api/apiService';
-import { Box, Typography, CircularProgress, Alert, Paper, Grid, Divider, Link, Card } from '@mui/material';
+import { Box, Typography, CircularProgress, Alert, Paper, Grid, Divider, Link, Card, Tabs, Tab } from '@mui/material'; // NOVO: Adicionado Tabs e Tab
 import { useAuth } from '../context/AuthContext';
 import { DataGrid } from '@mui/x-data-grid';
 import { parseDateRobust } from '../utils/dateUtils';
@@ -16,6 +17,7 @@ import TrendingUpIcon from '@mui/icons-material/TrendingUp';
 import AccountBalanceWalletIcon from '@mui/icons-material/AccountBalanceWallet';
 import PercentIcon from '@mui/icons-material/Percent';
 
+// Componentes StatCard e KeyMetricCard permanecem os mesmos
 const StatCard = ({ title, value }) => (
     <Paper variant="outlined" sx={{ p: 2, textAlign: 'center', height: '100%' }}>
         <Typography variant="body2" color="text.secondary">{title}</Typography>
@@ -46,9 +48,11 @@ const KeyMetricCard = ({ title, value, icon, isPercentage = false }) => {
   );
 };
 
+
 const UserDetailPage = () => {
     const { userId } = useParams();
     const { token } = useAuth();
+    const [currentTab, setCurrentTab] = useState('overview'); // NOVO: Estado para controlar a aba ativa
 
     const { data, isLoading, isError, error } = useQuery({
         queryKey: ['adminUserDetails', userId, token],
@@ -64,7 +68,6 @@ const UserDetailPage = () => {
         const currentHoldingsData = data.current_holdings || [];
         const allTransactions = data.transactions || [];
 
-        // Cálculos de Lucro/Prejuízo Realizado
         const stockPL = (metricsData.StockSaleDetails || []).reduce((sum, s) => sum + (s.Delta || 0), 0);
         const optionPL = (metricsData.OptionSaleDetails || []).reduce((sum, s) => sum + (s.delta || 0), 0);
         const { gross, tax } = (metricsData.DividendTransactionsList || []).reduce((acc, tx) => {
@@ -75,7 +78,6 @@ const UserDetailPage = () => {
         const dividendPL = gross + tax;
         const totalFeesAndCommissions = (metricsData.FeeDetails || []).reduce((sum, f) => sum + (f.amount_eur || 0), 0);
 
-        // Cálculos de Posições Atuais (Não Realizadas) usando os dados corretos da API
         const { marketValue, costBasis } = currentHoldingsData.reduce((acc, h) => {
             acc.marketValue += h.market_value_eur || 0;
             acc.costBasis += Math.abs(h.total_cost_basis_eur || 0);
@@ -83,10 +85,8 @@ const UserDetailPage = () => {
         }, { marketValue: 0, costBasis: 0 });
         const unrealizedStockPL = marketValue - costBasis;
 
-        // "Retorno Total (€)" é a soma de todos os ganhos e perdas (realizados e não realizados) menos os custos.
         const totalPL = stockPL + optionPL + dividendPL + totalFeesAndCommissions + unrealizedStockPL;
 
-        // Cálculos de Retorno do Portfólio (%)
         const { totalDeposits, totalWithdrawals } = allTransactions.reduce((acc, tx) => {
             if (tx.transaction_type === 'CASH') {
                 if (tx.transaction_subtype === 'DEPOSIT') acc.totalDeposits += tx.amount_eur || 0;
@@ -95,7 +95,6 @@ const UserDetailPage = () => {
             return acc;
         }, { totalDeposits: 0, totalWithdrawals: 0 });
         
-        // Crescimento total = (Valor Final + Levantamentos) - Depósitos
         const totalGrowth = (marketValue + Math.abs(totalWithdrawals)) - totalDeposits;
         const portfolioReturn = totalDeposits > 0 ? (totalGrowth / totalDeposits) * 100 : 0;
 
@@ -114,7 +113,8 @@ const UserDetailPage = () => {
         
         return { keyMetrics: finalKeyMetrics, currentHoldings: holdings };
     }, [data]);
-
+    
+    // Definições de colunas
     const uploadHistoryColumns = [
         { field: 'source', headerName: 'Corretora', width: 120 },
         { field: 'uploaded_at', headerName: 'Data Upload', width: 170, type: 'dateTime', valueGetter: (value) => value ? new Date(value) : null },
@@ -122,7 +122,6 @@ const UserDetailPage = () => {
         { field: 'transaction_count', headerName: 'Nº Transações', type: 'number', width: 130 },
         { field: 'file_size', headerName: 'Tamanho (KB)', type: 'number', width: 120, valueFormatter: (value) => (value / 1024).toFixed(2) },
     ];
-
     const transactionColumns = [
         { field: 'date', headerName: 'Data', width: 110, type: 'date', valueGetter: (value) => parseDateRobust(value) },
         { field: 'source', headerName: 'Origem', width: 100 },
@@ -131,7 +130,6 @@ const UserDetailPage = () => {
         { field: 'quantity', headerName: 'Qtd.', type: 'number', width: 80 },
         { field: 'amount_eur', headerName: 'Montante (€)', type: 'number', width: 120, valueFormatter: (value) => formatCurrency(value) },
     ];
-
     const holdingsColumns = [
         { field: 'productName', headerName: 'Produto', flex: 1, minWidth: 180 },
         { field: 'quantity', headerName: 'Qtd.', type: 'number', width: 90 },
@@ -155,79 +153,86 @@ const UserDetailPage = () => {
     const { user, upload_history, transactions } = data;
 
     return (
-        <Box>
-            <Link component={RouterLink} to="/admin" sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+        <Box sx={{ p: { xs: 1, sm: 2, md: 3 } }}>
+            <Link component={RouterLink} to="/admin" sx={{ display: 'flex', alignItems: 'center', mb: 2, textDecoration: 'none' }}>
                 <ArrowBackIcon sx={{ mr: 1 }} />
-                Voltar ao Dashboard
+                Voltar ao Dashboard de Admin
             </Link>
 
             <Typography variant="h4" gutterBottom>Detalhes do Utilizador: <strong>{user.email}</strong></Typography>
 
-            <Paper sx={{ p: 3, mb: 3 }}>
-                <Typography variant="h6" gutterBottom>Informação Geral</Typography>
-                <Divider sx={{ mb: 2 }} />
-                <Grid container spacing={2}>
-                    <Grid item xs={12} sm={6} md={3}><StatCard title="ID Utilizador" value={user.id} /></Grid>
-                    <Grid item xs={12} sm={6} md={3}><StatCard title="Nº de Logins" value={user.login_count} /></Grid>
-                    <Grid item xs={12} sm={6} md={3}><StatCard title="Uploads Totais" value={user.total_upload_count} /></Grid>
-                    <Grid item xs={12} sm={6} md={3}><StatCard title="Valor Carteira (Snapshot)" value={formatCurrency(user.portfolio_value_eur)} /></Grid>
-                    <Grid item xs={12} sm={6}><Typography variant="body2"><strong>Data Registo:</strong> {new Date(user.created_at).toLocaleString()}</Typography></Grid>
-                    <Grid item xs={12} sm={6}><Typography variant="body2"><strong>Último Login:</strong> {user.last_login_at.Valid ? new Date(user.last_login_at.Time).toLocaleString() : 'N/A'}</Typography></Grid>
-                    <Grid item xs={12} sm={6}><Typography variant="body2"><strong>IP Último Login:</strong> {user.last_login_ip || 'N/A'}</Typography></Grid>
-                    <Grid item xs={12} sm={6}><Typography variant="body2"><strong>Fornecedor Auth:</strong> {user.auth_provider}</Typography></Grid>
-                </Grid>
-            </Paper>
+            {/* NOVO: Sistema de Abas */}
+            <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 3 }}>
+                <Tabs value={currentTab} onChange={(e, newValue) => setCurrentTab(newValue)} aria-label="user detail tabs">
+                    <Tab label="Visão Geral" value="overview" />
+                    <Tab label="Carteira Atual" value="holdings" />
+                    <Tab label="Histórico de Uploads" value="uploads" />
+                    <Tab label="Transações" value="transactions" />
+                </Tabs>
+            </Box>
 
-            {keyMetrics && (
-                <Paper sx={{ p: 3, mb: 3 }}>
-                    <Typography variant="h6" gutterBottom>Métricas Chave (Análise Vitalícia)</Typography>
-                    <Divider sx={{ mb: 2 }} />
-                    <Grid container spacing={2}>
-                        <Grid item xs={12} sm={6} md={3}><KeyMetricCard title="Resultados Ações" value={keyMetrics.stockPL} icon={<ShowChartIcon />} /></Grid>
-                        <Grid item xs={12} sm={6} md={3}><KeyMetricCard title="Resultados Opções" value={keyMetrics.optionPL} icon={<CandlestickChartIcon />} /></Grid>
-                        <Grid item xs={12} sm={6} md={3}><KeyMetricCard title="Dividendos" value={keyMetrics.dividendPL} icon={<AttachMoneyIcon />} /></Grid>
-                        <Grid item xs={12} sm={6} md={3}><KeyMetricCard title="Taxas e Comissões" value={keyMetrics.totalFeesAndCommissions} icon={<RequestQuoteIcon />} /></Grid>
-                        <Grid item xs={12} sm={6} md={3}><KeyMetricCard title="P/L em Aberto" value={keyMetrics.unrealizedStockPL} icon={<TrendingUpIcon />} /></Grid>
-                        <Grid item xs={12} sm={6} md={3}><KeyMetricCard title="Retorno Total (€)" value={keyMetrics.totalPL} icon={<AccountBalanceWalletIcon />} /></Grid>
-                        <Grid item xs={12} sm={6} md={3}><KeyMetricCard title="Retorno Total (%)" value={keyMetrics.portfolioReturn} icon={<PercentIcon />} isPercentage /></Grid>
+            {/* Conteúdo da Aba "Visão Geral" */}
+            {currentTab === 'overview' && (
+                <Grid container spacing={3}>
+                    <Grid item xs={12}>
+                        <Paper sx={{ p: 3 }}>
+                            <Typography variant="h6" gutterBottom>Informação Geral</Typography>
+                            <Divider sx={{ mb: 2 }} />
+                            <Grid container spacing={2}>
+                                <Grid item xs={12} sm={6} md={3}><StatCard title="ID Utilizador" value={user.id} /></Grid>
+                                <Grid item xs={12} sm={6} md={3}><StatCard title="Nº de Logins" value={user.login_count} /></Grid>
+                                <Grid item xs={12} sm={6} md={3}><StatCard title="Uploads Totais" value={user.total_upload_count} /></Grid>
+                                <Grid item xs={12} sm={6} md={3}><StatCard title="Valor Carteira (Snapshot)" value={formatCurrency(user.portfolio_value_eur)} /></Grid>
+                            </Grid>
+                        </Paper>
                     </Grid>
-                </Paper>
+                    {keyMetrics && (
+                        <Grid item xs={12}>
+                            <Paper sx={{ p: 3 }}>
+                                <Typography variant="h6" gutterBottom>Métricas Chave (Análise Vitalícia)</Typography>
+                                <Divider sx={{ mb: 2 }} />
+                                <Grid container spacing={2}>
+                                    <Grid item xs={6} md={4} lg={3}><KeyMetricCard title="Resultados Ações" value={keyMetrics.stockPL} icon={<ShowChartIcon />} /></Grid>
+                                    <Grid item xs={6} md={4} lg={3}><KeyMetricCard title="Resultados Opções" value={keyMetrics.optionPL} icon={<CandlestickChartIcon />} /></Grid>
+                                    <Grid item xs={6} md={4} lg={3}><KeyMetricCard title="Dividendos" value={keyMetrics.dividendPL} icon={<AttachMoneyIcon />} /></Grid>
+                                    <Grid item xs={6} md={4} lg={3}><KeyMetricCard title="Taxas e Comissões" value={keyMetrics.totalFeesAndCommissions} icon={<RequestQuoteIcon />} /></Grid>
+                                    <Grid item xs={6} md={4} lg={3}><KeyMetricCard title="P/L em Aberto" value={keyMetrics.unrealizedStockPL} icon={<TrendingUpIcon />} /></Grid>
+                                    <Grid item xs={6} md={4} lg={3}><KeyMetricCard title="Retorno Total (€)" value={keyMetrics.totalPL} icon={<AccountBalanceWalletIcon />} /></Grid>
+                                    <Grid item xs={6} md={4} lg={3}><KeyMetricCard title="Retorno Total (%)" value={keyMetrics.portfolioReturn} icon={<PercentIcon />} isPercentage /></Grid>
+                                </Grid>
+                            </Paper>
+                        </Grid>
+                    )}
+                </Grid>
             )}
 
-            {currentHoldings && currentHoldings.length > 0 && (
-                <Paper sx={{ p: 3, mb: 3 }}>
+            {/* Conteúdo da Aba "Carteira Atual" */}
+            {currentTab === 'holdings' && (
+                <Paper sx={{ p: 3, height: 600, width: '100%' }}>
                     <Typography variant="h6" gutterBottom>Carteira de Ações Atual</Typography>
-                    <Box sx={{ height: 400, width: '100%' }}>
-                        <DataGrid
-                            rows={currentHoldings}
-                            columns={holdingsColumns}
-                            density="compact"
-                        />
-                    </Box>
+                    {currentHoldings && currentHoldings.length > 0 ? (
+                        <DataGrid rows={currentHoldings} columns={holdingsColumns} density="compact" />
+                    ) : (
+                        <Typography>Não existem posições em carteira.</Typography>
+                    )}
                 </Paper>
             )}
 
-            <Paper sx={{ p: 3, mb: 3 }}>
-                <Typography variant="h6" gutterBottom>Histórico de Uploads</Typography>
-                <Box sx={{ height: 300, width: '100%' }}>
-                    <DataGrid
-                        rows={upload_history}
-                        columns={uploadHistoryColumns}
-                        density="compact"
-                    />
-                </Box>
-            </Paper>
+            {/* Conteúdo da Aba "Histórico de Uploads" */}
+            {currentTab === 'uploads' && (
+                <Paper sx={{ p: 3, height: 500, width: '100%' }}>
+                     <Typography variant="h6" gutterBottom>Histórico de Uploads</Typography>
+                    <DataGrid rows={upload_history} columns={uploadHistoryColumns} density="compact" />
+                </Paper>
+            )}
 
-            <Paper sx={{ p: 3 }}>
-                <Typography variant="h6" gutterBottom>Últimas Transações Processadas</Typography>
-                <Box sx={{ height: 500, width: '100%' }}>
-                    <DataGrid
-                        rows={transactions}
-                        columns={transactionColumns}
-                        getRowId={(row) => row.id}
-                    />
-                </Box>
-            </Paper>
+            {/* Conteúdo da Aba "Transações" */}
+            {currentTab === 'transactions' && (
+                <Paper sx={{ p: 3, height: 700, width: '100%' }}>
+                     <Typography variant="h6" gutterBottom>Todas as Transações Processadas</Typography>
+                    <DataGrid rows={transactions} columns={transactionColumns} getRowId={(row) => row.id} />
+                </Paper>
+            )}
         </Box>
     );
 };
