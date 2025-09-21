@@ -193,6 +193,20 @@ const AdminDashboardPage = () => {
         }],
     };
 
+    // --- ALTERAÇÃO AQUI: Preparação de dados para o novo gráfico ---
+    const depositsByBrokerChartData = {
+        labels: statsData?.depositsByBroker?.map(d => d.name) || [],
+        datasets: [{
+            data: statsData?.depositsByBroker?.map(d => d.value) || [],
+            backgroundColor: [
+                'rgba(54, 162, 235, 0.7)',
+                'rgba(75, 192, 192, 0.7)',
+                'rgba(153, 102, 255, 0.7)',
+                'rgba(255, 159, 64, 0.7)',
+            ],
+        }],
+    };
+
     const topStocksByValueChartData = {
         labels: statsData?.topStocksByValue?.map(d => d.productName || d.isin) || [],
         datasets: [{
@@ -252,8 +266,7 @@ const AdminDashboardPage = () => {
                         <MenuItem value="all_time">Desde Sempre</MenuItem>
                         <MenuItem value="last_7_days">Últimos 7 dias</MenuItem>
                         <MenuItem value="last_30_days">Últimos 30 dias</MenuItem>
-                        <MenuItem value="this_month">Este Mês</MenuItem>
-                        <MenuItem value="this_year">Este Ano</MenuItem>
+                        <MenuItem value="last_365_days">Últimos 365 dias</MenuItem>
                     </Select>
                 </FormControl>
             </Box>
@@ -277,7 +290,9 @@ const AdminDashboardPage = () => {
                     <Grid item xs={12} md={6}><ChartCard type="line" data={timeSeriesChartData('usersPerDay', 'Novos Utilizadores')} options={timeSeriesChartOptions('Novos Utilizadores por Dia')} title="" /></Grid>
                     <Grid item xs={12} md={6}><ChartCard type="bar" data={topStocksByValueChartData} options={horizontalBarOptions('Top 10 Ações por Valor Investido', 'Valor (€)')} title="" /></Grid>
                     <Grid item xs={12} md={6}><ChartCard type="bar" data={topStocksByTradesChartData} options={horizontalBarOptions('Top 10 Ações por Nº de Transações', 'Nº Transações')} title="" /></Grid>
-                    <Grid item xs={12} md={6}><ChartCard type="doughnut" data={valueByBrokerChartData} options={chartOptions} title="Valor Transacionado por Corretora" /></Grid>
+                    {/* --- ALTERAÇÃO AQUI: Gráfico modificado e novo gráfico adicionado --- */}
+                    <Grid item xs={12} md={6}><ChartCard type="doughnut" data={valueByBrokerChartData} options={chartOptions} title="Volume Transacionado por Corretora (Ações/Opções)" /></Grid>
+                    <Grid item xs={12} md={6}><ChartCard type="doughnut" data={depositsByBrokerChartData} options={chartOptions} title="Depósitos por Corretora" /></Grid>
                     <Grid item xs={12} md={6}><ChartCard type="doughnut" data={{ labels: statsData?.investmentDistributionByCountry?.map(d => d.name.split(' - ')[1] || d.name) || [], datasets: [{ data: statsData?.investmentDistributionByCountry?.map(d => d.value) || [], backgroundColor: ['#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF', '#FF9F40', '#C9CBCF', '#4D5360'] }]}} options={chartOptions} title="Distribuição de Investimentos por País"/></Grid>
                 </Grid>
             </Box>
