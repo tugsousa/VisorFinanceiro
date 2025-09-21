@@ -1,8 +1,9 @@
 // frontend/src/pages/AdminDashboardPage.js
+
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiFetchAdminStats, apiFetchAdminUsers, apiRefreshUserMetrics, apiRefreshMultipleUserMetrics } from '../api/apiService';
-import { Box, Typography, Paper, Grid, CircularProgress, Alert, Tooltip, IconButton, FormControl, InputLabel, Select, MenuItem, Button } from '@mui/material';
+import { Box, Typography, Paper, Grid, CircularProgress, Alert, Tooltip, IconButton, FormControl, InputLabel, Select, MenuItem, Button, Divider } from '@mui/material';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import { DataGrid, GridToolbar } from '@mui/x-data-grid';
 import { useAuth } from '../context/AuthContext';
@@ -171,6 +172,14 @@ const AdminDashboardPage = () => {
             backgroundColor: ['rgba(75, 192, 192, 0.7)', 'rgba(255, 99, 132, 0.7)'],
         }],
     };
+    
+    const authProviderChartData = {
+        labels: statsData?.authProviderStats?.map(d => d.name) || [],
+        datasets: [{
+            data: statsData?.authProviderStats?.map(d => d.value) || [],
+            backgroundColor: ['rgba(54, 162, 235, 0.7)', 'rgba(255, 206, 86, 0.7)'],
+        }],
+    };
 
     const valueByBrokerChartData = {
         labels: statsData?.valueByBroker?.map(d => d.name) || [],
@@ -231,6 +240,8 @@ const AdminDashboardPage = () => {
         return <Alert severity="error">Erro ao carregar dados: {statsError?.message || usersError?.message}</Alert>;
     }
     
+    const periodTitle = dateRange.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+
     return (
         <Box sx={{ p: 3 }}>
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2, flexWrap: 'wrap', gap: 2 }}>
@@ -247,48 +258,43 @@ const AdminDashboardPage = () => {
                 </FormControl>
             </Box>
             
-            <Typography variant="h5" component="h2" gutterBottom sx={{ mt: 4 }}>Métricas Gerais ({dateRange.replace(/_/g, ' ')})</Typography>
-            <Grid container spacing={2} sx={{ mb: 4 }}>
-                <Grid item xs={6} sm={4} md={2}><KPICard title="Valor Total em Carteira" value={formatCurrency(statsData?.totalPortfolioValue)} loading={statsLoading} /></Grid>
-                <Grid item xs={6} sm={4} md={2}><KPICard title="Total Utilizadores" value={statsData?.totalUsers} loading={statsLoading} /></Grid>
-                <Grid item xs={6} sm={4} md={2}><KPICard title="DAU" value={statsData?.dailyActiveUsers} loading={statsLoading} /></Grid>
-                <Grid item xs={6} sm={4} md={2}><KPICard title="MAU" value={statsData?.monthlyActiveUsers} loading={statsLoading} /></Grid>
-                <Grid item xs={6} sm={4} md={2}><KPICard title="Total Uploads" value={statsData?.totalUploads} loading={statsLoading} /></Grid>
-                <Grid item xs={6} sm={4} md={2}><KPICard title="Média Trans./Upload" value={statsData?.avgTransactionsPerUpload?.toFixed(1)} loading={statsLoading} /></Grid>
-            </Grid>
-            
-            <Grid container spacing={3} sx={{ mb: 4 }}>
-                <Grid item xs={12} md={6} lg={4}><ChartCard type="line" data={timeSeriesChartData('activeUsersPerDay', 'Utilizadores Ativos')} options={timeSeriesChartOptions('Utilizadores Ativos por Dia')} title="" /></Grid>
-                <Grid item xs={12} md={6} lg={4}><ChartCard type="line" data={timeSeriesChartData('usersPerDay', 'Novos Utilizadores')} options={timeSeriesChartOptions('Novos Utilizadores por Dia')} title="" /></Grid>
-                <Grid item xs={12} md={6} lg={4}><ChartCard type="line" data={timeSeriesChartData('uploadsPerDay', 'Uploads')} options={timeSeriesChartOptions('Uploads por Dia')} title="" /></Grid>
-            </Grid>
-            
-            <Typography variant="h5" component="h2" gutterBottom sx={{ mt: 4 }}>Métricas de Negócio</Typography>
-            <Grid container spacing={3} sx={{ mb: 4 }}>
-                <Grid item xs={12} md={6} lg={4}>
-                    <ChartCard type="doughnut" data={valueByBrokerChartData} options={chartOptions} title="Valor Transacionado por Corretora" />
+            {/* Section for Period-Specific Data */}
+            <Box component={Paper} variant="outlined" sx={{ p: 2, mt: 4, borderColor: 'primary.main' }}>
+                <Typography variant="h5" component="h2" gutterBottom>Métricas do Período: {periodTitle}</Typography>
+                <Grid container spacing={2} sx={{ mb: 2 }}>
+                    <Grid item xs={6} sm={4} md={3}><KPICard title="Novos Utilizadores" value={statsData?.newUsersInPeriod} loading={statsLoading} /></Grid>
+                    <Grid item xs={6} sm={4} md={3}><KPICard title="Utilizadores Ativos" value={statsData?.activeUsersInPeriod} loading={statsLoading} /></Grid>
+                    <Grid item xs={6} sm={4} md={3}><KPICard title="Uploads" value={statsData?.uploadsInPeriod} loading={statsLoading} /></Grid>
+                    <Grid item xs={6} sm={4} md={3}><KPICard title="Média Trans./Upload" value={statsData?.avgTransactionsPerUploadInPeriod?.toFixed(1)} loading={statsLoading} /></Grid>
                 </Grid>
-                 <Grid item xs={12} md={6} lg={8}>
-                     <ChartCard type="bar" data={topStocksByValueChartData} options={horizontalBarOptions('Top 10 Ações por Valor Investido', 'Valor (€)')} title="" />
+                <Grid container spacing={3}>
+                    <Grid item xs={12} md={6}><ChartCard type="line" data={timeSeriesChartData('activeUsersPerDay', 'Utilizadores Ativos')} options={timeSeriesChartOptions('Utilizadores Ativos por Dia')} title="" /></Grid>
+                    <Grid item xs={12} md={6}><ChartCard type="line" data={timeSeriesChartData('usersPerDay', 'Novos Utilizadores')} options={timeSeriesChartOptions('Novos Utilizadores por Dia')} title="" /></Grid>
+                    <Grid item xs={12} md={6}><ChartCard type="bar" data={topStocksByValueChartData} options={horizontalBarOptions('Top 10 Ações por Valor Investido', 'Valor (€)')} title="" /></Grid>
+                    <Grid item xs={12} md={6}><ChartCard type="bar" data={topStocksByTradesChartData} options={horizontalBarOptions('Top 10 Ações por Nº de Transações', 'Nº Transações')} title="" /></Grid>
+                    <Grid item xs={12} md={6}><ChartCard type="doughnut" data={valueByBrokerChartData} options={chartOptions} title="Valor Transacionado por Corretora" /></Grid>
+                    <Grid item xs={12} md={6}><ChartCard type="doughnut" data={{ labels: statsData?.investmentDistributionByCountry?.map(d => d.name.split(' - ')[1] || d.name) || [], datasets: [{ data: statsData?.investmentDistributionByCountry?.map(d => d.value) || [], backgroundColor: ['#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF', '#FF9F40', '#C9CBCF', '#4D5360'] }]}} options={chartOptions} title="Distribuição de Investimentos por País"/></Grid>
                 </Grid>
-                <Grid item xs={12} md={6} lg={8}>
-                     <ChartCard type="bar" data={topStocksByTradesChartData} options={horizontalBarOptions('Top 10 Ações por Nº de Transações', 'Nº Transações')} title="" />
-                </Grid>
-                 <Grid item xs={12} md={6} lg={4}>
-                    <ChartCard type="doughnut" data={{
-                        labels: statsData?.investmentDistributionByCountry?.map(d => d.name.split(' - ')[1] || d.name) || [],
-                        datasets: [{
-                            data: statsData?.investmentDistributionByCountry?.map(d => d.value) || [],
-                            backgroundColor: ['#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF', '#FF9F40', '#C9CBCF', '#4D5360'],
-                        }],
-                    }} options={chartOptions} title="Distribuição de Investimentos por País"/>
-                </Grid>
-            </Grid>
+            </Box>
 
-            <Grid container spacing={3} sx={{ mb: 4 }}>
-                <Grid item xs={12} lg={6}><TopUsersTable users={statsData?.topUsersByLogins} title="Top Utilizadores por Nº de Logins" valueHeader="Logins" /></Grid>
-                <Grid item xs={12} lg={6}><TopUsersTable users={statsData?.topUsersByUploads} title="Top Utilizadores por Nº de Uploads" valueHeader="Uploads" /></Grid>
-            </Grid>
+            {/* Section for All-Time Data */}
+            <Box component={Paper} variant="outlined" sx={{ p: 2, mt: 4 }}>
+                <Typography variant="h5" component="h2" gutterBottom>Métricas Gerais (Sempre)</Typography>
+                <Grid container spacing={2} sx={{ mb: 2 }}>
+                    <Grid item xs={6} sm={4} md={2}><KPICard title="Valor Total Carteiras" value={formatCurrency(statsData?.totalPortfolioValue)} loading={statsLoading} /></Grid>
+                    <Grid item xs={6} sm={4} md={2}><KPICard title="Total Utilizadores" value={statsData?.totalUsers} loading={statsLoading} /></Grid>
+                    <Grid item xs={6} sm={4} md={2}><KPICard title="Total Uploads" value={statsData?.totalUploads} loading={statsLoading} /></Grid>
+                    <Grid item xs={6} sm={4} md={2}><KPICard title="DAU (Hoje)" value={statsData?.dailyActiveUsers} loading={statsLoading} /></Grid>
+                    <Grid item xs={6} sm={4} md={2}><KPICard title="Novos Hoje" value={statsData?.newUsersToday} loading={statsLoading} /></Grid>
+                    <Grid item xs={6} sm={4} md={2}><KPICard title="Novos 7 Dias" value={statsData?.newUsersThisWeek} loading={statsLoading} /></Grid>
+                </Grid>
+                <Grid container spacing={3}>
+                    <Grid item xs={12} md={6} lg={3}><ChartCard type="doughnut" data={verificationChartData} options={chartOptions} title="Verificação de Email" /></Grid>
+                    <Grid item xs={12} md={6} lg={3}><ChartCard type="doughnut" data={authProviderChartData} options={chartOptions} title="Método de Autenticação" /></Grid>
+                    <Grid item xs={12} lg={6}><TopUsersTable users={statsData?.topUsersByLogins} title="Top Utilizadores por Nº de Logins" valueHeader="Logins" /></Grid>
+                    <Grid item xs={12} lg={6}><TopUsersTable users={statsData?.topUsersByUploads} title="Top Utilizadores por Nº de Uploads" valueHeader="Uploads" /></Grid>
+                </Grid>
+            </Box>
 
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mt: 4, mb: 2 }}>
                 <Typography variant="h5" component="h2">Utilizadores Registados</Typography>

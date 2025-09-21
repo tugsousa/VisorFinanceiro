@@ -1,4 +1,5 @@
 // backend/src/handlers/user_handler.go
+
 package handlers
 
 import (
@@ -170,30 +171,38 @@ type TopUser struct {
 }
 
 type AdminStats struct {
-	TotalUsers                      int                   `json:"totalUsers"`
-	DailyActiveUsers                int                   `json:"dailyActiveUsers"`
-	MonthlyActiveUsers              int                   `json:"monthlyActiveUsers"`
-	TotalUploads                    int                   `json:"totalUploads"`
-	TotalTransactions               int                   `json:"totalTransactions"`
-	NewUsersToday                   int                   `json:"newUsersToday"`
-	NewUsersThisWeek                int                   `json:"newUsersThisWeek"`
-	NewUsersThisMonth               int                   `json:"newUsersThisMonth"`
-	UsersPerDay                     []TimeSeriesDataPoint `json:"usersPerDay"`
-	UploadsPerDay                   []TimeSeriesDataPoint `json:"uploadsPerDay"`
-	TransactionsPerDay              []TimeSeriesDataPoint `json:"transactionsPerDay"`
-	ActiveUsersPerDay               []TimeSeriesDataPoint `json:"activeUsersPerDay"`
-	VerificationStats               VerificationStatsData `json:"verificationStats"`
-	AuthProviderStats               []NameValueDataPoint  `json:"authProviderStats"`
-	UploadsByBroker                 []NameValueDataPoint  `json:"uploadsByBroker"`
-	AvgFileSizeMB                   float64               `json:"avgFileSizeMB"`
-	AvgTransactionsPerUpload        float64               `json:"avgTransactionsPerUpload"`
-	TopUsersByUploads               []TopUser             `json:"topUsersByUploads"`
-	TopUsersByLogins                []TopUser             `json:"topUsersByLogins"`
-	TotalPortfolioValue             float64               `json:"totalPortfolioValue"`
-	ValueByBroker                   []NameValueDataPoint  `json:"valueByBroker"`
-	TopStocksByValue                []TopStockInfo        `json:"topStocksByValue"`
-	TopStocksByTrades               []TopStockInfo        `json:"topStocksByTrades"`
-	InvestmentDistributionByCountry []NameValueDataPoint  `json:"investmentDistributionByCountry"`
+	// Period-specific metrics, controlled by the date range filter
+	NewUsersInPeriod                 int                   `json:"newUsersInPeriod"`
+	ActiveUsersInPeriod              int                   `json:"activeUsersInPeriod"`
+	UploadsInPeriod                  int                   `json:"uploadsInPeriod"`
+	TransactionsInPeriod             int                   `json:"transactionsInPeriod"`
+	AvgFileSizeMBInPeriod            float64               `json:"avgFileSizeMBInPeriod"`
+	AvgTransactionsPerUploadInPeriod float64               `json:"avgTransactionsPerUploadInPeriod"`
+	UsersPerDay                      []TimeSeriesDataPoint `json:"usersPerDay"`
+	UploadsPerDay                    []TimeSeriesDataPoint `json:"uploadsPerDay"`
+	TransactionsPerDay               []TimeSeriesDataPoint `json:"transactionsPerDay"`
+	ActiveUsersPerDay                []TimeSeriesDataPoint `json:"activeUsersPerDay"`
+	ValueByBroker                    []NameValueDataPoint  `json:"valueByBroker"`
+	TopStocksByValue                 []TopStockInfo        `json:"topStocksByValue"`
+	TopStocksByTrades                []TopStockInfo        `json:"topStocksByTrades"`
+	InvestmentDistributionByCountry  []NameValueDataPoint  `json:"investmentDistributionByCountry"`
+
+	// All-Time / Static Metrics
+	TotalUsers               int                   `json:"totalUsers"`
+	DailyActiveUsers         int                   `json:"dailyActiveUsers"`
+	TotalUploads             int                   `json:"totalUploads"`
+	TotalTransactions        int                   `json:"totalTransactions"`
+	NewUsersToday            int                   `json:"newUsersToday"`
+	NewUsersThisWeek         int                   `json:"newUsersThisWeek"`
+	NewUsersThisMonth        int                   `json:"newUsersThisMonth"`
+	TotalPortfolioValue      float64               `json:"totalPortfolioValue"`
+	VerificationStats        VerificationStatsData `json:"verificationStats"`
+	AuthProviderStats        []NameValueDataPoint  `json:"authProviderStats"`
+	UploadsByBroker          []NameValueDataPoint  `json:"uploadsByBroker"`
+	AvgFileSizeMB            float64               `json:"avgFileSizeMB"`
+	AvgTransactionsPerUpload float64               `json:"avgTransactionsPerUpload"`
+	TopUsersByUploads        []TopUser             `json:"topUsersByUploads"`
+	TopUsersByLogins         []TopUser             `json:"topUsersByLogins"`
 }
 
 type AdminUserView struct {
@@ -321,19 +330,29 @@ func (h *UserHandler) HandleGetAdminStats(w http.ResponseWriter, r *http.Request
 	uploadsWhere := getWhereClause("uploaded_at")
 	loginHistoryWhere := getWhereClause("login_at")
 
-	_ = database.DB.QueryRow("SELECT COUNT(*) FROM users" + usersWhere).Scan(&stats.TotalUsers)
-	_ = database.DB.QueryRow("SELECT COUNT(DISTINCT user_id) FROM login_history WHERE DATE(login_at) = DATE('now', 'localtime')").Scan(&stats.DailyActiveUsers)
-	_ = database.DB.QueryRow("SELECT COUNT(DISTINCT user_id) FROM login_history" + loginHistoryWhere).Scan(&stats.MonthlyActiveUsers)
-	_ = database.DB.QueryRow("SELECT COUNT(*) FROM uploads_history" + uploadsWhere).Scan(&stats.TotalUploads)
-	_ = database.DB.QueryRow("SELECT COALESCE(SUM(transaction_count), 0) FROM uploads_history" + uploadsWhere).Scan(&stats.TotalTransactions)
-	_ = database.DB.QueryRow("SELECT COUNT(*) FROM users WHERE DATE(created_at) = DATE('now', 'localtime')").Scan(&stats.NewUsersToday)
-	_ = database.DB.QueryRow("SELECT COUNT(*) FROM users" + usersWhere).Scan(&stats.NewUsersThisWeek)
+	// --- Metrics Filtered by Date Range ---
+	_ = database.DB.QueryRow("SELECT COUNT(*) FROM users" + usersWhere).Scan(&stats.NewUsersInPeriod)
+	_ = database.DB.QueryRow("SELECT COUNT(DISTINCT user_id) FROM login_history" + loginHistoryWhere).Scan(&stats.ActiveUsersInPeriod)
+	_ = database.DB.QueryRow("SELECT COUNT(*) FROM uploads_history" + uploadsWhere).Scan(&stats.UploadsInPeriod)
+	_ = database.DB.QueryRow("SELECT COALESCE(SUM(transaction_count), 0) FROM uploads_history" + uploadsWhere).Scan(&stats.TransactionsInPeriod)
+	_ = database.DB.QueryRow(`SELECT COALESCE(AVG(file_size), 0) / (1024*1024), COALESCE(AVG(transaction_count), 0) FROM uploads_history`+uploadsWhere).Scan(&stats.AvgFileSizeMBInPeriod, &stats.AvgTransactionsPerUploadInPeriod)
 
-	// CORREÇÃO FINAL: Usar SUBSTR para extrair a data de forma robusta.
+	// Time series are inherently filtered by date range
 	stats.UsersPerDay, _ = queryTimeSeries("SELECT SUBSTR(created_at, 1, 10) as date, COUNT(*) as count FROM users" + getFilterClause("created_at", "WHERE") + " GROUP BY date ORDER BY date ASC")
 	stats.UploadsPerDay, _ = queryTimeSeries("SELECT DATE(uploaded_at) as date, COUNT(*) as count FROM uploads_history" + getFilterClause("uploaded_at", "WHERE") + " GROUP BY date ORDER BY date ASC")
 	stats.TransactionsPerDay, _ = queryTimeSeries("SELECT DATE(uploaded_at) as date, SUM(transaction_count) as count FROM uploads_history" + getFilterClause("uploaded_at", "WHERE") + " GROUP BY date ORDER BY date ASC")
 	stats.ActiveUsersPerDay, _ = queryTimeSeries("SELECT DATE(login_at) as date, COUNT(DISTINCT user_id) as count FROM login_history" + getFilterClause("login_at", "WHERE") + " GROUP BY date ORDER BY date ASC")
+
+	// --- All-Time / Static Metrics ---
+	_ = database.DB.QueryRow("SELECT COUNT(*) FROM users").Scan(&stats.TotalUsers)
+	_ = database.DB.QueryRow("SELECT COUNT(DISTINCT user_id) FROM login_history WHERE DATE(login_at) = DATE('now', 'localtime')").Scan(&stats.DailyActiveUsers)
+	_ = database.DB.QueryRow("SELECT COUNT(*) FROM uploads_history").Scan(&stats.TotalUploads)
+	_ = database.DB.QueryRow("SELECT COALESCE(SUM(transaction_count), 0) FROM uploads_history").Scan(&stats.TotalTransactions)
+	_ = database.DB.QueryRow("SELECT COUNT(*) FROM users WHERE DATE(created_at) = DATE('now', 'localtime')").Scan(&stats.NewUsersToday)
+	_ = database.DB.QueryRow("SELECT COUNT(*) FROM users WHERE created_at >= DATE('now', '-7 days')").Scan(&stats.NewUsersThisWeek)
+	_ = database.DB.QueryRow("SELECT COUNT(*) FROM users WHERE STRFTIME('%Y-%m', created_at) = STRFTIME('%Y-%m', 'now', 'localtime')").Scan(&stats.NewUsersThisMonth)
+	_ = database.DB.QueryRow(`SELECT COALESCE(AVG(file_size), 0) / (1024*1024), COALESCE(AVG(transaction_count), 0) FROM uploads_history`).Scan(&stats.AvgFileSizeMB, &stats.AvgTransactionsPerUpload)
+
 	rows, err := database.DB.Query("SELECT is_email_verified, COUNT(*) FROM users GROUP BY is_email_verified")
 	if err == nil {
 		for rows.Next() {
@@ -372,8 +391,6 @@ func (h *UserHandler) HandleGetAdminStats(w http.ResponseWriter, r *http.Request
 		rows.Close()
 	}
 
-	_ = database.DB.QueryRow(`SELECT COALESCE(AVG(file_size), 0) / (1024*1024), COALESCE(AVG(transaction_count), 0) FROM uploads_history`+uploadsWhere).Scan(&stats.AvgFileSizeMB, &stats.AvgTransactionsPerUpload)
-
 	rows, err = database.DB.Query("SELECT email, total_upload_count FROM users ORDER BY total_upload_count DESC LIMIT 10")
 	if err == nil {
 		for rows.Next() {
@@ -398,6 +415,7 @@ func (h *UserHandler) HandleGetAdminStats(w http.ResponseWriter, r *http.Request
 
 	_ = database.DB.QueryRow("SELECT COALESCE(SUM(portfolio_value_eur), 0) FROM users").Scan(&stats.TotalPortfolioValue)
 
+	// --- Filtered Transactional Metrics ---
 	rows, err = database.DB.Query(`
         SELECT source, COALESCE(SUM(ABS(amount_eur)), 0) as total_value
         FROM processed_transactions
