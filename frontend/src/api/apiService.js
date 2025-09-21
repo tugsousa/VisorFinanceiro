@@ -127,7 +127,6 @@ export const apiFetchAdminUsers = (params) => apiClient.get('/api/admin/users', 
 
 export const apiRefreshUserMetrics = (userId) => apiClient.post(`/api/admin/users/${userId}/refresh-metrics`);
 
-// --- INÍCIO DAS NOVAS FUNÇÕES ---
 
 /**
  * Busca as estatísticas do dashboard de administrador, com um filtro de data opcional.
@@ -156,7 +155,5 @@ export const apiFetchAdminUserDetails = (userId) => apiClient.get(`/api/admin/us
  */
 export const apiRefreshMultipleUserMetrics = (userIds) => 
     apiClient.post('/api/admin/users/refresh-metrics-batch', { user_ids: userIds });
-
-// --- FIM DAS NOVAS FUNÇÕES ---
 
 export default apiClient;
