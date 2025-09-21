@@ -127,7 +127,7 @@ func main() {
 		reportCache,
 	)
 
-	userHandler := handlers.NewUserHandler(authService, emailService, uploadService)
+	userHandler := handlers.NewUserHandler(authService, emailService, uploadService, reportCache) // --- ALTERAÇÃO AQUI ---
 	uploadHandler := handlers.NewUploadHandler(uploadService)
 	portfolioHandler := handlers.NewPortfolioHandler(uploadService, priceService)
 	dividendHandler := handlers.NewDividendHandler(uploadService)
