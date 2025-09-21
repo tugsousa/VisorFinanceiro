@@ -172,25 +172,27 @@ type TopUser struct {
 
 type AdminStats struct {
 	// Period-specific metrics, controlled by the date range filter
-	NewUsersInPeriod                  int                   `json:"newUsersInPeriod"`
-	ActiveUsersInPeriod               int                   `json:"activeUsersInPeriod"`
-	UploadsInPeriod                   int                   `json:"uploadsInPeriod"`
-	TransactionsInPeriod              int                   `json:"transactionsInPeriod"`
-	AvgFileSizeMBInPeriod             float64               `json:"avgFileSizeMBInPeriod"`
-	AvgTransactionsPerUploadInPeriod  float64               `json:"avgTransactionsPerUploadInPeriod"`
-	UsersPerDay                       []TimeSeriesDataPoint `json:"usersPerDay"`
-	UploadsPerDay                     []TimeSeriesDataPoint `json:"uploadsPerDay"`
-	TransactionsPerDay                []TimeSeriesDataPoint `json:"transactionsPerDay"`
-	ActiveUsersPerDay                 []TimeSeriesDataPoint `json:"activeUsersPerDay"`
-	ValueByBroker                     []NameValueDataPoint  `json:"valueByBroker"`
-	TopStocksByValue                  []TopStockInfo        `json:"topStocksByValue"`
-	TopStocksByTrades                 []TopStockInfo        `json:"topStocksByTrades"`
-	InvestmentDistributionByCountry   []NameValueDataPoint  `json:"investmentDistributionByCountry"`
-	CashDepositsInPeriod              int                   `json:"cashDepositsInPeriod"`
-	TotalCashDepositedEURInPeriod     float64               `json:"totalCashDepositedEURInPeriod"`
-	AvgCashDepositEURInPeriod         float64               `json:"avgCashDepositEURInPeriod"`
-	TotalDividendsReceivedEURInPeriod float64               `json:"totalDividendsReceivedEURInPeriod"`
-	AvgDividendReceivedEURInPeriod    float64               `json:"avgDividendReceivedEURInPeriod"`
+	NewUsersInPeriod                 int                   `json:"newUsersInPeriod"`
+	ActiveUsersInPeriod              int                   `json:"activeUsersInPeriod"`
+	UploadsInPeriod                  int                   `json:"uploadsInPeriod"`
+	TransactionsInPeriod             int                   `json:"transactionsInPeriod"`
+	AvgFileSizeMBInPeriod            float64               `json:"avgFileSizeMBInPeriod"`
+	AvgTransactionsPerUploadInPeriod float64               `json:"avgTransactionsPerUploadInPeriod"`
+	UsersPerDay                      []TimeSeriesDataPoint `json:"usersPerDay"`
+	UploadsPerDay                    []TimeSeriesDataPoint `json:"uploadsPerDay"`
+	TransactionsPerDay               []TimeSeriesDataPoint `json:"transactionsPerDay"`
+	ActiveUsersPerDay                []TimeSeriesDataPoint `json:"activeUsersPerDay"`
+	ValueByBroker                    []NameValueDataPoint  `json:"valueByBroker"`
+	// --- ALTERAÇÃO AQUI ---
+	DepositsByBroker                  []NameValueDataPoint `json:"depositsByBroker"`
+	TopStocksByValue                  []TopStockInfo       `json:"topStocksByValue"`
+	TopStocksByTrades                 []TopStockInfo       `json:"topStocksByTrades"`
+	InvestmentDistributionByCountry   []NameValueDataPoint `json:"investmentDistributionByCountry"`
+	CashDepositsInPeriod              int                  `json:"cashDepositsInPeriod"`
+	TotalCashDepositedEURInPeriod     float64              `json:"totalCashDepositedEURInPeriod"`
+	AvgCashDepositEURInPeriod         float64              `json:"avgCashDepositEURInPeriod"`
+	TotalDividendsReceivedEURInPeriod float64              `json:"totalDividendsReceivedEURInPeriod"`
+	AvgDividendReceivedEURInPeriod    float64              `json:"avgDividendReceivedEURInPeriod"`
 
 	// All-Time / Static Metrics
 	TotalUsers               int                   `json:"totalUsers"`
@@ -277,14 +279,8 @@ func (h *UserHandler) HandleGetAdminStats(w http.ResponseWriter, r *http.Request
 			return fmt.Sprintf(" WHERE %s >= DATE('now', '-7 days')", columnName)
 		case "last_30_days":
 			return fmt.Sprintf(" WHERE %s >= DATE('now', '-30 days')", columnName)
-		case "this_month":
-			// --- START OF FIX: Removed 'localtime' ---
-			return fmt.Sprintf(" WHERE STRFTIME('%%Y-%%m', %s) = STRFTIME('%%Y-%%m', 'now')", columnName)
-			// --- END OF FIX ---
-		case "this_year":
-			// --- START OF FIX: Removed 'localtime' ---
-			return fmt.Sprintf(" WHERE STRFTIME('%%Y', %s) = STRFTIME('%%Y', 'now')", columnName)
-			// --- END OF FIX ---
+		case "last_365_days":
+			return fmt.Sprintf(" WHERE %s >= DATE('now', '-365 days')", columnName)
 		default:
 			return ""
 		}
@@ -298,14 +294,8 @@ func (h *UserHandler) HandleGetAdminStats(w http.ResponseWriter, r *http.Request
 			dateFilter = fmt.Sprintf(" AND %s >= DATE('now', '-7 days')", columnName)
 		case "last_30_days":
 			dateFilter = fmt.Sprintf(" AND %s >= DATE('now', '-30 days')", columnName)
-		case "this_month":
-			// --- START OF FIX: Removed 'localtime' ---
-			dateFilter = fmt.Sprintf(" AND STRFTIME('%%Y-%%m', %s) = STRFTIME('%%Y-%%m', 'now')", columnName)
-			// --- END OF FIX ---
-		case "this_year":
-			// --- START OF FIX: Removed 'localtime' ---
-			dateFilter = fmt.Sprintf(" AND STRFTIME('%%Y', %s) = STRFTIME('%%Y', 'now')", columnName)
-			// --- END OF FIX ---
+		case "last_365_days":
+			dateFilter = fmt.Sprintf(" AND %s >= DATE('now', '-365 days')", columnName)
 		}
 		return baseClause + dateFilter
 	}
@@ -322,14 +312,8 @@ func (h *UserHandler) HandleGetAdminStats(w http.ResponseWriter, r *http.Request
 			return fmt.Sprintf(" WHERE %s >= DATE('now', '-7 days')", formattedDate)
 		case "last_30_days":
 			return fmt.Sprintf(" WHERE %s >= DATE('now', '-30 days')", formattedDate)
-		case "this_month":
-			// --- START OF FIX: Removed 'localtime' ---
-			return fmt.Sprintf(" WHERE STRFTIME('%%Y-%%m', %s) = STRFTIME('%%Y-%%m', 'now')", formattedDate)
-			// --- END OF FIX ---
-		case "this_year":
-			// --- START OF FIX: Removed 'localtime' ---
-			return fmt.Sprintf(" WHERE STRFTIME('%%Y', %s) = STRFTIME('%%Y', 'now')", formattedDate)
-			// --- END OF FIX ---
+		case "last_365_days":
+			return fmt.Sprintf(" WHERE %s >= DATE('now', '-365 days')", formattedDate)
 		default:
 			return ""
 		}
@@ -451,10 +435,11 @@ func (h *UserHandler) HandleGetAdminStats(w http.ResponseWriter, r *http.Request
 	_ = database.DB.QueryRow("SELECT COALESCE(SUM(portfolio_value_eur), 0) FROM users").Scan(&stats.TotalPortfolioValue)
 
 	// --- Filtered Transactional Metrics ---
+	// --- ALTERAÇÃO AQUI: Adicionada condição para excluir DIVIDEND e CASH ---
 	rows, err = database.DB.Query(`
         SELECT source, COALESCE(SUM(ABS(amount_eur)), 0) as total_value
         FROM processed_transactions
-    ` + getTransactionsWhereClause("") + `
+    ` + getTransactionsAdditionalWhereClause("") + ` transaction_type NOT IN ('DIVIDEND', 'CASH')
         GROUP BY source
         ORDER BY total_value DESC
     `)
@@ -463,6 +448,24 @@ func (h *UserHandler) HandleGetAdminStats(w http.ResponseWriter, r *http.Request
 			var point NameValueDataPoint
 			if err := rows.Scan(&point.Name, &point.Value); err == nil {
 				stats.ValueByBroker = append(stats.ValueByBroker, point)
+			}
+		}
+		rows.Close()
+	}
+
+	// --- ALTERAÇÃO AQUI: Nova query para Depósitos por Corretora ---
+	rows, err = database.DB.Query(`
+		SELECT source, COALESCE(SUM(amount_eur), 0) as total_deposits
+		FROM processed_transactions
+	` + getTransactionsAdditionalWhereClause("") + ` transaction_type = 'CASH' AND transaction_subtype = 'DEPOSIT'
+		GROUP BY source
+		ORDER BY total_deposits DESC
+	`)
+	if err == nil {
+		for rows.Next() {
+			var point NameValueDataPoint
+			if err := rows.Scan(&point.Name, &point.Value); err == nil {
+				stats.DepositsByBroker = append(stats.DepositsByBroker, point)
 			}
 		}
 		rows.Close()
