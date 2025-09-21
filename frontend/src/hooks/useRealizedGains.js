@@ -114,7 +114,6 @@ export const useRealizedGains = (token, selectedYear) => {
         );
     }, [allData, isLoading]);
 
-    // START OF FIX: Calculate metrics scoped to the selected year
     const periodSpecificAggregatedMetricsByISIN = useMemo(() => {
         if (isLoading || !allData || selectedYear === ALL_YEARS_OPTION || selectedYear === NO_YEAR_SELECTED) {
             return {};
@@ -124,7 +123,6 @@ export const useRealizedGains = (token, selectedYear) => {
         
         return calculateCombinedAggregatedMetricsByISIN(yearlyTransactions, yearlyStockSales);
     }, [allData, selectedYear, isLoading]);
-    // END OF FIX
 
     const periodSpecificData = useMemo(() => {
         const defaultStructure = { stockSales: [], optionSales: [], dividendTransactions: [], fees: [], optionHoldings: [] };
@@ -151,11 +149,9 @@ export const useRealizedGains = (token, selectedYear) => {
         const currentSystemYear = new Date().getFullYear().toString();
         const isCurrentOrTotalView = selectedYear === ALL_YEARS_OPTION || selectedYear === currentSystemYear;
 
-        // START OF FIX: Select which metrics to use based on the view
         const metricsToUse = isCurrentOrTotalView
             ? aggregatedLifetimeMetricsByISIN
             : periodSpecificAggregatedMetricsByISIN;
-        // END OF FIX
 
         let baseHoldings = [];
 
@@ -188,7 +184,7 @@ export const useRealizedGains = (token, selectedYear) => {
         allData.CurrentHoldingsValue, 
         allData.StockHoldingsByYear, 
         aggregatedLifetimeMetricsByISIN,
-        periodSpecificAggregatedMetricsByISIN // FIX: Added new dependency
+        periodSpecificAggregatedMetricsByISIN
     ]);
     
     const unrealizedStockPL = useMemo(() => {
@@ -227,7 +223,9 @@ export const useRealizedGains = (token, selectedYear) => {
     }, [periodSpecificData, selectedYear, unrealizedStockPL]);
 
     const holdingsChartData = useMemo(() => {
-        if (!holdingsForGroupedView || holdingsForGroupedView.length === 0) return null;
+        // CORREÇÃO: Retornar um objeto de gráfico vazio em vez de null
+        if (!holdingsForGroupedView || holdingsForGroupedView.length === 0) return { labels: [], datasets: [] };
+
         const isHistorical = holdingsForGroupedView[0]?.isHistorical;
         const chartItems = holdingsForGroupedView.map(h => ({
             name: h.product_name,

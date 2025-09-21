@@ -25,18 +25,19 @@ const KPICard = ({ title, value, loading }) => (
     </Paper>
 );
 
+// CORREÇÃO: ChartCard melhorado para verificar se existem dados antes de renderizar o gráfico
 const ChartCard = ({ type, data, options, title }) => {
     const ChartComponent = type === 'doughnut' ? Doughnut : (type === 'bar' ? Bar : Line);
-    const hasData = data && data.datasets.some(ds => ds && ds.data && ds.data.length > 0 && ds.data.some(d => d > 0));
+    const hasData = data && data.datasets && data.datasets.some(ds => ds && ds.data && ds.data.length > 0 && ds.data.some(d => d > 0 || d < 0));
 
     return (
         <Paper sx={{ p: 2, height: 350, display: 'flex', flexDirection: 'column' }}>
             <Typography variant="h6" sx={{ mb: 2, textAlign: 'center' }}>{title}</Typography>
-            <Box sx={{ flexGrow: 1, position: 'relative' }}>
+            <Box sx={{ flexGrow: 1, position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 {hasData ? (
                     <ChartComponent data={data} options={{ ...options, maintainAspectRatio: false }} />
                 ) : (
-                    <Typography sx={{ textAlign: 'center', pt: '30%', color: 'text.secondary' }}>
+                    <Typography sx={{ color: 'text.secondary' }}>
                         Sem dados disponíveis.
                     </Typography>
                 )}
@@ -44,6 +45,7 @@ const ChartCard = ({ type, data, options, title }) => {
         </Paper>
     );
 };
+
 
 const TopUsersTable = ({ users, title, valueHeader }) => {
     const columns = [
@@ -152,7 +154,9 @@ const AdminDashboardPage = () => {
         }
     ];
 
-    // Chart Data Preparation
+    // CORREÇÃO: Fornecer um objeto de gráfico vazio como fallback em vez de null
+    const emptyChartData = { labels: [], datasets: [] };
+
     const timeSeriesChartData = (dataKey, label) => ({
         labels: statsData?.[dataKey]?.map(d => d.date) || [],
         datasets: [{ 
@@ -165,39 +169,38 @@ const AdminDashboardPage = () => {
         }],
     });
 
-    const verificationChartData = {
+    const verificationChartData = statsData ? {
         labels: ['Verificados', 'Não Verificados'],
         datasets: [{
-            data: [statsData?.verificationStats?.verified || 0, statsData?.verificationStats?.unverified || 0],
+            data: [statsData.verificationStats?.verified || 0, statsData.verificationStats?.unverified || 0],
             backgroundColor: ['rgba(75, 192, 192, 0.7)', 'rgba(255, 99, 132, 0.7)'],
         }],
-    };
+    } : emptyChartData;
     
-    const authProviderChartData = {
-        labels: statsData?.authProviderStats?.map(d => d.name) || [],
+    const authProviderChartData = statsData ? {
+        labels: statsData.authProviderStats?.map(d => d.name) || [],
         datasets: [{
-            data: statsData?.authProviderStats?.map(d => d.value) || [],
+            data: statsData.authProviderStats?.map(d => d.value) || [],
             backgroundColor: ['rgba(54, 162, 235, 0.7)', 'rgba(255, 206, 86, 0.7)'],
         }],
-    };
+    } : emptyChartData;
 
-    const valueByBrokerChartData = {
-        labels: statsData?.valueByBroker?.map(d => d.name) || [],
+    const valueByBrokerChartData = statsData ? {
+        labels: statsData.valueByBroker?.map(d => d.name) || [],
         datasets: [{
-            data: statsData?.valueByBroker?.map(d => d.value) || [],
+            data: statsData.valueByBroker?.map(d => d.value) || [],
             backgroundColor: [
                 'rgba(255, 99, 132, 0.7)', 'rgba(54, 162, 235, 0.7)',
                 'rgba(255, 206, 86, 0.7)', 'rgba(75, 192, 192, 0.7)',
                 'rgba(153, 102, 255, 0.7)',
             ],
         }],
-    };
+    } : emptyChartData;
 
-    // --- ALTERAÇÃO AQUI: Preparação de dados para o novo gráfico ---
-    const depositsByBrokerChartData = {
-        labels: statsData?.depositsByBroker?.map(d => d.name) || [],
+    const depositsByBrokerChartData = statsData ? {
+        labels: statsData.depositsByBroker?.map(d => d.name) || [],
         datasets: [{
-            data: statsData?.depositsByBroker?.map(d => d.value) || [],
+            data: statsData.depositsByBroker?.map(d => d.value) || [],
             backgroundColor: [
                 'rgba(54, 162, 235, 0.7)',
                 'rgba(75, 192, 192, 0.7)',
@@ -205,29 +208,29 @@ const AdminDashboardPage = () => {
                 'rgba(255, 159, 64, 0.7)',
             ],
         }],
-    };
+    } : emptyChartData;
 
-    const topStocksByValueChartData = {
-        labels: statsData?.topStocksByValue?.map(d => d.productName || d.isin) || [],
+    const topStocksByValueChartData = statsData ? {
+        labels: statsData.topStocksByValue?.map(d => d.productName || d.isin) || [],
         datasets: [{
             label: 'Total Investido (€)',
-            data: statsData?.topStocksByValue?.map(d => d.value) || [],
+            data: statsData.topStocksByValue?.map(d => d.value) || [],
             backgroundColor: 'rgba(75, 192, 192, 0.7)',
             borderColor: 'rgba(75, 192, 192, 1)',
             borderWidth: 1,
         }],
-    };
+    } : emptyChartData;
     
-    const topStocksByTradesChartData = {
-        labels: statsData?.topStocksByTrades?.map(d => d.productName || d.isin) || [],
+    const topStocksByTradesChartData = statsData ? {
+        labels: statsData.topStocksByTrades?.map(d => d.productName || d.isin) || [],
         datasets: [{
             label: 'Nº de Transações',
-            data: statsData?.topStocksByTrades?.map(d => d.value) || [],
+            data: statsData.topStocksByTrades?.map(d => d.value) || [],
             backgroundColor: 'rgba(255, 159, 64, 0.7)',
             borderColor: 'rgba(255, 159, 64, 1)',
             borderWidth: 1,
         }],
-    };
+    } : emptyChartData;
 
     // Chart Options
     const chartOptions = { responsive: true, plugins: { legend: { position: 'top' }, title: { display: false } } };
@@ -271,33 +274,27 @@ const AdminDashboardPage = () => {
                 </FormControl>
             </Box>
             
-            {/* Section for Period-Specific Data */}
             <Box component={Paper} variant="outlined" sx={{ p: 2, mt: 4, borderColor: 'primary.main' }}>
                 <Typography variant="h5" component="h2" gutterBottom>Métricas do Período: {periodTitle}</Typography>
                 <Grid container spacing={2} sx={{ mb: 2 }}>
-                    {/* Alterado de md={3} para md={4} para criar uma grelha de 3 colunas */}
                     <Grid item xs={6} sm={4} md={4}><KPICard title="Novos Utilizadores" value={statsData?.newUsersInPeriod} loading={statsLoading} /></Grid>
                     <Grid item xs={6} sm={4} md={4}><KPICard title="Utilizadores Ativos" value={statsData?.activeUsersInPeriod} loading={statsLoading} /></Grid>
                     <Grid item xs={6} sm={4} md={4}><KPICard title="Uploads" value={statsData?.uploadsInPeriod} loading={statsLoading} /></Grid>
-                    {/* --- INÍCIO DOS NOVOS CARDS --- */}
                     <Grid item xs={6} sm={4} md={4}><KPICard title="Nº Depósitos" value={statsData?.cashDepositsInPeriod} loading={statsLoading} /></Grid>
                     <Grid item xs={6} sm={4} md={4}><KPICard title="Total Depositado" value={formatCurrency(statsData?.totalCashDepositedEURInPeriod)} loading={statsLoading} /></Grid>
                     <Grid item xs={6} sm={4} md={4}><KPICard title="Dividendos Recebidos" value={formatCurrency(statsData?.totalDividendsReceivedEURInPeriod)} loading={statsLoading} /></Grid>
-                    {/* --- FIM DOS NOVOS CARDS --- */}
                 </Grid>
                 <Grid container spacing={3}>
                     <Grid item xs={12} md={6}><ChartCard type="line" data={timeSeriesChartData('activeUsersPerDay', 'Utilizadores Ativos')} options={timeSeriesChartOptions('Utilizadores Ativos por Dia')} title="" /></Grid>
                     <Grid item xs={12} md={6}><ChartCard type="line" data={timeSeriesChartData('usersPerDay', 'Novos Utilizadores')} options={timeSeriesChartOptions('Novos Utilizadores por Dia')} title="" /></Grid>
                     <Grid item xs={12} md={6}><ChartCard type="bar" data={topStocksByValueChartData} options={horizontalBarOptions('Top 10 Ações por Valor Investido', 'Valor (€)')} title="" /></Grid>
                     <Grid item xs={12} md={6}><ChartCard type="bar" data={topStocksByTradesChartData} options={horizontalBarOptions('Top 10 Ações por Nº de Transações', 'Nº Transações')} title="" /></Grid>
-                    {/* --- ALTERAÇÃO AQUI: Gráfico modificado e novo gráfico adicionado --- */}
                     <Grid item xs={12} md={6}><ChartCard type="doughnut" data={valueByBrokerChartData} options={chartOptions} title="Volume Transacionado por Corretora (Ações/Opções)" /></Grid>
                     <Grid item xs={12} md={6}><ChartCard type="doughnut" data={depositsByBrokerChartData} options={chartOptions} title="Depósitos por Corretora" /></Grid>
                     <Grid item xs={12} md={6}><ChartCard type="doughnut" data={{ labels: statsData?.investmentDistributionByCountry?.map(d => d.name.split(' - ')[1] || d.name) || [], datasets: [{ data: statsData?.investmentDistributionByCountry?.map(d => d.value) || [], backgroundColor: ['#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF', '#FF9F40', '#C9CBCF', '#4D5360'] }]}} options={chartOptions} title="Distribuição de Investimentos por País"/></Grid>
                 </Grid>
             </Box>
 
-            {/* Section for All-Time Data */}
             <Box component={Paper} variant="outlined" sx={{ p: 2, mt: 4 }}>
                 <Typography variant="h5" component="h2" gutterBottom>Métricas Gerais (Sempre)</Typography>
                 <Grid container spacing={2} sx={{ mb: 2 }}>
