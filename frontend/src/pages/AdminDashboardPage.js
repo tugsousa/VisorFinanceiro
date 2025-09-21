@@ -262,10 +262,15 @@ const AdminDashboardPage = () => {
             <Box component={Paper} variant="outlined" sx={{ p: 2, mt: 4, borderColor: 'primary.main' }}>
                 <Typography variant="h5" component="h2" gutterBottom>Métricas do Período: {periodTitle}</Typography>
                 <Grid container spacing={2} sx={{ mb: 2 }}>
-                    <Grid item xs={6} sm={4} md={3}><KPICard title="Novos Utilizadores" value={statsData?.newUsersInPeriod} loading={statsLoading} /></Grid>
-                    <Grid item xs={6} sm={4} md={3}><KPICard title="Utilizadores Ativos" value={statsData?.activeUsersInPeriod} loading={statsLoading} /></Grid>
-                    <Grid item xs={6} sm={4} md={3}><KPICard title="Uploads" value={statsData?.uploadsInPeriod} loading={statsLoading} /></Grid>
-                    <Grid item xs={6} sm={4} md={3}><KPICard title="Média Trans./Upload" value={statsData?.avgTransactionsPerUploadInPeriod?.toFixed(1)} loading={statsLoading} /></Grid>
+                    {/* Alterado de md={3} para md={4} para criar uma grelha de 3 colunas */}
+                    <Grid item xs={6} sm={4} md={4}><KPICard title="Novos Utilizadores" value={statsData?.newUsersInPeriod} loading={statsLoading} /></Grid>
+                    <Grid item xs={6} sm={4} md={4}><KPICard title="Utilizadores Ativos" value={statsData?.activeUsersInPeriod} loading={statsLoading} /></Grid>
+                    <Grid item xs={6} sm={4} md={4}><KPICard title="Uploads" value={statsData?.uploadsInPeriod} loading={statsLoading} /></Grid>
+                    {/* --- INÍCIO DOS NOVOS CARDS --- */}
+                    <Grid item xs={6} sm={4} md={4}><KPICard title="Nº Depósitos" value={statsData?.cashDepositsInPeriod} loading={statsLoading} /></Grid>
+                    <Grid item xs={6} sm={4} md={4}><KPICard title="Total Depositado" value={formatCurrency(statsData?.totalCashDepositedEURInPeriod)} loading={statsLoading} /></Grid>
+                    <Grid item xs={6} sm={4} md={4}><KPICard title="Dividendos Recebidos" value={formatCurrency(statsData?.totalDividendsReceivedEURInPeriod)} loading={statsLoading} /></Grid>
+                    {/* --- FIM DOS NOVOS CARDS --- */}
                 </Grid>
                 <Grid container spacing={3}>
                     <Grid item xs={12} md={6}><ChartCard type="line" data={timeSeriesChartData('activeUsersPerDay', 'Utilizadores Ativos')} options={timeSeriesChartOptions('Utilizadores Ativos por Dia')} title="" /></Grid>

@@ -172,20 +172,25 @@ type TopUser struct {
 
 type AdminStats struct {
 	// Period-specific metrics, controlled by the date range filter
-	NewUsersInPeriod                 int                   `json:"newUsersInPeriod"`
-	ActiveUsersInPeriod              int                   `json:"activeUsersInPeriod"`
-	UploadsInPeriod                  int                   `json:"uploadsInPeriod"`
-	TransactionsInPeriod             int                   `json:"transactionsInPeriod"`
-	AvgFileSizeMBInPeriod            float64               `json:"avgFileSizeMBInPeriod"`
-	AvgTransactionsPerUploadInPeriod float64               `json:"avgTransactionsPerUploadInPeriod"`
-	UsersPerDay                      []TimeSeriesDataPoint `json:"usersPerDay"`
-	UploadsPerDay                    []TimeSeriesDataPoint `json:"uploadsPerDay"`
-	TransactionsPerDay               []TimeSeriesDataPoint `json:"transactionsPerDay"`
-	ActiveUsersPerDay                []TimeSeriesDataPoint `json:"activeUsersPerDay"`
-	ValueByBroker                    []NameValueDataPoint  `json:"valueByBroker"`
-	TopStocksByValue                 []TopStockInfo        `json:"topStocksByValue"`
-	TopStocksByTrades                []TopStockInfo        `json:"topStocksByTrades"`
-	InvestmentDistributionByCountry  []NameValueDataPoint  `json:"investmentDistributionByCountry"`
+	NewUsersInPeriod                  int                   `json:"newUsersInPeriod"`
+	ActiveUsersInPeriod               int                   `json:"activeUsersInPeriod"`
+	UploadsInPeriod                   int                   `json:"uploadsInPeriod"`
+	TransactionsInPeriod              int                   `json:"transactionsInPeriod"`
+	AvgFileSizeMBInPeriod             float64               `json:"avgFileSizeMBInPeriod"`
+	AvgTransactionsPerUploadInPeriod  float64               `json:"avgTransactionsPerUploadInPeriod"`
+	UsersPerDay                       []TimeSeriesDataPoint `json:"usersPerDay"`
+	UploadsPerDay                     []TimeSeriesDataPoint `json:"uploadsPerDay"`
+	TransactionsPerDay                []TimeSeriesDataPoint `json:"transactionsPerDay"`
+	ActiveUsersPerDay                 []TimeSeriesDataPoint `json:"activeUsersPerDay"`
+	ValueByBroker                     []NameValueDataPoint  `json:"valueByBroker"`
+	TopStocksByValue                  []TopStockInfo        `json:"topStocksByValue"`
+	TopStocksByTrades                 []TopStockInfo        `json:"topStocksByTrades"`
+	InvestmentDistributionByCountry   []NameValueDataPoint  `json:"investmentDistributionByCountry"`
+	CashDepositsInPeriod              int                   `json:"cashDepositsInPeriod"`
+	TotalCashDepositedEURInPeriod     float64               `json:"totalCashDepositedEURInPeriod"`
+	AvgCashDepositEURInPeriod         float64               `json:"avgCashDepositEURInPeriod"`
+	TotalDividendsReceivedEURInPeriod float64               `json:"totalDividendsReceivedEURInPeriod"`
+	AvgDividendReceivedEURInPeriod    float64               `json:"avgDividendReceivedEURInPeriod"`
 
 	// All-Time / Static Metrics
 	TotalUsers               int                   `json:"totalUsers"`
@@ -335,10 +340,22 @@ func (h *UserHandler) HandleGetAdminStats(w http.ResponseWriter, r *http.Request
 	_ = database.DB.QueryRow("SELECT COUNT(DISTINCT user_id) FROM login_history" + loginHistoryWhere).Scan(&stats.ActiveUsersInPeriod)
 	_ = database.DB.QueryRow("SELECT COUNT(*) FROM uploads_history" + uploadsWhere).Scan(&stats.UploadsInPeriod)
 	_ = database.DB.QueryRow("SELECT COALESCE(SUM(transaction_count), 0) FROM uploads_history" + uploadsWhere).Scan(&stats.TransactionsInPeriod)
+
+	// --- INÍCIO DAS NOVAS QUERIES (CORRIGIDO) ---
+	// Query para depósitos de dinheiro
+	depositsQuery := "SELECT COUNT(*), COALESCE(SUM(amount_eur), 0), COALESCE(AVG(amount_eur), 0) FROM processed_transactions" + getTransactionsAdditionalWhereClause("") + "transaction_type = 'CASH' AND transaction_subtype = 'DEPOSIT'"
+	_ = database.DB.QueryRow(depositsQuery).Scan(&stats.CashDepositsInPeriod, &stats.TotalCashDepositedEURInPeriod, &stats.AvgCashDepositEURInPeriod)
+
+	// Query para dividendos recebidos (excluindo impostos sobre dividendos)
+	dividendsQuery := "SELECT COALESCE(SUM(amount_eur), 0), COALESCE(AVG(amount_eur), 0) FROM processed_transactions" + getTransactionsAdditionalWhereClause("") + "transaction_type = 'DIVIDEND' AND transaction_subtype != 'TAX'"
+	_ = database.DB.QueryRow(dividendsQuery).Scan(&stats.TotalDividendsReceivedEURInPeriod, &stats.AvgDividendReceivedEURInPeriod)
+	// --- FIM DAS NOVAS QUERIES (CORRIGIDO) ---
+
 	_ = database.DB.QueryRow(`SELECT COALESCE(AVG(file_size), 0) / (1024*1024), COALESCE(AVG(transaction_count), 0) FROM uploads_history`+uploadsWhere).Scan(&stats.AvgFileSizeMBInPeriod, &stats.AvgTransactionsPerUploadInPeriod)
 
 	// Time series are inherently filtered by date range
-	stats.UsersPerDay, _ = queryTimeSeries("SELECT SUBSTR(created_at, 1, 10) as date, COUNT(*) as count FROM users" + getFilterClause("created_at", "WHERE") + " GROUP BY date ORDER BY date ASC")
+	// --- CORREÇÃO: Utilizar DATE() em vez de SUBSTR para maior robustez ---
+	stats.UsersPerDay, _ = queryTimeSeries("SELECT DATE(created_at) as date, COUNT(*) as count FROM users" + getFilterClause("created_at", "WHERE") + " GROUP BY date ORDER BY date ASC")
 	stats.UploadsPerDay, _ = queryTimeSeries("SELECT DATE(uploaded_at) as date, COUNT(*) as count FROM uploads_history" + getFilterClause("uploaded_at", "WHERE") + " GROUP BY date ORDER BY date ASC")
 	stats.TransactionsPerDay, _ = queryTimeSeries("SELECT DATE(uploaded_at) as date, SUM(transaction_count) as count FROM uploads_history" + getFilterClause("uploaded_at", "WHERE") + " GROUP BY date ORDER BY date ASC")
 	stats.ActiveUsersPerDay, _ = queryTimeSeries("SELECT DATE(login_at) as date, COUNT(DISTINCT user_id) as count FROM login_history" + getFilterClause("login_at", "WHERE") + " GROUP BY date ORDER BY date ASC")
