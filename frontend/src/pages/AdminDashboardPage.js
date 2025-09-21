@@ -10,10 +10,10 @@ import { Bar, Line, Doughnut } from 'react-chartjs-2';
 import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, LineElement, PointElement, Title, Legend, Tooltip as ChartTooltip, ArcElement } from 'chart.js';
 import { useNavigate } from 'react-router-dom';
 
-// O registo do ChartJS já estava correto.
 ChartJS.register(CategoryScale, LinearScale, BarElement, LineElement, PointElement, Title, Legend, ChartTooltip, ArcElement);
 
-// Componentes KPICard, ChartCard e TopUsersTable permanecem os mesmos
+// Helper to format currency consistently
+const formatCurrency = (value) => new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(value || 0);
 
 const KPICard = ({ title, value, loading }) => (
     <Paper sx={{ p: 2, textAlign: 'center', height: '100%' }}>
@@ -26,7 +26,6 @@ const KPICard = ({ title, value, loading }) => (
 
 const ChartCard = ({ type, data, options, title }) => {
     const ChartComponent = type === 'doughnut' ? Doughnut : (type === 'bar' ? Bar : Line);
-    // A verificação agora é mais segura: confirma que ds e ds.data existem antes de aceder a .length
     const hasData = data && data.datasets.some(ds => ds && ds.data && ds.data.length > 0 && ds.data.some(d => d > 0));
 
     return (
@@ -91,13 +90,12 @@ const AdminDashboardPage = () => {
         placeholderData: (previousData) => previousData,
     });
     
-    // As mutações (refreshMutation, batchRefreshMutation) e as colunas (userColumns) continuam iguais.
     const refreshMutation = useMutation({
         mutationFn: (userId) => {
             setRefreshingUserId(userId);
             return apiRefreshUserMetrics(userId);
         },
-        onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['adminUsers'] }); }, // Simplificado
+        onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['adminUsers'] }); },
         onError: (error) => { console.error("Failed to refresh user metrics:", error); },
         onSettled: () => { setRefreshingUserId(null); }
     });
@@ -112,7 +110,6 @@ const AdminDashboardPage = () => {
     });
 
     const userColumns = [
-      // As colunas existentes estão corretas
         { field: 'id', headerName: 'ID', width: 70 },
         { field: 'email', headerName: 'Email', width: 220 },
         { field: 'auth_provider', headerName: 'Sign-in', width: 100 },
@@ -137,7 +134,7 @@ const AdminDashboardPage = () => {
             }
         },
         { field: 'login_count', headerName: 'Nº de Logins', type: 'number', width: 120 },
-        { field: 'last_login_at', headerName: 'Último Login', width: 170, type: 'dateTime', valueGetter: (value) => value ? new Date(value) : null },
+        { field: 'last_login_at', headerName: 'Último Login', width: 170, type: 'dateTime', valueGetter: (value) => value ? new Date(value.Time) : null },
         { field: 'created_at', headerName: 'Data Registo', width: 170, type: 'dateTime', valueGetter: (value) => new Date(value) },
         {
             field: 'actions', headerName: 'Ações', width: 80, sortable: false, disableColumnMenu: true,
@@ -154,12 +151,11 @@ const AdminDashboardPage = () => {
         }
     ];
 
-    // --- Lógica para os Novos Gráficos ---
+    // Chart Data Preparation
     const timeSeriesChartData = (dataKey, label) => ({
         labels: statsData?.[dataKey]?.map(d => d.date) || [],
         datasets: [{ 
             label, 
-            // Adicionámos `|| []` para garantir que `data` é sempre um array
             data: statsData?.[dataKey]?.map(d => d.count) || [], 
             tension: 0.1, 
             borderColor: 'rgb(75, 192, 192)', 
@@ -175,25 +171,60 @@ const AdminDashboardPage = () => {
             backgroundColor: ['rgba(75, 192, 192, 0.7)', 'rgba(255, 99, 132, 0.7)'],
         }],
     };
-    const authProviderChartData = {
-        labels: statsData?.authProviderStats?.map(d => d.name) || [],
+
+    const valueByBrokerChartData = {
+        labels: statsData?.valueByBroker?.map(d => d.name) || [],
         datasets: [{
-            data: statsData?.authProviderStats?.map(d => d.value) || [],
-            backgroundColor: ['rgba(153, 102, 255, 0.7)', 'rgba(255, 159, 64, 0.7)'],
+            data: statsData?.valueByBroker?.map(d => d.value) || [],
+            backgroundColor: [
+                'rgba(255, 99, 132, 0.7)', 'rgba(54, 162, 235, 0.7)',
+                'rgba(255, 206, 86, 0.7)', 'rgba(75, 192, 192, 0.7)',
+                'rgba(153, 102, 255, 0.7)',
+            ],
         }],
     };
-    const brokerChartData = {
-        labels: statsData?.uploadsByBroker?.map(d => d.name) || [],
+
+    const topStocksByValueChartData = {
+        labels: statsData?.topStocksByValue?.map(d => d.productName || d.isin) || [],
         datasets: [{
-            label: 'Uploads por Corretora',
-            data: statsData?.uploadsByBroker?.map(d => d.value) || [],
-            backgroundColor: 'rgba(54, 162, 235, 0.7)',
+            label: 'Total Investido (€)',
+            data: statsData?.topStocksByValue?.map(d => d.value) || [],
+            backgroundColor: 'rgba(75, 192, 192, 0.7)',
+            borderColor: 'rgba(75, 192, 192, 1)',
+            borderWidth: 1,
         }],
     };
+    
+    const topStocksByTradesChartData = {
+        labels: statsData?.topStocksByTrades?.map(d => d.productName || d.isin) || [],
+        datasets: [{
+            label: 'Nº de Transações',
+            data: statsData?.topStocksByTrades?.map(d => d.value) || [],
+            backgroundColor: 'rgba(255, 159, 64, 0.7)',
+            borderColor: 'rgba(255, 159, 64, 1)',
+            borderWidth: 1,
+        }],
+    };
+
+    // Chart Options
     const chartOptions = { responsive: true, plugins: { legend: { position: 'top' }, title: { display: false } } };
     const timeSeriesChartOptions = (title) => ({
         responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, title: { display: true, text: title, font: { size: 16 } } },
         scales: { x: { grid: { display: false } }, y: { beginAtZero: true } },
+    });
+    const horizontalBarOptions = (title, tooltipLabel) => ({
+        indexAxis: 'y',
+        responsive: true, maintainAspectRatio: false,
+        plugins: {
+            legend: { display: false },
+            title: { display: true, text: title, font: { size: 16 } },
+            tooltip: {
+                callbacks: {
+                    label: (context) => `${tooltipLabel}: ${tooltipLabel.includes('€') ? formatCurrency(context.raw) : context.raw}`
+                }
+            }
+        },
+        scales: { x: { beginAtZero: true } },
     });
 
     if (statsIsError || usersIsError) {
@@ -218,29 +249,47 @@ const AdminDashboardPage = () => {
             
             <Typography variant="h5" component="h2" gutterBottom sx={{ mt: 4 }}>Métricas Gerais ({dateRange.replace(/_/g, ' ')})</Typography>
             <Grid container spacing={2} sx={{ mb: 4 }}>
+                <Grid item xs={6} sm={4} md={2}><KPICard title="Valor Total em Carteira" value={formatCurrency(statsData?.totalPortfolioValue)} loading={statsLoading} /></Grid>
                 <Grid item xs={6} sm={4} md={2}><KPICard title="Total Utilizadores" value={statsData?.totalUsers} loading={statsLoading} /></Grid>
                 <Grid item xs={6} sm={4} md={2}><KPICard title="DAU" value={statsData?.dailyActiveUsers} loading={statsLoading} /></Grid>
                 <Grid item xs={6} sm={4} md={2}><KPICard title="MAU" value={statsData?.monthlyActiveUsers} loading={statsLoading} /></Grid>
                 <Grid item xs={6} sm={4} md={2}><KPICard title="Total Uploads" value={statsData?.totalUploads} loading={statsLoading} /></Grid>
                 <Grid item xs={6} sm={4} md={2}><KPICard title="Média Trans./Upload" value={statsData?.avgTransactionsPerUpload?.toFixed(1)} loading={statsLoading} /></Grid>
-                <Grid item xs={6} sm={4} md={2}><KPICard title="Tam. Médio Fich. (MB)" value={statsData?.avgFileSizeMB?.toFixed(2)} loading={statsLoading} /></Grid>
             </Grid>
             
             <Grid container spacing={3} sx={{ mb: 4 }}>
                 <Grid item xs={12} md={6} lg={4}><ChartCard type="line" data={timeSeriesChartData('activeUsersPerDay', 'Utilizadores Ativos')} options={timeSeriesChartOptions('Utilizadores Ativos por Dia')} title="" /></Grid>
                 <Grid item xs={12} md={6} lg={4}><ChartCard type="line" data={timeSeriesChartData('usersPerDay', 'Novos Utilizadores')} options={timeSeriesChartOptions('Novos Utilizadores por Dia')} title="" /></Grid>
                 <Grid item xs={12} md={6} lg={4}><ChartCard type="line" data={timeSeriesChartData('uploadsPerDay', 'Uploads')} options={timeSeriesChartOptions('Uploads por Dia')} title="" /></Grid>
-                <Grid item xs={12} sm={6} md={3}><ChartCard type="doughnut" data={verificationChartData} options={chartOptions} title="Verificação de Email" /></Grid>
-                <Grid item xs={12} sm={6} md={3}><ChartCard type="doughnut" data={authProviderChartData} options={chartOptions} title="Origem de Contas" /></Grid>
-                <Grid item xs={12} md={6}><ChartCard type="bar" data={brokerChartData} options={chartOptions} title="Uploads por Corretora" /></Grid>
             </Grid>
             
+            <Typography variant="h5" component="h2" gutterBottom sx={{ mt: 4 }}>Métricas de Negócio</Typography>
+            <Grid container spacing={3} sx={{ mb: 4 }}>
+                <Grid item xs={12} md={6} lg={4}>
+                    <ChartCard type="doughnut" data={valueByBrokerChartData} options={chartOptions} title="Valor Transacionado por Corretora" />
+                </Grid>
+                 <Grid item xs={12} md={6} lg={8}>
+                     <ChartCard type="bar" data={topStocksByValueChartData} options={horizontalBarOptions('Top 10 Ações por Valor Investido', 'Valor (€)')} title="" />
+                </Grid>
+                <Grid item xs={12} md={6} lg={8}>
+                     <ChartCard type="bar" data={topStocksByTradesChartData} options={horizontalBarOptions('Top 10 Ações por Nº de Transações', 'Nº Transações')} title="" />
+                </Grid>
+                 <Grid item xs={12} md={6} lg={4}>
+                    <ChartCard type="doughnut" data={{
+                        labels: statsData?.investmentDistributionByCountry?.map(d => d.name.split(' - ')[1] || d.name) || [],
+                        datasets: [{
+                            data: statsData?.investmentDistributionByCountry?.map(d => d.value) || [],
+                            backgroundColor: ['#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF', '#FF9F40', '#C9CBCF', '#4D5360'],
+                        }],
+                    }} options={chartOptions} title="Distribuição de Investimentos por País"/>
+                </Grid>
+            </Grid>
+
             <Grid container spacing={3} sx={{ mb: 4 }}>
                 <Grid item xs={12} lg={6}><TopUsersTable users={statsData?.topUsersByLogins} title="Top Utilizadores por Nº de Logins" valueHeader="Logins" /></Grid>
                 <Grid item xs={12} lg={6}><TopUsersTable users={statsData?.topUsersByUploads} title="Top Utilizadores por Nº de Uploads" valueHeader="Uploads" /></Grid>
             </Grid>
 
-            {/* A tabela de utilizadores com a paginação do servidor */}
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mt: 4, mb: 2 }}>
                 <Typography variant="h5" component="h2">Utilizadores Registados</Typography>
                 {selectedUserIds.length > 0 && (

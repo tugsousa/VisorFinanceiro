@@ -44,6 +44,12 @@ type UserHandler struct {
 	cache         *cache.Cache // --- NOVO: Adicionar cache ao handler ---
 }
 
+type TopStockInfo struct {
+	ISIN        string  `json:"isin"`
+	ProductName string  `json:"productName"`
+	Value       float64 `json:"value"` // Can be total value or trade count
+}
+
 func NewUserHandler(authService *security.AuthService, emailService services.EmailService, uploadService services.UploadService, reportCache *cache.Cache) *UserHandler { // --- ALTERAÇÃO AQUI ---
 	return &UserHandler{
 		authService:   authService,
@@ -167,25 +173,30 @@ type TopUser struct {
 }
 
 type AdminStats struct {
-	TotalUsers               int                   `json:"totalUsers"`
-	DailyActiveUsers         int                   `json:"dailyActiveUsers"`
-	MonthlyActiveUsers       int                   `json:"monthlyActiveUsers"`
-	TotalUploads             int                   `json:"totalUploads"`
-	TotalTransactions        int                   `json:"totalTransactions"`
-	NewUsersToday            int                   `json:"newUsersToday"`
-	NewUsersThisWeek         int                   `json:"newUsersThisWeek"`
-	NewUsersThisMonth        int                   `json:"newUsersThisMonth"`
-	UsersPerDay              []TimeSeriesDataPoint `json:"usersPerDay"`
-	UploadsPerDay            []TimeSeriesDataPoint `json:"uploadsPerDay"`
-	TransactionsPerDay       []TimeSeriesDataPoint `json:"transactionsPerDay"`
-	ActiveUsersPerDay        []TimeSeriesDataPoint `json:"activeUsersPerDay"`
-	VerificationStats        VerificationStatsData `json:"verificationStats"`
-	AuthProviderStats        []NameValueDataPoint  `json:"authProviderStats"`
-	UploadsByBroker          []NameValueDataPoint  `json:"uploadsByBroker"`
-	AvgFileSizeMB            float64               `json:"avgFileSizeMB"`
-	AvgTransactionsPerUpload float64               `json:"avgTransactionsPerUpload"`
-	TopUsersByUploads        []TopUser             `json:"topUsersByUploads"`
-	TopUsersByLogins         []TopUser             `json:"topUsersByLogins"`
+	TotalUsers                      int                   `json:"totalUsers"`
+	DailyActiveUsers                int                   `json:"dailyActiveUsers"`
+	MonthlyActiveUsers              int                   `json:"monthlyActiveUsers"`
+	TotalUploads                    int                   `json:"totalUploads"`
+	TotalTransactions               int                   `json:"totalTransactions"`
+	NewUsersToday                   int                   `json:"newUsersToday"`
+	NewUsersThisWeek                int                   `json:"newUsersThisWeek"`
+	NewUsersThisMonth               int                   `json:"newUsersThisMonth"`
+	UsersPerDay                     []TimeSeriesDataPoint `json:"usersPerDay"`
+	UploadsPerDay                   []TimeSeriesDataPoint `json:"uploadsPerDay"`
+	TransactionsPerDay              []TimeSeriesDataPoint `json:"transactionsPerDay"`
+	ActiveUsersPerDay               []TimeSeriesDataPoint `json:"activeUsersPerDay"`
+	VerificationStats               VerificationStatsData `json:"verificationStats"`
+	AuthProviderStats               []NameValueDataPoint  `json:"authProviderStats"`
+	UploadsByBroker                 []NameValueDataPoint  `json:"uploadsByBroker"`
+	AvgFileSizeMB                   float64               `json:"avgFileSizeMB"`
+	AvgTransactionsPerUpload        float64               `json:"avgTransactionsPerUpload"`
+	TopUsersByUploads               []TopUser             `json:"topUsersByUploads"`
+	TopUsersByLogins                []TopUser             `json:"topUsersByLogins"`
+	TotalPortfolioValue             float64               `json:"totalPortfolioValue"`
+	ValueByBroker                   []NameValueDataPoint  `json:"valueByBroker"`
+	TopStocksByValue                []TopStockInfo        `json:"topStocksByValue"`
+	TopStocksByTrades               []TopStockInfo        `json:"topStocksByTrades"`
+	InvestmentDistributionByCountry []NameValueDataPoint  `json:"investmentDistributionByCountry"`
 }
 
 type AdminUserView struct {
@@ -342,6 +353,89 @@ func (h *UserHandler) HandleGetAdminStats(w http.ResponseWriter, r *http.Request
 			var user TopUser
 			if err := rows.Scan(&user.Email, &user.Value); err == nil {
 				stats.TopUsersByLogins = append(stats.TopUsersByLogins, user)
+			}
+		}
+		rows.Close()
+	}
+
+	// KPI: Total Portfolio Value across all users
+	_ = database.DB.QueryRow("SELECT COALESCE(SUM(portfolio_value_eur), 0) FROM users").Scan(&stats.TotalPortfolioValue)
+
+	// Metric: Total transaction value by broker
+	rows, err = database.DB.Query(`
+        SELECT source, COALESCE(SUM(ABS(amount_eur)), 0) as total_value
+        FROM processed_transactions
+        GROUP BY source
+        ORDER BY total_value DESC
+    `)
+	if err == nil {
+		for rows.Next() {
+			var point NameValueDataPoint
+			if err := rows.Scan(&point.Name, &point.Value); err == nil {
+				stats.ValueByBroker = append(stats.ValueByBroker, point)
+			}
+		}
+		rows.Close()
+	}
+
+	// Metric: Top 10 Stocks by total amount invested (sum of all BUYs in EUR)
+	rows, err = database.DB.Query(`
+        SELECT p.isin, COALESCE(m.company_name, p.product_name), SUM(p.amount_eur) as total_invested
+        FROM processed_transactions p
+        LEFT JOIN isin_ticker_map m ON p.isin = m.isin
+        WHERE p.transaction_type = 'STOCK' AND p.buy_sell = 'BUY'
+        GROUP BY p.isin, p.product_name
+        ORDER BY total_invested DESC
+        LIMIT 10
+    `)
+	if err == nil {
+		for rows.Next() {
+			var stock TopStockInfo
+			var companyName sql.NullString
+			if err := rows.Scan(&stock.ISIN, &companyName, &stock.Value); err == nil {
+				stock.ProductName = companyName.String // Use company name if available
+				stats.TopStocksByValue = append(stats.TopStocksByValue, stock)
+			}
+		}
+		rows.Close()
+	}
+
+	// Metric: Top 10 Most Traded Stocks (by number of transactions)
+	rows, err = database.DB.Query(`
+        SELECT p.isin, COALESCE(m.company_name, p.product_name), COUNT(*) as trade_count
+        FROM processed_transactions p
+        LEFT JOIN isin_ticker_map m ON p.isin = m.isin
+        WHERE p.transaction_type = 'STOCK'
+        GROUP BY p.isin, p.product_name
+        ORDER BY trade_count DESC
+        LIMIT 10
+    `)
+	if err == nil {
+		for rows.Next() {
+			var stock TopStockInfo
+			var companyName sql.NullString
+			if err := rows.Scan(&stock.ISIN, &companyName, &stock.Value); err == nil {
+				stock.ProductName = companyName.String
+				stats.TopStocksByTrades = append(stats.TopStocksByTrades, stock)
+			}
+		}
+		rows.Close()
+	}
+
+	// Metric: Investment Distribution by Country (based on ISIN)
+	rows, err = database.DB.Query(`
+        SELECT country_code, COUNT(*) as count
+        FROM processed_transactions
+        WHERE country_code IS NOT NULL AND country_code != '' AND transaction_type = 'STOCK'
+        GROUP BY country_code
+        ORDER BY count DESC
+        LIMIT 10
+    `)
+	if err == nil {
+		for rows.Next() {
+			var point NameValueDataPoint
+			if err := rows.Scan(&point.Name, &point.Value); err == nil {
+				stats.InvestmentDistributionByCountry = append(stats.InvestmentDistributionByCountry, point)
 			}
 		}
 		rows.Close()
