@@ -28,7 +28,6 @@ func isAdmin(email string) bool {
 }
 
 // updateUserLoginInfo updates user's login stats and records the login event.
-// This will be called from both local and Google login handlers.
 func updateUserLoginInfo(userID int64, r *http.Request) {
 	tx, err := database.DB.Begin()
 	if err != nil {
@@ -106,7 +105,7 @@ func (h *UserHandler) RegisterUserHandler(w http.ResponseWriter, r *http.Request
 		sendJSONError(w, "Username already exists", http.StatusConflict)
 		return
 	} else if !errors.Is(err, sql.ErrNoRows) && !strings.Contains(strings.ToLower(err.Error()), "user not found") {
-		logger.L.Error("Error checking username uniqueness", "username", credentials.Username, "error", err)
+		logger.L.Error("Error checking username uniqueness", "error", err)
 		sendJSONError(w, "Failed to process registration", http.StatusInternalServerError)
 		return
 	}
@@ -116,7 +115,7 @@ func (h *UserHandler) RegisterUserHandler(w http.ResponseWriter, r *http.Request
 		sendJSONError(w, "Email address already in use", http.StatusConflict)
 		return
 	} else if !errors.Is(err, sql.ErrNoRows) && !strings.Contains(strings.ToLower(err.Error()), "user with this email not found") {
-		logger.L.Error("Error checking email uniqueness", "email", credentials.Email, "error", err)
+		logger.L.Error("Error checking email uniqueness", "error", err)
 		sendJSONError(w, "Failed to process registration", http.StatusInternalServerError)
 		return
 	}
@@ -148,14 +147,15 @@ func (h *UserHandler) RegisterUserHandler(w http.ResponseWriter, r *http.Request
 	}
 
 	if err := user.CreateUser(database.DB); err != nil {
-		logger.L.Error("Failed to create user in DB", "username", user.Username, "email", user.Email, "error", err)
+		logger.L.Error("Failed to create user in DB", "error", err)
 		sendJSONError(w, "Failed to create user", http.StatusInternalServerError)
 		return
 	}
+	logger.L.Info("User registered, verification email to be sent", "userID", user.ID)
 
 	err = h.emailService.SendVerificationEmail(user.Email, user.Username, verificationToken)
 	if err != nil {
-		logger.L.Error("Failed to send verification email after user creation", "userEmail", user.Email, "error", err)
+		logger.L.Error("Failed to send verification email after user creation", "userID", user.ID, "error", err)
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusCreated)
 		json.NewEncoder(w).Encode(map[string]string{
@@ -193,22 +193,22 @@ func (h *UserHandler) LoginUserHandler(w http.ResponseWriter, r *http.Request) {
 
 	credentials.Email = strings.ToLower(strings.TrimSpace(credentials.Email))
 
-	logger.L.Info("Login attempt", "email", credentials.Email)
+	logger.L.Info("Login attempt received")
 	user, err := model.GetUserByEmail(database.DB, credentials.Email)
 	if err != nil {
-		logger.L.Warn("User lookup by email failed for login", "email", credentials.Email, "error", err)
+		logger.L.Warn("User lookup by email failed for login", "error", err)
 		sendJSONError(w, "Invalid email or password", http.StatusUnauthorized)
 		return
 	}
 
 	if err := user.CheckPassword(credentials.Password); err != nil {
-		logger.L.Warn("Password check failed for login", "email", credentials.Email, "error", err)
+		logger.L.Warn("Password check failed for login", "userID", user.ID, "error", err)
 		sendJSONError(w, "Invalid email or password", http.StatusUnauthorized)
 		return
 	}
 
 	if !user.IsEmailVerified {
-		logger.L.Warn("Login attempt failed: email not verified. Resending verification.", "email", credentials.Email, "userID", user.ID)
+		logger.L.Warn("Login attempt failed: email not verified. Resending verification.", "userID", user.ID)
 
 		tokenBytes := make([]byte, 32)
 		if _, err := rand.Read(tokenBytes); err != nil {
@@ -222,9 +222,9 @@ func (h *UserHandler) LoginUserHandler(w http.ResponseWriter, r *http.Request) {
 			} else {
 				err = h.emailService.SendVerificationEmail(user.Email, user.Username, verificationToken)
 				if err != nil {
-					logger.L.Error("Failed to resend verification email on login attempt", "userEmail", user.Email, "error", err)
+					logger.L.Error("Failed to resend verification email on login attempt", "userID", user.ID, "error", err)
 				} else {
-					logger.L.Info("Resent verification email successfully on login attempt", "userEmail", user.Email)
+					logger.L.Info("Resent verification email successfully on login attempt", "userID", user.ID)
 				}
 			}
 		}
@@ -238,11 +238,8 @@ func (h *UserHandler) LoginUserHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// --- NEW: Update Login Info ---
 	updateUserLoginInfo(user.ID, r)
-	// --- END NEW ---
 
-	// Preencher a informação de admin
 	user.IsAdmin = isAdmin(user.Email)
 
 	userIDStr := fmt.Sprintf("%d", user.ID)
@@ -275,12 +272,15 @@ func (h *UserHandler) LoginUserHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// NOVO: Log de sucesso de login
+	logger.L.Info("User login successful, tokens generated", "userID", user.ID)
+
 	userData := map[string]interface{}{
 		"id":            user.ID,
 		"username":      user.Username,
 		"email":         user.Email,
 		"auth_provider": user.AuthProvider,
-		"is_admin":      user.IsAdmin, // Adicionar o campo is_admin
+		"is_admin":      user.IsAdmin,
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -291,7 +291,6 @@ func (h *UserHandler) LoginUserHandler(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// ... (rest of file is unchanged) ...
 func (h *UserHandler) RefreshTokenHandler(w http.ResponseWriter, r *http.Request) {
 	var requestBody struct {
 		RefreshToken string `json:"refresh_token"`
@@ -348,6 +347,8 @@ func (h *UserHandler) RefreshTokenHandler(w http.ResponseWriter, r *http.Request
 		sendJSONError(w, "Failed to create new session on refresh", http.StatusInternalServerError)
 		return
 	}
+
+	logger.L.Info("Token refreshed successfully", "userID", oldSession.UserID)
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{

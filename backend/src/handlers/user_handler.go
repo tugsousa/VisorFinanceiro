@@ -141,7 +141,7 @@ func (h *UserHandler) AdminMiddleware(next http.Handler) http.Handler {
 		}
 
 		if !isUserAdmin {
-			logger.L.Warn("Admin access denied for user", "userID", user.ID, "email", user.Email)
+			logger.L.Warn("Admin access denied for user", "userID", user.ID)
 			sendJSONError(w, "Forbidden: Administrator access required", http.StatusForbidden)
 			return
 		}
