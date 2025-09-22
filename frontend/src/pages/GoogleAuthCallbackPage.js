@@ -3,6 +3,7 @@ import React, { useEffect, useContext } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
 import { Box, CircularProgress, Typography } from '@mui/material';
+import logger from '../utils/logger';
 
 const GoogleAuthCallbackPage = () => {
     const location = useLocation();
@@ -21,7 +22,7 @@ const GoogleAuthCallbackPage = () => {
                 loginWithGoogleToken(token, user);
                 navigate('/dashboard');
             } catch (e) {
-                 console.error("Failed to parse user data from Google callback", e);
+                 logger.error("Failed to parse user data from Google callback", e);
                  navigate('/signin?error=callback_failed');
             }
         } else {

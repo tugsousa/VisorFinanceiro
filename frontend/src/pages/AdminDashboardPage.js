@@ -10,6 +10,7 @@ import { useAuth } from '../context/AuthContext';
 import { Bar, Line, Doughnut } from 'react-chartjs-2';
 import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, LineElement, PointElement, Title, Legend, Tooltip as ChartTooltip, ArcElement } from 'chart.js';
 import { useNavigate } from 'react-router-dom';
+import logger from '../utils/logger';
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, LineElement, PointElement, Title, Legend, ChartTooltip, ArcElement);
 
@@ -96,7 +97,7 @@ const AdminDashboardPage = () => {
             return apiRefreshUserMetrics(userId);
         },
         onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['adminUsers'] }); },
-        onError: (error) => { console.error("Failed to refresh user metrics:", error); },
+        onError: (error) => { logger.error("Failed to refresh user metrics:", error); },
         onSettled: () => { setRefreshingUserId(null); }
     });
 
@@ -106,17 +107,17 @@ const AdminDashboardPage = () => {
             queryClient.invalidateQueries({ queryKey: ['adminUsers'] });
             setSelectedUserIds([]);
         },
-        onError: (error) => { console.error("Failed to refresh metrics in batch:", error); },
+        onError: (error) => { logger.error("Failed to refresh metrics in batch:", error); },
     });
 
     const clearCacheMutation = useMutation({
         mutationFn: apiClearAdminStatsCache,
         onSuccess: () => {
-            console.log("Admin cache cleared, refetching stats...");
+            logger.log("Admin cache cleared, refetching stats...");
             queryClient.invalidateQueries({ queryKey: ['adminStats', token, dateRange] });
         },
         onError: (error) => {
-            console.error("Failed to clear admin stats cache:", error);
+            logger.error("Failed to clear admin stats cache:", error);
         }
     });
 
