@@ -4,7 +4,7 @@ services:
   # The Go Backend Service
   backend:
     build: ./backend
-    container_name: rumoclaro-backend-container
+    container_name: visorfinanceiro-backend-container
     restart: unless-stopped
     # Loads environment variables from the .env file in the project's root directory.
     # This is where you'll define your database path, secrets, and frontend URL.
@@ -14,7 +14,7 @@ services:
       # Mounts a named volume to the /app/db directory inside the container.
       # This ensures your SQLite database file persists even if the container is removed.
       # This path MUST match the directory created and given permissions in the Dockerfile.
-      - rumoclaro_data:/app/db
+      - visorfinanceiro_data:/app/db
 
   # The Caddy Service (serves the frontend and acts as a reverse proxy)
   caddy:
@@ -25,7 +25,7 @@ services:
         # Passes the variable from the root .env file into the frontend build process.
         # This is how your React app knows the production API URL at build time.
         - REACT_APP_API_BASE_URL=${REACT_APP_API_BASE_URL}
-    container_name: rumoclaro-caddy-container
+    container_name: visorfinanceiro-caddy-container
     restart: unless-stopped
     ports:
       # Maps host ports 80 and 443 to the container's ports.
@@ -41,5 +41,5 @@ services:
 
 # Define the named volumes used by the services to persist data.
 volumes:
-  rumoclaro_data: # Volume for persisting the backend's database.
+  visorfinanceiro_data: # Volume for persisting the backend's database.
   caddy_data:     # Volume for persisting Caddy's state and certificates.
