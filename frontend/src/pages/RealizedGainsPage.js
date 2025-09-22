@@ -151,7 +151,7 @@ export default function RealizedGainsPage() {
   return (
     <Box sx={{ p: { xs: 2, sm: 4, md: 6 }, maxWidth: 1200, mx: 'auto' }}>
       <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, justifyContent: 'space-between', alignItems: { xs: 'flex-start', sm: 'center' }, mb: 4, gap: 2 }}>
-        <Typography variant="h3" component="h1" sx={{ fontWeight: 'bold' }}>Análise de Portefólio</Typography>
+        <Typography variant="h4" component="h1" sx={{ mb: { xs: 2, sm: 0 } }}>Análise de Portefólio</Typography>
         <FormControl size="small" sx={{ minWidth: 140, width: { xs: '100%', sm: 'auto' } }}>
           <InputLabel id="year-select-label">Ano</InputLabel>
           <Select labelId="year-select-label" value={selectedYear} label="Ano" onChange={handleYearChange} disabled={availableYears.length <= 1}>

@@ -77,7 +77,7 @@ const OverallPLChart = ({ stockSaleDetails, optionSaleDetails, dividendTaxResult
       const singleYearData = yearlyPL[selectedYear];
       if (!singleYearData) return { chartData: { labels: [], datasets: [] }, yearlyPLDataForTooltip: {} };
       
-      const labels = ['L/P de Ações', 'L/P de Opções', 'Dividendos', 'Taxas e Comissões'];
+      const labels = ['Resultado Ações', 'Resultado Opções', 'Dividendos', 'Taxas e Comissões'];
       const dataset = generateDataset([singleYearData.stocks, singleYearData.options, singleYearData.dividends, singleYearData.fees]);
       dataset.label = `L/P para ${selectedYear}`;
 

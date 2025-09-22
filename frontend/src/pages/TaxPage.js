@@ -106,23 +106,17 @@ export default function TaxPage() {
     const numYear = Number(year);
     const filteredStockSales = (taxApiData.stockSales || []).filter(item => getYear(item.SaleDate) === numYear);
     
-    // --- START: Grouping Logic ---
     const groupedSalesMap = filteredStockSales.reduce((acc, sale) => {
-      // Create a unique key based on the grouping criteria
       const groupingKey = `${sale.country_code}|${sale.SaleDate}|${sale.BuyDate}`;
 
       if (!acc[groupingKey]) {
-        // If this is the first time we see this key, create a new entry.
-        // We create a copy of the sale object to avoid modifying the original data.
         acc[groupingKey] = {
           ...sale,
-          // Ensure numeric fields are initialized correctly for summation
           SaleAmountEUR: sale.SaleAmountEUR || 0,
-          BuyAmountEUR: Math.abs(sale.BuyAmountEUR || 0), // Use absolute value as in the original render
+          BuyAmountEUR: Math.abs(sale.BuyAmountEUR || 0),
           Commission: sale.Commission || 0,
         };
       } else {
-        // If the key already exists, sum the values.
         acc[groupingKey].SaleAmountEUR += sale.SaleAmountEUR || 0;
         acc[groupingKey].BuyAmountEUR += Math.abs(sale.BuyAmountEUR || 0);
         acc[groupingKey].Commission += sale.Commission || 0;
@@ -131,9 +125,7 @@ export default function TaxPage() {
       return acc;
     }, {});
 
-    // Convert the map of grouped sales back into an array
     const groupedStockSales = Object.values(groupedSalesMap);
-    // --- END: Grouping Logic ---
 
     const filteredOptionSales = (taxApiData.optionSales || []).filter(item => getYear(item.close_date) === numYear);
     
@@ -209,12 +201,22 @@ export default function TaxPage() {
   if (loading) {
     return <CircularProgress sx={{ display: 'block', margin: '20px auto' }} />;
   }
-  if (apiError && availableYears.length === 0 && selectedYear === NO_YEAR_SELECTED) {
+  if (apiError && availableYears.length === 0) {
     return <Alert severity="error" sx={{ m: 2 }}>{apiError}</Alert>;
+  }
+  
+  // No data state
+  if (availableYears.length === 0 && !loading) {
+    return (
+        <Box sx={{ p: 4, textAlign: 'center' }}>
+            <Typography variant="h4" gutterBottom>Preencher Declaração IRS</Typography>
+            <Typography variant="body1">Sem dados disponíveis. Por favor, carregue primeiro um ficheiro de transações.</Typography>
+        </Box>
+    );
   }
 
   return (
-    <Box sx={{ p: { xs: 1, sm: 2 } }}>
+    <Box sx={{ p: { xs: 2, sm: 3 } }}>
       <Box sx={{ 
         display: 'flex', 
         justifyContent: 'space-between', 
@@ -238,14 +240,8 @@ export default function TaxPage() {
             value={selectedYear}
             label="Year"
             onChange={handleYearChange}
-            disabled={loading || (availableYears.length === 0 && selectedYear === NO_YEAR_SELECTED)}
           >
-            <MenuItem
-              value={NO_YEAR_SELECTED}
-              disabled={availableYears.length > 0}
-            >
-              {availableYears.length === 0 ? "No Data" : "Select Year"}
-            </MenuItem>
+            <MenuItem value={NO_YEAR_SELECTED} disabled>Selecione o Ano</MenuItem>
             {availableYears.map(year => (
               <MenuItem key={year} value={String(year)}>{year}</MenuItem>
             ))}
@@ -253,18 +249,9 @@ export default function TaxPage() {
         </FormControl>
       </Box>
       
-      {apiError && (selectedYear !== NO_YEAR_SELECTED || (availableYears.length === 0 && loading)) && (
-          <Alert severity="warning" sx={{ mb: 2 }}>{apiError}</Alert>
-      )}
-      
-      {selectedYear === NO_YEAR_SELECTED && !loading && availableYears.length > 0 && (
+      {selectedYear === NO_YEAR_SELECTED ? (
         <Typography sx={{textAlign: 'center', my:2}}>Por favor, selecione um ano para visualizar os dados.</Typography>
-      )}
-       {selectedYear === NO_YEAR_SELECTED && !loading && availableYears.length === 0 && !apiError && (
-        <Typography sx={{textAlign: 'center', my:2}}>Não existem dados disponíveis. Por favor, carregue as transações.</Typography>
-       )}
-
-      {selectedYear && selectedYear !== NO_YEAR_SELECTED && !loading && (
+      ) : (
         <>
           <Typography variant="h5" component="h2" gutterBottom sx={{ mt: 2, color: '#0183cb', borderBottom: '1px solid #0183cb', pb: 1, fontSize: '1.1rem' }}>
             Anexo J - Quadro 8: Rendimentos de Capitais (Categoria E) - Obtidos no Estrangeiro
@@ -308,7 +295,7 @@ export default function TaxPage() {
                         <StyledTableBodyCell>{row.retencaoFonte.toFixed(2)}</StyledTableBodyCell>
                       </TableRow>
                     ))
-                  ) : ( <TableRow><StyledTableBodyCell colSpan={9}>{loading ? "Loading..." : UI_TEXT.noDataAvailable}</StyledTableBodyCell></TableRow> )}
+                  ) : ( <TableRow><StyledTableBodyCell colSpan={9}>{UI_TEXT.noDataAvailable}</StyledTableBodyCell></TableRow> )}
                 </TableBody>
               </Table>
             </TableContainer>
@@ -392,7 +379,7 @@ export default function TaxPage() {
                             <StyledTableBodyCell>{/* País Contraparte */}</StyledTableBodyCell>
                         </TableRow>
                       ))
-                    ) : ( <TableRow><StyledTableBodyCell colSpan={14}>{loading ? "Loading..." : UI_TEXT.noDataAvailable}</StyledTableBodyCell></TableRow> )}
+                    ) : ( <TableRow><StyledTableBodyCell colSpan={14}>{UI_TEXT.noDataAvailable}</StyledTableBodyCell></TableRow> )}
                    </TableBody>
                  </Table>
               </TableContainer>
@@ -447,7 +434,7 @@ export default function TaxPage() {
                            <StyledTableBodyCell align="left">{/* País Contraparte */}</StyledTableBodyCell>
                         </TableRow>
                       ))
-                    ) : ( <TableRow><StyledTableBodyCell colSpan={6}>{loading ? "Loading..." : UI_TEXT.noDataAvailable}</StyledTableBodyCell></TableRow> )}
+                    ) : ( <TableRow><StyledTableBodyCell colSpan={6}>{UI_TEXT.noDataAvailable}</StyledTableBodyCell></TableRow> )}
                     </TableBody>
                   </Table>
               </TableContainer>
