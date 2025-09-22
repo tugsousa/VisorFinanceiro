@@ -159,7 +159,7 @@ func (h *UserHandler) RegisterUserHandler(w http.ResponseWriter, r *http.Request
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusCreated)
 		json.NewEncoder(w).Encode(map[string]string{
-			"message": "User registered. Failed to send verification email. Please contact support or try resending later.",
+			"message": "Utilizador registado. Falha ao enviar o e-mail de verificação. Por favor, contacte o suporte ou tente reenviar mais tarde.",
 			"warning": "email_not_sent",
 		})
 		return
@@ -168,7 +168,7 @@ func (h *UserHandler) RegisterUserHandler(w http.ResponseWriter, r *http.Request
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(map[string]string{
-		"message": "User registered successfully. Please check your email to verify your account.",
+		"message": "Utilizador registado com sucesso. Por favor, verifique o seu e-mail para confirmar a sua conta.",
 	})
 }
 

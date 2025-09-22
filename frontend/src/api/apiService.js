@@ -2,6 +2,7 @@
 
 import axios from 'axios';
 import { API_ENDPOINTS } from '../constants';
+import logger from '../utils/logger';
 
 let authRefresher = null;
 
