@@ -9,8 +9,8 @@ import { useRealizedGains } from '../hooks/useRealizedGains';
 import { UI_TEXT, ALL_YEARS_OPTION } from '../constants';
 import { formatCurrency } from '../utils/formatUtils';
 
-// --- INÍCIO DA CORREÇÃO ---
-// Importações em falta
+// --- INÍCIO DA ALTERAÇÃO ---
+// Importar os ícones necessários
 import PercentIcon from '@mui/icons-material/Percent';
 import ShowChartIcon from '@mui/icons-material/ShowChart';
 import CandlestickChartIcon from '@mui/icons-material/CandlestickChart';
@@ -18,6 +18,9 @@ import AttachMoneyIcon from '@mui/icons-material/AttachMoney';
 import AccountBalanceWalletIcon from '@mui/icons-material/AccountBalanceWallet';
 import TrendingUpIcon from '@mui/icons-material/TrendingUp';
 import RequestQuoteIcon from '@mui/icons-material/RequestQuote';
+import EmojiEventsIcon from '@mui/icons-material/EmojiEvents'; // Ícone para Taxa de Sucesso
+import TimelapseIcon from '@mui/icons-material/Timelapse'; // Ícone para Duração Média
+// --- FIM DA ALTERAÇÃO ---
 
 import StockHoldingsSection from '../components/realizedgainsSections/StockHoldingsSection';
 import OptionHoldingsSection from '../components/realizedgainsSections/OptionHoldingsSection';
@@ -28,7 +31,6 @@ import OverallPLChart from '../components/realizedgainsSections/OverallPLChart';
 import HoldingsAllocationChart from '../components/realizedgainsSections/HoldingsAllocationChart';
 import PLContributionChart from '../components/realizedgainsSections/PLContributionChart';
 import FeesSection from '../components/realizedgainsSections/FeesSection';
-// --- FIM DA CORREÇÃO ---
 
 
 const isDataEmpty = (data) => {
@@ -46,11 +48,18 @@ const isDataEmpty = (data) => {
   );
 };
 
-const KeyMetricCard = ({ title, value, icon, isPercentage = false }) => {
-  const isPositive = value >= 0;
-  const bgColor = isPositive ? 'rgba(76, 175, 80, 0.1)' : 'rgba(244, 67, 54, 0.1)';
-  const textColor = isPositive ? 'success.main' : 'error.main';
-  const formattedValue = isPercentage ? `${value.toFixed(2)}%` : formatCurrency(value);
+// --- INÍCIO DA ALTERAÇÃO ---
+// Adicionar um novo prop `unit` para métricas que não são monetárias
+const KeyMetricCard = ({ title, value, icon, isPercentage = false, unit = '' }) => {
+  const isPositive = typeof value === 'number' ? value >= 0 : true;
+  // Ajustar a cor de fundo para métricas neutras como a duração
+  const bgColor = unit ? 'rgba(63, 81, 181, 0.1)' : (isPositive ? 'rgba(76, 175, 80, 0.1)' : 'rgba(244, 67, 54, 0.1)');
+  const textColor = unit ? 'primary.main' : (isPositive ? 'success.main' : 'error.main');
+  
+  const formattedValue = isPercentage 
+    ? `${(value || 0).toFixed(2)}%` 
+    : (unit ? `${(value || 0).toFixed(0)} ${unit}` : formatCurrency(value));
+// --- FIM DA ALTERAÇÃO ---
 
   return (
     <Card elevation={0} sx={{ display: 'flex', alignItems: 'center', p: 1.5, bgcolor: bgColor, borderRadius: 2, minWidth: 140, flex: '1 1 0' }}>
@@ -176,6 +185,15 @@ export default function RealizedGainsPage() {
                 </Tooltip>
                 <Tooltip title="Soma de todas as taxas e comissões pagas no período selecionado." placement="top">
                   <Box sx={{ flex: '1 1 0', minWidth: 140 }}><KeyMetricCard title="Taxas e Comissões" value={summaryData.totalTaxesAndCommissions} icon={<RequestQuoteIcon />} /></Box>
+                </Tooltip>
+                 <Tooltip title="Percentagem de transações fechadas (ações e opções) que resultaram em lucro." placement="top">
+                  <Box sx={{ flex: '1 1 0', minWidth: 140 }}><KeyMetricCard title="Taxa de Sucesso" value={summaryData.winLossRatio} icon={<EmojiEventsIcon />} isPercentage /></Box>
+                </Tooltip>
+                <Tooltip title="Tempo médio de detenção para as posições vendidas com lucro." placement="top">
+                  <Box sx={{ flex: '1 1 0', minWidth: 140 }}><KeyMetricCard title="Duração (Ganhos)" value={summaryData.avgHoldingPeriodWinners} icon={<TimelapseIcon />} unit="dias" /></Box>
+                </Tooltip>
+                <Tooltip title="Tempo médio de detenção para as posições vendidas com prejuízo." placement="top">
+                  <Box sx={{ flex: '1 1 0', minWidth: 140 }}><KeyMetricCard title="Duração (Perdas)" value={summaryData.avgHoldingPeriodLosers} icon={<TimelapseIcon />} unit="dias" /></Box>
                 </Tooltip>
                 {selectedYear === ALL_YEARS_OPTION && (<>
                   <Tooltip title="Diferença entre o custo de aquisição e o valor de mercado atual das suas posições em aberto." placement="top">
