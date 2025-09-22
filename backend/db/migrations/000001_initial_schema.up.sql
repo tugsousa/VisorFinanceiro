@@ -25,8 +25,10 @@ CREATE TABLE IF NOT EXISTS users (
     top_5_holdings TEXT, -- Stored as JSON: '[{"name": "AAPL", "value": 15000}, ...]'
 
     -- Timestamps
+    first_upload_at TIMESTAMP NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+
 );
 
 -- Login history for tracking DAU/MAU and user activity
@@ -123,3 +125,13 @@ CREATE TABLE IF NOT EXISTS system_metrics (
 -- Inserir o contador inicial para contas eliminadas (ADICIONADO)
 INSERT INTO system_metrics (metric_name, metric_value) 
 VALUES ('deleted_user_count', 0);
+
+CREATE TABLE IF NOT EXISTS upload_failures (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER,
+    source TEXT,
+    filename TEXT,
+    error_message TEXT,
+    failed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE SET NULL
+);

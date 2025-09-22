@@ -2,6 +2,7 @@
 package services
 
 import (
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -138,12 +139,27 @@ func (s *uploadServiceImpl) ProcessUpload(fileReader io.Reader, userID int64, so
 	}
 
 	if insertedCount > 0 {
+		go func(uid int64) {
+			logger.L.Info("Checking and setting first upload timestamp", "userID", uid)
+			var firstUploadTime sql.NullTime
+			err := database.DB.QueryRow("SELECT first_upload_at FROM users WHERE id = ?", uid).Scan(&firstUploadTime)
+			if err != nil {
+				logger.L.Error("Failed to check first_upload_at for user", "userID", uid, "error", err)
+				return
+			}
+			if !firstUploadTime.Valid {
+				_, updateErr := database.DB.Exec("UPDATE users SET first_upload_at = CURRENT_TIMESTAMP WHERE id = ?", uid)
+				if updateErr != nil {
+					logger.L.Error("Failed to set first_upload_at for user", "userID", uid, "error", updateErr)
+				} else {
+					logger.L.Info("Successfully set first_upload_at for user", "userID", uid)
+				}
+			}
+		}(userID)
+
 		go func() {
 			logger.L.Info("Triggering portfolio metrics update after upload", "userID", userID)
-			// --- START OF FIX ---
-			// The method call must be capitalized to match the public method.
 			if err := s.UpdateUserPortfolioMetrics(userID); err != nil {
-				// --- END OF FIX ---
 				logger.L.Error("Failed to update user portfolio metrics asynchronously", "userID", userID, "error", err)
 			}
 		}()

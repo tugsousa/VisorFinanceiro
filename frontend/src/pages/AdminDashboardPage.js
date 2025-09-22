@@ -15,7 +15,6 @@ ChartJS.register(CategoryScale, LinearScale, BarElement, LineElement, PointEleme
 
 const formatCurrency = (value) => new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(value || 0);
 
-// ALTERAÇÃO: KPICard agora usa um Box em vez de Paper para remover a borda/sombra
 const KPICard = ({ title, value, loading }) => (
     <Box sx={{ p: 2, textAlign: 'center', height: '100%' }}>
         <Typography variant="h6" color="text.secondary" sx={{fontSize: '1rem'}}>{title}</Typography>
@@ -25,7 +24,6 @@ const KPICard = ({ title, value, loading }) => (
     </Box>
 );
 
-// ALTERAÇÃO: ChartCard agora usa um Box para remover a borda/sombra
 const ChartCard = ({ type, data, options, title }) => {
     const ChartComponent = type === 'doughnut' ? Doughnut : (type === 'bar' ? Bar : Line);
     const hasData = data && data.datasets.some(ds => ds && ds.data && ds.data.length > 0 && ds.data.some(d => d > 0 || d < 0));
@@ -46,7 +44,6 @@ const ChartCard = ({ type, data, options, title }) => {
     );
 };
 
-// ALTERAÇÃO: TopUsersTable agora usa um Box para remover a borda/sombra
 const TopUsersTable = ({ users, title, valueHeader }) => {
     const columns = [
         { field: 'email', headerName: 'Email', flex: 1, minWidth: 150 },
@@ -188,13 +185,13 @@ const AdminDashboardPage = () => {
                 </FormControl>
             </Box>
             
-            {/* MANTIDO: O contentor principal para as métricas do período */}
             <Box component={Paper} variant="outlined" sx={{ p: 2, mt: 4, borderColor: 'divider' }}>
                 <Typography variant="h5" component="h2" gutterBottom>Métricas do Período: {periodTitle}</Typography>
                 <Grid container spacing={2} sx={{ mb: 2 }}>
-                    <Grid item xs={6} sm={4} md={4}><KPICard title="Novos Utilizadores" value={statsData?.newUsersInPeriod} loading={statsLoading} /></Grid>
-                    <Grid item xs={6} sm={4} md={4}><KPICard title="Utilizadores Ativos" value={statsData?.activeUsersInPeriod} loading={statsLoading} /></Grid>
-                    <Grid item xs={6} sm={4} md={4}><KPICard title="Uploads" value={statsData?.uploadsInPeriod} loading={statsLoading} /></Grid>
+                    <Grid item xs={6} sm={4} md={3}><KPICard title="Novos Utilizadores" value={statsData?.newUsersInPeriod} loading={statsLoading} /></Grid>
+                    <Grid item xs={6} sm={4} md={3}><KPICard title="Utilizadores Ativos" value={statsData?.activeUsersInPeriod} loading={statsLoading} /></Grid>
+                    <Grid item xs={6} sm={4} md={3}><KPICard title="Uploads" value={statsData?.uploadsInPeriod} loading={statsLoading} /></Grid>
+                    <Grid item xs={6} sm={4} md={3}><KPICard title="Taxa de Falha Upload" value={statsData ? `${statsData.uploadFailureRate.toFixed(1)}%` : 'N/A'} loading={statsLoading} /></Grid>
                     <Grid item xs={6} sm={4} md={4}><KPICard title="Nº Depósitos" value={statsData?.cashDepositsInPeriod} loading={statsLoading} /></Grid>
                     <Grid item xs={6} sm={4} md={4}><KPICard title="Total Depositado" value={formatCurrency(statsData?.totalCashDepositedEURInPeriod)} loading={statsLoading} /></Grid>
                     <Grid item xs={6} sm={4} md={4}><KPICard title="Dividendos Recebidos" value={formatCurrency(statsData?.totalDividendsReceivedEURInPeriod)} loading={statsLoading} /></Grid>
@@ -210,7 +207,6 @@ const AdminDashboardPage = () => {
                 </Grid>
             </Box>
 
-            {/* ALTERAÇÃO: Este contentor já não tem o estilo de Paper */}
             <Box sx={{ p: 2, mt: 4 }}>
                 <Typography variant="h5" component="h2" gutterBottom>Métricas Gerais (Sempre)</Typography>
                 <Grid container spacing={2} sx={{ mb: 2 }}>
@@ -219,6 +215,8 @@ const AdminDashboardPage = () => {
                     <Grid item xs={6} sm={4} md={2}><KPICard title="Contas Eliminadas" value={statsData?.deletedUserCount} loading={statsLoading} /></Grid>
                     <Grid item xs={6} sm={4} md={2}><KPICard title="Total Uploads" value={statsData?.totalUploads} loading={statsLoading} /></Grid>
                     <Grid item xs={6} sm={4} md={2}><KPICard title="DAU (Hoje)" value={statsData?.dailyActiveUsers} loading={statsLoading} /></Grid>
+                    <Grid item xs={6} sm={4} md={2}><KPICard title="Utilizadores Ativos (30d)" value={statsData?.monthlyActiveUsers} loading={statsLoading} /></Grid>
+                    <Grid item xs={6} sm={4} md={2}><KPICard title="Tempo p/ 1º Upload" value={statsData ? `${statsData.avgTimeToFirstUploadDays.toFixed(1)} dias` : 'N/A'} loading={statsLoading} /></Grid>
                     <Grid item xs={6} sm={4} md={2}><KPICard title="Novos Hoje" value={statsData?.newUsersToday} loading={statsLoading} /></Grid>
                     <Grid item xs={6} sm={4} md={2}><KPICard title="Novos 7 Dias" value={statsData?.newUsersThisWeek} loading={statsLoading} /></Grid>
                 </Grid>
@@ -244,7 +242,6 @@ const AdminDashboardPage = () => {
                     </Button>
                 )}
             </Box>
-            {/* ALTERAÇÃO: Tabela de utilizadores também já não tem Paper à volta */}
             <Box sx={{ height: 600, width: '100%' }}>
                 <DataGrid
                     rows={usersData?.users || []}
