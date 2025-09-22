@@ -112,3 +112,14 @@ CREATE TABLE IF NOT EXISTS daily_prices (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (ticker_symbol, date)
 );
+
+-- Tabela para guardar métricas gerais do sistema (ADICIONADO)
+CREATE TABLE IF NOT EXISTS system_metrics (
+    metric_name TEXT PRIMARY KEY NOT NULL,
+    metric_value INTEGER DEFAULT 0,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Inserir o contador inicial para contas eliminadas (ADICIONADO)
+INSERT INTO system_metrics (metric_name, metric_value) 
+VALUES ('deleted_user_count', 0);

@@ -172,31 +172,31 @@ type TopUser struct {
 
 type AdminStats struct {
 	// Period-specific metrics, controlled by the date range filter
-	NewUsersInPeriod                 int                   `json:"newUsersInPeriod"`
-	ActiveUsersInPeriod              int                   `json:"activeUsersInPeriod"`
-	UploadsInPeriod                  int                   `json:"uploadsInPeriod"`
-	TransactionsInPeriod             int                   `json:"transactionsInPeriod"`
-	AvgFileSizeMBInPeriod            float64               `json:"avgFileSizeMBInPeriod"`
-	AvgTransactionsPerUploadInPeriod float64               `json:"avgTransactionsPerUploadInPeriod"`
-	UsersPerDay                      []TimeSeriesDataPoint `json:"usersPerDay"`
-	UploadsPerDay                    []TimeSeriesDataPoint `json:"uploadsPerDay"`
-	TransactionsPerDay               []TimeSeriesDataPoint `json:"transactionsPerDay"`
-	ActiveUsersPerDay                []TimeSeriesDataPoint `json:"activeUsersPerDay"`
-	ValueByBroker                    []NameValueDataPoint  `json:"valueByBroker"`
-	// --- ALTERAÇÃO AQUI ---
-	DepositsByBroker                  []NameValueDataPoint `json:"depositsByBroker"`
-	TopStocksByValue                  []TopStockInfo       `json:"topStocksByValue"`
-	TopStocksByTrades                 []TopStockInfo       `json:"topStocksByTrades"`
-	InvestmentDistributionByCountry   []NameValueDataPoint `json:"investmentDistributionByCountry"`
-	CashDepositsInPeriod              int                  `json:"cashDepositsInPeriod"`
-	TotalCashDepositedEURInPeriod     float64              `json:"totalCashDepositedEURInPeriod"`
-	AvgCashDepositEURInPeriod         float64              `json:"avgCashDepositEURInPeriod"`
-	TotalDividendsReceivedEURInPeriod float64              `json:"totalDividendsReceivedEURInPeriod"`
-	AvgDividendReceivedEURInPeriod    float64              `json:"avgDividendReceivedEURInPeriod"`
+	NewUsersInPeriod                  int                   `json:"newUsersInPeriod"`
+	ActiveUsersInPeriod               int                   `json:"activeUsersInPeriod"`
+	UploadsInPeriod                   int                   `json:"uploadsInPeriod"`
+	TransactionsInPeriod              int                   `json:"transactionsInPeriod"`
+	AvgFileSizeMBInPeriod             float64               `json:"avgFileSizeMBInPeriod"`
+	AvgTransactionsPerUploadInPeriod  float64               `json:"avgTransactionsPerUploadInPeriod"`
+	UsersPerDay                       []TimeSeriesDataPoint `json:"usersPerDay"`
+	UploadsPerDay                     []TimeSeriesDataPoint `json:"uploadsPerDay"`
+	TransactionsPerDay                []TimeSeriesDataPoint `json:"transactionsPerDay"`
+	ActiveUsersPerDay                 []TimeSeriesDataPoint `json:"activeUsersPerDay"`
+	ValueByBroker                     []NameValueDataPoint  `json:"valueByBroker"`
+	DepositsByBroker                  []NameValueDataPoint  `json:"depositsByBroker"`
+	TopStocksByValue                  []TopStockInfo        `json:"topStocksByValue"`
+	TopStocksByTrades                 []TopStockInfo        `json:"topStocksByTrades"`
+	InvestmentDistributionByCountry   []NameValueDataPoint  `json:"investmentDistributionByCountry"`
+	CashDepositsInPeriod              int                   `json:"cashDepositsInPeriod"`
+	TotalCashDepositedEURInPeriod     float64               `json:"totalCashDepositedEURInPeriod"`
+	AvgCashDepositEURInPeriod         float64               `json:"avgCashDepositEURInPeriod"`
+	TotalDividendsReceivedEURInPeriod float64               `json:"totalDividendsReceivedEURInPeriod"`
+	AvgDividendReceivedEURInPeriod    float64               `json:"avgDividendReceivedEURInPeriod"`
 
 	// All-Time / Static Metrics
 	TotalUsers               int                   `json:"totalUsers"`
 	DailyActiveUsers         int                   `json:"dailyActiveUsers"`
+	DeletedUserCount         int                   `json:"deletedUserCount"`
 	TotalUploads             int                   `json:"totalUploads"`
 	TotalTransactions        int                   `json:"totalTransactions"`
 	NewUsersToday            int                   `json:"newUsersToday"`
@@ -359,6 +359,7 @@ func (h *UserHandler) HandleGetAdminStats(w http.ResponseWriter, r *http.Request
 	// --- Métricas Gerais / Estáticas ---
 	_ = database.DB.QueryRow("SELECT COUNT(*) FROM users").Scan(&stats.TotalUsers)
 	_ = database.DB.QueryRow("SELECT COUNT(DISTINCT user_id) FROM login_history WHERE DATE(SUBSTR(login_at, 1, 19)) = DATE('now')").Scan(&stats.DailyActiveUsers)
+	_ = database.DB.QueryRow("SELECT metric_value FROM system_metrics WHERE metric_name = 'deleted_user_count'").Scan(&stats.DeletedUserCount)
 	_ = database.DB.QueryRow("SELECT COUNT(*) FROM uploads_history").Scan(&stats.TotalUploads)
 	_ = database.DB.QueryRow("SELECT COALESCE(SUM(transaction_count), 0) FROM uploads_history").Scan(&stats.TotalTransactions)
 	_ = database.DB.QueryRow("SELECT COUNT(*) FROM users WHERE DATE(SUBSTR(created_at, 1, 19)) = DATE('now')").Scan(&stats.NewUsersToday)

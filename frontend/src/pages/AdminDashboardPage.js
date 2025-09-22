@@ -216,6 +216,7 @@ const AdminDashboardPage = () => {
                 <Grid container spacing={2} sx={{ mb: 2 }}>
                     <Grid item xs={6} sm={4} md={2}><KPICard title="Valor Total Carteiras" value={formatCurrency(statsData?.totalPortfolioValue)} loading={statsLoading} /></Grid>
                     <Grid item xs={6} sm={4} md={2}><KPICard title="Total Utilizadores" value={statsData?.totalUsers} loading={statsLoading} /></Grid>
+                    <Grid item xs={6} sm={4} md={2}><KPICard title="Contas Eliminadas" value={statsData?.deletedUserCount} loading={statsLoading} /></Grid>
                     <Grid item xs={6} sm={4} md={2}><KPICard title="Total Uploads" value={statsData?.totalUploads} loading={statsLoading} /></Grid>
                     <Grid item xs={6} sm={4} md={2}><KPICard title="DAU (Hoje)" value={statsData?.dailyActiveUsers} loading={statsLoading} /></Grid>
                     <Grid item xs={6} sm={4} md={2}><KPICard title="Novos Hoje" value={statsData?.newUsersToday} loading={statsLoading} /></Grid>

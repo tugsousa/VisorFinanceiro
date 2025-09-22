@@ -59,6 +59,12 @@ func (h *UserHandler) DeleteAccountHandler(w http.ResponseWriter, r *http.Reques
 		}
 	}()
 
+	if _, err = txDB.Exec("UPDATE system_metrics SET metric_value = metric_value + 1 WHERE metric_name = 'deleted_user_count'"); err != nil {
+		logger.L.Error("Failed to increment deleted user count metric", "userID", userID, "error", err)
+		sendJSONError(w, "Failed to update system metrics", http.StatusInternalServerError)
+		return
+	}
+
 	if _, err = txDB.Exec("DELETE FROM processed_transactions WHERE user_id = ?", userID); err != nil {
 		logger.L.Error("Failed to delete processed transactions for user", "userID", userID, "error", err)
 		sendJSONError(w, "Failed to delete account data (transactions)", http.StatusInternalServerError)
