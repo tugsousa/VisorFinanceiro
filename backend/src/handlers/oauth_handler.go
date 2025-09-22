@@ -100,7 +100,7 @@ func (h *UserHandler) HandleGoogleCallback(w http.ResponseWriter, r *http.Reques
 
 	} else { // User already exists
 		if user.AuthProvider == "local" || user.Password != "" {
-			logger.L.Warn("Google login attempt for existing local account", "email", user.Email)
+			logger.L.Warn("Google login attempt for existing local account", "userID", user.ID)
 			http.Redirect(w, r, "/signin?error=email_already_exists_local", http.StatusTemporaryRedirect)
 			return
 		}

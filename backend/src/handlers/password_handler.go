@@ -37,7 +37,7 @@ func (h *UserHandler) RequestPasswordResetHandler(w http.ResponseWriter, r *http
 
 	user, err := model.GetUserByEmail(database.DB, req.Email)
 	if err != nil {
-		logger.L.Info("Password reset requested for email, user not found or DB error, sending generic response", "email", req.Email, "errorIfAny", err)
+		logger.L.Info("Password reset requested for email, user not found or DB error, sending generic response", "errorIfAny", err)
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]string{"message": "If an account with that email exists and is verified, a password reset link has been sent."})
 		return
