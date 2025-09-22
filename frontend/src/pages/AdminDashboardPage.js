@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { apiFetchAdminStats, apiFetchAdminUsers, apiRefreshUserMetrics, apiRefreshMultipleUserMetrics } from '../api/apiService';
+import { apiFetchAdminStats, apiFetchAdminUsers, apiRefreshUserMetrics, apiRefreshMultipleUserMetrics, apiClearAdminStatsCache } from '../api/apiService';
 import { Box, Typography, Paper, Grid, CircularProgress, Alert, Tooltip, IconButton, FormControl, InputLabel, Select, MenuItem, Button, Divider } from '@mui/material';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import { DataGrid, GridToolbar } from '@mui/x-data-grid';
@@ -109,6 +109,23 @@ const AdminDashboardPage = () => {
         onError: (error) => { console.error("Failed to refresh metrics in batch:", error); },
     });
 
+    const clearCacheMutation = useMutation({
+        mutationFn: apiClearAdminStatsCache,
+        onSuccess: () => {
+            console.log("Admin cache cleared, refetching stats...");
+            queryClient.invalidateQueries({ queryKey: ['adminStats', token, dateRange] });
+        },
+        onError: (error) => {
+            console.error("Failed to clear admin stats cache:", error);
+        }
+    });
+
+    const handleRefreshStats = () => {
+        clearCacheMutation.mutate();
+    };
+
+    const isRefreshingStats = statsLoading || clearCacheMutation.isPending;
+
     const userColumns = [
         { field: 'id', headerName: 'ID', width: 70 },
         { field: 'email', headerName: 'Email', width: 220 },
@@ -174,15 +191,24 @@ const AdminDashboardPage = () => {
         <Box sx={{ p: 3 }}>
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2, flexWrap: 'wrap', gap: 2 }}>
                 <Typography variant="h4" component="h1">Dashboard de Administrador</Typography>
-                <FormControl size="small" sx={{ minWidth: 180 }}>
-                    <InputLabel>Intervalo de Datas</InputLabel>
-                    <Select value={dateRange} label="Intervalo de Datas" onChange={(e) => setDateRange(e.target.value)}>
-                        <MenuItem value="all_time">Desde Sempre</MenuItem>
-                        <MenuItem value="last_7_days">Últimos 7 dias</MenuItem>
-                        <MenuItem value="last_30_days">Últimos 30 dias</MenuItem>
-                        <MenuItem value="last_365_days">Últimos 365 dias</MenuItem>
-                    </Select>
-                </FormControl>
+                <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
+                    <FormControl size="small" sx={{ minWidth: 180 }}>
+                        <InputLabel>Intervalo de Datas</InputLabel>
+                        <Select value={dateRange} label="Intervalo de Datas" onChange={(e) => setDateRange(e.target.value)}>
+                            <MenuItem value="all_time">Desde Sempre</MenuItem>
+                            <MenuItem value="last_7_days">Últimos 7 dias</MenuItem>
+                            <MenuItem value="last_30_days">Últimos 30 dias</MenuItem>
+                            <MenuItem value="last_365_days">Últimos 365 dias</MenuItem>
+                        </Select>
+                    </FormControl>
+                    <Tooltip title="Atualizar Estatísticas">
+                        <span>
+                            <IconButton onClick={handleRefreshStats} disabled={isRefreshingStats}>
+                                {isRefreshingStats ? <CircularProgress size={24} /> : <RefreshIcon />}
+                            </IconButton>
+                        </span>
+                    </Tooltip>
+                </Box>
             </Box>
             
             <Box component={Paper} variant="outlined" sx={{ p: 2, mt: 4, borderColor: 'divider' }}>
