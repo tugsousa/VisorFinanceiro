@@ -192,10 +192,12 @@ type AdminStats struct {
 	AvgCashDepositEURInPeriod         float64               `json:"avgCashDepositEURInPeriod"`
 	TotalDividendsReceivedEURInPeriod float64               `json:"totalDividendsReceivedEURInPeriod"`
 	AvgDividendReceivedEURInPeriod    float64               `json:"avgDividendReceivedEURInPeriod"`
+	UploadFailureRate                 float64               `json:"uploadFailureRate"`
 
 	// All-Time / Static Metrics
 	TotalUsers               int                   `json:"totalUsers"`
 	DailyActiveUsers         int                   `json:"dailyActiveUsers"`
+	MonthlyActiveUsers       int                   `json:"monthlyActiveUsers"`
 	DeletedUserCount         int                   `json:"deletedUserCount"`
 	TotalUploads             int                   `json:"totalUploads"`
 	TotalTransactions        int                   `json:"totalTransactions"`
@@ -208,6 +210,7 @@ type AdminStats struct {
 	UploadsByBroker          []NameValueDataPoint  `json:"uploadsByBroker"`
 	AvgFileSizeMB            float64               `json:"avgFileSizeMB"`
 	AvgTransactionsPerUpload float64               `json:"avgTransactionsPerUpload"`
+	AvgTimeToFirstUploadDays float64               `json:"avgTimeToFirstUploadDays"`
 	TopUsersByUploads        []TopUser             `json:"topUsersByUploads"`
 	TopUsersByLogins         []TopUser             `json:"topUsersByLogins"`
 }
@@ -330,6 +333,7 @@ func (h *UserHandler) HandleGetAdminStats(w http.ResponseWriter, r *http.Request
 	usersWhere := getWhereClause("created_at")
 	uploadsWhere := getWhereClause("uploaded_at")
 	loginHistoryWhere := getWhereClause("login_at")
+	failuresWhere := getWhereClause("failed_at")
 
 	// --- Metrics Filtered by Date Range ---
 	_ = database.DB.QueryRow("SELECT COUNT(*) FROM users" + usersWhere).Scan(&stats.NewUsersInPeriod)
@@ -337,7 +341,15 @@ func (h *UserHandler) HandleGetAdminStats(w http.ResponseWriter, r *http.Request
 	_ = database.DB.QueryRow("SELECT COUNT(*) FROM uploads_history" + uploadsWhere).Scan(&stats.UploadsInPeriod)
 	_ = database.DB.QueryRow("SELECT COALESCE(SUM(transaction_count), 0) FROM uploads_history" + uploadsWhere).Scan(&stats.TransactionsInPeriod)
 
-	// --- INÍCIO DAS NOVAS QUERIES (CORRIGIDO) ---
+	var successfulUploads, failedUploads float64
+	_ = database.DB.QueryRow("SELECT COUNT(*) FROM uploads_history" + uploadsWhere).Scan(&successfulUploads)
+	_ = database.DB.QueryRow("SELECT COUNT(*) FROM upload_failures" + failuresWhere).Scan(&failedUploads)
+	if (successfulUploads + failedUploads) > 0 {
+		stats.UploadFailureRate = (failedUploads / (successfulUploads + failedUploads)) * 100
+	} else {
+		stats.UploadFailureRate = 0
+	}
+
 	// Query para depósitos de dinheiro
 	depositsQuery := "SELECT COUNT(*), COALESCE(SUM(amount_eur), 0), COALESCE(AVG(amount_eur), 0) FROM processed_transactions" + getTransactionsAdditionalWhereClause("") + "transaction_type = 'CASH' AND transaction_subtype = 'DEPOSIT'"
 	_ = database.DB.QueryRow(depositsQuery).Scan(&stats.CashDepositsInPeriod, &stats.TotalCashDepositedEURInPeriod, &stats.AvgCashDepositEURInPeriod)
@@ -345,12 +357,10 @@ func (h *UserHandler) HandleGetAdminStats(w http.ResponseWriter, r *http.Request
 	// Query para dividendos recebidos (excluindo impostos sobre dividendos)
 	dividendsQuery := "SELECT COALESCE(SUM(amount_eur), 0), COALESCE(AVG(amount_eur), 0) FROM processed_transactions" + getTransactionsAdditionalWhereClause("") + "transaction_type = 'DIVIDEND' AND transaction_subtype != 'TAX'"
 	_ = database.DB.QueryRow(dividendsQuery).Scan(&stats.TotalDividendsReceivedEURInPeriod, &stats.AvgDividendReceivedEURInPeriod)
-	// --- FIM DAS NOVAS QUERIES (CORRIGIDO) ---
 
 	_ = database.DB.QueryRow(`SELECT COALESCE(AVG(file_size), 0) / (1024*1024), COALESCE(AVG(transaction_count), 0) FROM uploads_history`+uploadsWhere).Scan(&stats.AvgFileSizeMBInPeriod, &stats.AvgTransactionsPerUploadInPeriod)
 
 	// Time series are inherently filtered by date range
-	// Utiliza SUBSTR nas queries de séries temporais para agrupar corretamente
 	stats.UsersPerDay, _ = queryTimeSeries("SELECT DATE(SUBSTR(created_at, 1, 19)) as date, COUNT(*) as count FROM users" + getFilterClause("created_at", "WHERE") + " GROUP BY date ORDER BY date ASC")
 	stats.UploadsPerDay, _ = queryTimeSeries("SELECT DATE(SUBSTR(uploaded_at, 1, 19)) as date, COUNT(*) as count FROM uploads_history" + getFilterClause("uploaded_at", "WHERE") + " GROUP BY date ORDER BY date ASC")
 	stats.TransactionsPerDay, _ = queryTimeSeries("SELECT DATE(SUBSTR(uploaded_at, 1, 19)) as date, SUM(transaction_count) as count FROM uploads_history" + getFilterClause("uploaded_at", "WHERE") + " GROUP BY date ORDER BY date ASC")
@@ -359,6 +369,7 @@ func (h *UserHandler) HandleGetAdminStats(w http.ResponseWriter, r *http.Request
 	// --- Métricas Gerais / Estáticas ---
 	_ = database.DB.QueryRow("SELECT COUNT(*) FROM users").Scan(&stats.TotalUsers)
 	_ = database.DB.QueryRow("SELECT COUNT(DISTINCT user_id) FROM login_history WHERE DATE(SUBSTR(login_at, 1, 19)) = DATE('now')").Scan(&stats.DailyActiveUsers)
+	_ = database.DB.QueryRow("SELECT COUNT(DISTINCT user_id) FROM login_history WHERE login_at >= DATE('now', '-30 days')").Scan(&stats.MonthlyActiveUsers)
 	_ = database.DB.QueryRow("SELECT metric_value FROM system_metrics WHERE metric_name = 'deleted_user_count'").Scan(&stats.DeletedUserCount)
 	_ = database.DB.QueryRow("SELECT COUNT(*) FROM uploads_history").Scan(&stats.TotalUploads)
 	_ = database.DB.QueryRow("SELECT COALESCE(SUM(transaction_count), 0) FROM uploads_history").Scan(&stats.TotalTransactions)
@@ -366,6 +377,7 @@ func (h *UserHandler) HandleGetAdminStats(w http.ResponseWriter, r *http.Request
 	_ = database.DB.QueryRow("SELECT COUNT(*) FROM users WHERE DATE(SUBSTR(created_at, 1, 19)) >= DATE('now', '-7 days')").Scan(&stats.NewUsersThisWeek)
 	_ = database.DB.QueryRow("SELECT COUNT(*) FROM users WHERE STRFTIME('%Y-%m', SUBSTR(created_at, 1, 19)) = STRFTIME('%Y-%m', 'now')").Scan(&stats.NewUsersThisMonth)
 	_ = database.DB.QueryRow(`SELECT COALESCE(AVG(file_size), 0) / (1024*1024), COALESCE(AVG(transaction_count), 0) FROM uploads_history`).Scan(&stats.AvgFileSizeMB, &stats.AvgTransactionsPerUpload)
+	_ = database.DB.QueryRow("SELECT COALESCE(AVG(JULIANDAY(first_upload_at) - JULIANDAY(created_at)), 0) FROM users WHERE first_upload_at IS NOT NULL").Scan(&stats.AvgTimeToFirstUploadDays)
 
 	rows, err := database.DB.Query("SELECT is_email_verified, COUNT(*) FROM users GROUP BY is_email_verified")
 	if err == nil {
@@ -430,7 +442,6 @@ func (h *UserHandler) HandleGetAdminStats(w http.ResponseWriter, r *http.Request
 	_ = database.DB.QueryRow("SELECT COALESCE(SUM(portfolio_value_eur), 0) FROM users").Scan(&stats.TotalPortfolioValue)
 
 	// --- Filtered Transactional Metrics ---
-	// --- ALTERAÇÃO AQUI: Adicionada condição para excluir DIVIDEND e CASH ---
 	rows, err = database.DB.Query(`
         SELECT source, COALESCE(SUM(ABS(amount_eur)), 0) as total_value
         FROM processed_transactions
@@ -448,7 +459,6 @@ func (h *UserHandler) HandleGetAdminStats(w http.ResponseWriter, r *http.Request
 		rows.Close()
 	}
 
-	// --- ALTERAÇÃO AQUI: Nova query para Depósitos por Corretora ---
 	rows, err = database.DB.Query(`
 		SELECT source, COALESCE(SUM(amount_eur), 0) as total_deposits
 		FROM processed_transactions

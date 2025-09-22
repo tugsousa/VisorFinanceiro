@@ -27,6 +27,17 @@ func NewUploadHandler(service services.UploadService) *UploadHandler {
 	}
 }
 
+// logUploadFailure insere um registo de falha de upload na base de dados.
+func logUploadFailure(userID int64, source, filename, errorMessage string) {
+	_, err := database.DB.Exec(
+		"INSERT INTO upload_failures (user_id, source, filename, error_message) VALUES (?, ?, ?, ?)",
+		userID, source, filename, errorMessage,
+	)
+	if err != nil {
+		logger.L.Error("Failed to log upload failure to database", "userID", userID, "error", err)
+	}
+}
+
 func (h *UploadHandler) HandleUpload(w http.ResponseWriter, r *http.Request) {
 	userID, ok := GetUserIDFromContext(r.Context())
 	if !ok {
@@ -43,42 +54,53 @@ func (h *UploadHandler) HandleUpload(w http.ResponseWriter, r *http.Request) {
 
 	const uploadLimit = 10
 	if user.UploadCount >= uploadLimit {
+		errMsg := "Atingiste o número máximo de carregamentos de ficheiros. Por favor, elimine os dados existentes para carregar novos ficheiros."
 		logger.L.Warn("User has reached upload limit", "userID", userID, "uploadCount", user.UploadCount)
-		utils.SendJSONError(w, "Atingiste o número máximo de carregamentos de ficheiros. Por favor, elimine os dados existentes para carregar novos ficheiros.", http.StatusForbidden)
+		go logUploadFailure(userID, r.FormValue("source"), "", "Upload limit reached")
+		utils.SendJSONError(w, errMsg, http.StatusForbidden)
 		return
 	}
 
 	if err := r.ParseMultipartForm(config.Cfg.MaxUploadSizeBytes); err != nil {
+		errMsg := fmt.Sprintf("Falha ao processar ou o ficheiro é demasiado grande (max %d MB)", config.Cfg.MaxUploadSizeBytes/(1024*1024))
 		logger.L.Warn("Failed to parse multipart form or request too large", "userID", userID, "error", err, "limit", config.Cfg.MaxUploadSizeBytes)
-		utils.SendJSONError(w, fmt.Sprintf("Falha ao processar ou o ficheiro é demasiado grande (max %d MB)", config.Cfg.MaxUploadSizeBytes/(1024*1024)), http.StatusBadRequest)
+		go logUploadFailure(userID, r.FormValue("source"), "", err.Error())
+		utils.SendJSONError(w, errMsg, http.StatusBadRequest)
 		return
 	}
 
 	source := r.FormValue("source")
 	if source == "" {
+		errMsg := "Broker source is required."
 		logger.L.Warn("Upload request missing 'source' field", "userID", userID)
-		utils.SendJSONError(w, "Broker source is required.", http.StatusBadRequest)
+		go logUploadFailure(userID, "", "", "Source field missing")
+		utils.SendJSONError(w, errMsg, http.StatusBadRequest)
 		return
 	}
 	logger.L.Info("Received upload for source", "source", source, "userID", userID)
 
 	file, fileHeader, err := r.FormFile("file")
 	if err != nil {
+		errMsg := "Failed to retrieve file from request. Ensure 'file' field is used."
 		logger.L.Warn("Failed to retrieve file from request", "userID", userID, "error", err)
-		utils.SendJSONError(w, "Failed to retrieve file from request. Ensure 'file' field is used.", http.StatusBadRequest)
+		go logUploadFailure(userID, source, "", err.Error())
+		utils.SendJSONError(w, errMsg, http.StatusBadRequest)
 		return
 	}
 	defer file.Close()
 
 	if fileHeader.Size > config.Cfg.MaxUploadSizeBytes {
+		errMsg := fmt.Sprintf("Ficheiro demasiado grande, max %d MB (header check)", config.Cfg.MaxUploadSizeBytes/(1024*1024))
 		logger.L.Warn("Uploaded file header reports size too large", "userID", userID, "fileSize", fileHeader.Size, "limit", config.Cfg.MaxUploadSizeBytes)
-		utils.SendJSONError(w, fmt.Sprintf("Ficheiro demasiado grande, max %d MB (header check)", config.Cfg.MaxUploadSizeBytes/(1024*1024)), http.StatusBadRequest)
+		go logUploadFailure(userID, source, fileHeader.Filename, "File size exceeded limit (header check)")
+		utils.SendJSONError(w, errMsg, http.StatusBadRequest)
 		return
 	}
 
 	clientContentType := fileHeader.Header.Get("Content-Type")
 	if err := validation.ValidateClientContentType(clientContentType); err != nil {
 		logger.L.Warn("Invalid client-declared file type", "userID", userID, "contentType", clientContentType, "error", err)
+		go logUploadFailure(userID, source, fileHeader.Filename, err.Error())
 		utils.SendJSONError(w, err.Error(), http.StatusBadRequest)
 		return
 	}
@@ -87,6 +109,7 @@ func (h *UploadHandler) HandleUpload(w http.ResponseWriter, r *http.Request) {
 	detectedContentType, err := validation.ValidateFileContentByMagicBytes(file)
 	if err != nil {
 		logger.L.Warn("Server-side file content validation failed", "userID", userID, "filename", fileHeader.Filename, "error", err)
+		go logUploadFailure(userID, source, fileHeader.Filename, err.Error())
 		utils.SendJSONError(w, err.Error(), http.StatusBadRequest)
 		return
 	}
@@ -96,12 +119,11 @@ func (h *UploadHandler) HandleUpload(w http.ResponseWriter, r *http.Request) {
 
 	result, err := h.uploadService.ProcessUpload(file, userID, source, fileHeader.Filename, fileHeader.Size)
 	if err != nil {
-		// ... (error handling remains the same)
+		// This error comes from the service layer (parsing/processing)
+		go logUploadFailure(userID, source, fileHeader.Filename, err.Error())
+		utils.SendJSONError(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-
-	// --- NO CHANGE HERE for upload_count as it's handled in the service layer ---
-	// The service layer now handles all database updates related to an upload.
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
@@ -110,7 +132,6 @@ func (h *UploadHandler) HandleUpload(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// ... (HandleGetRealizedGainsData remains the same) ...
 func (h *UploadHandler) HandleGetRealizedGainsData(w http.ResponseWriter, r *http.Request) {
 	userID, ok := GetUserIDFromContext(r.Context())
 	if !ok {

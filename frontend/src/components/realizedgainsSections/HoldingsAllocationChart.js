@@ -121,10 +121,16 @@ export default function HoldingsAllocationChart({ chartData }) {
     const [hoveredIndex, setHoveredIndex] = useState(null);
 
     const totalValue = useMemo(() => {
-        if (!chartData || !chartData.datasets || chartData.datasets[0].data.length === 0) {
+        // --- INÍCIO DA CORREÇÃO ---
+        // A verificação agora usa "optional chaining" (?.) para evitar o erro.
+        // Se qualquer parte do caminho (chartData, datasets, [0], data) for nula ou indefinida,
+        // a expressão retorna `undefined` sem causar um erro, e o `|| 0` trata disso.
+        const data = chartData?.datasets?.[0]?.data || [];
+        if (data.length === 0) {
             return 0;
         }
-        return chartData.datasets[0].data.reduce((sum, value) => sum + value, 0);
+        return data.reduce((sum, value) => sum + value, 0);
+        // --- FIM DA CORREÇÃO ---
     }, [chartData]);
 
     const baseColors = useMemo(() => {
@@ -159,13 +165,18 @@ export default function HoldingsAllocationChart({ chartData }) {
         return null;
     }, [hoveredIndex, chartData, totalValue]);
 
-    if (!chartData || !chartData.datasets || chartData.datasets[0].data.length === 0) {
+    // --- INÍCIO DA CORREÇÃO ---
+    // A verificação de "sem dados" também é robustecida.
+    const noData = !chartData?.datasets?.[0]?.data?.length > 0;
+
+    if (noData) {
         return (
             <Paper elevation={0} sx={{ p: 2, display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', border: 'none' }}>
                 <Typography color="text.secondary">Sem dados de posições para o gráfico.</Typography>
             </Paper>
         );
     }
+    // --- FIM DA CORREÇÃO ---
 
     const dataWithColors = {
         ...chartData,
@@ -183,19 +194,14 @@ export default function HoldingsAllocationChart({ chartData }) {
         maintainAspectRatio: false,
         cutout: '70%',
         hoverOffset: 12,
-        // --- MODIFICATION START ---
         onHover: (event, activeElements) => {
-            // We only care about setting the active index here.
-            // Resetting is handled by the onMouseLeave on the container.
             if (activeElements && activeElements.length > 0) {
                 const newIndex = activeElements[0].index;
-                // Only update state if the index has actually changed to prevent unnecessary re-renders
                 if (newIndex !== hoveredIndex) {
                     setHoveredIndex(newIndex);
                 }
             }
         },
-        // --- MODIFICATION END ---
         plugins: {
             legend: { display: false },
             tooltip: { enabled: false },
@@ -207,14 +213,10 @@ export default function HoldingsAllocationChart({ chartData }) {
     };
 
    return (
-      // --- MODIFICATION START ---
-      // This div wrapper is the key. Its onMouseLeave will reliably
-      // reset the hover state when the cursor leaves the chart area.
       <div 
         onMouseLeave={() => setHoveredIndex(null)}
         style={{ position: 'relative', width: '100%', height: '100%', minHeight: '280px', margin: 'auto' }}
       >
-      {/* --- MODIFICATION END --- */}
         <Doughnut data={dataWithColors} options={options} plugins={[centerTextPlugin]} />
       </div>
     );
