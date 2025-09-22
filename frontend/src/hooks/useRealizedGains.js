@@ -13,7 +13,10 @@ import {
     apiFetchProcessedTransactions
 } from '../api/apiService';
 import { ALL_YEARS_OPTION, NO_YEAR_SELECTED } from '../constants';
-import { getYearString, extractYearsFromData } from '../utils/dateUtils';
+// --- INÍCIO DA ALTERAÇÃO ---
+// Importar a função 'calculateDaysHeld'
+import { getYearString, extractYearsFromData, calculateDaysHeld } from '../utils/dateUtils';
+// --- FIM DA ALTERAÇÃO ---
 import { calculateCombinedAggregatedMetricsByISIN } from '../utils/aggregationUtils';
 
 export const useRealizedGains = (token, selectedYear) => {
@@ -219,7 +222,50 @@ export const useRealizedGains = (token, selectedYear) => {
             totalPL += unrealizedStockPL;
         }
 
-        return { stockPL, optionPL, dividendPL, totalTaxesAndCommissions, totalPL };
+        // --- INÍCIO DA ALTERAÇÃO ---
+        // 1. Cálculo do Win/Loss Ratio
+        const stockSales = periodSpecificData.stockSales || [];
+        const optionSales = periodSpecificData.optionSales || [];
+        const winningTrades = stockSales.filter(s => s.Delta > 0).length + optionSales.filter(o => o.delta > 0).length;
+        const totalTrades = stockSales.length + optionSales.length;
+        const winLossRatio = totalTrades > 0 ? (winningTrades / totalTrades) * 100 : 0;
+
+        // 2. Cálculo do Período Médio de Detenção
+        let totalDaysWinners = 0;
+        let countWinners = 0;
+        let totalDaysLosers = 0;
+        let countLosers = 0;
+
+        stockSales.forEach(sale => {
+            const daysHeld = calculateDaysHeld(sale.BuyDate, sale.SaleDate);
+            if (typeof daysHeld === 'number') {
+                if (sale.Delta > 0) {
+                    totalDaysWinners += daysHeld;
+                    countWinners++;
+                } else if (sale.Delta < 0) {
+                    totalDaysLosers += daysHeld;
+                    countLosers++;
+                }
+            }
+        });
+
+        // (Opcional) Adicionar lógica para opções se a duração for relevante
+        // optionSales.forEach(sale => { ... });
+        
+        const avgHoldingPeriodWinners = countWinners > 0 ? totalDaysWinners / countWinners : 0;
+        const avgHoldingPeriodLosers = countLosers > 0 ? totalDaysLosers / countLosers : 0;
+
+        return { 
+            stockPL, 
+            optionPL, 
+            dividendPL, 
+            totalTaxesAndCommissions, 
+            totalPL,
+            winLossRatio,
+            avgHoldingPeriodWinners,
+            avgHoldingPeriodLosers,
+        };
+        // --- FIM DA ALTERAÇÃO ---
     }, [periodSpecificData, selectedYear, unrealizedStockPL]);
 
     const holdingsChartData = useMemo(() => {
