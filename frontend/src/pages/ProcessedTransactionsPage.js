@@ -9,10 +9,8 @@ import { useAuth } from '../context/AuthContext';
 import { UI_TEXT } from '../constants';
 import { parseDateRobust } from '../utils/dateUtils';
 import DeleteTransactionsModal from '../components/DeleteTransactionsModal';
-// START OF NEW CODE
 import AddTransactionModal from '../components/AddTransactionModal';
 import AddCircleOutlineIcon from '@mui/icons-material/AddCircleOutline';
-// END OF NEW CODE
 
 const fetchProcessedTransactions = async () => {
   const response = await apiFetchProcessedTransactions();
@@ -91,9 +89,7 @@ const ProcessedTransactionsPage = () => {
   });
 
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
-  // START OF NEW CODE
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
-  // END OF NEW CODE
 
   const deleteTransactionsMutation = useMutation({
     mutationFn: (criteria) => apiDeleteTransactions(criteria),
@@ -139,57 +135,54 @@ const ProcessedTransactionsPage = () => {
   
   return (
     <Box sx={{ p: { xs: 2, sm: 3 } }}>
-      <Typography variant="h4" component="h1" gutterBottom>
-        Transações Processadas
-      </Typography>
-      
-      {processedTransactions.length > 0 && !transactionsLoading && (
-        // START OF MODIFIED CODE
-        <Box sx={{ mb: 2, display: 'flex', justifyContent: 'flex-end', gap: 2 }}>
-          <Button
-            variant="contained"
-            color="primary"
-            startIcon={<AddCircleOutlineIcon />}
-            onClick={() => setIsAddModalOpen(true)}
-          >
-            Adicionar Transação
-          </Button>
-          <Button
-            variant="contained"
-            color="error"
-            onClick={handleDeleteClick}
-            disabled={deleteTransactionsMutation.isPending || transactionsLoading}
-          >
-            {deleteTransactionsMutation.isPending ? <CircularProgress size={24} color="inherit" /> : "Eliminar Transações"}
-          </Button>
-        </Box>
-        // END OF MODIFIED CODE
-      )}
-
       {processedTransactions.length > 0 ? (
-        <Paper sx={{ width: '100%' }}>
-          <DataGrid
-            rows={processedTransactions}
-            columns={columns}
-            autoHeight
-            initialState={{
-              pagination: {
-                paginationModel: { pageSize: 10, page: 0 },
-              },
-              sorting: {
-                sortModel: [{ field: 'date', sort: 'desc' }],
-              },
-            }}
-            pageSizeOptions={[10, 25, 50, 100]}
-            disableRowSelectionOnClick
-            density="compact"
-            localeText={ptPT.components.MuiDataGrid.defaultProps.localeText}
-          />
-        </Paper>
+        <>
+          <Typography variant="h4" component="h1" gutterBottom>
+            Transações Processadas
+          </Typography>
+          <Box sx={{ mb: 2, display: 'flex', justifyContent: 'flex-end', gap: 2 }}>
+            <Button
+              variant="contained"
+              color="primary"
+              startIcon={<AddCircleOutlineIcon />}
+              onClick={() => setIsAddModalOpen(true)}
+            >
+              Adicionar Transação
+            </Button>
+            <Button
+              variant="contained"
+              color="error"
+              onClick={handleDeleteClick}
+              disabled={deleteTransactionsMutation.isPending || transactionsLoading}
+            >
+              {deleteTransactionsMutation.isPending ? <CircularProgress size={24} color="inherit" /> : "Eliminar Transações"}
+            </Button>
+          </Box>
+          <Paper sx={{ width: '100%' }}>
+            <DataGrid
+              rows={processedTransactions}
+              columns={columns}
+              autoHeight
+              initialState={{
+                pagination: {
+                  paginationModel: { pageSize: 10, page: 0 },
+                },
+                sorting: {
+                  sortModel: [{ field: 'date', sort: 'desc' }],
+                },
+              }}
+              pageSizeOptions={[10, 25, 50, 100]}
+              disableRowSelectionOnClick
+              density="compact"
+              localeText={ptPT.components.MuiDataGrid.defaultProps.localeText}
+            />
+          </Paper>
+        </>
       ) : (
-        <Typography sx={{ textAlign: 'center', mt: 4, fontStyle: 'italic', color: 'text.secondary' }}>
-          {transactionsLoading ? "A carregar..." : "Nenhuma transação processada encontrada."}
-        </Typography>
+        <Box sx={{ p: 4, textAlign: 'center' }}>
+            <Typography variant="h4" gutterBottom>Transações Processadas</Typography>
+            <Typography variant="body1">Sem dados disponíveis. Por favor, carregue primeiro um ficheiro de transações.</Typography>
+        </Box>
       )}
 
       <DeleteTransactionsModal
@@ -201,12 +194,10 @@ const ProcessedTransactionsPage = () => {
         deleteError={deleteError}
       />
       
-      {/* START OF NEW CODE */}
       <AddTransactionModal
         open={isAddModalOpen}
         onClose={() => setIsAddModalOpen(false)}
       />
-      {/* END OF NEW CODE */}
     </Box>
   );
 };
