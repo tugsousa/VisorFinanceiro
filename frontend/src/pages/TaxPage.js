@@ -258,10 +258,10 @@ export default function TaxPage() {
       )}
       
       {selectedYear === NO_YEAR_SELECTED && !loading && availableYears.length > 0 && (
-        <Typography sx={{textAlign: 'center', my:2}}>Please select a year to view data.</Typography>
+        <Typography sx={{textAlign: 'center', my:2}}>Por favor, selecione um ano para visualizar os dados.</Typography>
       )}
        {selectedYear === NO_YEAR_SELECTED && !loading && availableYears.length === 0 && !apiError && (
-        <Typography sx={{textAlign: 'center', my:2}}>No data available. Please upload transactions.</Typography>
+        <Typography sx={{textAlign: 'center', my:2}}>Não existem dados disponíveis. Por favor, carregue as transações.</Typography>
        )}
 
       {selectedYear && selectedYear !== NO_YEAR_SELECTED && !loading && (
