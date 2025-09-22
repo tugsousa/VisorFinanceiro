@@ -13,25 +13,25 @@ import { useNavigate } from 'react-router-dom';
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, LineElement, PointElement, Title, Legend, ChartTooltip, ArcElement);
 
-// Helper to format currency consistently
 const formatCurrency = (value) => new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(value || 0);
 
+// ALTERAÇÃO: KPICard agora usa um Box em vez de Paper para remover a borda/sombra
 const KPICard = ({ title, value, loading }) => (
-    <Paper sx={{ p: 2, textAlign: 'center', height: '100%' }}>
+    <Box sx={{ p: 2, textAlign: 'center', height: '100%' }}>
         <Typography variant="h6" color="text.secondary" sx={{fontSize: '1rem'}}>{title}</Typography>
         <Typography variant="h4" component="p" sx={{ fontWeight: 'bold', mt: 1 }}>
             {loading ? <CircularProgress size={28} /> : (value ?? 'N/A')}
         </Typography>
-    </Paper>
+    </Box>
 );
 
-// CORREÇÃO: ChartCard melhorado para verificar se existem dados antes de renderizar o gráfico
+// ALTERAÇÃO: ChartCard agora usa um Box para remover a borda/sombra
 const ChartCard = ({ type, data, options, title }) => {
     const ChartComponent = type === 'doughnut' ? Doughnut : (type === 'bar' ? Bar : Line);
-    const hasData = data && data.datasets && data.datasets.some(ds => ds && ds.data && ds.data.length > 0 && ds.data.some(d => d > 0 || d < 0));
+    const hasData = data && data.datasets.some(ds => ds && ds.data && ds.data.length > 0 && ds.data.some(d => d > 0 || d < 0));
 
     return (
-        <Paper sx={{ p: 2, height: 350, display: 'flex', flexDirection: 'column' }}>
+        <Box sx={{ p: 2, height: 350, display: 'flex', flexDirection: 'column' }}>
             <Typography variant="h6" sx={{ mb: 2, textAlign: 'center' }}>{title}</Typography>
             <Box sx={{ flexGrow: 1, position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 {hasData ? (
@@ -42,11 +42,11 @@ const ChartCard = ({ type, data, options, title }) => {
                     </Typography>
                 )}
             </Box>
-        </Paper>
+        </Box>
     );
 };
 
-
+// ALTERAÇÃO: TopUsersTable agora usa um Box para remover a borda/sombra
 const TopUsersTable = ({ users, title, valueHeader }) => {
     const columns = [
         { field: 'email', headerName: 'Email', flex: 1, minWidth: 150 },
@@ -54,10 +54,10 @@ const TopUsersTable = ({ users, title, valueHeader }) => {
     ];
     const rows = users ? users.map((user, index) => ({ id: index, ...user })) : [];
     return (
-        <Paper sx={{ p: 2, height: 400, display: 'flex', flexDirection: 'column' }}>
+        <Box sx={{ p: 2, height: 400, display: 'flex', flexDirection: 'column' }}>
             <Typography variant="h6" sx={{ mb: 2, textAlign: 'center' }}>{title}</Typography>
             <Box sx={{ flexGrow: 1 }}><DataGrid rows={rows} columns={columns} density="compact" hideFooter /></Box>
-        </Paper>
+        </Box>
     );
 };
 
@@ -154,109 +154,23 @@ const AdminDashboardPage = () => {
         }
     ];
 
-    // CORREÇÃO: Fornecer um objeto de gráfico vazio como fallback em vez de null
     const emptyChartData = { labels: [], datasets: [] };
-
     const timeSeriesChartData = (dataKey, label) => ({
         labels: statsData?.[dataKey]?.map(d => d.date) || [],
-        datasets: [{ 
-            label, 
-            data: statsData?.[dataKey]?.map(d => d.count) || [], 
-            tension: 0.1, 
-            borderColor: 'rgb(75, 192, 192)', 
-            backgroundColor: 'rgba(75, 192, 192, 0.2)', 
-            fill: true 
-        }],
+        datasets: [{ label, data: statsData?.[dataKey]?.map(d => d.count) || [], tension: 0.1, borderColor: 'rgb(75, 192, 192)', backgroundColor: 'rgba(75, 192, 192, 0.2)', fill: true }],
     });
+    const verificationChartData = statsData ? { labels: ['Verificados', 'Não Verificados'], datasets: [{ data: [statsData.verificationStats?.verified || 0, statsData.verificationStats?.unverified || 0], backgroundColor: ['rgba(75, 192, 192, 0.7)', 'rgba(255, 99, 132, 0.7)'] }] } : emptyChartData;
+    const authProviderChartData = statsData ? { labels: statsData.authProviderStats?.map(d => d.name) || [], datasets: [{ data: statsData.authProviderStats?.map(d => d.value) || [], backgroundColor: ['rgba(54, 162, 235, 0.7)', 'rgba(255, 206, 86, 0.7)'] }] } : emptyChartData;
+    const valueByBrokerChartData = statsData ? { labels: statsData.valueByBroker?.map(d => d.name) || [], datasets: [{ data: statsData.valueByBroker?.map(d => d.value) || [], backgroundColor: ['rgba(255, 99, 132, 0.7)', 'rgba(54, 162, 235, 0.7)', 'rgba(255, 206, 86, 0.7)', 'rgba(75, 192, 192, 0.7)', 'rgba(153, 102, 255, 0.7)'] }] } : emptyChartData;
+    const depositsByBrokerChartData = statsData ? { labels: statsData.depositsByBroker?.map(d => d.name) || [], datasets: [{ data: statsData.depositsByBroker?.map(d => d.value) || [], backgroundColor: ['rgba(54, 162, 235, 0.7)', 'rgba(75, 192, 192, 0.7)', 'rgba(153, 102, 255, 0.7)', 'rgba(255, 159, 64, 0.7)'] }] } : emptyChartData;
+    const topStocksByValueChartData = statsData ? { labels: statsData.topStocksByValue?.map(d => d.productName || d.isin) || [], datasets: [{ label: 'Total Investido (€)', data: statsData.topStocksByValue?.map(d => d.value) || [], backgroundColor: 'rgba(75, 192, 192, 0.7)', borderColor: 'rgba(75, 192, 192, 1)', borderWidth: 1 }] } : emptyChartData;
+    const topStocksByTradesChartData = statsData ? { labels: statsData.topStocksByTrades?.map(d => d.productName || d.isin) || [], datasets: [{ label: 'Nº de Transações', data: statsData.topStocksByTrades?.map(d => d.value) || [], backgroundColor: 'rgba(255, 159, 64, 0.7)', borderColor: 'rgba(255, 159, 64, 1)', borderWidth: 1 }] } : emptyChartData;
 
-    const verificationChartData = statsData ? {
-        labels: ['Verificados', 'Não Verificados'],
-        datasets: [{
-            data: [statsData.verificationStats?.verified || 0, statsData.verificationStats?.unverified || 0],
-            backgroundColor: ['rgba(75, 192, 192, 0.7)', 'rgba(255, 99, 132, 0.7)'],
-        }],
-    } : emptyChartData;
-    
-    const authProviderChartData = statsData ? {
-        labels: statsData.authProviderStats?.map(d => d.name) || [],
-        datasets: [{
-            data: statsData.authProviderStats?.map(d => d.value) || [],
-            backgroundColor: ['rgba(54, 162, 235, 0.7)', 'rgba(255, 206, 86, 0.7)'],
-        }],
-    } : emptyChartData;
-
-    const valueByBrokerChartData = statsData ? {
-        labels: statsData.valueByBroker?.map(d => d.name) || [],
-        datasets: [{
-            data: statsData.valueByBroker?.map(d => d.value) || [],
-            backgroundColor: [
-                'rgba(255, 99, 132, 0.7)', 'rgba(54, 162, 235, 0.7)',
-                'rgba(255, 206, 86, 0.7)', 'rgba(75, 192, 192, 0.7)',
-                'rgba(153, 102, 255, 0.7)',
-            ],
-        }],
-    } : emptyChartData;
-
-    const depositsByBrokerChartData = statsData ? {
-        labels: statsData.depositsByBroker?.map(d => d.name) || [],
-        datasets: [{
-            data: statsData.depositsByBroker?.map(d => d.value) || [],
-            backgroundColor: [
-                'rgba(54, 162, 235, 0.7)',
-                'rgba(75, 192, 192, 0.7)',
-                'rgba(153, 102, 255, 0.7)',
-                'rgba(255, 159, 64, 0.7)',
-            ],
-        }],
-    } : emptyChartData;
-
-    const topStocksByValueChartData = statsData ? {
-        labels: statsData.topStocksByValue?.map(d => d.productName || d.isin) || [],
-        datasets: [{
-            label: 'Total Investido (€)',
-            data: statsData.topStocksByValue?.map(d => d.value) || [],
-            backgroundColor: 'rgba(75, 192, 192, 0.7)',
-            borderColor: 'rgba(75, 192, 192, 1)',
-            borderWidth: 1,
-        }],
-    } : emptyChartData;
-    
-    const topStocksByTradesChartData = statsData ? {
-        labels: statsData.topStocksByTrades?.map(d => d.productName || d.isin) || [],
-        datasets: [{
-            label: 'Nº de Transações',
-            data: statsData.topStocksByTrades?.map(d => d.value) || [],
-            backgroundColor: 'rgba(255, 159, 64, 0.7)',
-            borderColor: 'rgba(255, 159, 64, 1)',
-            borderWidth: 1,
-        }],
-    } : emptyChartData;
-
-    // Chart Options
     const chartOptions = { responsive: true, plugins: { legend: { position: 'top' }, title: { display: false } } };
-    const timeSeriesChartOptions = (title) => ({
-        responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, title: { display: true, text: title, font: { size: 16 } } },
-        scales: { x: { grid: { display: false } }, y: { beginAtZero: true } },
-    });
-    const horizontalBarOptions = (title, tooltipLabel) => ({
-        indexAxis: 'y',
-        responsive: true, maintainAspectRatio: false,
-        plugins: {
-            legend: { display: false },
-            title: { display: true, text: title, font: { size: 16 } },
-            tooltip: {
-                callbacks: {
-                    label: (context) => `${tooltipLabel}: ${tooltipLabel.includes('€') ? formatCurrency(context.raw) : context.raw}`
-                }
-            }
-        },
-        scales: { x: { beginAtZero: true } },
-    });
+    const timeSeriesChartOptions = (title) => ({ responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, title: { display: true, text: title, font: { size: 16 } } }, scales: { x: { grid: { display: false } }, y: { beginAtZero: true } } });
+    const horizontalBarOptions = (title, tooltipLabel) => ({ indexAxis: 'y', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, title: { display: true, text: title, font: { size: 16 } }, tooltip: { callbacks: { label: (context) => `${tooltipLabel}: ${tooltipLabel.includes('€') ? formatCurrency(context.raw) : context.raw}` } } }, scales: { x: { beginAtZero: true } } });
 
-    if (statsIsError || usersIsError) {
-        return <Alert severity="error">Erro ao carregar dados: {statsError?.message || usersError?.message}</Alert>;
-    }
-    
+    if (statsIsError || usersIsError) { return <Alert severity="error">Erro ao carregar dados: {statsError?.message || usersError?.message}</Alert>; }
     const periodTitle = dateRange.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
 
     return (
@@ -274,7 +188,8 @@ const AdminDashboardPage = () => {
                 </FormControl>
             </Box>
             
-            <Box component={Paper} variant="outlined" sx={{ p: 2, mt: 4, borderColor: 'primary.main' }}>
+            {/* MANTIDO: O contentor principal para as métricas do período */}
+            <Box component={Paper} variant="outlined" sx={{ p: 2, mt: 4, borderColor: 'divider' }}>
                 <Typography variant="h5" component="h2" gutterBottom>Métricas do Período: {periodTitle}</Typography>
                 <Grid container spacing={2} sx={{ mb: 2 }}>
                     <Grid item xs={6} sm={4} md={4}><KPICard title="Novos Utilizadores" value={statsData?.newUsersInPeriod} loading={statsLoading} /></Grid>
@@ -295,7 +210,8 @@ const AdminDashboardPage = () => {
                 </Grid>
             </Box>
 
-            <Box component={Paper} variant="outlined" sx={{ p: 2, mt: 4 }}>
+            {/* ALTERAÇÃO: Este contentor já não tem o estilo de Paper */}
+            <Box sx={{ p: 2, mt: 4 }}>
                 <Typography variant="h5" component="h2" gutterBottom>Métricas Gerais (Sempre)</Typography>
                 <Grid container spacing={2} sx={{ mb: 2 }}>
                     <Grid item xs={6} sm={4} md={2}><KPICard title="Valor Total Carteiras" value={formatCurrency(statsData?.totalPortfolioValue)} loading={statsLoading} /></Grid>
@@ -306,10 +222,10 @@ const AdminDashboardPage = () => {
                     <Grid item xs={6} sm={4} md={2}><KPICard title="Novos 7 Dias" value={statsData?.newUsersThisWeek} loading={statsLoading} /></Grid>
                 </Grid>
                 <Grid container spacing={3}>
-                    <Grid item xs={12} md={6} lg={3}><ChartCard type="doughnut" data={verificationChartData} options={chartOptions} title="Verificação de Email" /></Grid>
-                    <Grid item xs={12} md={6} lg={3}><ChartCard type="doughnut" data={authProviderChartData} options={chartOptions} title="Método de Autenticação" /></Grid>
                     <Grid item xs={12} lg={6}><TopUsersTable users={statsData?.topUsersByLogins} title="Top Utilizadores por Nº de Logins" valueHeader="Logins" /></Grid>
                     <Grid item xs={12} lg={6}><TopUsersTable users={statsData?.topUsersByUploads} title="Top Utilizadores por Nº de Uploads" valueHeader="Uploads" /></Grid>
+                    <Grid item xs={12} md={6} lg={3}><ChartCard type="doughnut" data={verificationChartData} options={chartOptions} title="Verificação de Email" /></Grid>
+                    <Grid item xs={12} md={6} lg={3}><ChartCard type="doughnut" data={authProviderChartData} options={chartOptions} title="Método de Autenticação" /></Grid>
                 </Grid>
             </Box>
 
@@ -327,7 +243,8 @@ const AdminDashboardPage = () => {
                     </Button>
                 )}
             </Box>
-            <Paper sx={{ height: 600, width: '100%' }}>
+            {/* ALTERAÇÃO: Tabela de utilizadores também já não tem Paper à volta */}
+            <Box sx={{ height: 600, width: '100%' }}>
                 <DataGrid
                     rows={usersData?.users || []}
                     columns={userColumns}
@@ -348,7 +265,7 @@ const AdminDashboardPage = () => {
                     onRowClick={(params) => navigate(`/admin/users/${params.id}`)}
                     sx={{ '& .MuiDataGrid-row:hover': { cursor: 'pointer' } }}
                 />
-            </Paper>
+            </Box>
         </Box>
     );
 };

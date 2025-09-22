@@ -1,9 +1,10 @@
 // frontend/src/pages/UserDetailPage.js
-import React, { useMemo, useState } from 'react'; // NOVO: Adicionado useState
+
+import React, { useMemo, useState } from 'react';
 import { useParams, Link as RouterLink } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { apiFetchAdminUserDetails } from '../api/apiService';
-import { Box, Typography, CircularProgress, Alert, Paper, Grid, Divider, Link, Card, Tabs, Tab } from '@mui/material'; // NOVO: Adicionado Tabs e Tab
+import { Box, Typography, CircularProgress, Alert, Paper, Grid, Divider, Link, Card, Tabs, Tab } from '@mui/material';
 import { useAuth } from '../context/AuthContext';
 import { DataGrid } from '@mui/x-data-grid';
 import { parseDateRobust } from '../utils/dateUtils';
@@ -17,14 +18,14 @@ import TrendingUpIcon from '@mui/icons-material/TrendingUp';
 import AccountBalanceWalletIcon from '@mui/icons-material/AccountBalanceWallet';
 import PercentIcon from '@mui/icons-material/Percent';
 
-// Componentes StatCard e KeyMetricCard permanecem os mesmos
+// ALTERAÇÃO: StatCard agora usa um Box para remover a borda/sombra
 const StatCard = ({ title, value }) => (
-    <Paper variant="outlined" sx={{ p: 2, textAlign: 'center', height: '100%' }}>
+    <Box sx={{ p: 2, textAlign: 'center', height: '100%' }}>
         <Typography variant="body2" color="text.secondary">{title}</Typography>
         <Typography variant="h6" component="p" sx={{ fontWeight: 'bold' }}>
             {value}
         </Typography>
-    </Paper>
+    </Box>
 );
 
 const KeyMetricCard = ({ title, value, icon, isPercentage = false }) => {
@@ -52,7 +53,7 @@ const KeyMetricCard = ({ title, value, icon, isPercentage = false }) => {
 const UserDetailPage = () => {
     const { userId } = useParams();
     const { token } = useAuth();
-    const [currentTab, setCurrentTab] = useState('overview'); // NOVO: Estado para controlar a aba ativa
+    const [currentTab, setCurrentTab] = useState('overview');
 
     const { data, isLoading, isError, error } = useQuery({
         queryKey: ['adminUserDetails', userId, token],
@@ -114,7 +115,7 @@ const UserDetailPage = () => {
         return { keyMetrics: finalKeyMetrics, currentHoldings: holdings };
     }, [data]);
     
-    // Definições de colunas
+    // Column definitions
     const uploadHistoryColumns = [
         { field: 'source', headerName: 'Corretora', width: 120 },
         { field: 'uploaded_at', headerName: 'Data Upload', width: 170, type: 'dateTime', valueGetter: (value) => value ? new Date(value) : null },
@@ -161,7 +162,6 @@ const UserDetailPage = () => {
 
             <Typography variant="h4" gutterBottom>Detalhes do Utilizador: <strong>{user.email}</strong></Typography>
 
-            {/* NOVO: Sistema de Abas */}
             <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 3 }}>
                 <Tabs value={currentTab} onChange={(e, newValue) => setCurrentTab(newValue)} aria-label="user detail tabs">
                     <Tab label="Visão Geral" value="overview" />
@@ -171,11 +171,10 @@ const UserDetailPage = () => {
                 </Tabs>
             </Box>
 
-            {/* Conteúdo da Aba "Visão Geral" */}
             {currentTab === 'overview' && (
                 <Grid container spacing={3}>
                     <Grid item xs={12}>
-                        <Paper sx={{ p: 3 }}>
+                        <Box sx={{ p: 3 }}>
                             <Typography variant="h6" gutterBottom>Informação Geral</Typography>
                             <Divider sx={{ mb: 2 }} />
                             <Grid container spacing={2}>
@@ -184,11 +183,11 @@ const UserDetailPage = () => {
                                 <Grid item xs={12} sm={6} md={3}><StatCard title="Uploads Totais" value={user.total_upload_count} /></Grid>
                                 <Grid item xs={12} sm={6} md={3}><StatCard title="Valor Carteira (Snapshot)" value={formatCurrency(user.portfolio_value_eur)} /></Grid>
                             </Grid>
-                        </Paper>
+                        </Box>
                     </Grid>
                     {keyMetrics && (
                         <Grid item xs={12}>
-                            <Paper sx={{ p: 3 }}>
+                            <Box sx={{ p: 3 }}>
                                 <Typography variant="h6" gutterBottom>Métricas Chave (Análise Vitalícia)</Typography>
                                 <Divider sx={{ mb: 2 }} />
                                 <Grid container spacing={2}>
@@ -200,38 +199,35 @@ const UserDetailPage = () => {
                                     <Grid item xs={6} md={4} lg={3}><KeyMetricCard title="Retorno Total (€)" value={keyMetrics.totalPL} icon={<AccountBalanceWalletIcon />} /></Grid>
                                     <Grid item xs={6} md={4} lg={3}><KeyMetricCard title="Retorno Total (%)" value={keyMetrics.portfolioReturn} icon={<PercentIcon />} isPercentage /></Grid>
                                 </Grid>
-                            </Paper>
+                            </Box>
                         </Grid>
                     )}
                 </Grid>
             )}
 
-            {/* Conteúdo da Aba "Carteira Atual" */}
             {currentTab === 'holdings' && (
-                <Paper sx={{ p: 3, height: 600, width: '100%' }}>
+                <Box sx={{ p: 3, height: 600, width: '100%' }}>
                     <Typography variant="h6" gutterBottom>Carteira de Ações Atual</Typography>
                     {currentHoldings && currentHoldings.length > 0 ? (
                         <DataGrid rows={currentHoldings} columns={holdingsColumns} density="compact" />
                     ) : (
                         <Typography>Não existem posições em carteira.</Typography>
                     )}
-                </Paper>
+                </Box>
             )}
 
-            {/* Conteúdo da Aba "Histórico de Uploads" */}
             {currentTab === 'uploads' && (
-                <Paper sx={{ p: 3, height: 500, width: '100%' }}>
+                <Box sx={{ p: 3, height: 500, width: '100%' }}>
                      <Typography variant="h6" gutterBottom>Histórico de Uploads</Typography>
                     <DataGrid rows={upload_history} columns={uploadHistoryColumns} density="compact" />
-                </Paper>
+                </Box>
             )}
 
-            {/* Conteúdo da Aba "Transações" */}
             {currentTab === 'transactions' && (
-                <Paper sx={{ p: 3, height: 700, width: '100%' }}>
+                <Box sx={{ p: 3, height: 700, width: '100%' }}>
                      <Typography variant="h6" gutterBottom>Todas as Transações Processadas</Typography>
                     <DataGrid rows={transactions} columns={transactionColumns} getRowId={(row) => row.id} />
-                </Paper>
+                </Box>
             )}
         </Box>
     );
