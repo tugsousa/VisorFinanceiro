@@ -9,6 +9,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { UploadFile as UploadFileIcon, CheckCircleOutline as CheckCircleIcon, ErrorOutline as ErrorIcon, Close as CloseIcon } from '@mui/icons-material';
 import IBKRGuidePage from './IBKRGuidePage';
 import DEGIROGuidePage from './DEGIROGuidePage';
+import logger from '../utils/logger';
 
 const UploadDropzone = styled(Box)(({ theme, isDragActive }) => ({
     display: 'flex',
@@ -47,19 +48,19 @@ const uploadWithRetry = async (formData, onUploadProgress) => {
 
     for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
         try {
-            console.log(`Upload attempt ${attempt}...`);
+            logger.log(`Upload attempt ${attempt}...`);
             const response = await apiUploadFile(formData, onUploadProgress);
             return response;
         } catch (err) {
             lastError = err;
-            console.error(`Upload attempt ${attempt} failed:`, err);
+            logger.error(`Upload attempt ${attempt} failed:`, err);
             
             if (err.response && err.response.status < 500) {
                 throw lastError;
             }
 
             if (attempt < MAX_ATTEMPTS) {
-                console.log("Waiting 1 second before retrying...");
+                logger.log("Waiting 1 second before retrying...");
                 await new Promise(resolve => setTimeout(resolve, 1000));
             }
         }

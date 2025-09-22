@@ -8,6 +8,7 @@ import {
   apiRefreshToken,
   setAuthRefresher,
 } from '../api/apiService';
+import logger from '../utils/logger';
 
 export const AuthContext = createContext();
 
@@ -40,7 +41,7 @@ export const AuthProvider = ({ children }) => {
       return newCsrfToken;
     } catch (err) {
       if (!isSilent) {
-        console.error('AuthContext: Error in fetchCsrfTokenAndUpdateService:', err);
+        logger.error('AuthContext: Error in fetchCsrfTokenAndUpdateService:', err);
         setAuthError(prev => prev ? `${prev}; CSRF fetch error` : 'CSRF fetch error');
       }
       return null;
@@ -60,7 +61,7 @@ export const AuthProvider = ({ children }) => {
       localStorage.setItem('has_initial_data', JSON.stringify(userHasData));
       return userHasData;
     } catch (err) {
-      console.error('AuthContext: Error checking user data:', err);
+      logger.error('AuthContext: Error checking user data:', err);
       if (err.response && err.response.status === 401) {
         window.dispatchEvent(new CustomEvent('auth-error-logout', { detail: 'User data check unauthorized' }));
       }
@@ -73,7 +74,7 @@ export const AuthProvider = ({ children }) => {
   }, []);
 
   const performLogout = useCallback(async (apiCall = true, reason = "User initiated logout") => {
-    console.log(`AuthContext: Performing logout. API call: ${apiCall}. Reason: ${reason}`);
+    logger.log(`AuthContext: Performing logout. API call: ${apiCall}. Reason: ${reason}`);
     const oldToken = localStorage.getItem('auth_token');
     localStorage.removeItem('auth_token');
     localStorage.removeItem('refresh_token');
@@ -90,7 +91,7 @@ export const AuthProvider = ({ children }) => {
         try {
             await apiLogout();
         } catch (err) {
-            console.error('API Logout error during performLogout:', err);
+            logger.error('API Logout error during performLogout:', err);
         }
     }
     await fetchCsrfTokenAndUpdateService(true);
@@ -99,13 +100,13 @@ export const AuthProvider = ({ children }) => {
   const refreshToken = useCallback(async () => {
     const currentRefreshToken = localStorage.getItem('refresh_token');
     if (!currentRefreshToken) {
-      console.log("AuthContext: No refresh token available, logging out.");
+      logger.log("AuthContext: No refresh token available, logging out.");
       await performLogout(false, "No refresh token for refresh attempt");
       return Promise.reject(new Error("No refresh token"));
     }
   
     try {
-      console.log("AuthContext: Attempting to refresh token...");
+      logger.log("AuthContext: Attempting to refresh token...");
       const response = await apiRefreshToken(currentRefreshToken);
       const { access_token, refresh_token } = response.data;
   
@@ -114,10 +115,10 @@ export const AuthProvider = ({ children }) => {
       localStorage.setItem('auth_token', access_token);
       localStorage.setItem('refresh_token', refresh_token);
   
-      console.log("AuthContext: Token refreshed successfully.");
+      logger.log("AuthContext: Token refreshed successfully.");
       return access_token;
     } catch (error) {
-      console.error("AuthContext: Failed to refresh token, logging out.", error);
+      logger.error("AuthContext: Failed to refresh token, logging out.", error);
       await performLogout(false, "Refresh token failed or expired");
       return Promise.reject(error);
     }
@@ -126,7 +127,7 @@ export const AuthProvider = ({ children }) => {
   useEffect(() => {
     setAuthRefresher(refreshToken);
   }, [refreshToken]);
-  
+
   useEffect(() => {
     const initializeAuth = async () => {
       setIsInitialAuthLoading(true);
@@ -141,7 +142,7 @@ export const AuthProvider = ({ children }) => {
           setUser(parsedUser);
           await checkUserData(); 
         } catch (e) {
-          console.error("Failed to parse stored user during init", e);
+          logger.error("Failed to parse stored user during init", e);
           performLogout(false, "Corrupted user data in localStorage on init");
         }
       } else {
@@ -154,7 +155,7 @@ export const AuthProvider = ({ children }) => {
 
   useEffect(() => {
     const handleLogoutEvent = (event) => {
-      console.warn(`AuthContext: Received auth-error-logout event. Detail: ${event.detail}. Logging out.`);
+      logger.warn(`AuthContext: Received auth-error-logout event. Detail: ${event.detail}. Logging out.`);
       performLogout(false, `Auth error: ${event.detail}`);
     };
     window.addEventListener('auth-error-logout', handleLogoutEvent);

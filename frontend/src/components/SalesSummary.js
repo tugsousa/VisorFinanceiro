@@ -7,6 +7,7 @@ import {
 import { Bar } from 'react-chartjs-2';
 import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, 
   Title, Tooltip, Legend } from 'chart.js';
+import logger from '../utils/logger';
 
 ChartJS.register(
   CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend
@@ -25,7 +26,7 @@ export default function SalesSummary({ data }) {
 
     const parseDate = (dateStr) => {
       if (!dateStr || dateStr.trim() === '') {
-        console.warn('Empty date string encountered');
+        logger.warn('Empty date string encountered');
         return new Date(NaN);
       }
       
@@ -43,34 +44,34 @@ export default function SalesSummary({ data }) {
         return new Date(dateStr);
       }
       
-      console.warn('Unrecognized date format:', dateStr);
+      logger.warn('Unrecognized date format:', dateStr);
       return new Date(NaN);
     };
 
     if (data) {
-      console.log('Processing sales data. Total records:', data.length);
+      logger.log('Processing sales data. Total records:', data.length);
       let validCount = 0;
       let invalidCount = 0;
 
       data.forEach((sale, index) => {
         try {
-          console.groupCollapsed(`Processing sale #${index + 1}: ${sale.ProductName}`);
-          console.log('Raw sale data:', sale);
+          logger.groupCollapsed(`Processing sale #${index + 1}: ${sale.ProductName}`);
+          logger.log('Raw sale data:', sale);
 
           if (!sale.SaleDate) {
-            console.warn('Missing SaleDate', sale);
+            logger.warn('Missing SaleDate', sale);
             invalidCount++;
-            console.groupEnd();
+            logger.groupEnd();
             return;
           }
 
           const saleDate = parseDate(sale.SaleDate);
-          console.log(`Parsed "${sale.SaleDate}" as:`, saleDate);
+          logger.log(`Parsed "${sale.SaleDate}" as:`, saleDate);
 
           if (isNaN(saleDate.getTime())) {
-            console.warn('Invalid sale date:', sale.SaleDate, 'Parsed as:', saleDate);
+            logger.warn('Invalid sale date:', sale.SaleDate, 'Parsed as:', saleDate);
             invalidCount++;
-            console.groupEnd();
+            logger.groupEnd();
             return;
           }
 
@@ -81,7 +82,7 @@ export default function SalesSummary({ data }) {
           const commission = sale.Commission ? -Math.abs(sale.Commission) : 0;
           const netProfit = revenue + commission;
 
-          console.log('Calculated values:', {
+          logger.log('Calculated values:', {
             revenue,
             commission,
             netProfit
@@ -139,20 +140,20 @@ export default function SalesSummary({ data }) {
           yearlyIsinGroups[year][sale.ISIN].transactions.push(saleRecord);
 
           validCount++;
-          console.groupEnd();
+          logger.groupEnd();
         } catch (error) {
-          console.error(`Error processing sale #${index + 1}:`, error, sale);
+          logger.error(`Error processing sale #${index + 1}:`, error, sale);
           invalidCount++;
-          console.groupEnd();
+          logger.groupEnd();
         }
       });
 
-      console.log(`Data processing complete. Valid: ${validCount}, Invalid: ${invalidCount}`);
+      logger.log(`Data processing complete. Valid: ${validCount}, Invalid: ${invalidCount}`);
     }
 
-    console.log('Processed sales:', processedSales);
-    console.log('ISIN groups:', isinGroups);
-    console.log('Yearly ISIN groups:', yearlyIsinGroups);
+    logger.log('Processed sales:', processedSales);
+    logger.log('ISIN groups:', isinGroups);
+    logger.log('Yearly ISIN groups:', yearlyIsinGroups);
 
     return {
       processedSales,

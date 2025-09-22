@@ -9,8 +9,9 @@ import {
     Settings as SettingsIcon,
     Logout as LogoutIcon,
     AutoGraph as AutoGraphIcon,
-    AdminPanelSettings as AdminPanelSettingsIcon, // Ícone para o dashboard de admin
+    AdminPanelSettings as AdminPanelSettingsIcon,
 } from '@mui/icons-material';
+import logger from '../utils/logger';
 
 export default function Layout({ children }) {
     const { user, logout } = useAuth();
@@ -220,10 +221,10 @@ export default function Layout({ children }) {
                 declineButtonStyle={{ background: "#7a7a7a", color: "white", fontSize: "15px", borderRadius: "3px" }}
                 expires={150}
                 onAccept={() => {
-                    console.log("Cookie consent accepted.");
+                    logger.log("Cookie consent accepted.");
                 }}
                 onDecline={() => {
-                    console.log("Cookie consent declined.");
+                    logger.log("Cookie consent declined.");
                 }}
             >
                 Este site utiliza armazenamento local (localStorage) que é estritamente necessário para gerir a sua sessão de autenticação. Não usamos cookies para fins de análise ou publicidade.{" "}

@@ -38,10 +38,10 @@ export const fetchAndSetCsrfToken = async () => {
       setApiServiceCsrfToken(newCsrfToken);
       return newCsrfToken;
     }
-    console.warn('CSRF token not found in response from ' + API_ENDPOINTS.AUTH_CSRF);
+    logger.warn('CSRF token not found in response from ' + API_ENDPOINTS.AUTH_CSRF);
     return null;
   } catch (error) {
-    console.error('Error fetching CSRF token via apiService:', error.response?.data || error.message);
+    logger.error('Error fetching CSRF token via apiService:', error.response?.data || error.message);
     if (error.response && error.response.status === 401) {
       window.dispatchEvent(new CustomEvent('auth-error-logout', { detail: 'CSRF fetch unauthorized' }));
     }
@@ -70,7 +70,7 @@ apiClient.interceptors.request.use(
       if (csrfTokenToUse) {
         config.headers['X-CSRF-Token'] = csrfTokenToUse;
       } else {
-        console.error(`apiService Interceptor: Could not obtain a fresh CSRF token for protected method ${method.toUpperCase()} to ${config.url}. Cancelling request.`);
+        logger.error(`apiService Interceptor: Could not obtain a fresh CSRF token for protected method ${method.toUpperCase()} to ${config.url}. Cancelling request.`);
         return Promise.reject(new axios.Cancel('CSRF token fetch failed.'));
       }
     }
@@ -79,7 +79,7 @@ apiClient.interceptors.request.use(
   },
   (error) => {
     if (axios.isCancel(error)) {
-        console.log('Request canceled:', error.message);
+        logger.log('Request canceled:', error.message);
     }
     return Promise.reject(error);
   }
@@ -95,7 +95,7 @@ apiClient.interceptors.response.use(
     if (error.response?.status === 401 && !originalRequest._retry) {
       originalRequest._retry = true; // Marcar como repetido para evitar loops infinitos
       
-      console.log("apiService: Received 401. Attempting token refresh.");
+      logger.log("apiService: Received 401. Attempting token refresh.");
 
       if (authRefresher) {
         try {
@@ -108,11 +108,11 @@ apiClient.interceptors.response.use(
         } catch (refreshError) {
           // Se o refresh falhar, o authRefresher (no AuthContext) já tratou do logout.
           // Apenas rejeitamos a promessa para parar o fluxo.
-          console.error("apiService: Token refresh failed. Request will not be retried.", refreshError);
+          logger.error("apiService: Token refresh failed. Request will not be retried.", refreshError);
           return Promise.reject(refreshError);
         }
       } else {
-        console.error("apiService: 401 received but no authRefresher is set. Cannot refresh token.");
+        logger.error("apiService: 401 received but no authRefresher is set. Cannot refresh token.");
         // Se não houver refresher, dispara o evento de logout para garantir que a UI reage.
         window.dispatchEvent(new CustomEvent('auth-error-logout', { detail: 'No auth refresher' }));
       }
