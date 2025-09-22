@@ -1,8 +1,14 @@
 // frontend/src/api/apiService.js
 
-// --- O CÓDIGO EXISTENTE PERMANECE IGUAL ATÉ ÀS FUNÇÕES DA API ---
 import axios from 'axios';
 import { API_ENDPOINTS } from '../constants';
+
+let authRefresher = null;
+
+// Esta função permite que o AuthContext injete a sua função de refresh
+export const setAuthRefresher = (refresher) => {
+  authRefresher = refresher;
+};
 
 const API_URL = process.env.REACT_APP_API_BASE_URL;
 
@@ -82,14 +88,47 @@ apiClient.interceptors.request.use(
 
 apiClient.interceptors.response.use(
   (response) => response,
-  (error) => Promise.reject(error)
+  async (error) => {
+    const originalRequest = error.config;
+
+    // Se o erro for 401 e o pedido ainda não foi repetido
+    if (error.response?.status === 401 && !originalRequest._retry) {
+      originalRequest._retry = true; // Marcar como repetido para evitar loops infinitos
+      
+      console.log("apiService: Received 401. Attempting token refresh.");
+
+      if (authRefresher) {
+        try {
+          const newAccessToken = await authRefresher();
+          
+          // Atualiza o header de autorização do pedido original e repete-o
+          originalRequest.headers['Authorization'] = `Bearer ${newAccessToken}`;
+          return apiClient(originalRequest);
+
+        } catch (refreshError) {
+          // Se o refresh falhar, o authRefresher (no AuthContext) já tratou do logout.
+          // Apenas rejeitamos a promessa para parar o fluxo.
+          console.error("apiService: Token refresh failed. Request will not be retried.", refreshError);
+          return Promise.reject(refreshError);
+        }
+      } else {
+        console.error("apiService: 401 received but no authRefresher is set. Cannot refresh token.");
+        // Se não houver refresher, dispara o evento de logout para garantir que a UI reage.
+        window.dispatchEvent(new CustomEvent('auth-error-logout', { detail: 'No auth refresher' }));
+      }
+    }
+    
+    // Para todos os outros erros, ou se o refresh falhar, rejeita a promessa.
+    return Promise.reject(error);
+  }
 );
 
-// --- FUNÇÕES DE API EXISTENTES ---
+
+export const apiRefreshToken = (refreshToken) => 
+    apiClient.post(API_ENDPOINTS.AUTH_REFRESH, { refresh_token: refreshToken });
+
 export const apiUploadFile = (formData, onUploadProgress) => 
-  apiClient.post(API_ENDPOINTS.UPLOAD, formData, { 
-    onUploadProgress 
-  });
+    apiClient.post(API_ENDPOINTS.UPLOAD, formData, { onUploadProgress });
 
 export const apiLogin = (email, password) => apiClient.post(API_ENDPOINTS.AUTH_LOGIN, { email, password });
 export const apiRegister = (username, email, password) => apiClient.post(API_ENDPOINTS.AUTH_REGISTER, { username, email, password });

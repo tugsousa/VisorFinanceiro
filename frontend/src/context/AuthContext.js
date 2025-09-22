@@ -4,7 +4,9 @@ import {
   apiLogin, apiRegister, apiLogout,
   fetchAndSetCsrfToken as apiServiceFetchCsrf,
   apiCheckUserHasData,
-  getApiServiceCsrfToken
+  getApiServiceCsrfToken,
+  apiRefreshToken,
+  setAuthRefresher,
 } from '../api/apiService';
 
 export const AuthContext = createContext();
@@ -94,6 +96,37 @@ export const AuthProvider = ({ children }) => {
     await fetchCsrfTokenAndUpdateService(true);
   }, [fetchCsrfTokenAndUpdateService]);
 
+  const refreshToken = useCallback(async () => {
+    const currentRefreshToken = localStorage.getItem('refresh_token');
+    if (!currentRefreshToken) {
+      console.log("AuthContext: No refresh token available, logging out.");
+      await performLogout(false, "No refresh token for refresh attempt");
+      return Promise.reject(new Error("No refresh token"));
+    }
+  
+    try {
+      console.log("AuthContext: Attempting to refresh token...");
+      const response = await apiRefreshToken(currentRefreshToken);
+      const { access_token, refresh_token } = response.data;
+  
+      setToken(access_token);
+      setRefreshTokenState(refresh_token);
+      localStorage.setItem('auth_token', access_token);
+      localStorage.setItem('refresh_token', refresh_token);
+  
+      console.log("AuthContext: Token refreshed successfully.");
+      return access_token;
+    } catch (error) {
+      console.error("AuthContext: Failed to refresh token, logging out.", error);
+      await performLogout(false, "Refresh token failed or expired");
+      return Promise.reject(error);
+    }
+  }, [performLogout]);
+
+  useEffect(() => {
+    setAuthRefresher(refreshToken);
+  }, [refreshToken]);
+  
   useEffect(() => {
     const initializeAuth = async () => {
       setIsInitialAuthLoading(true);
