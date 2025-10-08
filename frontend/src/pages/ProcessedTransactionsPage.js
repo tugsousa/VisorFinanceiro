@@ -11,11 +11,33 @@ import { parseDateRobust } from '../utils/dateUtils';
 import DeleteTransactionsModal from '../components/DeleteTransactionsModal';
 import AddTransactionModal from '../components/AddTransactionModal';
 import AddCircleOutlineIcon from '@mui/icons-material/AddCircleOutline';
+import RequestQuoteIcon from '@mui/icons-material/RequestQuote'; // <-- NOVO ÍCONE
 
 const fetchProcessedTransactions = async () => {
   const response = await apiFetchProcessedTransactions();
   return (response.data || []).map(tx => ({ ...tx, id: tx.hash_id || `${tx.date}-${tx.order_id}-${Math.random()}` }));
 };
+
+// --- NOVO: Componente para o slot NoRowsOverlay ---
+const NoRowsOverlay = () => (
+  <Box 
+    sx={{ 
+      display: 'flex', 
+      flexDirection: 'column',
+      alignItems: 'center', 
+      justifyContent: 'center', 
+      height: '100%', 
+      py: 4, 
+      color: 'text.secondary',
+      fontSize: '0.9rem'
+    }}
+  >
+    <RequestQuoteIcon sx={{ fontSize: 40, mb: 1 }} />
+    Não existem transações registadas.
+  </Box>
+);
+// --- FIM DO NOVO COMPONENTE ---
+
 
 const columns = [
     { 
@@ -120,70 +142,54 @@ const ProcessedTransactionsPage = () => {
   const transactionsError = isTransactionsError ? (transactionsErrorObj?.message || UI_TEXT.errorLoadingData) : null;
   const deleteError = deleteTransactionsMutation.isError ? (deleteTransactionsMutation.error.response?.data?.error || deleteTransactionsMutation.error.message || "Falha a excluir as transações.") : null;
 
-  if (transactionsLoading) {
-    return (
-      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '200px', p: 3 }}>
-        <CircularProgress />
-        <Typography sx={{ ml: 2 }}>A carregar as transações...</Typography>
-      </Box>
-    );
-  }
-
   if (transactionsError) {
     return <Alert severity="error" sx={{ my: 2, mx: { xs: 2, sm: 3 } }}>{transactionsError}</Alert>;
   }
   
   return (
     <Box sx={{ p: { xs: 2, sm: 3 } }}>
-      {processedTransactions.length > 0 ? (
-        <>
-          <Typography variant="h4" component="h1" gutterBottom>
-            Transações Processadas
-          </Typography>
-          <Box sx={{ mb: 2, display: 'flex', justifyContent: 'flex-end', gap: 2 }}>
-            <Button
-              variant="contained"
-              color="primary"
-              startIcon={<AddCircleOutlineIcon />}
-              onClick={() => setIsAddModalOpen(true)}
-            >
-              Adicionar Transação
-            </Button>
-            <Button
-              variant="contained"
-              color="error"
-              onClick={handleDeleteClick}
-              disabled={deleteTransactionsMutation.isPending || transactionsLoading}
-            >
-              {deleteTransactionsMutation.isPending ? <CircularProgress size={24} color="inherit" /> : "Eliminar Transações"}
-            </Button>
-          </Box>
-          <Paper sx={{ width: '100%' }}>
-            <DataGrid
-              rows={processedTransactions}
-              columns={columns}
-              autoHeight
-              initialState={{
-                pagination: {
-                  paginationModel: { pageSize: 10, page: 0 },
-                },
-                sorting: {
-                  sortModel: [{ field: 'date', sort: 'desc' }],
-                },
-              }}
-              pageSizeOptions={[10, 25, 50, 100]}
-              disableRowSelectionOnClick
-              density="compact"
-              localeText={ptPT.components.MuiDataGrid.defaultProps.localeText}
-            />
-          </Paper>
-        </>
-      ) : (
-        <Box sx={{ p: 4, textAlign: 'center' }}>
-            <Typography variant="h4" gutterBottom>Transações Processadas</Typography>
-            <Typography variant="body1">Sem dados disponíveis. Por favor, carregue primeiro um ficheiro de transações.</Typography>
+        <Typography variant="h4" component="h1" gutterBottom>
+          Transações Processadas
+        </Typography>
+        <Box sx={{ mb: 2, display: 'flex', justifyContent: 'flex-end', gap: 2 }}>
+          <Button
+            variant="contained"
+            color="primary"
+            startIcon={<AddCircleOutlineIcon />}
+            onClick={() => setIsAddModalOpen(true)}
+          >
+            Adicionar Transação
+          </Button>
+          <Button
+            variant="contained"
+            color="error"
+            onClick={handleDeleteClick}
+            disabled={deleteTransactionsMutation.isPending || transactionsLoading}
+          >
+            {deleteTransactionsMutation.isPending ? <CircularProgress size={24} color="inherit" /> : "Eliminar Transações"}
+          </Button>
         </Box>
-      )}
+        <Paper sx={{ width: '100%' }}>
+          <DataGrid
+            rows={processedTransactions}
+            columns={columns}
+            loading={transactionsLoading} // <-- NOVO: Usar o prop DataGrid loading
+            autoHeight
+            initialState={{
+              pagination: {
+                paginationModel: { pageSize: 10, page: 0 },
+              },
+              sorting: {
+                sortModel: [{ field: 'date', sort: 'desc' }],
+              },
+            }}
+            pageSizeOptions={[10, 25, 50, 100]}
+            disableRowSelectionOnClick
+            density="compact"
+            localeText={ptPT.components.MuiDataGrid.defaultProps.localeText}
+            slots={{ noRowsOverlay: NoRowsOverlay }} // <-- NOVO: Usar o slot para ausência de linhas
+          />
+        </Paper>
 
       <DeleteTransactionsModal
         open={isDeleteModalOpen}

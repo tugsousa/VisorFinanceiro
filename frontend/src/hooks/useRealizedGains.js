@@ -37,34 +37,31 @@ export const useRealizedGains = (token, selectedYear) => {
         currentHoldingsValueQuery, feesQuery, allTransactionsQuery
     ] = results;
 
+    const stockSalesData = stockSalesQuery.data;
+    const optionSalesData = optionSalesQuery.data;
+    const dividendSummaryData = dividendSummaryQuery.data;
+    const dividendTransactionsData = dividendTransactionsQuery.data;
+    const stockHoldingsByYearData = stockHoldingsByYearQuery.data;
+    const optionHoldingsData = optionHoldingsQuery.data;
+    const currentHoldingsValueData = currentHoldingsValueQuery.data;
+    const feesData = feesQuery.data;
+    const allTransactionsData = allTransactionsQuery.data;
+
+
     const isLoading = results.some(q => q.isLoading);
     const isError = results.some(q => q.isError);
     const error = results.find(q => q.error)?.error;
 
-    const allData = useMemo(() => ({
-        StockSaleDetails: stockSalesQuery.data,
-        OptionSaleDetails: optionSalesQuery.data,
-        dividendSummary: dividendSummaryQuery.data,
-        DividendTransactionsList: dividendTransactionsQuery.data,
-        StockHoldingsByYear: stockHoldingsByYearQuery.data,
-        OptionHoldings: optionHoldingsQuery.data,
-        FeeDetails: feesQuery.data,
-        CurrentHoldingsValue: currentHoldingsValueQuery.data,
-        AllTransactions: allTransactionsQuery.data,
-    }), [
-        stockSalesQuery.data, optionSalesQuery.data, dividendSummaryQuery.data,
-        dividendTransactionsQuery.data, stockHoldingsByYearQuery.data, optionHoldingsQuery.data,
-        currentHoldingsValueQuery.data, feesQuery.data, allTransactionsQuery.data
-    ]);
+    // Removido o useMemo allData
 
     const portfolioMetrics = useMemo(() => {
-        if (isLoading || !allData.CurrentHoldingsValue || !allData.AllTransactions) {
+        if (isLoading || !currentHoldingsValueData || !allTransactionsData) {
             return { totalPortfolioValue: 0, totalDeposits: 0, totalWithdrawals: 0, portfolioReturn: 0 };
         }
-        const totalPortfolioValue = allData.CurrentHoldingsValue.reduce(
+        const totalPortfolioValue = currentHoldingsValueData.reduce(
             (sum, holding) => sum + (holding.market_value_eur || 0), 0
         );
-        const cashFlows = allData.AllTransactions.reduce((acc, tx) => {
+        const cashFlows = allTransactionsData.reduce((acc, tx) => {
             if (tx.transaction_type === 'CASH') {
                 if (tx.transaction_subtype === 'DEPOSIT') {
                     acc.deposits += tx.amount_eur || 0;
@@ -86,53 +83,54 @@ export const useRealizedGains = (token, selectedYear) => {
             totalWithdrawals,
             portfolioReturn,
         };
-    }, [isLoading, allData]);
+    }, [isLoading, currentHoldingsValueData, allTransactionsData]);
 
     const availableYears = useMemo(() => {
-        if (isLoading || !allData) return [ALL_YEARS_OPTION];
+        if (isLoading) return [ALL_YEARS_OPTION];
         const dateAccessors = { stockSales: 'SaleDate', optionSales: 'close_date', DividendTaxResult: null };
         const dataForYearExtraction = {
-            stockSales: allData.StockSaleDetails,
-            optionSales: allData.OptionSaleDetails,
-            DividendTaxResult: allData.dividendSummary,
+            stockSales: stockSalesData,
+            optionSales: optionSalesData,
+            DividendTaxResult: dividendSummaryData,
         };
         const yearsFromUtil = extractYearsFromData(dataForYearExtraction, dateAccessors);
-        const stockHoldingYears = allData.StockHoldingsByYear ? Object.keys(allData.StockHoldingsByYear) : [];
+        const stockHoldingYears = stockHoldingsByYearData ? Object.keys(stockHoldingsByYearData) : [];
         const allYearsSet = new Set([...yearsFromUtil, ...stockHoldingYears]);
         const sortedYears = Array.from(allYearsSet)
             .filter(y => y && y !== ALL_YEARS_OPTION && y !== NO_YEAR_SELECTED)
             .sort((a, b) => b.localeCompare(a));
         return [ALL_YEARS_OPTION, ...sortedYears];
-    }, [allData, isLoading]);
+    }, [stockSalesData, optionSalesData, dividendSummaryData, stockHoldingsByYearData, isLoading]);
 
     const aggregatedLifetimeMetricsByISIN = useMemo(() => {
-        if (isLoading || !allData) return {};
+        if (isLoading || !allTransactionsData || !stockSalesData || !optionSalesData) return {};
         return calculateCombinedAggregatedMetricsByISIN(
-            allData.AllTransactions,
-            allData.StockSaleDetails,
-            allData.OptionSaleDetails
+            allTransactionsData,
+            stockSalesData,
+            optionSalesData
         );
-    }, [allData, isLoading]);
+    }, [allTransactionsData, stockSalesData, optionSalesData, isLoading]);
 
     const periodSpecificAggregatedMetricsByISIN = useMemo(() => {
-        if (isLoading || !allData || selectedYear === ALL_YEARS_OPTION || selectedYear === NO_YEAR_SELECTED) {
+        if (isLoading || !allTransactionsData || selectedYear === ALL_YEARS_OPTION || selectedYear === NO_YEAR_SELECTED) {
             return {};
         }
-        const yearlyTransactions = (allData.AllTransactions || []).filter(tx => getYearString(tx.date) === selectedYear);
-        const yearlyStockSales = (allData.StockSaleDetails || []).filter(sale => getYearString(sale.SaleDate) === selectedYear);
+        const yearlyTransactions = (allTransactionsData || []).filter(tx => getYearString(tx.date) === selectedYear);
+        const yearlyStockSales = (stockSalesData || []).filter(sale => getYearString(sale.SaleDate) === selectedYear);
+        const yearlyOptionSales = (optionSalesData || []).filter(sale => getYearString(sale.close_date) === selectedYear);
         
-        return calculateCombinedAggregatedMetricsByISIN(yearlyTransactions, yearlyStockSales);
-    }, [allData, selectedYear, isLoading]);
+        return calculateCombinedAggregatedMetricsByISIN(yearlyTransactions, yearlyStockSales, yearlyOptionSales);
+    }, [allTransactionsData, stockSalesData, optionSalesData, selectedYear, isLoading]);
 
     const periodSpecificData = useMemo(() => {
         const defaultStructure = { stockSales: [], optionSales: [], dividendTransactions: [], fees: [], optionHoldings: [] };
-        if (isLoading || !allData) return defaultStructure;
+        if (isLoading) return defaultStructure;
         const dataSet = {
-            stockSales: allData.StockSaleDetails || [],
-            optionSales: allData.OptionSaleDetails || [],
-            dividendTransactions: allData.DividendTransactionsList || [],
-            fees: allData.FeeDetails || [],
-            optionHoldings: allData.OptionHoldings || [],
+            stockSales: stockSalesData || [],
+            optionSales: optionSalesData || [],
+            dividendTransactions: dividendTransactionsData || [],
+            fees: feesData || [],
+            optionHoldings: optionHoldingsData || [],
         };
         if (selectedYear === ALL_YEARS_OPTION || selectedYear === NO_YEAR_SELECTED) return dataSet;
         const currentYear = new Date().getFullYear().toString();
@@ -143,7 +141,7 @@ export const useRealizedGains = (token, selectedYear) => {
             fees: dataSet.fees.filter(fee => getYearString(fee.date) === selectedYear),
             optionHoldings: selectedYear === currentYear ? dataSet.optionHoldings : [],
         };
-    }, [allData, selectedYear, isLoading]);
+    }, [stockSalesData, optionSalesData, dividendTransactionsData, feesData, optionHoldingsData, selectedYear, isLoading]);
 
     const holdingsForGroupedView = useMemo(() => {
         const currentSystemYear = new Date().getFullYear().toString();
@@ -156,14 +154,14 @@ export const useRealizedGains = (token, selectedYear) => {
         let baseHoldings = [];
 
         if (isCurrentOrTotalView) {
-            baseHoldings = (allData.CurrentHoldingsValue || []).map(holding => ({
+            baseHoldings = (currentHoldingsValueData || []).map(holding => ({
                 ...holding,
                 marketValueEUR: holding.market_value_eur,
                 total_cost_basis_eur: Math.abs(holding.total_cost_basis_eur),
                 isHistorical: false,
             }));
-        } else if (allData.StockHoldingsByYear && allData.StockHoldingsByYear[selectedYear]) {
-            const historicalLots = allData.StockHoldingsByYear[selectedYear];
+        } else if (stockHoldingsByYearData && stockHoldingsByYearData[selectedYear]) {
+            const historicalLots = stockHoldingsByYearData[selectedYear];
             const groupedMap = historicalLots.reduce((acc, lot) => {
                 if (!acc[lot.isin]) {
                     acc[lot.isin] = { isin: lot.isin, product_name: lot.product_name, quantity: 0, total_cost_basis_eur: 0, isHistorical: true };
@@ -181,23 +179,23 @@ export const useRealizedGains = (token, selectedYear) => {
         }));
     }, [
         selectedYear, 
-        allData.CurrentHoldingsValue, 
-        allData.StockHoldingsByYear, 
+        currentHoldingsValueData, 
+        stockHoldingsByYearData, 
         aggregatedLifetimeMetricsByISIN,
         periodSpecificAggregatedMetricsByISIN
     ]);
     
     const unrealizedStockPL = useMemo(() => {
-        if (!allData.CurrentHoldingsValue || selectedYear !== ALL_YEARS_OPTION) {
+        if (!currentHoldingsValueData || selectedYear !== ALL_YEARS_OPTION) {
             return 0;
         }
-        const totals = allData.CurrentHoldingsValue.reduce((acc, h) => {
+        const totals = currentHoldingsValueData.reduce((acc, h) => {
             acc.marketValue += h.market_value_eur || 0;
             acc.costBasis += Math.abs(h.total_cost_basis_eur || 0);
             return acc;
         }, { marketValue: 0, costBasis: 0 });
         return totals.marketValue - totals.costBasis;
-    }, [allData.CurrentHoldingsValue, selectedYear]);
+    }, [currentHoldingsValueData, selectedYear]);
 
     const summaryData = useMemo(() => {
         const stockPL = (periodSpecificData.stockSales || []).reduce((sum, s) => sum + (s.Delta || 0), 0);
@@ -246,6 +244,19 @@ export const useRealizedGains = (token, selectedYear) => {
             }
         });
         
+        optionSales.forEach(sale => {
+            const daysHeld = calculateDaysHeld(sale.open_date, sale.close_date);
+            if (typeof daysHeld === 'number') {
+                if (sale.delta > 0) {
+                    totalDaysWinners += daysHeld;
+                    countWinners++;
+                } else if (sale.delta < 0) {
+                    totalDaysLosers += daysHeld;
+                    countLosers++;
+                }
+            }
+        });
+
         const avgHoldingPeriodWinners = countWinners > 0 ? totalDaysWinners / countWinners : 0;
         const avgHoldingPeriodLosers = countLosers > 0 ? totalDaysLosers / countLosers : 0;
 
@@ -285,8 +296,18 @@ export const useRealizedGains = (token, selectedYear) => {
     }, [holdingsForGroupedView]);
 
     return {
-        allData, periodSpecificData, summaryData, unrealizedStockPL,
-        derivedDividendTaxSummary: allData.dividendSummary,
+        // Expor resultados de query com um nome estável
+        stockSalesData: stockSalesData,
+        optionSalesData: optionSalesData,
+        dividendSummaryData: dividendSummaryData,
+        dividendTransactionsData: dividendTransactionsData,
+        stockHoldingsByYearData: stockHoldingsByYearData,
+        optionHoldingsData: optionHoldingsData,
+        feesData: feesData,
+        allTransactionsData: allTransactionsData,
+        
+        periodSpecificData, summaryData, unrealizedStockPL,
+        derivedDividendTaxSummary: dividendSummaryData,
         availableYears, holdingsChartData, holdingsForGroupedView,
         isHoldingsValueFetching: currentHoldingsValueQuery.isFetching,
         isLoading, isError, error,

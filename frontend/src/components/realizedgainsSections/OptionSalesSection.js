@@ -1,6 +1,6 @@
 // frontend/src/components/realizedgainsSections/OptionSalesSection.js
 import React, { useMemo } from 'react';
-import { Typography, Paper, Box, Grid } from '@mui/material';
+import { Typography, Paper, Box, Grid, CircularProgress } from '@mui/material'; // <-- Adicionado CircularProgress
 import { DataGrid } from '@mui/x-data-grid';
 import { ptPT } from '@mui/x-data-grid/locales';
 import { Bar } from 'react-chartjs-2';
@@ -56,7 +56,8 @@ const columns = [
     },
 ];
 
-export default function OptionSalesSection({ optionSalesData, selectedYear }) {
+// Adicionado prop isLoading e NoRowsOverlay
+export default function OptionSalesSection({ optionSalesData, selectedYear, isLoading, NoRowsOverlay }) {
     const { salesByProductChartData, salesByTimeSeriesChartData } = useMemo(() => {
         const emptyResult = {
             salesByProductChartData: { labels: [], datasets: [] },
@@ -222,51 +223,56 @@ export default function OptionSalesSection({ optionSalesData, selectedYear }) {
         }
     }), [selectedYear]);
 
-    if (!optionSalesData || optionSalesData.length === 0) {
-        return (
-            <Paper elevation={0} sx={{ p: 2, mb: 3, border: 'none' }}>
-                <Typography>Não existe informação disponível.</Typography>
-            </Paper>
-        );
-    }
-
     const rows = optionSalesData.map((sale, index) => ({
         id: `${sale.product_name}-${sale.close_date}-${index}`,
         ...sale
     }));
+    
+    const hasData = rows.length > 0;
 
     return (
         <Paper elevation={0} sx={{ p: 2, mb: 3, border: 'none' }}>
-
-            <Grid container spacing={3} sx={{ mb: 3 }}>
-                <Grid item xs={12} lg={6}>
-                    <Paper elevation={0} sx={{ p: 2, height: 350, borderRadius: 3 }}>
-                        <Bar data={salesByTimeSeriesChartData} options={salesByTimeSeriesChartOptions} />
-                    </Paper>
-                </Grid>
-                <Grid item xs={12} lg={6}>
-                    <Paper elevation={0} sx={{ p: 2, height: 350, borderRadius: 3 }}>
-                        <Bar data={salesByProductChartData} options={salesByProductChartOptions} />
-                    </Paper>
-                </Grid>
-            </Grid>
-
-      <Box sx={{ width: '100%' }}>
-        <DataGrid
-          rows={rows}
-          columns={columns}
-          autoHeight
-          initialState={{
-            pagination: { paginationModel: { pageSize: 10 } },
-            sorting: {
-              sortModel: [{ field: 'open_date', sort: 'desc' }],
-            },
-          }}
-          pageSizeOptions={[10, 25, 50]}
-          disableRowSelectionOnClick
-          localeText={ptPT.components.MuiDataGrid.defaultProps.localeText}
-        />
-      </Box>
+            {isLoading && !hasData ? (
+                <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}><CircularProgress /></Box>
+            ) : (
+                <>
+                    {hasData ? (
+                        <Grid container spacing={3} sx={{ mb: 3 }}>
+                            <Grid item xs={12} lg={6}>
+                                <Paper elevation={0} sx={{ p: 2, height: 350, borderRadius: 3 }}>
+                                    <Bar data={salesByTimeSeriesChartData} options={salesByTimeSeriesChartOptions} />
+                                </Paper>
+                            </Grid>
+                            <Grid item xs={12} lg={6}>
+                                <Paper elevation={0} sx={{ p: 2, height: 350, borderRadius: 3 }}>
+                                    <Bar data={salesByProductChartData} options={salesByProductChartOptions} />
+                                </Paper>
+                            </Grid>
+                        </Grid>
+                    ) : (
+                         <Typography align="center" sx={{ my: 4, color: 'text.secondary' }}>Não existe informação de vendas de opções para este período.</Typography>
+                    )}
+        
+                    <Box sx={{ width: '100%' }}>
+                        <DataGrid
+                            rows={rows}
+                            columns={columns}
+                            loading={isLoading} // <-- NOVO
+                            autoHeight
+                            initialState={{
+                                pagination: { paginationModel: { pageSize: 10 } },
+                                sorting: {
+                                    sortModel: [{ field: 'open_date', sort: 'desc' }],
+                                },
+                            }}
+                            pageSizeOptions={[10, 25, 50]}
+                            disableRowSelectionOnClick
+                            localeText={ptPT.components.MuiDataGrid.defaultProps.localeText}
+                            slots={{ noRowsOverlay: NoRowsOverlay }} // <-- NOVO
+                        />
+                    </Box>
+                </>
+            )}
         </Paper>
     );
 }

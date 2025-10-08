@@ -32,21 +32,39 @@ import FeesSection from '../components/realizedgainsSections/FeesSection';
 
 const isDataEmpty = (data) => {
   if (!data) return true;
-  const hasStockHoldings = data.StockHoldingsByYear && Object.keys(data.StockHoldingsByYear).some(
-    year => data.StockHoldingsByYear[year] && data.StockHoldingsByYear[year].length > 0
+  const hasStockHoldings = data.stockHoldingsByYearData && Object.keys(data.stockHoldingsByYearData).some(
+    year => data.stockHoldingsByYearData[year] && data.stockHoldingsByYearData[year].length > 0
   );
   return (
-    (data.StockSaleDetails?.length ?? 0) === 0 &&
-    (data.OptionSaleDetails?.length ?? 0) === 0 &&
-    (data.DividendTransactionsList?.length ?? 0) === 0 &&
-    (data.FeeDetails?.length ?? 0) === 0 &&
+    (data.stockSalesData?.length ?? 0) === 0 &&
+    (data.optionSalesData?.length ?? 0) === 0 &&
+    (data.dividendTransactionsData?.length ?? 0) === 0 &&
+    (data.feesData?.length ?? 0) === 0 &&
     !hasStockHoldings &&
-    (data.OptionHoldings?.length ?? 0) === 0
+    (data.optionHoldingsData?.length ?? 0) === 0
   );
 };
 
-// --- INÍCIO DA ALTERAÇÃO ---
-// Adicionar um novo prop `unit` para métricas que não são monetárias
+// --- NOVO: Componente para o slot NoRowsOverlay (Reutilizável) ---
+const NoRowsOverlay = () => (
+  <Box 
+    sx={{ 
+      display: 'flex', 
+      flexDirection: 'column',
+      alignItems: 'center', 
+      justifyContent: 'center', 
+      height: '100%', 
+      py: 4, 
+      color: 'text.secondary',
+      fontSize: '0.9rem'
+    }}
+  >
+    <RequestQuoteIcon sx={{ fontSize: 40, mb: 1 }} />
+    Não existem transações ou posições para este filtro.
+  </Box>
+);
+// --- FIM DO NOVO COMPONENTE ---
+
 const KeyMetricCard = ({ title, value, icon, isPercentage = false, unit = '' }) => {
   const isPositive = typeof value === 'number' ? value >= 0 : true;
   // Ajustar a cor de fundo para métricas neutras como a duração
@@ -56,7 +74,6 @@ const KeyMetricCard = ({ title, value, icon, isPercentage = false, unit = '' }) 
   const formattedValue = isPercentage 
     ? `${(value || 0).toFixed(2)}%` 
     : (unit ? `${(value || 0).toFixed(0)} ${unit}` : formatCurrency(value));
-// --- FIM DA ALTERAÇÃO ---
 
   return (
     <Card elevation={0} sx={{ display: 'flex', alignItems: 'center', p: 1.5, bgcolor: bgColor, borderRadius: 2, minWidth: 140, flex: '1 1 0' }}>
@@ -79,7 +96,9 @@ export default function RealizedGainsPage() {
   const [currentTab, setCurrentTab] = useState('overview');
 
   const {
-    allData,
+    stockSalesData, optionSalesData, dividendSummaryData,
+    dividendTransactionsData, stockHoldingsByYearData, optionHoldingsData,
+    feesData, allTransactionsData, // Dados brutos de todas as queries
     periodSpecificData,
     summaryData,
     unrealizedStockPL,
@@ -101,7 +120,7 @@ export default function RealizedGainsPage() {
   }, [availableYears, selectedYear, isLoading, isError]);
 
   const detailedHoldingsForView = useMemo(() => {
-    const holdingsByYear = allData.StockHoldingsByYear;
+    const holdingsByYear = stockHoldingsByYearData;
     if (!holdingsByYear || Object.keys(holdingsByYear).length === 0) {
       return [];
     }
@@ -118,7 +137,7 @@ export default function RealizedGainsPage() {
 
     // For any other historical year, show the data for that specific year.
     return holdingsByYear[selectedYear] || [];
-  }, [allData.StockHoldingsByYear, selectedYear]);
+  }, [stockHoldingsByYearData, selectedYear]);
 
 
   const handleYearChange = (event) => setSelectedYear(event.target.value);
@@ -128,15 +147,17 @@ export default function RealizedGainsPage() {
     ? isHoldingsValueFetching
     : isLoading;
 
-  if (isLoading) {
+  if (isLoading && isDataEmpty({ stockHoldingsByYearData, stockSalesData, optionSalesData, dividendTransactionsData, feesData, optionHoldingsData })) {
     return <CircularProgress sx={{ display: 'block', margin: 'auto', mt: 6 }} />;
   }
 
   if (isError) {
     return <Alert severity="error" sx={{ m: 3 }}>{error?.message || UI_TEXT.errorLoadingData}</Alert>;
   }
+  
+  const hasAnyData = !isDataEmpty({ stockHoldingsByYearData, stockSalesData, optionSalesData, dividendTransactionsData, feesData, optionHoldingsData });
 
-  if (isDataEmpty(allData)) {
+  if (!hasAnyData && !isLoading) {
     return (
       <Box sx={{ p: 4, textAlign: 'center' }}>
         <Typography variant="h4" gutterBottom>Análise de Portefólio</Typography>
@@ -217,10 +238,10 @@ export default function RealizedGainsPage() {
             <Grid item xs={12}>
               <Paper elevation={0} sx={{ p: 2, height: 350, borderRadius: 3 }}>
                 <OverallPLChart 
-                  stockSaleDetails={allData.StockSaleDetails} 
-                  optionSaleDetails={allData.OptionSaleDetails} 
+                  stockSaleDetails={stockSalesData} 
+                  optionSaleDetails={optionSalesData} 
                   dividendTaxResultForChart={derivedDividendTaxSummary} 
-                  feesData={allData.FeeDetails}
+                  feesData={feesData}
                   selectedYear={selectedYear} 
                 />
               </Paper>
@@ -228,11 +249,11 @@ export default function RealizedGainsPage() {
             <Grid item xs={12}>
               <Paper elevation={0} sx={{ p: 2, height: 350, borderRadius: 3 }}>
                 <PLContributionChart 
-                    stockSaleDetails={allData.StockSaleDetails} 
-                    optionSaleDetails={allData.OptionSaleDetails} 
+                    stockSaleDetails={stockSalesData} 
+                    optionSaleDetails={optionSalesData} 
                     dividendTaxResultForChart={derivedDividendTaxSummary} 
-                    dividendTransactionsList={allData.DividendTransactionsList} 
-                    feesData={periodSpecificData.fees} 
+                    dividendTransactionsList={dividendTransactionsData} 
+                    feesData={feesData} 
                     selectedYear={selectedYear} 
                 />
               </Paper>
@@ -248,17 +269,50 @@ export default function RealizedGainsPage() {
             detailedData={detailedHoldingsForView}
             isGroupedFetching={isGroupedHoldingsLoading}
             isDetailedFetching={isLoading}
+            NoRowsOverlay={NoRowsOverlay} // <-- NOVO
           />
-          {periodSpecificData.optionHoldings && periodSpecificData.optionHoldings.length > 0 && (
-            <OptionHoldingsSection holdingsData={periodSpecificData.optionHoldings} />
+          {periodSpecificData.optionHoldings && (
+            <OptionHoldingsSection 
+              holdingsData={periodSpecificData.optionHoldings} 
+              isLoading={isLoading} // <-- NOVO
+              NoRowsOverlay={NoRowsOverlay} // <-- NOVO
+            />
           )}
         </Box>
       )}
 
-      {currentTab === 'stock-sales' && (<StockSalesSection stockSalesData={periodSpecificData.stockSales} selectedYear={selectedYear} />)}
-      {currentTab === 'option-sales' && (<OptionSalesSection optionSalesData={periodSpecificData.optionSales} selectedYear={selectedYear} />)}
-      {currentTab === 'dividends' && (<DividendsSection dividendTransactionsData={periodSpecificData.dividendTransactions} selectedYear={selectedYear} />)}
-      {currentTab === 'fees' && (<FeesSection feeData={periodSpecificData.fees} selectedYear={selectedYear} />)}
+      {currentTab === 'stock-sales' && (
+        <StockSalesSection 
+          stockSalesData={periodSpecificData.stockSales} 
+          selectedYear={selectedYear} 
+          isLoading={isLoading} // <-- NOVO
+          NoRowsOverlay={NoRowsOverlay} // <-- NOVO
+        />
+      )}
+      {currentTab === 'option-sales' && (
+        <OptionSalesSection 
+          optionSalesData={periodSpecificData.optionSales} 
+          selectedYear={selectedYear} 
+          isLoading={isLoading} // <-- NOVO
+          NoRowsOverlay={NoRowsOverlay} // <-- NOVO
+        />
+      )}
+      {currentTab === 'dividends' && (
+        <DividendsSection 
+          dividendTransactionsData={periodSpecificData.dividendTransactions} 
+          selectedYear={selectedYear} 
+          isLoading={isLoading} // <-- NOVO
+          NoRowsOverlay={NoRowsOverlay} // <-- NOVO
+        />
+      )}
+      {currentTab === 'fees' && (
+        <FeesSection 
+          feeData={periodSpecificData.fees} 
+          selectedYear={selectedYear} 
+          isLoading={isLoading} // <-- NOVO
+          NoRowsOverlay={NoRowsOverlay} // <-- NOVO
+        />
+      )}
     </Box>
   );
 }

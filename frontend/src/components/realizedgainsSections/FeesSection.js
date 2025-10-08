@@ -1,6 +1,6 @@
 // frontend/src/components/realizedgainsSections/FeesSection.js
 import React, { useMemo } from 'react';
-import { Typography, Paper, Box, Grid } from '@mui/material';
+import { Typography, Paper, Box, Grid, CircularProgress } from '@mui/material'; // <-- Adicionado CircularProgress
 import { DataGrid } from '@mui/x-data-grid';
 import { ptPT } from '@mui/x-data-grid/locales';
 import { Bar, Doughnut } from 'react-chartjs-2';
@@ -60,7 +60,8 @@ const columns = [
     { field: 'source', headerName: 'Corretora', width: 120 },
 ];
 
-export default function FeesSection({ feeData, selectedYear }) {
+// Adicionado prop isLoading e NoRowsOverlay
+export default function FeesSection({ feeData, selectedYear, isLoading, NoRowsOverlay }) {
     
     const chartData = useMemo(() => {
         if (!feeData || feeData.length === 0) {
@@ -191,14 +192,6 @@ export default function FeesSection({ feeData, selectedYear }) {
 
     // --- Render Logic ---
 
-    if (!feeData || feeData.length === 0) {
-        return (
-            <Paper elevation={0} sx={{ p: 2, mb: 3, border: 'none' }}>
-                <Typography>Não existe informação sobre taxas e comissões para o período selecionado.</Typography>
-            </Paper>
-        );
-    }
-
     // Translate categories for the DataGrid ---
     const rows = feeData.map((fee, index) => ({
         id: `${fee.date}-${fee.description}-${index}`,
@@ -206,56 +199,69 @@ export default function FeesSection({ feeData, selectedYear }) {
         category: translateCategory(fee.category),
     }));
 
+    const hasData = rows.length > 0;
+
     return (
         <Paper elevation={0} sx={{ p: 2, mb: 3, border: 'none' }}>
-            {/* Charts Grid */}
-            <Grid container spacing={3} sx={{ mb: 4 }}>
-                <Grid item xs={12} md={8}>
-                    <Paper elevation={0} sx={{ p: 2, height: 350, borderRadius: 3 }}>
-                         {chartData.timeSeries && chartData.timeSeries.datasets.some(ds => ds.data.some(d => d > 0)) ? (
-                            <Bar options={barOptions} data={chartData.timeSeries} />
-                        ) : (
-                             <Typography sx={{ textAlign: 'center', pt: '30%' }}>Sem dados para o gráfico de tempo.</Typography>
-                        )}
-                    </Paper>
-                </Grid>
-                <Grid item xs={12} md={4} container spacing={3}>
-                    <Grid item xs={12}>
-                        <Paper elevation={0} sx={{ p: 2, height: 163, borderRadius: 3 }}>
-                            {chartData.bySource ? (
-                                <Doughnut options={doughnutOptions('Taxas por Corretora')} data={chartData.bySource} />
-                            ) : (
-                                <Typography>Sem dados.</Typography>
-                            )}
-                        </Paper>
-                    </Grid>
-                    <Grid item xs={12}>
-                        <Paper elevation={0} sx={{ p: 2, height: 163, borderRadius: 3 }}>
-                            {chartData.byCategory ? (
-                                <Doughnut options={doughnutOptions('Taxas por Categoria')} data={chartData.byCategory} />
-                            ) : (
-                                 <Typography>Sem dados.</Typography>
-                            )}
-                        </Paper>
-                    </Grid>
-                </Grid>
-            </Grid>
-            
-            {/* DataGrid */}
-            <Box sx={{ width: '100%' }}>
-                <DataGrid
-                    rows={rows}
-                    columns={columns}
-                    autoHeight
-                    initialState={{
-                        pagination: { paginationModel: { pageSize: 10 } },
-                        sorting: { sortModel: [{ field: 'date', sort: 'desc' }] },
-                    }}
-                    pageSizeOptions={[10, 25, 50]}
-                    disableRowSelectionOnClick
-                    localeText={ptPT.components.MuiDataGrid.defaultProps.localeText}
-                />
-            </Box>
+            {isLoading && !hasData ? (
+                <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}><CircularProgress /></Box>
+            ) : (
+                <>
+                    {hasData ? (
+                         <Grid container spacing={3} sx={{ mb: 4 }}>
+                            <Grid item xs={12} md={8}>
+                                <Paper elevation={0} sx={{ p: 2, height: 350, borderRadius: 3 }}>
+                                    {chartData.timeSeries && chartData.timeSeries.datasets.some(ds => ds.data.some(d => d > 0)) ? (
+                                        <Bar options={barOptions} data={chartData.timeSeries} />
+                                    ) : (
+                                        <Typography sx={{ textAlign: 'center', pt: '30%' }}>Sem dados para o gráfico de tempo.</Typography>
+                                    )}
+                                </Paper>
+                            </Grid>
+                            <Grid item xs={12} md={4} container spacing={3}>
+                                <Grid item xs={12}>
+                                    <Paper elevation={0} sx={{ p: 2, height: 163, borderRadius: 3 }}>
+                                        {chartData.bySource ? (
+                                            <Doughnut options={doughnutOptions('Taxas por Corretora')} data={chartData.bySource} />
+                                        ) : (
+                                            <Typography>Sem dados.</Typography>
+                                        )}
+                                    </Paper>
+                                </Grid>
+                                <Grid item xs={12}>
+                                    <Paper elevation={0} sx={{ p: 2, height: 163, borderRadius: 3 }}>
+                                        {chartData.byCategory ? (
+                                            <Doughnut options={doughnutOptions('Taxas por Categoria')} data={chartData.byCategory} />
+                                        ) : (
+                                            <Typography>Sem dados.</Typography>
+                                        )}
+                                    </Paper>
+                                </Grid>
+                            </Grid>
+                        </Grid>
+                    ) : (
+                         <Typography align="center" sx={{ my: 4, color: 'text.secondary' }}>Não existe informação de taxas e comissões para o período selecionado.</Typography>
+                    )}
+                    
+                    {/* DataGrid */}
+                    <Box sx={{ width: '100%' }}>
+                        <DataGrid
+                            rows={rows}
+                            columns={columns}
+                            loading={isLoading} // <-- NOVO
+                            autoHeight
+                            initialState={{
+                                pagination: { paginationModel: { pageSize: 10 } },
+                                sorting: { sortModel: [{ field: 'date', sort: 'desc' }] },
+                            }}
+                            pageSizeOptions={[10, 25, 50]}
+                            disableRowSelectionOnClick
+                            localeText={ptPT.components.MuiDataGrid.defaultProps.localeText}
+                            slots={{ noRowsOverlay: NoRowsOverlay }} // <-- NOVO
+                        />
+                    </Box>
+                </>
+            )}
         </Paper>
     );
 }
