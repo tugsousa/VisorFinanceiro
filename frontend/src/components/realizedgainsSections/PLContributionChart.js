@@ -21,7 +21,6 @@ const BORDER_COLORS = {
     fees: 'rgba(210, 42, 42, 1)',
 };
 
-// Helper function to create a dataset with the smart borderRadius logic
 const createDataset = (label, data, color, borderColor) => ({
   label,
   data,
@@ -33,12 +32,11 @@ const createDataset = (label, data, color, borderColor) => ({
     const { datasets } = chart.data;
     const currentValue = datasets[datasetIndex].data[dataIndex];
 
-    if (!currentValue) return 0; // No radius for zero values
+    if (!currentValue) return 0;
 
     let lastPositiveDatasetIndex = -1;
     let lastNegativeDatasetIndex = -1;
 
-    // Find the last dataset index for positive and negative values in this stack
     for (let i = 0; i < datasets.length; i++) {
       const value = datasets[i].data[dataIndex];
       if (value > 0) {
@@ -50,7 +48,6 @@ const createDataset = (label, data, color, borderColor) => ({
 
     const radius = 4;
 
-    // Apply radius only to the outermost segments of each stack
     if (currentValue > 0 && datasetIndex === lastPositiveDatasetIndex) {
       return { topRight: radius, topLeft: radius };
     }
@@ -58,7 +55,6 @@ const createDataset = (label, data, color, borderColor) => ({
       return { bottomRight: radius, bottomLeft: radius };
     }
     
-    // All other "inner" segments have no radius
     return 0;
   },
 });
@@ -78,9 +74,18 @@ const PLContributionChart = ({ stockSaleDetails, optionSaleDetails, dividendTaxR
       years.forEach(year => { yearlyData[year] = { stocks: 0, options: 0, dividends: 0, fees: 0 }; });
       stockSaleDetails.forEach(sale => { const year = getYearString(sale.SaleDate); if (year && yearlyData[year]) yearlyData[year].stocks += sale.Delta; });
       optionSaleDetails.forEach(sale => { const year = getYearString(sale.close_date); if (year && yearlyData[year]) yearlyData[year].options += sale.delta; });
-      Object.entries(dividendTaxResultForChart).forEach(([year, countries]) => { if (yearlyData[year]) { let net = 0; Object.values(countries).forEach(d => { net += (d.gross_amt || 0) + (d.taxed_amt || 0); }); yearlyData[year].dividends += net; } });
+      
+      Object.entries(dividendTaxResultForChart).forEach(([year, countries]) => {
+        if (yearlyData[year]) {
+          let gross = 0;
+          Object.values(countries).forEach(d => {
+            gross += (d.gross_amt || 0);
+          });
+          yearlyData[year].dividends += gross;
+        }
+      });
+      
       (feesData || []).forEach(fee => { const year = getYearString(fee.date); if (year && yearlyData[year]) yearlyData[year].fees += fee.amount_eur; });
-
 
       finalChartData = {
         labels: years,
@@ -95,9 +100,17 @@ const PLContributionChart = ({ stockSaleDetails, optionSaleDetails, dividendTaxR
       const monthlyData = Array(12).fill(null).map(() => ({ stocks: 0, options: 0, dividends: 0, fees: 0 }));
       stockSaleDetails.forEach(sale => { if (getYearString(sale.SaleDate) === selectedYear) { const month = getMonthIndex(sale.SaleDate); if (month !== null) monthlyData[month].stocks += sale.Delta; } });
       optionSaleDetails.forEach(sale => { if (getYearString(sale.close_date) === selectedYear) { const month = getMonthIndex(sale.close_date); if (month !== null) monthlyData[month].options += sale.delta; } });
-      (dividendTransactionsList || []).forEach(tx => { if (getYearString(tx.date) === selectedYear) { const month = getMonthIndex(tx.date); if (month !== null && tx.amount_eur != null) monthlyData[month].dividends += tx.amount_eur; } });
+      
+      (dividendTransactionsList || []).forEach(tx => {
+        if (getYearString(tx.date) === selectedYear && tx.transaction_subtype !== 'TAX') {
+          const month = getMonthIndex(tx.date);
+          if (month !== null && tx.amount_eur != null) {
+            monthlyData[month].dividends += tx.amount_eur;
+          }
+        }
+      });
+      
       (feesData || []).forEach(fee => { if (getYearString(fee.date) === selectedYear) { const month = getMonthIndex(fee.date); if (month !== null) monthlyData[month].fees += fee.amount_eur; } });
-
 
       finalChartData = {
         labels: MONTH_NAMES_CHART,

@@ -39,12 +39,12 @@ const OverallPLChart = ({ stockSaleDetails, optionSaleDetails, dividendTaxResult
       if (year) {
         allYearsInData.add(year);
         if (!yearlyPL[year]) yearlyPL[year] = { stocks: 0, options: 0, dividends: 0, fees: 0, total: 0 };
-        let yearDividendNet = 0;
+        let yearDividendGross = 0; 
         Object.values(countries).forEach(countryData => {
-          yearDividendNet += (countryData.gross_amt || 0) + (countryData.taxed_amt || 0);
+          yearDividendGross += (countryData.gross_amt || 0);
         });
-        yearlyPL[year].dividends += yearDividendNet;
-        yearlyPL[year].total += yearDividendNet;
+        yearlyPL[year].dividends += yearDividendGross;
+        yearlyPL[year].total += yearDividendGross;
       }
     });
 
