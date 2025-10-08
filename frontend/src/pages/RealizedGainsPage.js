@@ -9,8 +9,6 @@ import { useRealizedGains } from '../hooks/useRealizedGains';
 import { UI_TEXT, ALL_YEARS_OPTION } from '../constants';
 import { formatCurrency } from '../utils/formatUtils';
 
-// --- INÍCIO DA ALTERAÇÃO ---
-// Importar os ícones necessários
 import PercentIcon from '@mui/icons-material/Percent';
 import ShowChartIcon from '@mui/icons-material/ShowChart';
 import CandlestickChartIcon from '@mui/icons-material/CandlestickChart';
@@ -18,9 +16,8 @@ import AttachMoneyIcon from '@mui/icons-material/AttachMoney';
 import AccountBalanceWalletIcon from '@mui/icons-material/AccountBalanceWallet';
 import TrendingUpIcon from '@mui/icons-material/TrendingUp';
 import RequestQuoteIcon from '@mui/icons-material/RequestQuote';
-import EmojiEventsIcon from '@mui/icons-material/EmojiEvents'; // Ícone para Taxa de Sucesso
-import TimelapseIcon from '@mui/icons-material/Timelapse'; // Ícone para Duração Média
-// --- FIM DA ALTERAÇÃO ---
+import EmojiEventsIcon from '@mui/icons-material/EmojiEvents'; 
+import TimelapseIcon from '@mui/icons-material/Timelapse';
 
 import StockHoldingsSection from '../components/realizedgainsSections/StockHoldingsSection';
 import OptionHoldingsSection from '../components/realizedgainsSections/OptionHoldingsSection';
@@ -180,7 +177,7 @@ export default function RealizedGainsPage() {
                 <Tooltip title="Lucro ou prejuízo total realizado com o fecho de posições de opções no período selecionado." placement="top">
                   <Box sx={{ flex: '1 1 0', minWidth: 140 }}><KeyMetricCard title="Resultado Opções" value={summaryData.optionPL} icon={<CandlestickChartIcon />} /></Box>
                 </Tooltip>
-                <Tooltip title="Montante líquido recebido em dividendos (após impostos retidos na fonte) no período selecionado." placement="top">
+                <Tooltip title="Montante bruto recebido de dividendos (não tem em conta retenções na fonte) no período selecionado." placement="top">
                   <Box sx={{ flex: '1 1 0', minWidth: 140 }}><KeyMetricCard title="Dividendos" value={summaryData.dividendPL} icon={<AttachMoneyIcon />} /></Box>
                 </Tooltip>
                 <Tooltip title="Soma de todas as taxas e comissões pagas no período selecionado." placement="top">
