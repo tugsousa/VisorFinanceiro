@@ -15,6 +15,7 @@ import (
 	"github.com/username/taxfolio/backend/src/database"
 	"github.com/username/taxfolio/backend/src/logger"
 	"github.com/username/taxfolio/backend/src/model"
+	"github.com/username/taxfolio/backend/src/security/validation" // Adicionado
 )
 
 // Helper function to check if an email belongs to an admin.
@@ -79,42 +80,60 @@ func (h *UserHandler) RegisterUserHandler(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	credentials.Username = strings.TrimSpace(credentials.Username)
-	credentials.Email = strings.ToLower(strings.TrimSpace(credentials.Email))
-	credentials.Password = strings.TrimSpace(credentials.Password)
+	// --- CORREÇÃO: Sanitização Imediata ---
+	credentials.Username = validation.SanitizeText(strings.TrimSpace(credentials.Username))
+	credentials.Email = strings.ToLower(validation.SanitizeText(strings.TrimSpace(credentials.Email)))
+	credentials.Password = strings.TrimSpace(credentials.Password) // Password should only be trimmed, hashing handles sanitization later
+	// --- FIM DA CORREÇÃO ---
 
 	if credentials.Username == "" && strings.Contains(credentials.Email, "@") {
 		credentials.Username = strings.Split(credentials.Email, "@")[0]
 	}
 
-	if credentials.Username == "" || credentials.Email == "" || credentials.Password == "" {
-		sendJSONError(w, "Username, email, and password are required", http.StatusBadRequest)
+	// --- CORREÇÃO: Validação Centralizada ---
+	if credentials.Username == "" {
+		sendJSONError(w, "Username is required", http.StatusBadRequest)
+		return
+	}
+	if err := validation.ValidateStringMaxLength(credentials.Username, 50, "Username"); err != nil {
+		sendJSONError(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	if err := validation.ValidateStringNotEmpty(credentials.Email, "Email"); err != nil {
+		sendJSONError(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 	if !emailRegex.MatchString(credentials.Email) {
 		sendJSONError(w, "Invalid email format", http.StatusBadRequest)
 		return
 	}
+	if err := validation.ValidateStringNotEmpty(credentials.Password, "Password"); err != nil {
+		sendJSONError(w, err.Error(), http.StatusBadRequest)
+		return
+	}
 	if !passwordRegex.MatchString(credentials.Password) {
 		sendJSONError(w, "Password must be at least 6 characters long", http.StatusBadRequest)
 		return
 	}
+	// --- FIM DA CORREÇÃO ---
 
+	// Check username uniqueness
 	_, err := model.GetUserByUsername(database.DB, credentials.Username)
 	if err == nil {
 		sendJSONError(w, "Username already exists", http.StatusConflict)
 		return
-	} else if !errors.Is(err, sql.ErrNoRows) && !strings.Contains(strings.ToLower(err.Error()), "user not found") {
+	} else if !errors.Is(err, sql.ErrNoRows) { // CORREÇÃO: Apenas verificar por sql.ErrNoRows
 		logger.L.Error("Error checking username uniqueness", "error", err)
 		sendJSONError(w, "Failed to process registration", http.StatusInternalServerError)
 		return
 	}
 
+	// Check email uniqueness
 	_, err = model.GetUserByEmail(database.DB, credentials.Email)
 	if err == nil {
 		sendJSONError(w, "Email address already in use", http.StatusConflict)
 		return
-	} else if !errors.Is(err, sql.ErrNoRows) && !strings.Contains(strings.ToLower(err.Error()), "user with this email not found") {
+	} else if !errors.Is(err, sql.ErrNoRows) { // CORREÇÃO: Apenas verificar por sql.ErrNoRows
 		logger.L.Error("Error checking email uniqueness", "error", err)
 		sendJSONError(w, "Failed to process registration", http.StatusInternalServerError)
 		return
@@ -191,12 +210,20 @@ func (h *UserHandler) LoginUserHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	credentials.Email = strings.ToLower(strings.TrimSpace(credentials.Email))
+	// --- CORREÇÃO: Sanitização Imediata ---
+	credentials.Email = strings.ToLower(validation.SanitizeText(strings.TrimSpace(credentials.Email)))
+	// --- FIM DA CORREÇÃO ---
 
 	logger.L.Info("Login attempt received")
 	user, err := model.GetUserByEmail(database.DB, credentials.Email)
 	if err != nil {
-		logger.L.Warn("User lookup by email failed for login", "error", err)
+		// CORREÇÃO: Usar sql.ErrNoRows para evitar verificação de string
+		if errors.Is(err, sql.ErrNoRows) {
+			logger.L.Warn("User lookup by email failed for login: user not found", "email", credentials.Email)
+			sendJSONError(w, "Invalid email or password", http.StatusUnauthorized)
+			return
+		}
+		logger.L.Error("User lookup by email failed for login", "error", err)
 		sendJSONError(w, "Invalid email or password", http.StatusUnauthorized)
 		return
 	}

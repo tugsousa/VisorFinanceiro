@@ -1,30 +1,12 @@
 // frontend/src/pages/VerifyEmailPage.js
 import React, { useMemo } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-// REMOVE THE DIRECT AXIOS IMPORT
-// import axios from 'axios'; 
 import { useQuery } from '@tanstack/react-query';
 import { API_ENDPOINTS } from '../constants';
-// IMPORT THE NEW SERVICE FUNCTION
+
 import { apiVerifyEmail } from '../api/apiService'; 
 import { Typography, Box, CircularProgress, Alert } from '@mui/material';
 
-// THIS ENTIRE FUNCTION IS NOW OBSOLETE AND SHOULD BE DELETED
-/*
-const verifyEmailToken = async (token) => {
-  if (!token) {
-    throw new Error('Invalid verification link: No token provided.');
-  }
-  const verificationUrl = `${API_ENDPOINTS.AUTH_VERIFY_EMAIL}?token=${token}`;
-  try {
-    const { data } = await axios.get(verificationUrl); // <-- THIS IS THE PROBLEM LINE
-    return data;
-  } catch (err) {
-    const errorMessage = err.response?.data?.error || err.response?.data?.message || err.message || 'Failed to verify email.';
-    throw new Error(errorMessage);
-  }
-};
-*/
 
 const VerifyEmailPage = () => {
   const location = useLocation();
@@ -35,13 +17,12 @@ const VerifyEmailPage = () => {
     return queryParams.get('token');
   }, [location.search]);
 
-  // UPDATE THE useQuery HOOK
+
   const { data, error, isLoading, isSuccess, isError } = useQuery({
     queryKey: ['emailVerification', token],
-    // REPLACE THE OLD FUNCTION WITH THE NEW API SERVICE CALL
     queryFn: async () => {
         const response = await apiVerifyEmail(token);
-        return response.data; // Ensure we pass the data part to the component
+        return response.data;
     },
     enabled: !!token,
     retry: false, 
@@ -50,7 +31,8 @@ const VerifyEmailPage = () => {
   
   React.useEffect(() => {
       if (isSuccess) {
-          setTimeout(() => navigate('/signin?verified=true'), 3000);
+          // CORREÇÃO: Remover o setTimeout para navegação imediata
+          navigate('/signin?verified=true');
       }
   }, [isSuccess, navigate]);
 
