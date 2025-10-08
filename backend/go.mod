@@ -7,12 +7,15 @@ toolchain go1.24.7
 require (
 	github.com/golang-jwt/jwt/v5 v5.2.2
 	github.com/golang-migrate/migrate/v4 v4.18.3
-	golang.org/x/net v0.38.0
 	github.com/google/uuid v1.6.0
+	github.com/microcosm-cc/bluemonday v1.0.26 // <-- ADICIONADO
+	golang.org/x/net v0.38.0
 )
 
 require (
 	cloud.google.com/go/compute/metadata v0.3.0 // indirect
+	github.com/aymerick/douceur v0.2.0 // indirect
+	github.com/gorilla/css v1.0.0 // indirect
 	github.com/hashicorp/errwrap v1.1.0 // indirect
 	github.com/hashicorp/go-multierror v1.1.1 // indirect
 	github.com/stretchr/testify v1.10.0 // indirect
@@ -22,7 +25,6 @@ require (
 require (
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/go-chi/chi/v5 v5.2.3
-	github.com/google/uuid v1.6.0 // indirect
 	github.com/joho/godotenv v1.5.1
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/ncruces/go-strftime v0.1.9 // indirect

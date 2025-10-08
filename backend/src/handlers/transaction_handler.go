@@ -211,6 +211,18 @@ func (h *TransactionHandler) HandleAddManualTransaction(w http.ResponseWriter, r
 		return
 	}
 
+	// --- START: Sanitization and Cleaning ---
+	// Sanitizar e limpar todos os campos de texto antes de prosseguir
+	req.Source = validation.StripUnprintable(req.Source)
+	req.Source = validation.SanitizeText(req.Source)
+
+	req.ProductName = validation.StripUnprintable(req.ProductName)
+	req.ProductName = validation.SanitizeText(req.ProductName)
+
+	req.ISIN = validation.StripUnprintable(req.ISIN)
+	req.ISIN = validation.SanitizeText(req.ISIN)
+	// --- END: Sanitization and Cleaning ---
+
 	// --- START: Detailed Validation ---
 	if err := validation.ValidateStringNotEmpty(req.Date, "Data"); err != nil {
 		utils.SendJSONError(w, "O campo 'Data' é obrigatório.", http.StatusBadRequest)
@@ -284,6 +296,11 @@ func (h *TransactionHandler) HandleAddManualTransaction(w http.ResponseWriter, r
 
 	description := fmt.Sprintf("Manual Entry: %s %f %s @ %f %s", req.BuySell, req.Quantity, req.ProductName, req.Price, req.Currency)
 
+	// Aplica a sanitização final e proteção contra injeção de fórmulas
+	// à string de descrição final que será guardada
+	sanitizedDescription := validation.SanitizeForFormulaInjection(description)
+	sanitizedDescription = validation.SanitizeText(sanitizedDescription)
+
 	hashInput := fmt.Sprintf("%s-%s", description, time.Now().String())
 	hash := sha256.Sum256([]byte(hashInput))
 	hashId := hex.EncodeToString(hash[:])
@@ -314,7 +331,7 @@ func (h *TransactionHandler) HandleAddManualTransaction(w http.ResponseWriter, r
 		req.TransactionType,
 		req.TransactionSubType,
 		req.BuySell,
-		description,
+		sanitizedDescription, // <-- USAR O CAMPO SANITIZADO
 		amount,
 		req.Currency,
 		req.Commission,
@@ -322,7 +339,7 @@ func (h *TransactionHandler) HandleAddManualTransaction(w http.ResponseWriter, r
 		exchangeRate,
 		amountEUR,
 		countryCode,
-		description,
+		sanitizedDescription, // <-- USAR O CAMPO SANITIZADO
 		hashId,
 	)
 
