@@ -4,10 +4,10 @@ import React, { useMemo, useState } from 'react';
 import { useParams, Link as RouterLink } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { apiFetchAdminUserDetails } from '../api/apiService';
-import { Box, Typography, CircularProgress, Alert, Paper, Grid, Divider, Link, Card, Tabs, Tab } from '@mui/material';
+import { Box, Typography, CircularProgress, Alert, Paper, Grid, Divider, Link, Card, Tabs, Tab, Tooltip } from '@mui/material';
 import { useAuth } from '../context/AuthContext';
 import { DataGrid } from '@mui/x-data-grid';
-import { parseDateRobust } from '../utils/dateUtils';
+import { parseDateRobust, calculateDaysHeld } from '../utils/dateUtils'; // <-- Importado calculateDaysHeld
 import { formatCurrency } from '../utils/formatUtils';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import ShowChartIcon from '@mui/icons-material/ShowChart';
@@ -18,13 +18,20 @@ import TrendingUpIcon from '@mui/icons-material/TrendingUp';
 import AccountBalanceWalletIcon from '@mui/icons-material/AccountBalanceWallet';
 import PercentIcon from '@mui/icons-material/Percent';
 import StatCard from '../components/admin/StatCard';
+import EmojiEventsIcon from '@mui/icons-material/EmojiEvents'; // <-- Novo Icon
+import TimelapseIcon from '@mui/icons-material/Timelapse'; // <-- Novo Icon
 
 
-const KeyMetricCard = ({ title, value, icon, isPercentage = false }) => {
-  const isPositive = value >= 0;
-  const bgColor = isPositive ? 'rgba(76, 175, 80, 0.1)' : 'rgba(244, 67, 54, 0.1)';
-  const textColor = isPositive ? 'success.main' : 'error.main';
-  const formattedValue = isPercentage ? `${value.toFixed(2)}%` : formatCurrency(value);
+// Componente KeyMetricCard atualizado para suportar 'unit'
+const KeyMetricCard = ({ title, value, icon, isPercentage = false, unit = '' }) => {
+  const isPositive = typeof value === 'number' ? value >= 0 : true;
+  // Ajustar a cor de fundo para métricas neutras como a duração
+  const bgColor = unit ? 'rgba(63, 81, 181, 0.1)' : (isPositive ? 'rgba(76, 175, 80, 0.1)' : 'rgba(244, 67, 54, 0.1)');
+  const textColor = unit ? 'primary.main' : (isPositive ? 'success.main' : 'error.main');
+  
+  const formattedValue = isPercentage 
+    ? `${(value || 0).toFixed(2)}%` 
+    : (unit ? `${(value || 0).toFixed(0)} ${unit}` : formatCurrency(value));
 
   return (
     <Card elevation={0} sx={{ display: 'flex', alignItems: 'center', p: 1.5, bgcolor: bgColor, borderRadius: 2, height: '100%' }}>
@@ -91,7 +98,52 @@ const UserDetailPage = () => {
         const totalGrowth = (marketValue + Math.abs(totalWithdrawals)) - totalDeposits;
         const portfolioReturn = totalDeposits > 0 ? (totalGrowth / totalDeposits) * 100 : 0;
 
-        const finalKeyMetrics = { stockPL, optionPL, dividendPL, totalFeesAndCommissions, unrealizedStockPL, totalPL, portfolioReturn };
+        // --- INÍCIO: NOVAS MÉTRICAS CALCULADAS ---
+        const stockSales = metricsData.StockSaleDetails || [];
+        const optionSales = metricsData.OptionSaleDetails || [];
+        const winningTrades = stockSales.filter(s => s.Delta > 0).length + optionSales.filter(o => o.delta > 0).length;
+        const totalTrades = stockSales.length + optionSales.length;
+        const winLossRatio = totalTrades > 0 ? (winningTrades / totalTrades) * 100 : 0;
+
+        let totalDaysWinners = 0;
+        let countWinners = 0;
+        let totalDaysLosers = 0;
+        let countLosers = 0;
+
+        stockSales.forEach(sale => {
+            const daysHeld = calculateDaysHeld(sale.BuyDate, sale.SaleDate);
+            if (typeof daysHeld === 'number') {
+                if (sale.Delta > 0) {
+                    totalDaysWinners += daysHeld;
+                    countWinners++;
+                } else if (sale.Delta < 0) {
+                    totalDaysLosers += daysHeld;
+                    countLosers++;
+                }
+            }
+        });
+
+        optionSales.forEach(sale => {
+            const daysHeld = calculateDaysHeld(sale.open_date, sale.close_date);
+            if (typeof daysHeld === 'number') {
+                if (sale.delta > 0) {
+                    totalDaysWinners += daysHeld;
+                    countWinners++;
+                } else if (sale.delta < 0) {
+                    totalDaysLosers += daysHeld;
+                    countLosers++;
+                }
+            }
+        });
+
+        const avgHoldingPeriodWinners = countWinners > 0 ? totalDaysWinners / countWinners : 0;
+        const avgHoldingPeriodLosers = countLosers > 0 ? totalDaysLosers / countLosers : 0;
+        // --- FIM: NOVAS MÉTRICAS CALCULADAS ---
+
+        const finalKeyMetrics = { 
+            stockPL, optionPL, dividendPL, totalFeesAndCommissions, unrealizedStockPL, totalPL, portfolioReturn,
+            winLossRatio, avgHoldingPeriodWinners, avgHoldingPeriodLosers
+        };
         
         const holdings = currentHoldingsData.map(h => ({
             id: h.isin,
@@ -187,9 +239,16 @@ const UserDetailPage = () => {
                                     <Grid item xs={6} md={4} lg={3}><KeyMetricCard title="Resultados Opções" value={keyMetrics.optionPL} icon={<CandlestickChartIcon />} /></Grid>
                                     <Grid item xs={6} md={4} lg={3}><KeyMetricCard title="Dividendos" value={keyMetrics.dividendPL} icon={<AttachMoneyIcon />} /></Grid>
                                     <Grid item xs={6} md={4} lg={3}><KeyMetricCard title="Taxas e Comissões" value={keyMetrics.totalFeesAndCommissions} icon={<RequestQuoteIcon />} /></Grid>
+                                    
                                     <Grid item xs={6} md={4} lg={3}><KeyMetricCard title="P/L em Aberto" value={keyMetrics.unrealizedStockPL} icon={<TrendingUpIcon />} /></Grid>
                                     <Grid item xs={6} md={4} lg={3}><KeyMetricCard title="Retorno Total (€)" value={keyMetrics.totalPL} icon={<AccountBalanceWalletIcon />} /></Grid>
                                     <Grid item xs={6} md={4} lg={3}><KeyMetricCard title="Retorno Total (%)" value={keyMetrics.portfolioReturn} icon={<PercentIcon />} isPercentage /></Grid>
+                                    
+                                    {/* --- NOVAS MÉTRICAS ADICIONADAS --- */}
+                                    <Grid item xs={6} md={4} lg={3}><KeyMetricCard title="Taxa de Sucesso (%)" value={keyMetrics.winLossRatio} icon={<EmojiEventsIcon />} isPercentage /></Grid>
+                                    <Grid item xs={6} md={4} lg={3}><KeyMetricCard title="Duração (Ganhos)" value={keyMetrics.avgHoldingPeriodWinners} icon={<TimelapseIcon />} unit="dias" /></Grid>
+                                    <Grid item xs={6} md={4} lg={3}><KeyMetricCard title="Duração (Perdas)" value={keyMetrics.avgHoldingPeriodLosers} icon={<TimelapseIcon />} unit="dias" /></Grid>
+                                    {/* --- FIM DAS NOVAS MÉTRICAS ADICIONADAS --- */}
                                 </Grid>
                             </Paper>
                         </Grid>
