@@ -40,10 +40,19 @@ func (p *TransactionProcessor) Process(txs []models.CanonicalTransaction) []mode
 			tx.AmountEUR = tx.Amount // Fallback if exchange rate is somehow zero
 		}
 
-		// 3. Enrich with Country Code from ISIN.
+		// NOVO PASSO 3: Converter a comissão para EUR.
+		// O campo tx.Commission (Canonical) tem o valor na moeda original.
+		var commissionEUR float64
+		if tx.ExchangeRate > 0 {
+			commissionEUR = tx.Commission / tx.ExchangeRate
+		} else {
+			commissionEUR = tx.Commission // Assume 1:1 se a taxa for 0 ou 1
+		}
+
+		// 4. Enrich with Country Code from ISIN.
 		tx.CountryCode = utils.GetCountryCodeString(tx.ISIN)
 
-		// 4. Enrich with a unique Hash ID.
+		// 5. Enrich with a unique Hash ID.
 		tx.HashId = generateHash(tx)
 
 		// --- Final Mapping ---
@@ -60,12 +69,12 @@ func (p *TransactionProcessor) Process(txs []models.CanonicalTransaction) []mode
 			TransactionSubType: tx.TransactionSubType,
 			BuySell:            tx.BuySell,
 			Description:        tx.RawText,
-			Amount:             tx.Amount, // This is now the correct signed amount from the parser
+			Amount:             tx.Amount,
 			Currency:           tx.Currency,
-			Commission:         tx.Commission,
+			Commission:         commissionEUR, // <--- USAR O VALOR CONVERTIDO AQUI
 			OrderID:            tx.OrderID,
 			ExchangeRate:       tx.ExchangeRate,
-			AmountEUR:          tx.AmountEUR, // This is the correctly converted EUR amount
+			AmountEUR:          tx.AmountEUR,
 			CountryCode:        tx.CountryCode,
 			InputString:        tx.RawText,
 			HashId:             tx.HashId,

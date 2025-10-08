@@ -17,48 +17,37 @@ func (p *feeProcessorImpl) Process(transactions []models.ProcessedTransaction) [
 	processedCommissions := make(map[string]bool) // Map to track processed order IDs for commissions
 
 	for _, tx := range transactions {
-		// Case 1: Dedicated Fee Transactions (e.g., Degiro "custo de conectividade")
+		// Case 1: Dedicated Fee Transactions (e.g., Degiro "custo de conectividade", "juros")
 		if tx.TransactionType == "FEE" {
 			category := "Brokerage Fee" // Default
 			if tx.TransactionSubType == "INTEREST" {
 				category = "Interest"
 			}
 
+			// For dedicated fees, we use AmountEUR (which is the net movement, usually negative)
 			feeDetails = append(feeDetails, models.FeeDetail{
 				Date:        tx.Date,
 				Description: tx.ProductName,
-				AmountEUR:   tx.AmountEUR, // This is already calculated in EUR
+				AmountEUR:   tx.AmountEUR,
 				Source:      tx.Source,
 				Category:    category,
 			})
 		}
 
-		// Case 2: Commissions from Trades
-		// This check prevents adding the total commission for a single order multiple times
-		// if the order was executed in several partial trades.
+		// Case 2: Commissions from Trades (STOCK/OPTION)
+		// We use the tx.Commission field, which is now guaranteed to be in EUR.
+		// We use tx.OrderID to consolidate commission for partial fills.
 		if tx.Commission > 0 && tx.OrderID != "" && !processedCommissions[tx.OrderID] {
-			var commissionEUR float64
-
-			// DEGIRO CSVs report commissions in EUR, even for foreign currency trades.
-			// IBKR reports commissions in the trade's currency.
-			if tx.Source == "degiro" {
-				commissionEUR = tx.Commission
-			} else {
-				// For other brokers, we assume the commission is in the transaction's currency
-				// and needs to be converted using the provided exchange rate.
-				if tx.ExchangeRate > 0 {
-					commissionEUR = tx.Commission / tx.ExchangeRate
-				} else {
-					commissionEUR = tx.Commission // Fallback if rate is missing
-				}
-			}
+			// A comissão é o valor absoluto do tx.Commission (já em EUR)
+			commissionEUR := tx.Commission
 
 			feeDetails = append(feeDetails, models.FeeDetail{
 				Date:        tx.Date,
-				Description: tx.ProductName,                      // Use the product name for context
-				AmountEUR:   utils.RoundFloat(-commissionEUR, 2), // Commissions are a cost (negative)
-				Source:      tx.Source,
-				Category:    "Trade Commission",
+				Description: tx.ProductName, // Use the product name for context
+				// Comissões são um custo (negativo), usamos o valor da comissão (positivo) e invertemos o sinal.
+				AmountEUR: utils.RoundFloat(-commissionEUR, 2),
+				Source:    tx.Source,
+				Category:  "Trade Commission",
 			})
 			processedCommissions[tx.OrderID] = true // Mark this OrderID as processed
 		}
