@@ -27,6 +27,11 @@ export default function Layout({ children }) {
         setAnchorEl(null);
     };
 
+    const handleCookiePreferenceChange = () => {
+        document.cookie = "visorfinanceiro-cookie-consent=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
+        window.location.reload();
+    };
+
     const handleLogout = async () => {
         handleMenuClose();
         await logout();
@@ -205,6 +210,9 @@ export default function Layout({ children }) {
                         <MuiLink component={RouterLink} to="/policies/contact-information" variant="body2">
                             Informações de contacto
                         </MuiLink>
+                        <MuiLink component="button" variant="body2" onClick={handleCookiePreferenceChange}>
+                            Preferências de Cookies
+                        </MuiLink>
                     </Box>
                 </Container>
             </Box>
@@ -229,7 +237,7 @@ export default function Layout({ children }) {
             >
                 Este site utiliza armazenamento local (localStorage) que é estritamente necessário para gerir a sua sessão de autenticação. Não usamos cookies para fins de análise ou publicidade.{" "}
                 <span style={{ fontSize: "12px", marginLeft: "10px" }}>
-                    <MuiLink component={RouterLink} to="/privacy-policy" style={{ color: "white", textDecoration: "underline" }}>
+                    <MuiLink component={RouterLink} to="/policies/privacy-policy" style={{ color: "white", textDecoration: "underline" }}>
                         Saber mais
                     </MuiLink>
                 </span>

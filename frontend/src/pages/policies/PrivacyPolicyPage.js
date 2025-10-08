@@ -56,9 +56,9 @@ const PrivacyPolicyPage = () => {
           Acreditamos que deve ter controlo total sobre a sua informação.
         </Typography>
 
-          <Typography variant="body1">
-            A qualquer momento, pode <strong>eliminar todas as suas transações</strong> através da página <MuiLink component={RouterLink} to="/transactions">Dados</MuiLink>. Se desejar <strong>encerrar permanentemente a sua conta</strong>, pode fazê-lo na página de <MuiLink component={RouterLink} to="/settings">Configurações</MuiLink>. Esta ação é irreversível e eliminará imediatamente todos os seus dados (de conta e financeiros) da nossa plataforma.
-          </Typography>
+        <Typography variant="body1">
+          A qualquer momento, pode <strong>eliminar todas as suas transações</strong> através da página <MuiLink component={RouterLink} to="/transactions">Dados</MuiLink>. Se desejar <strong>encerrar permanentemente a sua conta</strong>, pode fazê-lo na página de <MuiLink component={RouterLink} to="/settings">Configurações</MuiLink>. Esta ação é irreversível e eliminará imediatamente todos os seus dados (de conta e financeiros) da nossa plataforma.
+        </Typography>
 
       </Section>
 
@@ -67,6 +67,9 @@ const PrivacyPolicyPage = () => {
           <strong>Não vendemos os seus dados pessoais.</strong> Para operar a nossa plataforma, recorremos a prestadores de serviços essenciais que processam dados em nosso nome, sob estritas obrigações de segurança e confidencialidade:
         </Typography>
         <List dense sx={{ pl: 2 }}>
+          <ListItem>
+            <ListItemText primary={<strong>Autenticação (Google OAuth)</strong>} secondary="Se optar por criar uma conta ou iniciar sessão com o Google, recebemos as informações do seu perfil, como o seu e-mail e nome, para gerir o seu acesso de forma segura." />
+          </ListItem>
           <ListItem>
             <ListItemText primary={<strong>Alojamento Web (Hetzner)</strong>} secondary="A nossa aplicação e a sua base de dados estão alojadas em servidores seguros na Alemanha." />
           </ListItem>
@@ -104,7 +107,7 @@ const PrivacyPolicyPage = () => {
           Podemos atualizar esta Política de Privacidade periodicamente. Notificá-lo-emos de quaisquer alterações, publicando a nova versão nesta página.
         </Typography>
       </Section>
-      
+
       <Section title="Contacto" number={8}>
         <Typography variant="body1" paragraph>
           Se tiver alguma questão sobre a nossa Política de Privacidade, contacte-nos através do e-mail: <MuiLink href="mailto:geral@visorfinanceiro.pt">geral@visorfinanceiro.pt</MuiLink>.
