@@ -1,3 +1,4 @@
+// backend/src/logger/logger.go
 package logger
 
 import (
@@ -10,9 +11,15 @@ import (
 
 var L *slog.Logger // Global logger instance
 
+// Define um tipo de chave para evitar colisões com outras chaves de contexto.
+type contextKey string
+
+const loggerKey contextKey = "logger"
+
 // InitLogger initializes the global logger.
 // Call this once at application startup, after loading config.
 func InitLogger(logLevelStr string) {
+	// ... (O resto da função InitLogger permanece inalterado)
 	var level slog.Level
 	switch strings.ToLower(logLevelStr) {
 	case "debug":
@@ -34,7 +41,6 @@ func InitLogger(logLevelStr string) {
 		ReplaceAttr: func(groups []string, a slog.Attr) slog.Attr {
 			if a.Key == slog.TimeKey {
 				// Format time as RFC3339 for better machine readability
-				// Or remove if not needed: return slog.Attr{}
 				if t, ok := a.Value.Any().(time.Time); ok {
 					a.Value = slog.StringValue(t.Format(time.RFC3339))
 				}
@@ -45,8 +51,6 @@ func InitLogger(logLevelStr string) {
 
 	// Use JSON handler for structured logs
 	handler := slog.NewJSONHandler(os.Stdout, opts)
-	// For local development, TextHandler might be more readable:
-	// handler := slog.NewTextHandler(os.Stdout, opts)
 	L = slog.New(handler)
 
 	slog.SetDefault(L) // Set as default logger for packages that use log.Default() or slog's top-level functions
@@ -54,14 +58,24 @@ func InitLogger(logLevelStr string) {
 }
 
 // FromContext retrieves a logger from context, or returns the default global logger.
-// This is a placeholder for more advanced context-aware logging (e.g., with request IDs).
 func FromContext(ctx context.Context) *slog.Logger {
-	// if logger, ok := ctx.Value(loggerKey).(*slog.Logger); ok {
-	//  return logger
-	// }
+	if logger, ok := ctx.Value(loggerKey).(*slog.Logger); ok {
+		return logger
+	}
 	return L // Return global logger if none in context
 }
 
-// Add a context key type if you plan to store loggers in context
-// type contextKey string
-// const loggerKey = contextKey("logger")
+// ToContext embeds a slog.Logger into a context.Context.
+func ToContext(ctx context.Context, logger *slog.Logger) context.Context {
+	return context.WithValue(ctx, loggerKey, logger)
+}
+
+// InfoFromContext logs a message at Info level using the contextual logger.
+func InfoFromContext(ctx context.Context, msg string, args ...any) {
+	FromContext(ctx).Info(msg, args...)
+}
+
+// ErrorFromContext logs a message at Error level using the contextual logger.
+func ErrorFromContext(ctx context.Context, msg string, args ...any) {
+	FromContext(ctx).Error(msg, args...)
+}

@@ -138,11 +138,15 @@ func main() {
 	r := chi.NewRouter()
 
 	r.Use(middleware.Recoverer)
+	r.Use(handlers.ContextualLoggerMiddleware) // <-- NOVO MIDDLEWARE APLICADO
 	r.Use(proxyHeadersMiddleware)
 	r.Use(enableCORS)
 	r.Use(rateLimitMiddleware)
 
 	r.Get("/", func(w http.ResponseWriter, r *http.Request) {
+		ctxLogger := logger.FromContext(r.Context()) // Logger contextual
+		ctxLogger.Debug("Root path access")
+
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]string{"message": "VisorFinanceiro Backend is running"})
 	})
@@ -173,9 +177,7 @@ func main() {
 			r.Use(userHandler.AuthMiddleware)
 
 			r.Post("/upload", uploadHandler.HandleUpload)
-			// --- THIS IS THE CORRECTED LINE ---
 			r.Get("/realizedgains-data", uploadHandler.HandleGetRealizedGainsData)
-			// ------------------------------------
 			r.Get("/transactions/processed", txHandler.HandleGetProcessedTransactions)
 			r.Post("/transactions/manual", txHandler.HandleAddManualTransaction)
 			r.Get("/holdings/current-value", portfolioHandler.HandleGetCurrentHoldingsValue)
@@ -199,7 +201,6 @@ func main() {
 				r.Post("/admin/users/{userID}/refresh-metrics", userHandler.HandleAdminRefreshUserMetrics)
 				r.Get("/admin/users/{userID}", userHandler.HandleGetAdminUserDetails)
 				r.Post("/admin/users/refresh-metrics-batch", userHandler.HandleAdminRefreshMultipleUserMetrics)
-				// --- THIS ROUTE IS NOW CORRECTLY HANDLED ---
 				r.Post("/admin/stats/clear-cache", userHandler.HandleAdminClearStatsCache)
 			})
 		})
@@ -207,7 +208,8 @@ func main() {
 
 	r.NotFound(func(w http.ResponseWriter, r *http.Request) {
 		if !strings.HasPrefix(r.URL.Path, "/api/") {
-			logger.L.Warn("Root level path not found", "method", r.Method, "path", r.URL.Path)
+			ctxLogger := logger.FromContext(r.Context())
+			ctxLogger.Warn("Root level path not found", "method", r.Method, "path", r.URL.Path)
 			http.NotFound(w, r)
 		}
 	})
