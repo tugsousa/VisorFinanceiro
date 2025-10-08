@@ -7,30 +7,23 @@ import { Box, Typography, Paper, Grid, CircularProgress, Alert, Tooltip, IconBut
 import RefreshIcon from '@mui/icons-material/Refresh';
 import { DataGrid, GridToolbar } from '@mui/x-data-grid';
 import { useAuth } from '../context/AuthContext';
+// --- THIS IS THE CORRECTED IMPORT FOR CHART COMPONENTS ---
 import { Bar, Line, Doughnut } from 'react-chartjs-2';
 import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, LineElement, PointElement, Title, Legend, Tooltip as ChartTooltip, ArcElement } from 'chart.js';
 import { useNavigate } from 'react-router-dom';
 import logger from '../utils/logger';
+import StatCard from '../components/admin/StatCard';
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, LineElement, PointElement, Title, Legend, ChartTooltip, ArcElement);
 
 const formatCurrency = (value) => new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(value || 0);
-
-const KPICard = ({ title, value, loading }) => (
-    <Box sx={{ p: 2, textAlign: 'center', height: '100%' }}>
-        <Typography variant="h6" color="text.secondary" sx={{fontSize: '1rem'}}>{title}</Typography>
-        <Typography variant="h4" component="p" sx={{ fontWeight: 'bold', mt: 1 }}>
-            {loading ? <CircularProgress size={28} /> : (value ?? 'N/A')}
-        </Typography>
-    </Box>
-);
 
 const ChartCard = ({ type, data, options, title }) => {
     const ChartComponent = type === 'doughnut' ? Doughnut : (type === 'bar' ? Bar : Line);
     const hasData = data && data.datasets.some(ds => ds && ds.data && ds.data.length > 0 && ds.data.some(d => d > 0 || d < 0));
 
     return (
-        <Box sx={{ p: 2, height: 350, display: 'flex', flexDirection: 'column' }}>
+        <Paper variant="outlined" sx={{ p: 2, height: 350, display: 'flex', flexDirection: 'column' }}>
             <Typography variant="h6" sx={{ mb: 2, textAlign: 'center' }}>{title}</Typography>
             <Box sx={{ flexGrow: 1, position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 {hasData ? (
@@ -41,7 +34,7 @@ const ChartCard = ({ type, data, options, title }) => {
                     </Typography>
                 )}
             </Box>
-        </Box>
+        </Paper>
     );
 };
 
@@ -52,10 +45,10 @@ const TopUsersTable = ({ users, title, valueHeader }) => {
     ];
     const rows = users ? users.map((user, index) => ({ id: index, ...user })) : [];
     return (
-        <Box sx={{ p: 2, height: 400, display: 'flex', flexDirection: 'column' }}>
+        <Paper variant="outlined" sx={{ p: 2, height: 400, display: 'flex', flexDirection: 'column' }}>
             <Typography variant="h6" sx={{ mb: 2, textAlign: 'center' }}>{title}</Typography>
             <Box sx={{ flexGrow: 1 }}><DataGrid rows={rows} columns={columns} density="compact" hideFooter /></Box>
-        </Box>
+        </Paper>
     );
 };
 
@@ -215,13 +208,13 @@ const AdminDashboardPage = () => {
             <Box component={Paper} variant="outlined" sx={{ p: 2, mt: 4, borderColor: 'divider' }}>
                 <Typography variant="h5" component="h2" gutterBottom>Métricas do Período: {periodTitle}</Typography>
                 <Grid container spacing={2} sx={{ mb: 2 }}>
-                    <Grid item xs={6} sm={4} md={3}><KPICard title="Novos Utilizadores" value={statsData?.newUsersInPeriod} loading={statsLoading} /></Grid>
-                    <Grid item xs={6} sm={4} md={3}><KPICard title="Utilizadores Ativos" value={statsData?.activeUsersInPeriod} loading={statsLoading} /></Grid>
-                    <Grid item xs={6} sm={4} md={3}><KPICard title="Uploads" value={statsData?.uploadsInPeriod} loading={statsLoading} /></Grid>
-                    <Grid item xs={6} sm={4} md={3}><KPICard title="Taxa de Falha Upload" value={statsData ? `${statsData.uploadFailureRate.toFixed(1)}%` : 'N/A'} loading={statsLoading} /></Grid>
-                    <Grid item xs={6} sm={4} md={4}><KPICard title="Nº Depósitos" value={statsData?.cashDepositsInPeriod} loading={statsLoading} /></Grid>
-                    <Grid item xs={6} sm={4} md={4}><KPICard title="Total Depositado" value={formatCurrency(statsData?.totalCashDepositedEURInPeriod)} loading={statsLoading} /></Grid>
-                    <Grid item xs={6} sm={4} md={4}><KPICard title="Dividendos Recebidos" value={formatCurrency(statsData?.totalDividendsReceivedEURInPeriod)} loading={statsLoading} /></Grid>
+                    <Grid item xs={6} sm={4} md={3}><StatCard title="Novos Utilizadores" value={statsData?.newUsersInPeriod} loading={statsLoading} /></Grid>
+                    <Grid item xs={6} sm={4} md={3}><StatCard title="Utilizadores Ativos" value={statsData?.activeUsersInPeriod} loading={statsLoading} /></Grid>
+                    <Grid item xs={6} sm={4} md={3}><StatCard title="Uploads" value={statsData?.uploadsInPeriod} loading={statsLoading} /></Grid>
+                    <Grid item xs={6} sm={4} md={3}><StatCard title="Taxa de Falha Upload" value={statsData ? `${statsData.uploadFailureRate.toFixed(1)}%` : 'N/A'} loading={statsLoading} /></Grid>
+                    <Grid item xs={6} sm={4} md={4}><StatCard title="Nº Depósitos" value={statsData?.cashDepositsInPeriod} loading={statsLoading} /></Grid>
+                    <Grid item xs={6} sm={4} md={4}><StatCard title="Total Depositado" value={formatCurrency(statsData?.totalCashDepositedEURInPeriod)} loading={statsLoading} /></Grid>
+                    <Grid item xs={6} sm={4} md={4}><StatCard title="Dividendos Recebidos" value={formatCurrency(statsData?.totalDividendsReceivedEURInPeriod)} loading={statsLoading} /></Grid>
                 </Grid>
                 <Grid container spacing={3}>
                     <Grid item xs={12} md={6}><ChartCard type="line" data={timeSeriesChartData('activeUsersPerDay', 'Utilizadores Ativos')} options={timeSeriesChartOptions('Utilizadores Ativos por Dia')} title="" /></Grid>
@@ -237,15 +230,15 @@ const AdminDashboardPage = () => {
             <Box sx={{ p: 2, mt: 4 }}>
                 <Typography variant="h5" component="h2" gutterBottom>Métricas Gerais (Sempre)</Typography>
                 <Grid container spacing={2} sx={{ mb: 2 }}>
-                    <Grid item xs={6} sm={4} md={2}><KPICard title="Valor Total Carteiras" value={formatCurrency(statsData?.totalPortfolioValue)} loading={statsLoading} /></Grid>
-                    <Grid item xs={6} sm={4} md={2}><KPICard title="Total Utilizadores" value={statsData?.totalUsers} loading={statsLoading} /></Grid>
-                    <Grid item xs={6} sm={4} md={2}><KPICard title="Contas Eliminadas" value={statsData?.deletedUserCount} loading={statsLoading} /></Grid>
-                    <Grid item xs={6} sm={4} md={2}><KPICard title="Total Uploads" value={statsData?.totalUploads} loading={statsLoading} /></Grid>
-                    <Grid item xs={6} sm={4} md={2}><KPICard title="DAU (Hoje)" value={statsData?.dailyActiveUsers} loading={statsLoading} /></Grid>
-                    <Grid item xs={6} sm={4} md={2}><KPICard title="Utilizadores Ativos (30d)" value={statsData?.monthlyActiveUsers} loading={statsLoading} /></Grid>
-                    <Grid item xs={6} sm={4} md={2}><KPICard title="Tempo p/ 1º Upload" value={statsData ? `${statsData.avgTimeToFirstUploadDays.toFixed(1)} dias` : 'N/A'} loading={statsLoading} /></Grid>
-                    <Grid item xs={6} sm={4} md={2}><KPICard title="Novos Hoje" value={statsData?.newUsersToday} loading={statsLoading} /></Grid>
-                    <Grid item xs={6} sm={4} md={2}><KPICard title="Novos 7 Dias" value={statsData?.newUsersThisWeek} loading={statsLoading} /></Grid>
+                    <Grid item xs={6} sm={4} md={2}><StatCard title="Valor Total Carteiras" value={formatCurrency(statsData?.totalPortfolioValue)} loading={statsLoading} /></Grid>
+                    <Grid item xs={6} sm={4} md={2}><StatCard title="Total Utilizadores" value={statsData?.totalUsers} loading={statsLoading} /></Grid>
+                    <Grid item xs={6} sm={4} md={2}><StatCard title="Contas Eliminadas" value={statsData?.deletedUserCount} loading={statsLoading} /></Grid>
+                    <Grid item xs={6} sm={4} md={2}><StatCard title="Total Uploads" value={statsData?.totalUploads} loading={statsLoading} /></Grid>
+                    <Grid item xs={6} sm={4} md={2}><StatCard title="DAU (Hoje)" value={statsData?.dailyActiveUsers} loading={statsLoading} /></Grid>
+                    <Grid item xs={6} sm={4} md={2}><StatCard title="Utilizadores Ativos (30d)" value={statsData?.monthlyActiveUsers} loading={statsLoading} /></Grid>
+                    <Grid item xs={6} sm={4} md={2}><StatCard title="Tempo p/ 1º Upload" value={statsData ? `${statsData.avgTimeToFirstUploadDays.toFixed(1)} dias` : 'N/A'} loading={statsLoading} /></Grid>
+                    <Grid item xs={6} sm={4} md={2}><StatCard title="Novos Hoje" value={statsData?.newUsersToday} loading={statsLoading} /></Grid>
+                    <Grid item xs={6} sm={4} md={2}><StatCard title="Novos 7 Dias" value={statsData?.newUsersThisWeek} loading={statsLoading} /></Grid>
                 </Grid>
                 <Grid container spacing={3}>
                     <Grid item xs={12} lg={6}><TopUsersTable users={statsData?.topUsersByLogins} title="Top Utilizadores por Nº de Logins" valueHeader="Logins" /></Grid>
