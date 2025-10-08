@@ -127,7 +127,7 @@ func GetUserByID(db *sql.DB, id int64) (*User, error) {
 
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return nil, errors.New("user not found")
+			return nil, sql.ErrNoRows
 		}
 		return nil, err
 	}
@@ -184,7 +184,7 @@ func GetUserByUsername(db *sql.DB, username string) (*User, error) {
 	)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return nil, errors.New("user not found")
+			return nil, sql.ErrNoRows
 		}
 		return nil, err
 	}
@@ -233,7 +233,7 @@ func GetUserByEmail(db *sql.DB, email string) (*User, error) {
 	)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return nil, errors.New("user with this email not found")
+			return nil, sql.ErrNoRows
 		}
 		return nil, err
 	}

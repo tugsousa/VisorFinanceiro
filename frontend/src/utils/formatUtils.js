@@ -16,14 +16,9 @@ export const formatCurrency = (value, options = {}) => {
 
   const finalOptions = { ...defaultOptions, ...options };
 
-  // --- INÍCIO DA CORREÇÃO ---
-  // Garante que o número máximo de casas decimais é sempre igual ou superior ao mínimo.
-  // Se for fornecido um `minimumFractionDigits` nos `options` que seja maior que
-  // o `maximumFractionDigits` atual, atualiza o `maximumFractionDigits`.
-  if (options.minimumFractionDigits && options.minimumFractionDigits > finalOptions.maximumFractionDigits) {
-    finalOptions.maximumFractionDigits = options.minimumFractionDigits;
-  }
-  // --- FIM DA CORREÇÃO ---
+  // A lógica de correção manual para garantir que maximumFractionDigits >= minimumFractionDigits
+  // foi removida. Confiamos na coerção e nas regras nativas do Intl.NumberFormat,
+  // simplificando o código conforme a recomendação.
 
   // Alterado de 'de-DE' para 'pt-PT' para usar o formato de moeda português.
   return new Intl.NumberFormat('pt-PT', finalOptions).format(value || 0);
