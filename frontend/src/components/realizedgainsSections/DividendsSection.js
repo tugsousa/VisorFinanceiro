@@ -1,6 +1,6 @@
 // frontend/src/components/realizedgainsSections/DividendsSection.js
 import React, { useMemo } from 'react';
-import { Typography, Paper, Box, Grid } from '@mui/material';
+import { Typography, Paper, Box, Grid, CircularProgress } from '@mui/material'; // <-- Adicionado CircularProgress
 import { DataGrid } from '@mui/x-data-grid';
 import { ptPT } from '@mui/x-data-grid/locales';
 import { Bar } from 'react-chartjs-2';
@@ -40,7 +40,8 @@ const columns = [
   },
 ];
 
-export default function DividendsSection({ dividendTransactionsData, selectedYear }) {
+// Adicionado prop isLoading e NoRowsOverlay
+export default function DividendsSection({ dividendTransactionsData, selectedYear, isLoading, NoRowsOverlay }) {
   const { relevantDividendTransactions, productChartData, timeSeriesChartData } = useMemo(() => {
     const emptyResult = {
       relevantDividendTransactions: [],
@@ -222,60 +223,64 @@ export default function DividendsSection({ dividendTransactionsData, selectedYea
     }
   }), [selectedYear]);
 
-  if (relevantDividendTransactions.length === 0) {
-    return (
-      <Paper elevation={0} sx={{ p: 2, mb: 3, border: 'none' }}>
-        <Typography>Não existe informação disponível.</Typography>
-      </Paper>
-    );
-  }
-
   const rows = relevantDividendTransactions.map((tx, index) => ({
     id: tx.id || `${tx.order_id}-${index}`,
     ...tx
   }));
+  
+  const hasData = rows.length > 0;
 
   return (
     <Paper elevation={0} sx={{ p: 2, mb: 3, border: 'none' }}>
+        {isLoading && !hasData ? (
+            <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}><CircularProgress /></Box>
+        ) : (
+            <>
+                {hasData ? (
+                    <Grid container spacing={3} sx={{ mb: 3 }}>
+                        <Grid item xs={12} lg={6}>
+                            <Paper elevation={0} sx={{ p: 2, height: 350, borderRadius: 3 }}>
+                            {timeSeriesChartData.labels.length > 0 ? (
+                                <Bar options={timeSeriesChartOptions} data={timeSeriesChartData} />
+                            ) : (
+                                <Typography sx={{ my: 2, fontStyle: 'italic', color: 'text.secondary', textAlign: 'center', pt: '25%' }}>Não há dados para este período.</Typography>
+                            )}
+                            </Paper>
+                        </Grid>
+                        <Grid item xs={12} lg={6}>
+                        <Paper elevation={0} sx={{ p: 2, height: 350, borderRadius: 3 }}>
+                            {productChartData.labels.length > 0 ? (
+                            <Bar options={productChartOptions} data={productChartData} />
+                            ) : (
+                            <Typography sx={{ my: 2, fontStyle: 'italic', color: 'text.secondary', textAlign: 'center', pt: '25%' }}>Não há dados para este período.</Typography>
+                            )}
+                        </Paper>
+                        </Grid>
+                    </Grid>
+                ) : (
+                    <Typography align="center" sx={{ my: 4, color: 'text.secondary' }}>Não existe informação de dividendos para este período.</Typography>
+                )}
 
-      <Grid container spacing={3} sx={{ mb: 3 }}>
-        <Grid item xs={12} lg={6}>
-            <Paper elevation={0} sx={{ p: 2, height: 350, borderRadius: 3 }}>
-              {timeSeriesChartData.labels.length > 0 ? (
-                <Bar options={timeSeriesChartOptions} data={timeSeriesChartData} />
-              ) : (
-                <Typography sx={{ my: 2, fontStyle: 'italic', color: 'text.secondary', textAlign: 'center', pt: '25%' }}>Não há dados para este período.</Typography>
-              )}
-            </Paper>
-        </Grid>
-        <Grid item xs={12} lg={6}>
-          <Paper elevation={0} sx={{ p: 2, height: 350, borderRadius: 3 }}>
-            {productChartData.labels.length > 0 ? (
-              <Bar options={productChartOptions} data={productChartData} />
-            ) : (
-              <Typography sx={{ my: 2, fontStyle: 'italic', color: 'text.secondary', textAlign: 'center', pt: '25%' }}>Não há dados para este período.</Typography>
-            )}
-          </Paper>
-        </Grid>
-      </Grid>
-
-
-      <Box sx={{ width: '100%' }}>
-        <DataGrid
-          rows={rows}
-          columns={columns}
-          autoHeight
-          initialState={{
-            pagination: { paginationModel: { pageSize: 10 } },
-            sorting: {
-              sortModel: [{ field: 'date', sort: 'desc' }],
-            },
-          }}
-          pageSizeOptions={[10, 25, 50]}
-          disableRowSelectionOnClick
-          localeText={ptPT.components.MuiDataGrid.defaultProps.localeText}
-        />
-      </Box>
+                <Box sx={{ width: '100%' }}>
+                    <DataGrid
+                        rows={rows}
+                        columns={columns}
+                        loading={isLoading} // <-- NOVO
+                        autoHeight
+                        initialState={{
+                            pagination: { paginationModel: { pageSize: 10 } },
+                            sorting: {
+                            sortModel: [{ field: 'date', sort: 'desc' }],
+                            },
+                        }}
+                        pageSizeOptions={[10, 25, 50]}
+                        disableRowSelectionOnClick
+                        localeText={ptPT.components.MuiDataGrid.defaultProps.localeText}
+                        slots={{ noRowsOverlay: NoRowsOverlay }} // <-- NOVO
+                    />
+                </Box>
+            </>
+        )}
     </Paper>
   );
 }

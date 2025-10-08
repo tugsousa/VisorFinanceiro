@@ -1,5 +1,6 @@
+// frontend/src/components/realizedgainsSections/OptionHoldingsSection.js
 import React from 'react';
-import { Typography, Paper, Box } from '@mui/material';
+import { Typography, Paper, Box, CircularProgress } from '@mui/material'; // <-- Adicionado CircularProgress
 import { DataGrid } from '@mui/x-data-grid';
 import { ptPT } from '@mui/x-data-grid/locales';
 import { formatCurrency } from '../../utils/formatUtils'; // Import the utility
@@ -40,37 +41,40 @@ const columns = [
     { field: 'open_currency', headerName: 'Moeda', width: 90 },
 ];
 
-export default function OptionHoldingsSection({ holdingsData }) {
-  if (!holdingsData || holdingsData.length === 0) {
-    return (
-      <Paper elevation={0} sx={{ p: 2, mb: 3, border: 'none' }}>
-        <Typography>Não existe informação disponível.</Typography>
-      </Paper>
-    );
-  }
+// Adicionado prop isLoading e NoRowsOverlay
+export default function OptionHoldingsSection({ holdingsData, isLoading, NoRowsOverlay }) {
 
   const rows = holdingsData.map((holding, index) => ({
     id: `${holding.product_name}-${holding.open_date}-${index}`,
     ...holding
   }));
+  
+  const hasData = rows.length > 0;
 
   return (
     <Paper elevation={0} sx={{ p: 2, mb: 3, border: 'none' }}>
       <Typography variant="h6" sx={{ mb: 2 }}>Posições em Opções</Typography>
-      <Box sx={{ width: '100%' }}>
-        <DataGrid
-          rows={rows}
-          columns={columns}
-          autoHeight
-          initialState={{
-            pagination: { paginationModel: { pageSize: 10 } },
-            sorting: { sortModel: [{ field: 'open_amount_eur', sort: 'desc' }] },
-          }}
-          pageSizeOptions={[10, 25, 50]}
-          disableRowSelectionOnClick
-          localeText={ptPT.components.MuiDataGrid.defaultProps.localeText}
-        />
-      </Box>
+      
+      {isLoading && !hasData ? (
+        <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}><CircularProgress /></Box>
+      ) : (
+        <Box sx={{ width: '100%' }}>
+          <DataGrid
+            rows={rows}
+            columns={columns}
+            loading={isLoading} // <-- NOVO
+            autoHeight
+            initialState={{
+              pagination: { paginationModel: { pageSize: 10 } },
+              sorting: { sortModel: [{ field: 'open_amount_eur', sort: 'desc' }] },
+            }}
+            pageSizeOptions={[10, 25, 50]}
+            disableRowSelectionOnClick
+            localeText={ptPT.components.MuiDataGrid.defaultProps.localeText}
+            slots={{ noRowsOverlay: NoRowsOverlay }} // <-- NOVO
+          />
+        </Box>
+      )}
     </Paper>
   );
 }

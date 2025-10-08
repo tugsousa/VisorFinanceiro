@@ -1,3 +1,4 @@
+// frontend/src/components/realizedgainsSections/StockHoldingsSection.js
 import React, { useState, useMemo } from 'react';
 import { Typography, Paper, Box, ToggleButtonGroup, ToggleButton, Tooltip, CircularProgress } from '@mui/material';
 import { DataGrid } from '@mui/x-data-grid';
@@ -97,7 +98,8 @@ const groupedColumnsHistorical = [
     { field: 'totalCommissions', headerName: 'Comissões (Hist.)', type: 'number', width: 160, align: 'right', headerAlign: 'right', renderCell: renderCommissionCell },
 ];
 
-export default function StockHoldingsSection({ groupedData, detailedData, isGroupedFetching, isDetailedFetching }) {
+// Adicionado prop NoRowsOverlay
+export default function StockHoldingsSection({ groupedData, detailedData, isGroupedFetching, isDetailedFetching, NoRowsOverlay }) {
   const [viewMode, setViewMode] = useState('grouped');
 
   const isGroupedDataHistorical = groupedData?.[0]?.isHistorical === true;
@@ -126,23 +128,19 @@ export default function StockHoldingsSection({ groupedData, detailedData, isGrou
 
   const detailedRows = useMemo(() => {
     if (!detailedData) return [];
-    // ============================ BUG FIX IS HERE ============================
-    // We add a .filter(holding => holding) to safely remove any null or
-    // undefined entries from the array before we try to map over it.
     return detailedData
       .filter(holding => holding)
       .map((holding, index) => ({
         id: `${holding.isin}-${holding.buy_date}-${index}`,
         ...holding,
       }));
-    // =======================================================================
   }, [detailedData]);
   
   const noData = viewMode === 'grouped' 
     ? !isGroupedFetching && groupedRows.length === 0
     : !isDetailedFetching && detailedRows.length === 0;
 
-  if (noData) {
+  if (noData && !isGroupedFetching && !isDetailedFetching) {
     return (
       <Paper elevation={0} sx={{ p: 2, mb: 3, border: 'none' }}>
         <Typography>Não existe informação disponível.</Typography>
@@ -171,6 +169,7 @@ export default function StockHoldingsSection({ groupedData, detailedData, isGrou
             pageSizeOptions={[10, 25, 50]}
             disableRowSelectionOnClick
             localeText={ptPT.components.MuiDataGrid.defaultProps.localeText}
+            slots={{ noRowsOverlay: NoRowsOverlay }}
           />
         ) : (
           <DataGrid
@@ -182,6 +181,7 @@ export default function StockHoldingsSection({ groupedData, detailedData, isGrou
             pageSizeOptions={[10, 25, 50]}
             disableRowSelectionOnClick
             localeText={ptPT.components.MuiDataGrid.defaultProps.localeText}
+            slots={{ noRowsOverlay: NoRowsOverlay }}
           />
         )}
       </Box>
