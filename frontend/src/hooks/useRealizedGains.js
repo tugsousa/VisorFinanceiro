@@ -13,10 +13,7 @@ import {
     apiFetchProcessedTransactions
 } from '../api/apiService';
 import { ALL_YEARS_OPTION, NO_YEAR_SELECTED } from '../constants';
-// --- INÍCIO DA ALTERAÇÃO ---
-// Importar a função 'calculateDaysHeld'
 import { getYearString, extractYearsFromData, calculateDaysHeld } from '../utils/dateUtils';
-// --- FIM DA ALTERAÇÃO ---
 import { calculateCombinedAggregatedMetricsByISIN } from '../utils/aggregationUtils';
 
 export const useRealizedGains = (token, selectedYear) => {
@@ -206,13 +203,16 @@ export const useRealizedGains = (token, selectedYear) => {
         const stockPL = (periodSpecificData.stockSales || []).reduce((sum, s) => sum + (s.Delta || 0), 0);
         const optionPL = (periodSpecificData.optionSales || []).reduce((sum, s) => sum + (s.delta || 0), 0);
         
-        const { gross, tax } = (periodSpecificData.dividendTransactions || []).reduce((acc, tx) => {
-            if (tx.transaction_subtype === 'TAX') acc.tax += tx.amount_eur || 0;
-            else acc.gross += tx.amount_eur || 0;
+        const { gross } = (periodSpecificData.dividendTransactions || []).reduce((acc, tx) => {
+            if (tx.transaction_subtype !== 'TAX') {
+                acc.gross += tx.amount_eur || 0;
+            }
             return acc;
-        }, { gross: 0, tax: 0 });
+        }, { gross: 0 });
 
-        const dividendPL = gross + tax;
+        const dividendPL = gross;
+   
+
         const totalFeesAndCommissions = (periodSpecificData.fees || []).reduce((sum, f) => sum + (f.amount_eur || 0), 0);
         
         const totalTaxesAndCommissions = totalFeesAndCommissions; 
@@ -222,15 +222,12 @@ export const useRealizedGains = (token, selectedYear) => {
             totalPL += unrealizedStockPL;
         }
 
-        // --- INÍCIO DA ALTERAÇÃO ---
-        // 1. Cálculo do Win/Loss Ratio
         const stockSales = periodSpecificData.stockSales || [];
         const optionSales = periodSpecificData.optionSales || [];
         const winningTrades = stockSales.filter(s => s.Delta > 0).length + optionSales.filter(o => o.delta > 0).length;
         const totalTrades = stockSales.length + optionSales.length;
         const winLossRatio = totalTrades > 0 ? (winningTrades / totalTrades) * 100 : 0;
 
-        // 2. Cálculo do Período Médio de Detenção
         let totalDaysWinners = 0;
         let countWinners = 0;
         let totalDaysLosers = 0;
@@ -248,9 +245,6 @@ export const useRealizedGains = (token, selectedYear) => {
                 }
             }
         });
-
-        // (Opcional) Adicionar lógica para opções se a duração for relevante
-        // optionSales.forEach(sale => { ... });
         
         const avgHoldingPeriodWinners = countWinners > 0 ? totalDaysWinners / countWinners : 0;
         const avgHoldingPeriodLosers = countLosers > 0 ? totalDaysLosers / countLosers : 0;
@@ -265,11 +259,9 @@ export const useRealizedGains = (token, selectedYear) => {
             avgHoldingPeriodWinners,
             avgHoldingPeriodLosers,
         };
-        // --- FIM DA ALTERAÇÃO ---
     }, [periodSpecificData, selectedYear, unrealizedStockPL]);
 
     const holdingsChartData = useMemo(() => {
-        // CORREÇÃO: Retornar um objeto de gráfico vazio em vez de null
         if (!holdingsForGroupedView || holdingsForGroupedView.length === 0) return { labels: [], datasets: [] };
 
         const isHistorical = holdingsForGroupedView[0]?.isHistorical;
