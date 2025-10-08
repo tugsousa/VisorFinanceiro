@@ -855,3 +855,12 @@ func (h *UserHandler) HandleAdminRefreshMultipleUserMetrics(w http.ResponseWrite
 	logger.L.Info("Atualização em lote para utilizadores concluída com sucesso", "count", len(req.UserIDs))
 	w.WriteHeader(http.StatusNoContent)
 }
+
+// --- NEW HANDLER FUNCTION ---
+// HandleAdminClearStatsCache handles the request to clear the admin stats cache.
+func (h *UserHandler) HandleAdminClearStatsCache(w http.ResponseWriter, r *http.Request) {
+	logger.L.Info("Admin triggered admin stats cache clear")
+	h.cache.Flush() // Flushes all items from the cache
+	logger.L.Info("Admin stats cache flushed successfully.")
+	w.WriteHeader(http.StatusNoContent)
+}

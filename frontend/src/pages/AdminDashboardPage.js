@@ -7,7 +7,6 @@ import { Box, Typography, Paper, Grid, CircularProgress, Alert, Tooltip, IconBut
 import RefreshIcon from '@mui/icons-material/Refresh';
 import { DataGrid, GridToolbar } from '@mui/x-data-grid';
 import { useAuth } from '../context/AuthContext';
-// --- THIS IS THE CORRECTED IMPORT FOR CHART COMPONENTS ---
 import { Bar, Line, Doughnut } from 'react-chartjs-2';
 import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, LineElement, PointElement, Title, Legend, Tooltip as ChartTooltip, ArcElement } from 'chart.js';
 import { useNavigate } from 'react-router-dom';
@@ -227,7 +226,7 @@ const AdminDashboardPage = () => {
                 </Grid>
             </Box>
 
-            <Box sx={{ p: 2, mt: 4 }}>
+            <Box component={Paper} variant="outlined" sx={{ p: 2, mt: 4, borderColor: 'divider' }}>
                 <Typography variant="h5" component="h2" gutterBottom>Métricas Gerais (Sempre)</Typography>
                 <Grid container spacing={2} sx={{ mb: 2 }}>
                     <Grid item xs={6} sm={4} md={2}><StatCard title="Valor Total Carteiras" value={formatCurrency(statsData?.totalPortfolioValue)} loading={statsLoading} /></Grid>
@@ -248,41 +247,43 @@ const AdminDashboardPage = () => {
                 </Grid>
             </Box>
 
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mt: 4, mb: 2 }}>
-                <Typography variant="h5" component="h2">Utilizadores Registados</Typography>
-                {selectedUserIds.length > 0 && (
-                    <Button
-                        variant="contained"
-                        size="small"
-                        startIcon={batchRefreshMutation.isPending ? <CircularProgress size={16} color="inherit" /> : <RefreshIcon />}
-                        onClick={() => batchRefreshMutation.mutate(selectedUserIds)}
-                        disabled={batchRefreshMutation.isPending}
-                    >
-                        Atualizar Métricas ({selectedUserIds.length})
-                    </Button>
-                )}
-            </Box>
-            <Box sx={{ height: 600, width: '100%' }}>
-                <DataGrid
-                    rows={usersData?.users || []}
-                    columns={userColumns}
-                    rowCount={usersData?.totalRows || 0}
-                    loading={usersLoading}
-                    pageSizeOptions={[10, 25, 50, 100]}
-                    paginationModel={paginationModel}
-                    onPaginationModelChange={setPaginationModel}
-                    paginationMode="server"
-                    sortModel={sortModel}
-                    onSortModelChange={setSortModel}
-                    sortingMode="server"
-                    slots={{ toolbar: GridToolbar }}
-                    density="compact"
-                    checkboxSelection
-                    onRowSelectionModelChange={(newSelectionModel) => setSelectedUserIds(newSelectionModel)}
-                    rowSelectionModel={selectedUserIds}
-                    onRowClick={(params) => navigate(`/admin/users/${params.id}`)}
-                    sx={{ '& .MuiDataGrid-row:hover': { cursor: 'pointer' } }}
-                />
+            <Box component={Paper} variant="outlined" sx={{ p: 2, mt: 4, borderColor: 'divider' }}>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                    <Typography variant="h5" component="h2">Utilizadores Registados</Typography>
+                    {selectedUserIds.length > 0 && (
+                        <Button
+                            variant="contained"
+                            size="small"
+                            startIcon={batchRefreshMutation.isPending ? <CircularProgress size={16} color="inherit" /> : <RefreshIcon />}
+                            onClick={() => batchRefreshMutation.mutate(selectedUserIds)}
+                            disabled={batchRefreshMutation.isPending}
+                        >
+                            Atualizar Métricas ({selectedUserIds.length})
+                        </Button>
+                    )}
+                </Box>
+                <Box sx={{ height: 600, width: '100%' }}>
+                    <DataGrid
+                        rows={usersData?.users || []}
+                        columns={userColumns}
+                        rowCount={usersData?.totalRows || 0}
+                        loading={usersLoading}
+                        pageSizeOptions={[10, 25, 50, 100]}
+                        paginationModel={paginationModel}
+                        onPaginationModelChange={setPaginationModel}
+                        paginationMode="server"
+                        sortModel={sortModel}
+                        onSortModelChange={setSortModel}
+                        sortingMode="server"
+                        slots={{ toolbar: GridToolbar }}
+                        density="compact"
+                        checkboxSelection
+                        onRowSelectionModelChange={(newSelectionModel) => setSelectedUserIds(newSelectionModel)}
+                        rowSelectionModel={selectedUserIds}
+                        onRowClick={(params) => navigate(`/admin/users/${params.id}`)}
+                        sx={{ '& .MuiDataGrid-row:hover': { cursor: 'pointer' } }}
+                    />
+                </Box>
             </Box>
         </Box>
     );
