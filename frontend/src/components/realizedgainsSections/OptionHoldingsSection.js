@@ -58,12 +58,14 @@ export default function OptionHoldingsSection({ holdingsData, isLoading, NoRowsO
       {isLoading && !hasData ? (
         <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}><CircularProgress /></Box>
       ) : (
-        <Box sx={{ width: '100%' }}>
+        // CORREÇÃO FORÇADA: Usar altura fixa e desativar autoHeight quando não há dados.
+        // O height deve ser suficiente para o cabeçalho da tabela + o overlay.
+        <Box sx={{ width: '100%', height: hasData ? 'auto' : 300 }}> 
           <DataGrid
             rows={rows}
             columns={columns}
-            loading={isLoading} // <-- NOVO
-            autoHeight
+            loading={isLoading} 
+            
             initialState={{
               pagination: { paginationModel: { pageSize: 10 } },
               sorting: { sortModel: [{ field: 'open_amount_eur', sort: 'desc' }] },
@@ -72,6 +74,8 @@ export default function OptionHoldingsSection({ holdingsData, isLoading, NoRowsO
             disableRowSelectionOnClick
             localeText={ptPT.components.MuiDataGrid.defaultProps.localeText}
             slots={{ noRowsOverlay: NoRowsOverlay }} // <-- NOVO
+            // Adicionar estilo inline para garantir que o DataGrid ocupa a altura total da Box quando não há dados
+            sx={{ height: hasData ? 'auto' : '100%' }}
           />
         </Box>
       )}

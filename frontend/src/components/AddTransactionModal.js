@@ -30,11 +30,8 @@ const AddTransactionModal = ({ open, onClose }) => {
   const mutation = useMutation({
     mutationFn: (data) => apiAddManualTransaction(data),
     onSuccess: () => {
-      // --- CORREÇÃO ESTÁ AQUI ---
-      // Invalida TODAS as queries para garantir que a UI inteira é atualizada.
       queryClient.invalidateQueries(); 
-      // --- FIM DA CORREÇÃO ---
-      onClose(); // Close modal on success
+      onClose(); 
     },
   });
 

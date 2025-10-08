@@ -59,11 +59,9 @@ const NoRowsOverlay = () => (
       fontSize: '0.9rem'
     }}
   >
-    <RequestQuoteIcon sx={{ fontSize: 40, mb: 1 }} />
     Não existem transações ou posições para este filtro.
   </Box>
 );
-// --- FIM DO NOVO COMPONENTE ---
 
 const KeyMetricCard = ({ title, value, icon, isPercentage = false, unit = '' }) => {
   const isPositive = typeof value === 'number' ? value >= 0 : true;
@@ -98,7 +96,7 @@ export default function RealizedGainsPage() {
   const {
     stockSalesData, optionSalesData, dividendSummaryData,
     dividendTransactionsData, stockHoldingsByYearData, optionHoldingsData,
-    feesData, allTransactionsData, // Dados brutos de todas as queries
+    feesData, allTransactionsData, 
     periodSpecificData,
     summaryData,
     unrealizedStockPL,
@@ -269,13 +267,13 @@ export default function RealizedGainsPage() {
             detailedData={detailedHoldingsForView}
             isGroupedFetching={isGroupedHoldingsLoading}
             isDetailedFetching={isLoading}
-            NoRowsOverlay={NoRowsOverlay} // <-- NOVO
+            NoRowsOverlay={NoRowsOverlay}
           />
           {periodSpecificData.optionHoldings && (
             <OptionHoldingsSection 
               holdingsData={periodSpecificData.optionHoldings} 
-              isLoading={isLoading} // <-- NOVO
-              NoRowsOverlay={NoRowsOverlay} // <-- NOVO
+              isLoading={isLoading} 
+              NoRowsOverlay={NoRowsOverlay} 
             />
           )}
         </Box>
@@ -285,32 +283,32 @@ export default function RealizedGainsPage() {
         <StockSalesSection 
           stockSalesData={periodSpecificData.stockSales} 
           selectedYear={selectedYear} 
-          isLoading={isLoading} // <-- NOVO
-          NoRowsOverlay={NoRowsOverlay} // <-- NOVO
+          isLoading={isLoading}
+          NoRowsOverlay={NoRowsOverlay}
         />
       )}
       {currentTab === 'option-sales' && (
         <OptionSalesSection 
           optionSalesData={periodSpecificData.optionSales} 
           selectedYear={selectedYear} 
-          isLoading={isLoading} // <-- NOVO
-          NoRowsOverlay={NoRowsOverlay} // <-- NOVO
+          isLoading={isLoading} 
+          NoRowsOverlay={NoRowsOverlay}
         />
       )}
       {currentTab === 'dividends' && (
         <DividendsSection 
           dividendTransactionsData={periodSpecificData.dividendTransactions} 
           selectedYear={selectedYear} 
-          isLoading={isLoading} // <-- NOVO
-          NoRowsOverlay={NoRowsOverlay} // <-- NOVO
+          isLoading={isLoading} 
+          NoRowsOverlay={NoRowsOverlay}
         />
       )}
       {currentTab === 'fees' && (
         <FeesSection 
           feeData={periodSpecificData.fees} 
           selectedYear={selectedYear} 
-          isLoading={isLoading} // <-- NOVO
-          NoRowsOverlay={NoRowsOverlay} // <-- NOVO
+          isLoading={isLoading}
+          NoRowsOverlay={NoRowsOverlay}
         />
       )}
     </Box>
