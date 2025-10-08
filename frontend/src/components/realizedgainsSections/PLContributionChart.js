@@ -62,20 +62,29 @@ const createDataset = (label, data, color, borderColor) => ({
 
 const PLContributionChart = ({ stockSaleDetails, optionSaleDetails, dividendTaxResultForChart, dividendTransactionsList, feesData, selectedYear }) => {
   const chartData = useMemo(() => {
+    // FIX: Garantir que todas as props são pelo menos coleções vazias para evitar o erro 'can't convert undefined to object'
+    const safeStockSales = stockSaleDetails || [];
+    const safeOptionSales = optionSaleDetails || [];
+    const safeDividendSummary = dividendTaxResultForChart || {};
+    const safeFeesData = feesData || [];
+    const safeDividendTxs = dividendTransactionsList || [];
+    
     const maxThickness = 60;
     const smallDataSetThreshold = 5;
     let finalChartData;
 
     if (selectedYear === ALL_YEARS_OPTION || selectedYear === NO_YEAR_SELECTED) {
-      const years = extractYearsFromData({ stockSales: stockSaleDetails, optionSales: optionSaleDetails, DividendTaxResult: dividendTaxResultForChart, fees: feesData }, { stockSales: 'SaleDate', optionSales: 'close_date', DividendTaxResult: null, fees: 'date' }).filter(y => y && y !== ALL_YEARS_OPTION && y !== NO_YEAR_SELECTED).sort((a, b) => Number(a) - Number(b));
+      // Usar as coleções seguras aqui
+      const years = extractYearsFromData({ stockSales: safeStockSales, optionSales: safeOptionSales, DividendTaxResult: safeDividendSummary, fees: safeFeesData }, { stockSales: 'SaleDate', optionSales: 'close_date', DividendTaxResult: null, fees: 'date' }).filter(y => y && y !== ALL_YEARS_OPTION && y !== NO_YEAR_SELECTED).sort((a, b) => Number(a) - Number(b));
       if (years.length === 0) return { labels: [], datasets: [] };
 
       const yearlyData = {};
       years.forEach(year => { yearlyData[year] = { stocks: 0, options: 0, dividends: 0, fees: 0 }; });
-      stockSaleDetails.forEach(sale => { const year = getYearString(sale.SaleDate); if (year && yearlyData[year]) yearlyData[year].stocks += sale.Delta; });
-      optionSaleDetails.forEach(sale => { const year = getYearString(sale.close_date); if (year && yearlyData[year]) yearlyData[year].options += sale.delta; });
       
-      Object.entries(dividendTaxResultForChart).forEach(([year, countries]) => {
+      safeStockSales.forEach(sale => { const year = getYearString(sale.SaleDate); if (year && yearlyData[year]) yearlyData[year].stocks += sale.Delta; });
+      safeOptionSales.forEach(sale => { const year = getYearString(sale.close_date); if (year && yearlyData[year]) yearlyData[year].options += sale.delta; });
+      
+      Object.entries(safeDividendSummary).forEach(([year, countries]) => {
         if (yearlyData[year]) {
           let gross = 0;
           Object.values(countries).forEach(d => {
@@ -85,7 +94,7 @@ const PLContributionChart = ({ stockSaleDetails, optionSaleDetails, dividendTaxR
         }
       });
       
-      (feesData || []).forEach(fee => { const year = getYearString(fee.date); if (year && yearlyData[year]) yearlyData[year].fees += fee.amount_eur; });
+      safeFeesData.forEach(fee => { const year = getYearString(fee.date); if (year && yearlyData[year]) yearlyData[year].fees += fee.amount_eur; });
 
       finalChartData = {
         labels: years,
@@ -98,10 +107,12 @@ const PLContributionChart = ({ stockSaleDetails, optionSaleDetails, dividendTaxR
       };
     } else {
       const monthlyData = Array(12).fill(null).map(() => ({ stocks: 0, options: 0, dividends: 0, fees: 0 }));
-      stockSaleDetails.forEach(sale => { if (getYearString(sale.SaleDate) === selectedYear) { const month = getMonthIndex(sale.SaleDate); if (month !== null) monthlyData[month].stocks += sale.Delta; } });
-      optionSaleDetails.forEach(sale => { if (getYearString(sale.close_date) === selectedYear) { const month = getMonthIndex(sale.close_date); if (month !== null) monthlyData[month].options += sale.delta; } });
       
-      (dividendTransactionsList || []).forEach(tx => {
+      // Usar as coleções seguras aqui
+      safeStockSales.forEach(sale => { if (getYearString(sale.SaleDate) === selectedYear) { const month = getMonthIndex(sale.SaleDate); if (month !== null) monthlyData[month].stocks += sale.Delta; } });
+      safeOptionSales.forEach(sale => { if (getYearString(sale.close_date) === selectedYear) { const month = getMonthIndex(sale.close_date); if (month !== null) monthlyData[month].options += sale.delta; } });
+      
+      safeDividendTxs.forEach(tx => {
         if (getYearString(tx.date) === selectedYear && tx.transaction_subtype !== 'TAX') {
           const month = getMonthIndex(tx.date);
           if (month !== null && tx.amount_eur != null) {
@@ -110,7 +121,7 @@ const PLContributionChart = ({ stockSaleDetails, optionSaleDetails, dividendTaxR
         }
       });
       
-      (feesData || []).forEach(fee => { if (getYearString(fee.date) === selectedYear) { const month = getMonthIndex(fee.date); if (month !== null) monthlyData[month].fees += fee.amount_eur; } });
+      safeFeesData.forEach(fee => { if (getYearString(fee.date) === selectedYear) { const month = getMonthIndex(fee.date); if (month !== null) monthlyData[month].fees += fee.amount_eur; } });
 
       finalChartData = {
         labels: MONTH_NAMES_CHART,
