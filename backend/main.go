@@ -3,7 +3,7 @@ package main
 
 import (
 	"crypto/tls"
-	"encoding/json" // Importação adicionada para uso posterior
+	"encoding/json"
 	stdlog "log"
 	"net/http"
 	"os"
@@ -127,7 +127,7 @@ func main() {
 		reportCache,
 	)
 
-	userHandler := handlers.NewUserHandler(authService, emailService, uploadService, reportCache) // --- ALTERAÇÃO AQUI ---
+	userHandler := handlers.NewUserHandler(authService, emailService, uploadService, reportCache)
 	uploadHandler := handlers.NewUploadHandler(uploadService)
 	portfolioHandler := handlers.NewPortfolioHandler(uploadService, priceService)
 	dividendHandler := handlers.NewDividendHandler(uploadService)
@@ -173,7 +173,9 @@ func main() {
 			r.Use(userHandler.AuthMiddleware)
 
 			r.Post("/upload", uploadHandler.HandleUpload)
+			// --- THIS IS THE CORRECTED LINE ---
 			r.Get("/realizedgains-data", uploadHandler.HandleGetRealizedGainsData)
+			// ------------------------------------
 			r.Get("/transactions/processed", txHandler.HandleGetProcessedTransactions)
 			r.Post("/transactions/manual", txHandler.HandleAddManualTransaction)
 			r.Get("/holdings/current-value", portfolioHandler.HandleGetCurrentHoldingsValue)
@@ -195,11 +197,10 @@ func main() {
 				r.Get("/admin/stats", userHandler.HandleGetAdminStats)
 				r.Get("/admin/users", userHandler.HandleGetAdminUsers)
 				r.Post("/admin/users/{userID}/refresh-metrics", userHandler.HandleAdminRefreshUserMetrics)
-
-				// --- INÍCIO DAS NOVAS ROTAS DE ADMIN ---
 				r.Get("/admin/users/{userID}", userHandler.HandleGetAdminUserDetails)
 				r.Post("/admin/users/refresh-metrics-batch", userHandler.HandleAdminRefreshMultipleUserMetrics)
-				// --- FIM DAS NOVAS ROTAS DE ADMIN ---
+				// --- THIS ROUTE IS NOW CORRECTLY HANDLED ---
+				r.Post("/admin/stats/clear-cache", userHandler.HandleAdminClearStatsCache)
 			})
 		})
 	})

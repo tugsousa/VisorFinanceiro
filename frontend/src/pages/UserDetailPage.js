@@ -17,12 +17,8 @@ import RequestQuoteIcon from '@mui/icons-material/RequestQuote';
 import TrendingUpIcon from '@mui/icons-material/TrendingUp';
 import AccountBalanceWalletIcon from '@mui/icons-material/AccountBalanceWallet';
 import PercentIcon from '@mui/icons-material/Percent';
-// --- NEW IMPORT ---
 import StatCard from '../components/admin/StatCard';
 
-
-// --- DELETED StatCard COMPONENT ---
-// The local StatCard component has been removed.
 
 const KeyMetricCard = ({ title, value, icon, isPercentage = false }) => {
   const isPositive = value >= 0;
@@ -174,7 +170,6 @@ const UserDetailPage = () => {
                             <Typography variant="h6" gutterBottom>Informação Geral</Typography>
                             <Divider sx={{ mb: 2 }} />
                             <Grid container spacing={2}>
-                                {/* --- UPDATED TO USE StatCard --- */}
                                 <Grid item xs={12} sm={6} md={3}><StatCard title="ID Utilizador" value={user.id} loading={isLoading} /></Grid>
                                 <Grid item xs={12} sm={6} md={3}><StatCard title="Nº de Logins" value={user.login_count} loading={isLoading} /></Grid>
                                 <Grid item xs={12} sm={6} md={3}><StatCard title="Uploads Totais" value={user.total_upload_count} loading={isLoading} /></Grid>
