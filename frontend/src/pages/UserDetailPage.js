@@ -17,16 +17,12 @@ import RequestQuoteIcon from '@mui/icons-material/RequestQuote';
 import TrendingUpIcon from '@mui/icons-material/TrendingUp';
 import AccountBalanceWalletIcon from '@mui/icons-material/AccountBalanceWallet';
 import PercentIcon from '@mui/icons-material/Percent';
+// --- NEW IMPORT ---
+import StatCard from '../components/admin/StatCard';
 
-// ALTERAÇÃO: StatCard agora usa um Box para remover a borda/sombra
-const StatCard = ({ title, value }) => (
-    <Box sx={{ p: 2, textAlign: 'center', height: '100%' }}>
-        <Typography variant="body2" color="text.secondary">{title}</Typography>
-        <Typography variant="h6" component="p" sx={{ fontWeight: 'bold' }}>
-            {value}
-        </Typography>
-    </Box>
-);
+
+// --- DELETED StatCard COMPONENT ---
+// The local StatCard component has been removed.
 
 const KeyMetricCard = ({ title, value, icon, isPercentage = false }) => {
   const isPositive = value >= 0;
@@ -174,20 +170,21 @@ const UserDetailPage = () => {
             {currentTab === 'overview' && (
                 <Grid container spacing={3}>
                     <Grid item xs={12}>
-                        <Box sx={{ p: 3 }}>
+                        <Paper variant="outlined" sx={{ p: 3 }}>
                             <Typography variant="h6" gutterBottom>Informação Geral</Typography>
                             <Divider sx={{ mb: 2 }} />
                             <Grid container spacing={2}>
-                                <Grid item xs={12} sm={6} md={3}><StatCard title="ID Utilizador" value={user.id} /></Grid>
-                                <Grid item xs={12} sm={6} md={3}><StatCard title="Nº de Logins" value={user.login_count} /></Grid>
-                                <Grid item xs={12} sm={6} md={3}><StatCard title="Uploads Totais" value={user.total_upload_count} /></Grid>
-                                <Grid item xs={12} sm={6} md={3}><StatCard title="Valor Carteira (Snapshot)" value={formatCurrency(user.portfolio_value_eur)} /></Grid>
+                                {/* --- UPDATED TO USE StatCard --- */}
+                                <Grid item xs={12} sm={6} md={3}><StatCard title="ID Utilizador" value={user.id} loading={isLoading} /></Grid>
+                                <Grid item xs={12} sm={6} md={3}><StatCard title="Nº de Logins" value={user.login_count} loading={isLoading} /></Grid>
+                                <Grid item xs={12} sm={6} md={3}><StatCard title="Uploads Totais" value={user.total_upload_count} loading={isLoading} /></Grid>
+                                <Grid item xs={12} sm={6} md={3}><StatCard title="Valor Carteira (Snapshot)" value={formatCurrency(user.portfolio_value_eur)} loading={isLoading} /></Grid>
                             </Grid>
-                        </Box>
+                        </Paper>
                     </Grid>
                     {keyMetrics && (
                         <Grid item xs={12}>
-                            <Box sx={{ p: 3 }}>
+                            <Paper variant="outlined" sx={{ p: 3 }}>
                                 <Typography variant="h6" gutterBottom>Métricas Chave (Análise Vitalícia)</Typography>
                                 <Divider sx={{ mb: 2 }} />
                                 <Grid container spacing={2}>
@@ -199,35 +196,35 @@ const UserDetailPage = () => {
                                     <Grid item xs={6} md={4} lg={3}><KeyMetricCard title="Retorno Total (€)" value={keyMetrics.totalPL} icon={<AccountBalanceWalletIcon />} /></Grid>
                                     <Grid item xs={6} md={4} lg={3}><KeyMetricCard title="Retorno Total (%)" value={keyMetrics.portfolioReturn} icon={<PercentIcon />} isPercentage /></Grid>
                                 </Grid>
-                            </Box>
+                            </Paper>
                         </Grid>
                     )}
                 </Grid>
             )}
 
             {currentTab === 'holdings' && (
-                <Box sx={{ p: 3, height: 600, width: '100%' }}>
+                <Paper variant="outlined" sx={{ p: 3, height: 600, width: '100%' }}>
                     <Typography variant="h6" gutterBottom>Carteira de Ações Atual</Typography>
                     {currentHoldings && currentHoldings.length > 0 ? (
                         <DataGrid rows={currentHoldings} columns={holdingsColumns} density="compact" />
                     ) : (
                         <Typography>Não existem posições em carteira.</Typography>
                     )}
-                </Box>
+                </Paper>
             )}
 
             {currentTab === 'uploads' && (
-                <Box sx={{ p: 3, height: 500, width: '100%' }}>
+                <Paper variant="outlined" sx={{ p: 3, height: 500, width: '100%' }}>
                      <Typography variant="h6" gutterBottom>Histórico de Uploads</Typography>
                     <DataGrid rows={upload_history} columns={uploadHistoryColumns} density="compact" />
-                </Box>
+                </Paper>
             )}
 
             {currentTab === 'transactions' && (
-                <Box sx={{ p: 3, height: 700, width: '100%' }}>
+                <Paper variant="outlined" sx={{ p: 3, height: 700, width: '100%' }}>
                      <Typography variant="h6" gutterBottom>Todas as Transações Processadas</Typography>
                     <DataGrid rows={transactions} columns={transactionColumns} getRowId={(row) => row.id} />
-                </Box>
+                </Paper>
             )}
         </Box>
     );
