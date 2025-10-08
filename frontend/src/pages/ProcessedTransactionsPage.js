@@ -11,14 +11,12 @@ import { parseDateRobust } from '../utils/dateUtils';
 import DeleteTransactionsModal from '../components/DeleteTransactionsModal';
 import AddTransactionModal from '../components/AddTransactionModal';
 import AddCircleOutlineIcon from '@mui/icons-material/AddCircleOutline';
-import RequestQuoteIcon from '@mui/icons-material/RequestQuote'; // <-- NOVO ÍCONE
 
 const fetchProcessedTransactions = async () => {
   const response = await apiFetchProcessedTransactions();
   return (response.data || []).map(tx => ({ ...tx, id: tx.hash_id || `${tx.date}-${tx.order_id}-${Math.random()}` }));
 };
 
-// --- NOVO: Componente para o slot NoRowsOverlay ---
 const NoRowsOverlay = () => (
   <Box 
     sx={{ 
@@ -32,11 +30,9 @@ const NoRowsOverlay = () => (
       fontSize: '0.9rem'
     }}
   >
-    <RequestQuoteIcon sx={{ fontSize: 40, mb: 1 }} />
     Não existem transações registadas.
   </Box>
 );
-// --- FIM DO NOVO COMPONENTE ---
 
 
 const columns = [
@@ -173,7 +169,7 @@ const ProcessedTransactionsPage = () => {
           <DataGrid
             rows={processedTransactions}
             columns={columns}
-            loading={transactionsLoading} // <-- NOVO: Usar o prop DataGrid loading
+            loading={transactionsLoading} 
             autoHeight
             initialState={{
               pagination: {
@@ -187,7 +183,7 @@ const ProcessedTransactionsPage = () => {
             disableRowSelectionOnClick
             density="compact"
             localeText={ptPT.components.MuiDataGrid.defaultProps.localeText}
-            slots={{ noRowsOverlay: NoRowsOverlay }} // <-- NOVO: Usar o slot para ausência de linhas
+            slots={{ noRowsOverlay: NoRowsOverlay }}
           />
         </Paper>
 

@@ -118,8 +118,6 @@ apiClient.interceptors.response.use(
         window.dispatchEvent(new CustomEvent('auth-error-logout', { detail: 'No auth refresher' }));
       }
     }
-    
-    // Para todos os outros erros, ou se o refresh falhar, rejeita a promessa.
     return Promise.reject(error);
   }
 );
@@ -153,7 +151,6 @@ export const apiFetchDividendTaxSummary = () => apiClient.get(API_ENDPOINTS.DIVI
 export const apiFetchDividendTransactions = () => apiClient.get(API_ENDPOINTS.DIVIDEND_TRANSACTIONS);
 export const apiFetchFees = () => apiClient.get(API_ENDPOINTS.FEES_DATA);
 
-// --- ATUALIZAÇÃO AQUI ---
 /**
  * Busca a lista de utilizadores para o admin com suporte para paginação.
  * @param {object} params - Objeto com os parâmetros de paginação.
@@ -196,12 +193,10 @@ export const apiFetchAdminUserDetails = (userId) => apiClient.get(`/api/admin/us
 export const apiRefreshMultipleUserMetrics = (userIds) => 
     apiClient.post('/api/admin/users/refresh-metrics-batch', { user_ids: userIds });
 
-// >>> INÍCIO DA NOVA FUNÇÃO QUE FALTAVA <<<
 /**
  * Pede ao backend para limpar a cache das estatísticas do admin.
  * @returns {Promise} A promessa da chamada da API.
  */
 export const apiClearAdminStatsCache = () => apiClient.post('/api/admin/stats/clear-cache');
-// >>> FIM DA NOVA FUNÇÃO QUE FALTAVA <<<
 
 export default apiClient;
