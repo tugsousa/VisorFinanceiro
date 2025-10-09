@@ -178,9 +178,9 @@ const UserDetailPage = () => {
     const holdingsColumns = [
         { field: 'productName', headerName: 'Produto', flex: 1, minWidth: 180 },
         { field: 'quantity', headerName: 'Qtd.', type: 'number', width: 90 },
-        { field: 'avgBuyPrice', headerName: 'Preço Médio Compra (€)', type: 'number', width: 180, valueFormatter: (value) => formatCurrency(value, { minimumFractionDigits: 4 }) },
+        { field: 'avgBuyPrice', headerName: 'Preço Médio Compra (€)', type: 'number', width: 180, valueFormatter: (value) => formatCurrency(value, { minimumFractionDigits: 4, maximumFractionDigits: 4 }) },
         { field: 'totalCost', headerName: 'Custo Total (€)', type: 'number', width: 150, valueFormatter: (value) => formatCurrency(value) },
-        { field: 'currentPrice', headerName: 'Preço Atual (€)', type: 'number', width: 150, valueFormatter: (value) => formatCurrency(value, { minimumFractionDigits: 4 }) },
+        { field: 'currentPrice', headerName: 'Preço Atual (€)', type: 'number', width: 150, valueFormatter: (value) => formatCurrency(value, { minimumFractionDigits: 4, maximumFractionDigits: 4 }) },
         { field: 'marketValue', headerName: 'Valor de Mercado (€)', type: 'number', width: 180, valueFormatter: (value) => formatCurrency(value) },
         { field: 'unrealizedPL', headerName: 'P/L Não Realizado (€)', type: 'number', width: 180,
             renderCell: (params) => {
