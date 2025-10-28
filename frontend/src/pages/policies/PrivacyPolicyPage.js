@@ -1,6 +1,7 @@
 import React from 'react';
 import { Container, Box, Typography, List, ListItem, ListItemText, Link as MuiLink, Paper } from '@mui/material';
 import { Link as RouterLink } from 'react-router-dom';
+import { Helmet } from 'react-helmet-async';
 
 // Um componente de secção reutilizável para manter o estilo consistente
 const Section = ({ title, number, children }) => (
@@ -15,6 +16,11 @@ const Section = ({ title, number, children }) => (
 const PrivacyPolicyPage = () => {
   return (
     <Container maxWidth="md" sx={{ py: { xs: 3, sm: 5 } }}>
+      <Helmet>
+        <title>Política de Privacidade | VisorFinanceiro</title>
+        <meta name="description" content="Leia a nossa Política de Privacidade. A sua segurança e controlo sobre os seus dados financeiros e pessoais são a nossa máxima prioridade." />
+        <link rel="canonical" href="https://www.visorfinanceiro.pt/policies/privacy-policy" />
+      </Helmet>
       <Typography variant="h4" component="h1" gutterBottom align="center">
         Política de Privacidade
       </Typography>
