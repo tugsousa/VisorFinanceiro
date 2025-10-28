@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+    <!-- Homepage -->
+    <url>
+        <loc>https://www.visorfinanceiro.pt/</loc>
+        <lastmod>2025-07-20</lastmod>
+        <changefreq>daily</changefreq>
+        <priority>1.0</priority>
+    </url>
+    <!-- Public Auth Pages (Indexar para que o Google entenda as rotas) -->
+    <url>
+        <loc>https://www.visorfinanceiro.pt/signin</loc>
+        <lastmod>2025-07-20</lastmod>
+        <changefreq>monthly</changefreq>
+        <priority>0.7</priority>
+    </url>
+    <url>
+        <loc>https://www.visorfinanceiro.pt/signup</loc>
+        <lastmod>2025-07-20</lastmod>
+        <changefreq>monthly</changefreq>
+        <priority>0.7</priority>
+    </url>
+    <url>
+        <loc>https://www.visorfinanceiro.pt/request-password-reset</loc>
+        <lastmod>2025-07-20</lastmod>
+        <changefreq>monthly</changefreq>
+        <priority>0.5</priority>
+    </url>
+    <!-- Policy Pages -->
+    <url>
+        <loc>https://www.visorfinanceiro.pt/policies/privacy-policy</loc>
+        <lastmod>2025-07-20</lastmod>
+        <changefreq>monthly</changefreq>
+        <priority>0.8</priority>
+    </url>
+    <url>
+        <loc>https://www.visorfinanceiro.pt/policies/terms-of-service</loc>
+        <lastmod>2025-07-20</lastmod>
+        <changefreq>monthly</changefreq>
+        <priority>0.8</priority>
+    </url>
+    <url>
+        <loc>https://www.visorfinanceiro.pt/policies/contact-information</loc>
+        <lastmod>2025-07-20</lastmod>
+        <changefreq>monthly</changefreq>
+        <priority>0.8</priority>
+    </url>
+</urlset>

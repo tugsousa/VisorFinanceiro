@@ -8,6 +8,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
 import { ThemeProvider } from '@mui/material/styles'; // Import ThemeProvider
 import theme from './theme'; // Import your new theme file
+import { HelmetProvider } from 'react-helmet-async';
 
 // Import the Poppins font weights you want to use
 import '@fontsource/poppins/400.css'; // Regular
@@ -28,12 +29,13 @@ const queryClient = new QueryClient({
 const root = ReactDOM.createRoot(document.getElementById('root'));
 root.render(
   <React.StrictMode>
-    <QueryClientProvider client={queryClient}>
-      <ThemeProvider theme={theme}> {/* Wrap your App in the ThemeProvider */}
-        <App />
-      </ThemeProvider>
-      <ReactQueryDevtools initialIsOpen={false} />
-    </QueryClientProvider>
+    <HelmetProvider>
+      <QueryClientProvider client={queryClient}>
+        <ThemeProvider theme={theme}>
+          <App />
+        </ThemeProvider>
+      </QueryClientProvider>
+    </HelmetProvider>
   </React.StrictMode>
 );
 

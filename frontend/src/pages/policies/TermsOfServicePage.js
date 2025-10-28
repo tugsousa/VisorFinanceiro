@@ -1,10 +1,16 @@
 import React from 'react';
 import { Container, Box, Typography, List, ListItem, ListItemText, Link, Divider } from '@mui/material';
-import { Link as RouterLink } from 'react-router-dom'; // CORREÇÃO: Adicionada esta linha
+import { Link as RouterLink } from 'react-router-dom';
+import { Helmet } from 'react-helmet-async';
 
 const TermsOfServicePage = () => {
   return (
     <Container maxWidth="md" sx={{ py: 4 }}>
+      <Helmet>
+        <title>Termos de Serviço | VisorFinanceiro</title>
+        <meta name="description" content="Leia os Termos de Serviço do VisorFinanceiro. Informações importantes sobre a utilização da plataforma e a nossa isenção de responsabilidade fiscal." />
+        <link rel="canonical" href="https://www.visorfinanceiro.pt/policies/terms-of-service" />
+      </Helmet>
       <Typography variant="h4" component="h1" gutterBottom>
         Termos de Serviço
       </Typography>
