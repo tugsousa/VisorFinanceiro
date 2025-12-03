@@ -110,6 +110,19 @@ const TotalProfitTooltipContent = ({ row }) => (
 
 // --- HELPER FUNCTIONS (Renderização de Células) ---
 
+/**
+ * Calculates the number of days between the buy date and today.
+ */
+const calculateDaysHeld = (buyDateStr) => {
+    const buyDate = parseDateRobust(buyDateStr);
+    if (!buyDate || isNaN(buyDate.getTime())) return 'N/A';
+    
+    const oneDay = 24 * 60 * 60 * 1000; // milliseconds in a day
+    const diffDays = Math.round(Math.abs((new Date() - buyDate) / oneDay));
+    return diffDays;
+};
+
+// Reusable Name/Ticker cell render (for Grouped view total row only)
 const renderNameTickerCell = ({ row }) => {
     if (row.isTotalRow) {
         return (
@@ -125,6 +138,14 @@ const renderNameTickerCell = ({ row }) => {
         </Box>
     );
 };
+
+// NEW: Combined Name/Ticker cell render for DETAILED view
+const renderNameTickerCellDetailed = ({ row }) => (
+    <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
+        <Typography variant="body2">{row.product_name}</Typography>
+        <Typography variant="caption" sx={{ color: 'text.secondary' }}>{row.isin}</Typography>
+    </Box>
+);
 
 const renderCurrentValueCombinedCell = ({ row }) => {
     if (row.isFetching) { return <CircularProgress size={20} />; }
@@ -171,6 +192,39 @@ const renderCostBasisCombinedCell = ({ row }) => {
             <Typography variant="body2">{formatCurrency(totalCostBasis)}</Typography>
             <Typography variant="caption" sx={{ color: 'text.secondary' }}>@{formatCurrency(costPerShare)}</Typography>
         </Box>
+    );
+};
+
+// NEW: Combined Cost cell render for DETAILED view
+const renderCostCombinedCellDetailed = ({ row }) => {
+    // Assuming buy_amount_eur is the total cost for this transaction
+    const totalCost = row.buy_amount_eur || 0;
+    const costPerShare = row.quantity > 0 ? (totalCost / row.quantity) : 0;
+    
+    return (
+        <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
+            <Typography variant="body2">{formatCurrency(totalCost)}</Typography>
+            <Typography variant="caption" sx={{ color: 'text.secondary' }}>@{formatCurrency(costPerShare)}</Typography>
+        </Box>
+    );
+};
+
+// NEW: Days Held cell render
+const renderDaysHeldCell = ({ value }) => {
+    return (
+        <Typography variant="body2" align="right">
+            {value === 'N/A' ? value : `${value} dias`}
+        </Typography>
+    );
+};
+
+// NEW: Unrealized Gains per Transaction cell render
+const renderUnrealizedGainsDetailedCell = ({ value }) => {
+    const color = value >= 0 ? 'success.main' : 'error.main';
+    return (
+        <Typography variant="body2" align="right" sx={{ color: color, fontWeight: '500' }}>
+            {formatCurrency(value)}
+        </Typography>
     );
 };
 
@@ -268,8 +322,8 @@ const getGroupedColumns = (hiddenCols) => {
     let columns = [
         { field: 'product_name_ticker', headerName: 'Nome / ISIN', flex: 1.5, minWidth: 200, renderCell: renderNameTickerCell },
         { field: 'quantity', headerName: 'Qtd', type: 'number', width: 80, align: 'right', headerAlign: 'right', valueFormatter: (val, row) => row.isTotalRow ? '' : val },
-        { field: 'cost_basis_combined', headerName: 'Custo Médio', type: 'number', width: 120, align: 'right', headerAlign: 'right', renderCell: renderCostBasisCombinedCell }, // TRANSLATED
-        { field: 'marketValueEUR_combined', headerName: 'Valor Atual', type: 'number', width: 120, align: 'right', headerAlign: 'right', renderCell: renderCurrentValueCombinedCell }, // TRANSLATED
+        { field: 'cost_basis_combined', headerName: 'Custo Médio', type: 'number', width: 120, align: 'right', headerAlign: 'right', renderCell: renderCostBasisCombinedCell },
+        { field: 'marketValueEUR_combined', headerName: 'Valor Atual', type: 'number', width: 120, align: 'right', headerAlign: 'right', renderCell: renderCurrentValueCombinedCell },
     ];
 
     if (!hiddenCols.dividends) {
@@ -279,26 +333,32 @@ const getGroupedColumns = (hiddenCols) => {
         columns.push({ field: 'totalCommissions', headerName: 'Comissões Pagas', type: 'number', width: 140, align: 'right', headerAlign: 'right', renderCell: renderCommissionCell });
     }
     if (!hiddenCols.salesRealized) {
-        columns.push({ field: 'totalRealizedStockPL', headerName: 'L/P Realizados', type: 'number', width: 140, align: 'right', headerAlign: 'right', renderCell: renderLifetimeMetricCell }); // TRANSLATED
+        columns.push({ field: 'totalRealizedStockPL', headerName: 'L/P Realizados', type: 'number', width: 140, align: 'right', headerAlign: 'right', renderCell: renderLifetimeMetricCell });
     }
 
     columns.push(
-        { field: 'unrealizedPL', headerName: 'Ganhos Não Realizado', type: 'number', width: 140, align: 'right', headerAlign: 'right', renderCell: renderUnrealizedGainsCell }, // TRANSLATED
-        { field: 'realizedGains', headerName: 'Ganhos Realizados', type: 'number', width: 140, align: 'right', headerAlign: 'right', renderCell: renderRealizedGainsCell }, // TRANSLATED
-        { field: 'totalProfit', headerName: 'Lucro Total', type: 'number', width: 130, align: 'right', headerAlign: 'right', renderCell: renderTotalProfitCell }, // TRANSLATED
+        { field: 'unrealizedPL', headerName: 'Ganhos Não Realizados', type: 'number', width: 140, align: 'right', headerAlign: 'right', renderCell: renderUnrealizedGainsCell },
+        { field: 'realizedGains', headerName: 'Ganhos Realizados', type: 'number', width: 140, align: 'right', headerAlign: 'right', renderCell: renderRealizedGainsCell },
+        { field: 'totalProfit', headerName: 'Lucro Total', type: 'number', width: 130, align: 'right', headerAlign: 'right', renderCell: renderTotalProfitCell },
     );
 
     return columns;
 };
 
+// UPDATED DETAILED COLUMNS
 const detailedColumns = [
-    { field: 'product_name', headerName: 'Produto', flex: 1, minWidth: 200 },
-    { field: 'isin', headerName: 'ISIN', width: 130 },
-    { field: 'buy_date', headerName: 'Data Compra', width: 110, type: 'date', valueGetter: (value) => parseDateRobust(value) }, // TRANSLATED
+    // 1. Combined Name/ISIN
+    { field: 'product_name_ticker', headerName: 'Nome / ISIN', flex: 1, minWidth: 200, renderCell: renderNameTickerCellDetailed },
+    // 3. Days Held
+    { field: 'daysHeld', headerName: 'Dias (Held)', width: 90, type: 'number', align: 'right', headerAlign: 'right', renderCell: renderDaysHeldCell },
+    { field: 'buy_date', headerName: 'Data Compra', width: 110, type: 'date', valueGetter: (value) => parseDateRobust(value) },
     { field: 'quantity', headerName: 'Qtd', type: 'number', width: 80, align: 'right', headerAlign: 'right' },
-    { field: 'buyPrice', headerName: 'Preço (€)', type: 'number', width: 120, align: 'right', headerAlign: 'right', valueGetter: (_, row) => Math.abs(row.buyPrice || 0), valueFormatter: (value) => typeof value === 'number' ? value.toFixed(2) : '' },
-    { field: 'buy_amount_eur', headerName: 'Montante (€)', type: 'number', width: 130, align: 'right', headerAlign: 'right', valueGetter: (_, row) => Math.abs(row.buy_amount_eur || 0), valueFormatter: (value) => typeof value === 'number' ? value.toFixed(2) : '' },
+    // 2. Combined Cost (Custo Total + @Preço)
+    { field: 'cost_combined', headerName: 'Custo', type: 'number', width: 130, align: 'right', headerAlign: 'right', renderCell: renderCostCombinedCellDetailed },
+    // 4. Unrealized Gains per Transaction
+    { field: 'unrealizedGainTransaction', headerName: 'Ganhos Não Realizados', type: 'number', width: 140, align: 'right', headerAlign: 'right', renderCell: renderUnrealizedGainsDetailedCell },
     { field: 'buy_currency', headerName: 'Moeda', width: 90 },
+    // Removed: buyPrice and buy_amount_eur (merged into 'cost_combined')
 ];
 
 export default function StockHoldingsSection({ groupedData, detailedData, isGroupedFetching, isDetailedFetching, NoRowsOverlay }) {
@@ -416,15 +476,34 @@ export default function StockHoldingsSection({ groupedData, detailedData, isGrou
     }, [groupedData, isGroupedFetching, isGroupedDataHistorical]);
 
 
+    // UPDATED DETAILED ROWS CALCULATION
     const detailedRows = useMemo(() => {
         if (!detailedData) return [];
         return detailedData
             .filter(holding => holding)
-            .map((holding, index) => ({
-                id: `${holding.isin}-${holding.buy_date}-${index}`,
-                ...holding,
-            }));
+            .map((holding, index) => {
+                const id = `${holding.isin}-${holding.buy_date}-${index}`;
+                
+                // 3. Days Held
+                const daysHeld = calculateDaysHeld(holding.buy_date);
+
+                // 4. Unrealized Gains per Transaction
+                const currentPriceEUR = holding.current_price_eur || 0;
+                // Calculate buy price in EUR per share from total amount
+                const buyPriceEUR = holding.quantity > 0 ? (holding.buy_amount_eur / holding.quantity) : 0; 
+                
+                // Unrealized Gain = (Current Price - Buy Price) * Quantity
+                const unrealizedGainTransaction = (currentPriceEUR - buyPriceEUR) * holding.quantity;
+
+                return {
+                    id,
+                    ...holding,
+                    daysHeld,
+                    unrealizedGainTransaction,
+                };
+            });
     }, [detailedData]);
+    // END UPDATED DETAILED ROWS CALCULATION
 
     const noData = viewMode === 'grouped'
         ? !isGroupedFetching && rowsWithTotal.length === 0
