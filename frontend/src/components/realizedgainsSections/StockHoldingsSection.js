@@ -83,7 +83,7 @@ const TotalProfitTooltipContent = ({ row }) => (
         </Typography>
         
         <TooltipRow 
-            label="L/P Ações" 
+            label="L/P Ações (Vendas)" 
             value={row.totalRealizedStockPL} 
             color={row.totalRealizedStockPL >= 0 ? 'success.main' : 'error.main'}
         />
@@ -91,7 +91,7 @@ const TotalProfitTooltipContent = ({ row }) => (
         <TooltipRow 
             label="Dividendos" 
             value={row.totalDividends} 
-            color="success.main" // Dividendos is always a gain, so it's green
+            color="success.main"
         />
         
         <TooltipRow label="Comissões" value={-Math.abs(row.totalCommissions || 0)} color="error.main" />
@@ -99,7 +99,7 @@ const TotalProfitTooltipContent = ({ row }) => (
         <Box sx={{ my: 1 }} />
         
         <Typography variant="caption" sx={{ color: 'text.disabled', display: 'block', mb: 0.5, textTransform: 'uppercase', fontSize: '0.7rem' }}>
-            Não Realizado (Latente)
+            Não Realizado
         </Typography>
         <TooltipRow label="P/L Aberto" value={row.unrealizedPL} color={row.unrealizedPL >= 0 ? 'success.main' : 'error.main'} />
 
@@ -267,9 +267,9 @@ const renderCommissionCell = ({ value, row }) => {
 const getGroupedColumns = (hiddenCols) => {
     let columns = [
         { field: 'product_name_ticker', headerName: 'Nome / ISIN', flex: 1.5, minWidth: 200, renderCell: renderNameTickerCell },
-        { field: 'quantity', headerName: 'Shares', type: 'number', width: 80, align: 'right', headerAlign: 'right', valueFormatter: (val, row) => row.isTotalRow ? '' : val },
-        { field: 'cost_basis_combined', headerName: 'Cost Basis', type: 'number', width: 120, align: 'right', headerAlign: 'right', renderCell: renderCostBasisCombinedCell },
-        { field: 'marketValueEUR_combined', headerName: 'Current Value', type: 'number', width: 120, align: 'right', headerAlign: 'right', renderCell: renderCurrentValueCombinedCell },
+        { field: 'quantity', headerName: 'Qtd', type: 'number', width: 80, align: 'right', headerAlign: 'right', valueFormatter: (val, row) => row.isTotalRow ? '' : val },
+        { field: 'cost_basis_combined', headerName: 'Custo Médio', type: 'number', width: 120, align: 'right', headerAlign: 'right', renderCell: renderCostBasisCombinedCell }, // TRANSLATED
+        { field: 'marketValueEUR_combined', headerName: 'Valor Atual', type: 'number', width: 120, align: 'right', headerAlign: 'right', renderCell: renderCurrentValueCombinedCell }, // TRANSLATED
     ];
 
     if (!hiddenCols.dividends) {
@@ -279,13 +279,13 @@ const getGroupedColumns = (hiddenCols) => {
         columns.push({ field: 'totalCommissions', headerName: 'Comissões Pagas', type: 'number', width: 140, align: 'right', headerAlign: 'right', renderCell: renderCommissionCell });
     }
     if (!hiddenCols.salesRealized) {
-        columns.push({ field: 'totalRealizedStockPL', headerName: 'Ganhos C/V', type: 'number', width: 140, align: 'right', headerAlign: 'right', renderCell: renderLifetimeMetricCell });
+        columns.push({ field: 'totalRealizedStockPL', headerName: 'L/P Realizados', type: 'number', width: 140, align: 'right', headerAlign: 'right', renderCell: renderLifetimeMetricCell }); // TRANSLATED
     }
 
     columns.push(
-        { field: 'unrealizedPL', headerName: 'Unrealized Gains', type: 'number', width: 140, align: 'right', headerAlign: 'right', renderCell: renderUnrealizedGainsCell },
-        { field: 'realizedGains', headerName: 'Realized Gains', type: 'number', width: 140, align: 'right', headerAlign: 'right', renderCell: renderRealizedGainsCell },
-        { field: 'totalProfit', headerName: 'Total Profit', type: 'number', width: 130, align: 'right', headerAlign: 'right', renderCell: renderTotalProfitCell },
+        { field: 'unrealizedPL', headerName: 'Ganhos Não Realizado', type: 'number', width: 140, align: 'right', headerAlign: 'right', renderCell: renderUnrealizedGainsCell }, // TRANSLATED
+        { field: 'realizedGains', headerName: 'Ganhos Realizados', type: 'number', width: 140, align: 'right', headerAlign: 'right', renderCell: renderRealizedGainsCell }, // TRANSLATED
+        { field: 'totalProfit', headerName: 'Lucro Total', type: 'number', width: 130, align: 'right', headerAlign: 'right', renderCell: renderTotalProfitCell }, // TRANSLATED
     );
 
     return columns;
@@ -294,7 +294,7 @@ const getGroupedColumns = (hiddenCols) => {
 const detailedColumns = [
     { field: 'product_name', headerName: 'Produto', flex: 1, minWidth: 200 },
     { field: 'isin', headerName: 'ISIN', width: 130 },
-    { field: 'buy_date', headerName: 'Dt. compra', width: 110, type: 'date', valueGetter: (value) => parseDateRobust(value) },
+    { field: 'buy_date', headerName: 'Data Compra', width: 110, type: 'date', valueGetter: (value) => parseDateRobust(value) }, // TRANSLATED
     { field: 'quantity', headerName: 'Qtd', type: 'number', width: 80, align: 'right', headerAlign: 'right' },
     { field: 'buyPrice', headerName: 'Preço (€)', type: 'number', width: 120, align: 'right', headerAlign: 'right', valueGetter: (_, row) => Math.abs(row.buyPrice || 0), valueFormatter: (value) => typeof value === 'number' ? value.toFixed(2) : '' },
     { field: 'buy_amount_eur', headerName: 'Montante (€)', type: 'number', width: 130, align: 'right', headerAlign: 'right', valueGetter: (_, row) => Math.abs(row.buy_amount_eur || 0), valueFormatter: (value) => typeof value === 'number' ? value.toFixed(2) : '' },
@@ -466,19 +466,19 @@ export default function StockHoldingsSection({ groupedData, detailedData, isGrou
                 anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
                 transformOrigin={{ vertical: 'top', horizontal: 'right' }}
             >
-                <Box sx={{ p: 2 }}>
+                <Box sx={{ p: 2, display: 'flex', flexDirection: 'column' }}>
                     <Typography variant="subtitle1" sx={{ fontWeight: 'bold', mb: 1 }}>Colunas Opcionais</Typography>
                     <FormControlLabel
                         control={<Checkbox checked={!hiddenColumns.dividends} onChange={() => handleToggleColumn('dividends')} />}
-                        label="Montante recebido em dividendos"
+                        label="Dividendos Recebidos"
                     />
                     <FormControlLabel
                         control={<Checkbox checked={!hiddenColumns.commissions} onChange={() => handleToggleColumn('commissions')} />}
-                        label="Montante pago em comissões"
+                        label="Comissões Pagas"
                     />
                     <FormControlLabel
                         control={<Checkbox checked={!hiddenColumns.salesRealized} onChange={() => handleToggleColumn('salesRealized')} />}
-                        label="Montante realizado de compra e venda de ações"
+                        label="L/P Realizados (Vendas)"
                     />
                 </Box>
             </Popover>
