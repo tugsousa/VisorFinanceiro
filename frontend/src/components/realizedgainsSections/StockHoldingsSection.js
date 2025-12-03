@@ -160,7 +160,7 @@ const renderUnrealizedGainsCell = ({ row }) => {
     return (
         <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
             <Typography variant="body2" sx={{ color: color }}>{formatCurrency(totalAmount)}</Typography>
-            <Typography variant="caption" sx={{ color: 'text.secondary' }}>@{formatCurrency(perShareAmount)}</Typography>
+            <Typography variant="caption" sx={{ color: 'text.secondary' }}>{formatCurrency(perShareAmount)}</Typography>
         </Box>
     );
 };
@@ -191,11 +191,11 @@ const renderTotalProfitCell = ({ row }) => {
 const getGroupedColumns = (hiddenCols) => {
     // Colunas BASE (Obrigatórias)
     let columns = [
-        { field: 'product_name_ticker', headerName: 'Nome / Ticker', flex: 1.5, minWidth: 200, renderCell: renderNameTickerCell },
+        { field: 'product_name_ticker', headerName: 'Nome / ISIN', flex: 1.5, minWidth: 200, renderCell: renderNameTickerCell },
         { field: 'quantity', headerName: 'Shares', type: 'number', width: 80, align: 'right', headerAlign: 'right' },
         // Coluna combinada para Cost Basis (Custo Total + Custo por Ação)
-        { field: 'cost_basis_combined', headerName: 'Cost Basis', type: 'number', width: 180, align: 'right', headerAlign: 'right', renderCell: renderCostBasisCombinedCell },
-        { field: 'marketValueEUR_combined', headerName: 'Current Value', type: 'number', width: 180, align: 'right', headerAlign: 'right', renderCell: renderCurrentValueCombinedCell },
+        { field: 'cost_basis_combined', headerName: 'Cost Basis', type: 'number', width: 120, align: 'right', headerAlign: 'right', renderCell: renderCostBasisCombinedCell },
+        { field: 'marketValueEUR_combined', headerName: 'Current Value', type: 'number', width: 120, align: 'right', headerAlign: 'right', renderCell: renderCurrentValueCombinedCell },
     ];
 
     // Colunas Opcionais (visibilidade controlada pelo estado)
@@ -211,9 +211,9 @@ const getGroupedColumns = (hiddenCols) => {
 
     // Colunas FINAIS (Obrigatórias)
     columns.push(
-        { field: 'unrealizedPL', headerName: 'Unrealized Gains', type: 'number', width: 160, align: 'right', headerAlign: 'right', renderCell: renderUnrealizedGainsCell },
-        { field: 'realizedGains', headerName: 'Realized Gains', type: 'number', width: 160, align: 'right', headerAlign: 'right', renderCell: renderRealizedGainsCell },
-        { field: 'totalProfit', headerName: 'Total Profit', type: 'number', width: 160, align: 'right', headerAlign: 'right', renderCell: renderTotalProfitCell },
+        { field: 'unrealizedPL', headerName: 'Unrealized Gains', type: 'number', width: 140, align: 'right', headerAlign: 'right', renderCell: renderUnrealizedGainsCell },
+        { field: 'realizedGains', headerName: 'Realized Gains', type: 'number', width: 140, align: 'right', headerAlign: 'right', renderCell: renderRealizedGainsCell },
+        { field: 'totalProfit', headerName: 'Total Profit', type: 'number', width: 120, align: 'right', headerAlign: 'right', renderCell: renderTotalProfitCell },
     );
 
     return columns;
