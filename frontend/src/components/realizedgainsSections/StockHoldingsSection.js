@@ -18,22 +18,22 @@ import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 // --- STYLED COMPONENTS (Professional Light Tooltip) ---
 
 const LightTooltip = styled(({ className, ...props }) => (
-  <Tooltip {...props} classes={{ popper: className }} />
+    <Tooltip {...props} classes={{ popper: className }} />
 ))(({ theme }) => ({
-  [`& .${tooltipClasses.tooltip}`]: {
-    backgroundColor: theme.palette.background.paper, // White/Paper color
-    color: 'rgba(0, 0, 0, 0.87)', // Dark gray text
-    boxShadow: theme.shadows[3], // Soft shadow for depth
-    fontSize: 12,
-    border: '1px solid #dadde9', // Subtle border
-    maxWidth: 300,
-  },
-  [`& .${tooltipClasses.arrow}`]: {
-    color: theme.palette.background.paper,
-    "&:before": {
-        border: "1px solid #dadde9"
-    }
-  },
+    [`& .${tooltipClasses.tooltip}`]: {
+        backgroundColor: theme.palette.background.paper, // White/Paper color
+        color: 'rgba(0, 0, 0, 0.87)', // Dark gray text
+        boxShadow: theme.shadows[3], // Soft shadow for depth
+        fontSize: 12,
+        border: '1px solid #dadde9', // Subtle border
+        maxWidth: 300,
+    },
+    [`& .${tooltipClasses.arrow}`]: {
+        color: theme.palette.background.paper,
+        "&:before": {
+            border: "1px solid #dadde9"
+        }
+    },
 }));
 
 // --- TOOLTIP CONTENT COMPONENTS ---
@@ -139,7 +139,7 @@ const renderNameTickerCell = ({ row }) => {
     );
 };
 
-// NEW: Combined Name/Ticker cell render for DETAILED view
+// Combined Name/Ticker cell render for DETAILED view
 const renderNameTickerCellDetailed = ({ row }) => (
     <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
         <Typography variant="body2">{row.product_name}</Typography>
@@ -195,36 +195,62 @@ const renderCostBasisCombinedCell = ({ row }) => {
     );
 };
 
-// NEW: Combined Cost cell render for DETAILED view
-const renderCostCombinedCellDetailed = ({ row }) => {
-    // Assuming buy_amount_eur is the total cost for this transaction
-    const totalCost = row.buy_amount_eur || 0;
-    const costPerShare = row.quantity > 0 ? (totalCost / row.quantity) : 0;
-    
+// IMPROVEMENT 1: Days Held cell render (Centered)
+const renderDaysHeldCell = ({ value }) => {
     return (
-        <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
-            <Typography variant="body2">{formatCurrency(totalCost)}</Typography>
-            <Typography variant="caption" sx={{ color: 'text.secondary' }}>@{formatCurrency(costPerShare)}</Typography>
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
+            <Typography variant="body2">
+                {value === 'N/A' ? value : `${value} dias`}
+            </Typography>
         </Box>
     );
 };
 
-// NEW: Days Held cell render
-const renderDaysHeldCell = ({ value }) => {
+// IMPROVEMENT 2: New renderer for Cost in Original Currency
+const renderOriginalCostCell = ({ row }) => {
+    // Assuming 'buy_amount' is the original cost amount and 'buy_currency' is the symbol
+    const totalCost = row.buy_amount || 0;
+    const currency = row.buy_currency || 'EUR';
+    
     return (
-        <Typography variant="body2" align="right">
-            {value === 'N/A' ? value : `${value} dias`}
-        </Typography>
+        <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', justifyContent: 'center', height: '100%' }}>
+            <Typography variant="body2" sx={{ fontWeight: '500' }}>
+                {/* Use formatCurrency with the original currency and symbol */}
+                {formatCurrency(totalCost, { currency: currency, showSymbol: true })}
+            </Typography>
+        </Box>
     );
 };
 
-// NEW: Unrealized Gains per Transaction cell render
-const renderUnrealizedGainsDetailedCell = ({ value }) => {
-    const color = value >= 0 ? 'success.main' : 'error.main';
-    return (
-        <Typography variant="body2" align="right" sx={{ color: color, fontWeight: '500' }}>
+// IMPROVEMENT 2: New renderer for Cost in EUR
+const renderCostEURCell = ({ value }) => (
+    <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', justifyContent: 'center', height: '100%' }}>
+        {/* formatCurrency without options defaults to EUR (€) */}
+        <Typography variant="body2" sx={{ fontWeight: '500' }}>
             {formatCurrency(value)}
         </Typography>
+    </Box>
+);
+
+// IMPROVEMENT 3: Unrealized Gains per Transaction cell render (Total + Per Share)
+const renderUnrealizedGainsDetailedCell = ({ row }) => {
+    const totalAmount = row.unrealizedPLTotal || 0;
+    const perShareAmount = row.unrealizedPLPerShare || 0;
+    
+    const isNegative = totalAmount < 0;
+    const color = isNegative ? 'error.main' : 'success.main';
+
+    return (
+        <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', justifyContent: 'center', height: '100%', color: color }}>
+            {/* Total Amount */}
+            <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
+                {formatCurrency(totalAmount)}
+            </Typography>
+            {/* P/L per Share */}
+            <Typography variant="caption">
+                {formatCurrency(perShareAmount)} / Qtd
+            </Typography>
+        </Box>
     );
 };
 
@@ -349,16 +375,66 @@ const getGroupedColumns = (hiddenCols) => {
 const detailedColumns = [
     // 1. Combined Name/ISIN
     { field: 'product_name_ticker', headerName: 'Nome / ISIN', flex: 1, minWidth: 200, renderCell: renderNameTickerCellDetailed },
-    // 3. Days Held
-    { field: 'daysHeld', headerName: 'Dias (Held)', width: 90, type: 'number', align: 'right', headerAlign: 'right', renderCell: renderDaysHeldCell },
+    
+    // IMPROVEMENT 1: Days Held (Centered)
+    { 
+        field: 'daysHeld', 
+        headerName: 'Dias (Held)', 
+        width: 90, 
+        type: 'number', 
+        align: 'center',        // Improvement: Center cell content
+        headerAlign: 'center',  // Improvement: Center header text
+        renderCell: renderDaysHeldCell 
+    },
+    
+    // FIX: Revert valueGetter to non-destructuring format for compatibility/safety
     { field: 'buy_date', headerName: 'Data Compra', width: 110, type: 'date', valueGetter: (value) => parseDateRobust(value) },
+    
     { field: 'quantity', headerName: 'Qtd', type: 'number', width: 80, align: 'right', headerAlign: 'right' },
-    // 2. Combined Cost (Custo Total + @Preço)
-    { field: 'cost_combined', headerName: 'Custo', type: 'number', width: 130, align: 'right', headerAlign: 'right', renderCell: renderCostCombinedCellDetailed },
-    // 4. Unrealized Gains per Transaction
-    { field: 'unrealizedGainTransaction', headerName: 'Ganhos Não Realizados', type: 'number', width: 140, align: 'right', headerAlign: 'right', renderCell: renderUnrealizedGainsDetailedCell },
-    { field: 'buy_currency', headerName: 'Moeda', width: 90 },
-    // Removed: buyPrice and buy_amount_eur (merged into 'cost_combined')
+    
+    // IMPROVEMENT 2: New Cost Columns
+    { 
+        field: 'buy_amount', // Original currency amount
+        headerName: 'Custo Original', 
+        type: 'number', 
+        width: 140, 
+        align: 'right', 
+        headerAlign: 'right', 
+        renderCell: renderOriginalCostCell 
+    },
+    { 
+        field: 'buy_amount_eur', // EUR cost amount
+        headerName: 'Custo (€)', 
+        type: 'number', 
+        width: 130, 
+        align: 'right', 
+        headerAlign: 'right', 
+        renderCell: renderCostEURCell 
+    },
+    
+    // 💥 FIX APPLIED HERE: Added check for 'params' before accessing 'params.row'
+    { 
+        field: 'currentMarketValue', 
+        headerName: 'Valor Atual (€)', 
+        type: 'number', 
+        width: 130, 
+        align: 'right', 
+        headerAlign: 'right',
+        // Robust Fix: Check if params exists AND if params.row exists
+        valueGetter: (params) => (params && params.row) ? (params.row.quantity * (params.row.current_price_eur || 0)) : 0, 
+        renderCell: ({ value }) => <Box sx={{ fontWeight: '500' }}>{formatCurrency(value)}</Box> 
+    },
+    
+    // IMPROVEMENT 3: Unrealized Gains (Total + Per Share)
+    { 
+        field: 'unrealizedPLTotal', // Used for sorting
+        headerName: 'Ganhos Não Realizados', 
+        type: 'number', 
+        width: 150, // Increased width to accommodate two lines
+        align: 'right', 
+        headerAlign: 'right', 
+        renderCell: renderUnrealizedGainsDetailedCell 
+    },
 ];
 
 export default function StockHoldingsSection({ groupedData, detailedData, isGroupedFetching, isDetailedFetching, NoRowsOverlay }) {
@@ -476,7 +552,7 @@ export default function StockHoldingsSection({ groupedData, detailedData, isGrou
     }, [groupedData, isGroupedFetching, isGroupedDataHistorical]);
 
 
-    // UPDATED DETAILED ROWS CALCULATION
+    // UPDATED DETAILED ROWS CALCULATION (for Detailed view)
     const detailedRows = useMemo(() => {
         if (!detailedData) return [];
         return detailedData
@@ -487,19 +563,23 @@ export default function StockHoldingsSection({ groupedData, detailedData, isGrou
                 // 3. Days Held
                 const daysHeld = calculateDaysHeld(holding.buy_date);
 
-                // 4. Unrealized Gains per Transaction
+                // --- IMPROVEMENT 3: Unrealized Gains per Transaction Calculation ---
                 const currentPriceEUR = holding.current_price_eur || 0;
-                // Calculate buy price in EUR per share from total amount
+                // Calculate cost per share in EUR from total amount
                 const buyPriceEUR = holding.quantity > 0 ? (holding.buy_amount_eur / holding.quantity) : 0; 
                 
-                // Unrealized Gain = (Current Price - Buy Price) * Quantity
-                const unrealizedGainTransaction = (currentPriceEUR - buyPriceEUR) * holding.quantity;
+                // Total Unrealized P/L in EUR (the total amount for the cell)
+                const unrealizedPLTotal = (currentPriceEUR - buyPriceEUR) * holding.quantity;
+                
+                // Difference in stock cost per share (P/L per share)
+                const unrealizedPLPerShare = currentPriceEUR - buyPriceEUR;
 
                 return {
                     id,
                     ...holding,
                     daysHeld,
-                    unrealizedGainTransaction,
+                    unrealizedPLTotal,      // NEW field for total P/L
+                    unrealizedPLPerShare,   // NEW field for P/L per share
                 };
             });
     }, [detailedData]);
