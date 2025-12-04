@@ -15,7 +15,8 @@ import TrendingDownIcon from '@mui/icons-material/TrendingDown';
 import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 
-// --- STYLED COMPONENTS (Professional Light Tooltip) ---
+// ... [Keep existing Styled Components and Tooltip Content Components unchanged] ...
+// (LightTooltip, TooltipRow, RealizedGainsTooltipContent, TotalProfitTooltipContent)
 
 const LightTooltip = styled(({ className, ...props }) => (
     <Tooltip {...props} classes={{ popper: className }} />
@@ -108,11 +109,9 @@ const TotalProfitTooltipContent = ({ row }) => (
     </Box>
 );
 
-// --- HELPER FUNCTIONS (Renderização de Células) ---
+// ... [Keep existing Render Helper Functions unchanged] ...
+// (calculateDaysHeld, renderNameTickerCell, renderNameTickerCellDetailed, renderCurrentValueCombinedCell, etc.)
 
-/**
- * Calculates the number of days between the buy date and today.
- */
 const calculateDaysHeld = (buyDateStr) => {
     const buyDate = parseDateRobust(buyDateStr);
     if (!buyDate || isNaN(buyDate.getTime())) return 'N/A';
@@ -122,7 +121,6 @@ const calculateDaysHeld = (buyDateStr) => {
     return diffDays;
 };
 
-// Reusable Name/Ticker cell render (for Grouped view total row only)
 const renderNameTickerCell = ({ row }) => {
     if (row.isTotalRow) {
         return (
@@ -139,7 +137,6 @@ const renderNameTickerCell = ({ row }) => {
     );
 };
 
-// Combined Name/Ticker cell render for DETAILED view
 const renderNameTickerCellDetailed = ({ row }) => (
     <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
         <Typography variant="body2">{row.product_name}</Typography>
@@ -195,7 +192,6 @@ const renderCostBasisCombinedCell = ({ row }) => {
     );
 };
 
-// Days Held cell render (Centered)
 const renderDaysHeldCell = ({ value }) => {
     return (
         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
@@ -206,13 +202,10 @@ const renderDaysHeldCell = ({ value }) => {
     );
 };
 
-// Renderer for Cost in Original Currency
 const renderOriginalCostCell = ({ row }) => {
     const totalCost = Math.abs(row.buy_amount || 0);
     const costPerShare = row.buyPrice || 0;
     const currency = row.buy_currency || 'EUR';
-
-    // Helper to format currency for the original currency
     const formatOriginalCurrency = (value) => formatCurrency(value, { currency: currency, showSymbol: true });
 
     return (
@@ -223,21 +216,16 @@ const renderOriginalCostCell = ({ row }) => {
     );
 };
 
-// Renderer for Cost in EUR
 const renderCostEURCell = ({ row }) => {
     const totalCostEUR = Math.abs(row.buy_amount_eur || 0);
     const quantity = row.quantity || 0;
-    
-    // Calculate the cost per share in EUR using the absolute total
     const costPerShareEUR = quantity > 0 ? totalCostEUR / quantity : 0;
     
     return (
         <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', justifyContent: 'center', height: '100%' }}>
-            {/* Total amount spent in EUR */}
             <Typography variant="body2" sx={{ fontWeight: '500' }}>
                 {formatCurrency(totalCostEUR)}
             </Typography>
-            {/* Cost per share in EUR */}
             <Typography variant="caption" sx={{ color: 'text.secondary' }}>
                 @{formatCurrency(costPerShareEUR)}
             </Typography>
@@ -245,30 +233,21 @@ const renderCostEURCell = ({ row }) => {
     );
 };
 
-// Renderer for Exchange Rate
 const renderExchangeRateCell = ({ row }) => {
     const quantity = row.quantity || 0;
     const buyAmountOriginal = row.buy_amount || 0;
     const buyAmountEUR = row.buy_amount_eur || 0;
     const currency = row.buy_currency || 'EUR';
     
-    // If currency is EUR, exchange rate is 1.0
     if (currency === 'EUR' || buyAmountOriginal === 0) {
         return (
             <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
-                {/* Display rate 1.0000 with bold weight */}
-                <Typography variant="body2" sx={{ fontWeight: '500' }}>
-                    1.0000
-                </Typography>
-                {/* Display EUR/EUR currency pair */}
-                <Typography variant="caption" sx={{ color: 'text.secondary', fontSize: '0.7rem' }}>
-                    EUR/EUR
-                </Typography>
+                <Typography variant="body2" sx={{ fontWeight: '500' }}>1.0000</Typography>
+                <Typography variant="caption" sx={{ color: 'text.secondary', fontSize: '0.7rem' }}>EUR/EUR</Typography>
             </Box>
         );
     }
     
-    // Calculate exchange rate: EUR / Original Currency
     const exchangeRate = buyAmountEUR / buyAmountOriginal;
     
     return (
@@ -283,22 +262,17 @@ const renderExchangeRateCell = ({ row }) => {
     );
 };
 
-// FIXED: Unrealized Gains per Transaction cell render (Total + Per Share)
 const renderUnrealizedGainsDetailedCell = ({ row }) => {
-    // Use the pre-calculated values from the row
     const totalAmount = row.unrealizedPLTotal || 0;
     const perShareAmount = row.unrealizedPLPerShare || 0;
-    
     const isNegative = totalAmount < 0;
     const color = isNegative ? 'error.main' : 'success.main';
 
     return (
         <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', justifyContent: 'center', height: '100%' }}>
-            {/* Total Amount */}
             <Typography variant="body2" sx={{ fontWeight: 'bold', color: color }}>
                 {formatCurrency(totalAmount)}
             </Typography>
-            {/* P/L per Share */}
             <Typography variant="caption" sx={{ color: 'text.secondary' }}>
                 {formatCurrency(perShareAmount)}
             </Typography>
@@ -306,7 +280,6 @@ const renderUnrealizedGainsDetailedCell = ({ row }) => {
     );
 };
 
-// Updated Render for Realized Gains using LightTooltip
 const renderRealizedGainsCell = ({ value, row }) => {
     if (row.isFetching) { return <CircularProgress size={20} />; }
     const textColor = value >= 0 ? 'success.main' : 'error.main';
@@ -324,7 +297,6 @@ const renderRealizedGainsCell = ({ value, row }) => {
 
 const renderUnrealizedGainsCell = ({ row }) => {
     if (row.isFetching) { return <CircularProgress size={20} />; }
-    
     if (!row.isTotalRow && (row.isHistorical || row.unrealizedPL === undefined)) {
         return <Typography variant="body2" sx={{ color: 'text.secondary' }}>N/A</Typography>;
     }
@@ -352,7 +324,6 @@ const renderUnrealizedGainsCell = ({ row }) => {
     );
 };
 
-// Updated Render for Total Profit using LightTooltip
 const renderTotalProfitCell = ({ row }) => {
     if (row.isFetching) { return <CircularProgress size={20} />; }
     const amount = row.totalProfitAmount;
@@ -371,7 +342,6 @@ const renderTotalProfitCell = ({ row }) => {
                     </Typography>
                     {!row.isTotalRow && <InfoOutlinedIcon sx={{ fontSize: '0.8rem', color: 'text.disabled' }} />}
                 </Box>
-                
                 <Box sx={{ display: 'flex', alignItems: 'center', color: color }}>
                     {TrendIcon && <TrendIcon sx={{ fontSize: '0.8rem', mr: 0.5 }} />}
                     <Typography variant="caption" sx={{ fontWeight: '500' }}>{percent.toFixed(2)}%</Typography>
@@ -396,6 +366,7 @@ const renderCommissionCell = ({ value, row }) => {
 
 // --- ESTRUTURA DE COLUNAS ---
 
+// Function to generate Grouped Columns based on hidden settings
 const getGroupedColumns = (hiddenCols) => {
     let columns = [
         { field: 'product_name_ticker', headerName: 'Nome / ISIN', flex: 1.5, minWidth: 200, renderCell: renderNameTickerCell },
@@ -423,72 +394,41 @@ const getGroupedColumns = (hiddenCols) => {
     return columns;
 };
 
-// UPDATED DETAILED COLUMNS
-const detailedColumns = [
-    // 1. Combined Name/ISIN
-    { field: 'product_name_ticker', headerName: 'Nome / ISIN', flex: 1, minWidth: 200, renderCell: renderNameTickerCellDetailed },
-    
-    { field: 'buy_date', headerName: 'Data Compra', width: 110, type: 'date', valueGetter: (value) => parseDateRobust(value) },
-     // Days Held (Centered)
-    { 
-        field: 'daysHeld', 
-        headerName: 'Dias detidos', 
-        width: 90, 
-        type: 'number', 
-        align: 'center',
-        headerAlign: 'center',
-        renderCell: renderDaysHeldCell 
-    },
-    { field: 'quantity', headerName: 'Qtd', type: 'number', width: 80, align: 'right', headerAlign: 'right' },
-    
-    // Cost Columns
-    { 
-        field: 'buy_amount',
-        headerName: 'Custo Original', 
-        type: 'number', 
-        width: 140, 
-        align: 'right', 
-        headerAlign: 'right', 
-        renderCell: renderOriginalCostCell 
-    },
+// Function to generate Detailed Columns based on hidden settings
+const getDetailedColumns = (hiddenCols) => {
+    let columns = [
+        { field: 'product_name_ticker', headerName: 'Nome / ISIN', flex: 1, minWidth: 200, renderCell: renderNameTickerCellDetailed },
+        { field: 'buy_date', headerName: 'Data Compra', width: 110, type: 'date', valueGetter: (value) => parseDateRobust(value) },
+        { field: 'daysHeld', headerName: 'Dias detidos', width: 90, type: 'number', align: 'center', headerAlign: 'center', renderCell: renderDaysHeldCell },
+        { field: 'quantity', headerName: 'Qtd', type: 'number', width: 80, align: 'right', headerAlign: 'right' },
+    ];
 
-    { 
-        field: 'exchangeRate',
-        headerName: 'Exchange Rate', 
-        type: 'number', 
-        width: 140, 
-        align: 'right', 
-        headerAlign: 'right', 
-        renderCell: renderExchangeRateCell 
-    },
-    
-    { 
-        field: 'buy_amount_eur',
-        headerName: 'Custo (€)', 
-        type: 'number', 
-        width: 130, 
-        align: 'right', 
-        headerAlign: 'right', 
-        renderCell: renderCostEURCell 
-    },
-    { 
-        field: 'unrealizedPLTotal',
-        headerName: 'Ganhos Não Realizados', 
-        type: 'number', 
-        width: 170,
-        align: 'right', 
-        headerAlign: 'right', 
-        renderCell: renderUnrealizedGainsDetailedCell 
-    },
-];
+    if (!hiddenCols.originalCost) {
+        columns.push({ field: 'buy_amount', headerName: 'Custo Original', type: 'number', width: 140, align: 'right', headerAlign: 'right', renderCell: renderOriginalCostCell });
+    }
+
+    if (!hiddenCols.exchangeRate) {
+        columns.push({ field: 'exchangeRate', headerName: 'Exchange Rate', type: 'number', width: 140, align: 'right', headerAlign: 'right', renderCell: renderExchangeRateCell });
+    }
+
+    columns.push(
+        { field: 'buy_amount_eur', headerName: 'Custo (€)', type: 'number', width: 130, align: 'right', headerAlign: 'right', renderCell: renderCostEURCell },
+        { field: 'unrealizedPLTotal', headerName: 'Ganhos Não Realizados', type: 'number', width: 170, align: 'right', headerAlign: 'right', renderCell: renderUnrealizedGainsDetailedCell }
+    );
+
+    return columns;
+};
 
 export default function StockHoldingsSection({ groupedData, detailedData, isGroupedFetching, isDetailedFetching, NoRowsOverlay }) {
     const [viewMode, setViewMode] = useState('grouped');
     
+    // Default state: Original Cost and Exchange Rate are hidden (true)
     const [hiddenColumns, setHiddenColumns] = useState({
         dividends: true,
         commissions: true,
         salesRealized: true,
+        originalCost: true,
+        exchangeRate: true
     });
     const [anchorEl, setAnchorEl] = useState(null);
 
@@ -509,8 +449,10 @@ export default function StockHoldingsSection({ groupedData, detailedData, isGrou
 
     const isSettingsOpen = Boolean(anchorEl);
 
-    // Colunas Agrupadas
+    // Columns Logic
     const isGroupedDataHistorical = groupedData?.[0]?.isHistorical === true;
+    
+    // Historical Grouped Columns (Fixed)
     const groupedColumnsHistorical = [
         { field: 'product_name_ticker', headerName: 'Nome / Ticker', flex: 1.5, minWidth: 200, renderCell: renderNameTickerCell },
         { field: 'quantity', headerName: 'Qtd', type: 'number', width: 110, align: 'right', headerAlign: 'right', valueFormatter: (val, row) => row.isTotalRow ? '' : val },
@@ -520,9 +462,11 @@ export default function StockHoldingsSection({ groupedData, detailedData, isGrou
         { field: 'totalCommissions', headerName: 'Comissões (Hist.)', type: 'number', width: 160, align: 'right', headerAlign: 'right', renderCell: renderCommissionCell },
     ];
     
+    // Determine active columns based on view mode and state
     const finalGroupedColumns = isGroupedDataHistorical ? groupedColumnsHistorical : getGroupedColumns(hiddenColumns);
+    const finalDetailedColumns = getDetailedColumns(hiddenColumns);
 
-    // Cálculo das Linhas Agrupadas + Linha de TOTAL
+    // Data Processing (Grouped + Totals)
     const rowsWithTotal = useMemo(() => {
         if (!groupedData || groupedData.length === 0) return [];
 
@@ -553,7 +497,7 @@ export default function StockHoldingsSection({ groupedData, detailedData, isGrou
             };
         });
 
-        // Calcular Totais
+        // Totals Calculation
         const totals = standardRows.reduce((acc, row) => {
             return {
                 total_cost_basis_eur: acc.total_cost_basis_eur + (row.total_cost_basis_eur || 0),
@@ -576,7 +520,6 @@ export default function StockHoldingsSection({ groupedData, detailedData, isGrou
             totalProfitAmount: 0
         });
 
-        // Calcular percentagem global
         const totalProfitPercentage = totals.total_cost_basis_eur > 0 
             ? (totals.totalProfitAmount / totals.total_cost_basis_eur) * 100 
             : 0;
@@ -597,30 +540,19 @@ export default function StockHoldingsSection({ groupedData, detailedData, isGrou
     }, [groupedData, isGroupedFetching, isGroupedDataHistorical]);
 
 
-    // FIXED: DETAILED ROWS CALCULATION
+    // Data Processing (Detailed)
     const detailedRows = useMemo(() => {
         if (!detailedData) return [];
         return detailedData
             .filter(holding => holding)
             .map((holding, index) => {
                 const id = `${holding.isin}-${holding.buy_date}-${index}`;
-                
-                // Calculate Days Held
                 const daysHeld = calculateDaysHeld(holding.buy_date);
-
                 const quantity = holding.quantity || 0;
                 const currentPriceEUR = holding.current_price_eur || 0;
-                
-                // antes de calcular o lucro.
                 const buyAmountEUR = Math.abs(holding.buy_amount_eur || 0);
-                
-                // Calculate buy price per share in EUR (absolute value)
                 const buyPricePerShareEUR = quantity > 0 ? (buyAmountEUR / quantity) : 0;
-                
-                // Calculate P/L per share: Preço Atual - Preço Compra (Positivo)
                 const unrealizedPLPerShare = currentPriceEUR - buyPricePerShareEUR;
-                
-                // Calculate total unrealized P/L for this transaction
                 const unrealizedPLTotal = unrealizedPLPerShare * quantity;
 
                 return {
@@ -675,18 +607,34 @@ export default function StockHoldingsSection({ groupedData, detailedData, isGrou
             >
                 <Box sx={{ p: 2, display: 'flex', flexDirection: 'column' }}>
                     <Typography variant="subtitle1" sx={{ fontWeight: 'bold', mb: 1 }}>Colunas Opcionais</Typography>
-                    <FormControlLabel
-                        control={<Checkbox checked={!hiddenColumns.dividends} onChange={() => handleToggleColumn('dividends')} />}
-                        label="Dividendos Recebidos"
-                    />
-                    <FormControlLabel
-                        control={<Checkbox checked={!hiddenColumns.commissions} onChange={() => handleToggleColumn('commissions')} />}
-                        label="Comissões Pagas"
-                    />
-                    <FormControlLabel
-                        control={<Checkbox checked={!hiddenColumns.salesRealized} onChange={() => handleToggleColumn('salesRealized')} />}
-                        label="L/P Realizados (Vendas)"
-                    />
+                    
+                    {viewMode === 'grouped' ? (
+                        <>
+                            <FormControlLabel
+                                control={<Checkbox checked={!hiddenColumns.dividends} onChange={() => handleToggleColumn('dividends')} />}
+                                label="Dividendos Recebidos"
+                            />
+                            <FormControlLabel
+                                control={<Checkbox checked={!hiddenColumns.commissions} onChange={() => handleToggleColumn('commissions')} />}
+                                label="Comissões Pagas"
+                            />
+                            <FormControlLabel
+                                control={<Checkbox checked={!hiddenColumns.salesRealized} onChange={() => handleToggleColumn('salesRealized')} />}
+                                label="L/P Realizados (Vendas)"
+                            />
+                        </>
+                    ) : (
+                        <>
+                            <FormControlLabel
+                                control={<Checkbox checked={!hiddenColumns.originalCost} onChange={() => handleToggleColumn('originalCost')} />}
+                                label="Custo Original"
+                            />
+                            <FormControlLabel
+                                control={<Checkbox checked={!hiddenColumns.exchangeRate} onChange={() => handleToggleColumn('exchangeRate')} />}
+                                label="Exchange Rate"
+                            />
+                        </>
+                    )}
                 </Box>
             </Popover>
 
@@ -694,7 +642,7 @@ export default function StockHoldingsSection({ groupedData, detailedData, isGrou
                 {viewMode === 'detailed' ? (
                     <DataGrid
                         rows={detailedRows}
-                        columns={detailedColumns}
+                        columns={finalDetailedColumns}
                         loading={isDetailedFetching}
                         autoHeight
                         initialState={{ pagination: { paginationModel: { pageSize: 10 } }, sorting: { sortModel: [{ field: 'buy_date', sort: 'desc' }] } }}
