@@ -8,12 +8,14 @@ import {
 import { DataGrid } from '@mui/x-data-grid';
 import { ptPT } from '@mui/x-data-grid/locales';
 import { parseDateRobust } from '../../utils/dateUtils';
+// CORREÇÃO: Adicionado calculateAnnualizedReturn à importação
 import { formatCurrency, calculateAnnualizedReturn } from '../../utils/formatUtils';
 import SettingsIcon from '@mui/icons-material/Settings';
 import TrendingUpIcon from '@mui/icons-material/TrendingUp';
 import TrendingDownIcon from '@mui/icons-material/TrendingDown';
 import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
+import { ALL_YEARS_OPTION } from '../../constants';
 
 const LightTooltip = styled(({ className, ...props }) => (
     <Tooltip {...props} classes={{ popper: className }} />
@@ -115,6 +117,8 @@ const calculateDaysHeld = (buyDateStr) => {
     return diffDays;
 };
 
+// --- RENDERIZADORES ---
+
 const renderNameTickerCell = ({ row }) => {
     if (row.isTotalRow) {
         return (
@@ -151,13 +155,10 @@ const renderCurrentValueCombinedCell = ({ row }) => {
         );
     }
 
-    const totalValue = row.marketValueEUR;
-    const currentPrice = row.current_price_eur;
-    
     return (
         <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
-            <Typography variant="body2">{formatCurrency(totalValue)}</Typography>
-            <Typography variant="caption" sx={{ color: 'text.secondary' }}>@{formatCurrency(currentPrice)}</Typography>
+            <Typography variant="body2">{formatCurrency(row.marketValueEUR)}</Typography>
+            <Typography variant="caption" sx={{ color: 'text.secondary' }}>@{formatCurrency(row.current_price_eur)}</Typography>
         </Box>
     );
 };
@@ -175,20 +176,18 @@ const renderCostBasisCombinedCell = ({ row }) => {
         );
     }
 
-    const totalCostBasis = row.total_cost_basis_eur;
-    const costPerShare = row.costPerShare;
-    
     return (
         <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
-            <Typography variant="body2">{formatCurrency(totalCostBasis)}</Typography>
-            <Typography variant="caption" sx={{ color: 'text.secondary' }}>@{formatCurrency(costPerShare)}</Typography>
+            <Typography variant="body2">{formatCurrency(row.total_cost_basis_eur)}</Typography>
+            <Typography variant="caption" sx={{ color: 'text.secondary' }}>@{formatCurrency(row.costPerShare)}</Typography>
         </Box>
     );
 };
 
+// Alinhamento à direita (flex-end)
 const renderDaysHeldCell = ({ value }) => {
     return (
-        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', height: '100%', width: '100%' }}>
             <Typography variant="body2">
                 {value === 'N/A' ? value : `${value} dias`}
             </Typography>
@@ -227,15 +226,15 @@ const renderCostEURCell = ({ row }) => {
     );
 };
 
+// Alinhamento à direita (alignItems: flex-end)
 const renderExchangeRateCell = ({ row }) => {
-    const quantity = row.quantity || 0;
     const buyAmountOriginal = row.buy_amount || 0;
     const buyAmountEUR = row.buy_amount_eur || 0;
     const currency = row.buy_currency || 'EUR';
     
     if (currency === 'EUR' || buyAmountOriginal === 0) {
         return (
-            <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
+            <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', justifyContent: 'center', height: '100%', width: '100%' }}>
                 <Typography variant="body2" sx={{ fontWeight: '500' }}>1.0000</Typography>
                 <Typography variant="caption" sx={{ color: 'text.secondary', fontSize: '0.7rem' }}>EUR/EUR</Typography>
             </Box>
@@ -245,7 +244,7 @@ const renderExchangeRateCell = ({ row }) => {
     const exchangeRate = buyAmountEUR / buyAmountOriginal;
     
     return (
-        <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
+        <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', justifyContent: 'center', height: '100%', width: '100%' }}>
             <Typography variant="body2" sx={{ fontWeight: '500' }}>
                 {exchangeRate.toFixed(4)}
             </Typography>
@@ -256,6 +255,7 @@ const renderExchangeRateCell = ({ row }) => {
     );
 };
 
+// Removido negrito (fontWeight: '500' em vez de 'bold')
 const renderUnrealizedGainsDetailedCell = ({ row }) => {
     const totalAmount = row.unrealizedPLTotal || 0;
     const perShareAmount = row.unrealizedPLPerShare || 0;
@@ -264,7 +264,7 @@ const renderUnrealizedGainsDetailedCell = ({ row }) => {
 
     return (
         <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', justifyContent: 'center', height: '100%' }}>
-            <Typography variant="body2" sx={{ fontWeight: 'bold', color: color }}>
+            <Typography variant="body2" sx={{ fontWeight: '500', color: color }}>
                 {formatCurrency(totalAmount)}
             </Typography>
             <Typography variant="caption" sx={{ color: 'text.secondary' }}>
@@ -273,8 +273,6 @@ const renderUnrealizedGainsDetailedCell = ({ row }) => {
         </Box>
     );
 };
-
-// --- NOVAS FUNÇÕES DE RENDERIZAÇÃO PARA DETAILED VIEW ---
 
 const renderDetailedCurrentValue = ({ row }) => {
     const marketValue = row.marketValueEUR || 0;
@@ -288,6 +286,7 @@ const renderDetailedCurrentValue = ({ row }) => {
     );
 };
 
+// Removido negrito (fontWeight: '500' em vez de 'bold')
 const renderDetailedPerformance = ({ row }) => {
     const totalReturn = row.returnPercentage || 0;
     const annualized = row.annualizedReturnStr || 'N/A';
@@ -295,7 +294,7 @@ const renderDetailedPerformance = ({ row }) => {
 
     return (
         <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', justifyContent: 'center', height: '100%' }}>
-            <Typography variant="body2" sx={{ fontWeight: 'bold', color: color }}>
+            <Typography variant="body2" sx={{ fontWeight: '500', color: color }}>
                 {totalReturn > 0 ? '+' : ''}{totalReturn.toFixed(2)}%
             </Typography>
             <Typography variant="caption" sx={{ color: 'text.secondary', fontSize: '0.7rem' }}>
@@ -304,8 +303,6 @@ const renderDetailedPerformance = ({ row }) => {
         </Box>
     );
 };
-
-// --------------------------------------------------------
 
 const renderRealizedGainsCell = ({ value, row }) => {
     if (row.isFetching) { return <CircularProgress size={20} />; }
@@ -421,12 +418,13 @@ const getGroupedColumns = (hiddenCols) => {
     return columns;
 };
 
-// Function to generate Detailed Columns based on hidden settings
-const getDetailedColumns = (hiddenCols) => {
+// Recebe selectedYear e aplica lógica condicional para esconder colunas de "hoje"
+const getDetailedColumns = (hiddenCols, selectedYear) => {
     let columns = [
         { field: 'product_name_ticker', headerName: 'Nome / ISIN', flex: 1, minWidth: 180, renderCell: renderNameTickerCellDetailed },
         { field: 'buy_date', headerName: 'Data Compra', width: 100, type: 'date', valueGetter: (value) => parseDateRobust(value) },
-        { field: 'daysHeld', headerName: 'Dias', width: 70, type: 'number', align: 'center', headerAlign: 'center', renderCell: renderDaysHeldCell },
+        // Align headers right for numbers
+        { field: 'daysHeld', headerName: 'Dias', width: 70, type: 'number', align: 'right', headerAlign: 'right', renderCell: renderDaysHeldCell },
         { field: 'quantity', headerName: 'Qtd', type: 'number', width: 70, align: 'right', headerAlign: 'right' },
     ];
 
@@ -439,18 +437,26 @@ const getDetailedColumns = (hiddenCols) => {
     }
 
     columns.push(
-        { field: 'buy_amount_eur', headerName: 'Custo (€)', type: 'number', width: 120, align: 'right', headerAlign: 'right', renderCell: renderCostEURCell },
-        
-        // --- NOVAS COLUNAS ADICIONADAS AQUI ---
-        { field: 'marketValueEUR', headerName: 'Valor Atual', type: 'number', width: 130, align: 'right', headerAlign: 'right', renderCell: renderDetailedCurrentValue },
-        { field: 'unrealizedPLTotal', headerName: 'P/L (€)', type: 'number', width: 110, align: 'right', headerAlign: 'right', renderCell: renderUnrealizedGainsDetailedCell },
-        { field: 'performance', headerName: 'Rentabilidade', type: 'number', width: 140, align: 'right', headerAlign: 'right', renderCell: renderDetailedPerformance }
+        { field: 'buy_amount_eur', headerName: 'Custo (€)', type: 'number', width: 120, align: 'right', headerAlign: 'right', renderCell: renderCostEURCell }
     );
+
+    // Lógica para mostrar colunas de "hoje" apenas se for Ano Total ou Ano Corrente
+    const currentSystemYear = new Date().getFullYear().toString();
+    const showCurrentMetrics = selectedYear === ALL_YEARS_OPTION || selectedYear === currentSystemYear;
+
+    if (showCurrentMetrics) {
+        columns.push(
+            { field: 'marketValueEUR', headerName: 'Valor Atual', type: 'number', width: 130, align: 'right', headerAlign: 'right', renderCell: renderDetailedCurrentValue },
+            { field: 'unrealizedPLTotal', headerName: 'P/L (€)', type: 'number', width: 110, align: 'right', headerAlign: 'right', renderCell: renderUnrealizedGainsDetailedCell },
+            { field: 'performance', headerName: 'Rentabilidade', type: 'number', width: 140, align: 'right', headerAlign: 'right', renderCell: renderDetailedPerformance }
+        );
+    }
 
     return columns;
 };
 
-export default function StockHoldingsSection({ groupedData, detailedData, isGroupedFetching, isDetailedFetching, NoRowsOverlay }) {
+// Recebe prop selectedYear
+export default function StockHoldingsSection({ groupedData, detailedData, isGroupedFetching, isDetailedFetching, selectedYear, NoRowsOverlay }) {
     const [viewMode, setViewMode] = useState('grouped');
     
     // Default state: Original Cost and Exchange Rate are hidden (true)
@@ -495,7 +501,7 @@ export default function StockHoldingsSection({ groupedData, detailedData, isGrou
     
     // Determine active columns based on view mode and state
     const finalGroupedColumns = isGroupedDataHistorical ? groupedColumnsHistorical : getGroupedColumns(hiddenColumns);
-    const finalDetailedColumns = getDetailedColumns(hiddenColumns);
+    const finalDetailedColumns = getDetailedColumns(hiddenColumns, selectedYear); // Passar selectedYear aqui
 
     // Data Processing (Grouped + Totals)
     const rowsWithTotal = useMemo(() => {

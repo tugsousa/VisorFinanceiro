@@ -287,6 +287,7 @@ export default function RealizedGainsPage() {
             detailedData={detailedHoldingsForView}
             isGroupedFetching={isGroupedHoldingsLoading}
             isDetailedFetching={isLoading}
+            selectedYear={selectedYear}
             NoRowsOverlay={NoRowsOverlay}
           />
           {periodSpecificData.optionHoldings && (
