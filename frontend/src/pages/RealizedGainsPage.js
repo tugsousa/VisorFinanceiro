@@ -45,7 +45,7 @@ const isDataEmpty = (data) => {
   );
 };
 
-// --- NOVO: Componente para o slot NoRowsOverlay (Reutilizável) ---
+// --- Componente para o slot NoRowsOverlay (Reutilizável) ---
 const NoRowsOverlay = () => (
   <Box 
     sx={{ 
@@ -96,7 +96,9 @@ export default function RealizedGainsPage() {
   const {
     stockSalesData, optionSalesData, dividendSummaryData,
     dividendTransactionsData, stockHoldingsByYearData, optionHoldingsData,
-    feesData, allTransactionsData, 
+    feesData, 
+    currentHoldingsValueData, // <--- NOVA EXTRAÇÃO AQUI
+    
     periodSpecificData,
     summaryData,
     unrealizedStockPL,
@@ -117,25 +119,43 @@ export default function RealizedGainsPage() {
     }
   }, [availableYears, selectedYear, isLoading, isError]);
 
+  // --- LÓGICA ATUALIZADA PARA O MODO DETALHADO ---
   const detailedHoldingsForView = useMemo(() => {
     const holdingsByYear = stockHoldingsByYearData;
     if (!holdingsByYear || Object.keys(holdingsByYear).length === 0) {
       return [];
     }
 
-    const currentSystemYear = new Date().getFullYear().toString();
-
-    // If "Total" or the current system year is selected, show the most recent snapshot available.
-    // This correctly represents the current portfolio's detailed lots.
-    if (selectedYear === ALL_YEARS_OPTION || selectedYear === currentSystemYear) {
-      // Find the latest year with data by sorting keys descending
-      const latestYear = Object.keys(holdingsByYear).sort((a, b) => b.localeCompare(a))[0];
-      return holdingsByYear[latestYear] || [];
+    // 1. Criar mapa de preços (ISIN -> Preço Atual)
+    const priceMap = {};
+    if (currentHoldingsValueData && Array.isArray(currentHoldingsValueData)) {
+      currentHoldingsValueData.forEach(holding => {
+        if (holding.isin && holding.current_price_eur) {
+          priceMap[holding.isin] = holding.current_price_eur;
+        }
+      });
     }
 
-    // For any other historical year, show the data for that specific year.
-    return holdingsByYear[selectedYear] || [];
-  }, [stockHoldingsByYearData, selectedYear]);
+    const currentSystemYear = new Date().getFullYear().toString();
+    let targetData = [];
+
+    // Se "Total" ou o ano corrente for selecionado, mostrar o snapshot mais recente
+    if (selectedYear === ALL_YEARS_OPTION || selectedYear === currentSystemYear) {
+      const latestYear = Object.keys(holdingsByYear).sort((a, b) => b.localeCompare(a))[0];
+      targetData = holdingsByYear[latestYear] || [];
+    } else {
+      // Para anos históricos, mostrar os dados desse ano específico
+      targetData = holdingsByYear[selectedYear] || [];
+    }
+
+    // 2. Injetar o preço atual em cada lote de compra
+    return targetData.map(lot => ({
+      ...lot,
+      current_price_eur: priceMap[lot.isin] || 0 // Injectar preço ou 0 se não encontrado
+    }));
+
+  }, [stockHoldingsByYearData, selectedYear, currentHoldingsValueData]);
+  // ----------------------------------------------------
 
 
   const handleYearChange = (event) => setSelectedYear(event.target.value);

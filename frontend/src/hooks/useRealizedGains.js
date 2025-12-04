@@ -305,6 +305,7 @@ export const useRealizedGains = (token, selectedYear) => {
         optionHoldingsData: optionHoldingsData,
         feesData: feesData,
         allTransactionsData: allTransactionsData,
+        currentHoldingsValueData: currentHoldingsValueData,
         
         periodSpecificData, summaryData, unrealizedStockPL,
         derivedDividendTaxSummary: dividendSummaryData,
