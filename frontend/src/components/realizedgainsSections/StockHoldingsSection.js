@@ -208,9 +208,7 @@ const renderDaysHeldCell = ({ value }) => {
 
 // Renderer for Cost in Original Currency
 const renderOriginalCostCell = ({ row }) => {
-    console.log("Current Row Data:", row);
-    // Total amount spent for the lot
-    const totalCost = row.buy_amount || 0;
+    const totalCost = Math.abs(row.buy_amount || 0);
     const costPerShare = row.buyPrice || 0;
     const currency = row.buy_currency || 'EUR';
 
@@ -218,25 +216,21 @@ const renderOriginalCostCell = ({ row }) => {
     const formatOriginalCurrency = (value) => formatCurrency(value, { currency: currency, showSymbol: true });
 
     return (
-		<Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
-			<Typography variant="body2">{formatOriginalCurrency(totalCost)}</Typography>
-			<Typography variant="caption" sx={{ color: 'text.secondary' }}>@{formatOriginalCurrency(costPerShare)}</Typography>
+        <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
+            <Typography variant="body2">{formatOriginalCurrency(totalCost)}</Typography>
+            <Typography variant="caption" sx={{ color: 'text.secondary' }}>@{formatOriginalCurrency(costPerShare)}</Typography>
         </Box>
     );
 };
 
 // Renderer for Cost in EUR
 const renderCostEURCell = ({ row }) => {
-    // 1. Get the total cost in EUR from the row data
-    const totalCostEUR = row.buy_amount_eur || 0;
+    const totalCostEUR = Math.abs(row.buy_amount_eur || 0);
     const quantity = row.quantity || 0;
     
-    // 2. Calculate the cost per share in EUR.
-    // We use Math.abs() to ensure the price is positive, as 'buy_amount_eur' is negative in your sample data.
-    const costPerShareEUR = quantity > 0 ? Math.abs(totalCostEUR) / quantity : 0;
+    // Calculate the cost per share in EUR using the absolute total
+    const costPerShareEUR = quantity > 0 ? totalCostEUR / quantity : 0;
     
-    // We assume 'formatCurrency' defaults to or is configured for EUR.
-
     return (
         <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', justifyContent: 'center', height: '100%' }}>
             {/* Total amount spent in EUR */}
@@ -306,7 +300,7 @@ const renderUnrealizedGainsDetailedCell = ({ row }) => {
             </Typography>
             {/* P/L per Share */}
             <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-                {formatCurrency(perShareAmount)} / ação
+                {formatCurrency(perShareAmount)}
             </Typography>
         </Box>
     );
@@ -614,15 +608,16 @@ export default function StockHoldingsSection({ groupedData, detailedData, isGrou
                 // Calculate Days Held
                 const daysHeld = calculateDaysHeld(holding.buy_date);
 
-                // --- FIXED CALCULATION: Unrealized Gains per Transaction ---
                 const quantity = holding.quantity || 0;
                 const currentPriceEUR = holding.current_price_eur || 0;
-                const buyAmountEUR = holding.buy_amount_eur || 0;
                 
-                // Calculate buy price per share in EUR
+                // antes de calcular o lucro.
+                const buyAmountEUR = Math.abs(holding.buy_amount_eur || 0);
+                
+                // Calculate buy price per share in EUR (absolute value)
                 const buyPricePerShareEUR = quantity > 0 ? (buyAmountEUR / quantity) : 0;
                 
-                // Calculate P/L per share (difference between current and buy price)
+                // Calculate P/L per share: Preço Atual - Preço Compra (Positivo)
                 const unrealizedPLPerShare = currentPriceEUR - buyPricePerShareEUR;
                 
                 // Calculate total unrealized P/L for this transaction
