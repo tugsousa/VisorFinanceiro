@@ -8,15 +8,12 @@ import {
 import { DataGrid } from '@mui/x-data-grid';
 import { ptPT } from '@mui/x-data-grid/locales';
 import { parseDateRobust } from '../../utils/dateUtils';
-import { formatCurrency } from '../../utils/formatUtils';
+import { formatCurrency, calculateAnnualizedReturn } from '../../utils/formatUtils';
 import SettingsIcon from '@mui/icons-material/Settings';
 import TrendingUpIcon from '@mui/icons-material/TrendingUp';
 import TrendingDownIcon from '@mui/icons-material/TrendingDown';
 import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
-
-// ... [Keep existing Styled Components and Tooltip Content Components unchanged] ...
-// (LightTooltip, TooltipRow, RealizedGainsTooltipContent, TotalProfitTooltipContent)
 
 const LightTooltip = styled(({ className, ...props }) => (
     <Tooltip {...props} classes={{ popper: className }} />
@@ -108,9 +105,6 @@ const TotalProfitTooltipContent = ({ row }) => (
         <TooltipRow label="LUCRO TOTAL" value={row.totalProfitAmount} isTotal={true} color={row.totalProfitAmount >= 0 ? 'success.main' : 'error.main'} />
     </Box>
 );
-
-// ... [Keep existing Render Helper Functions unchanged] ...
-// (calculateDaysHeld, renderNameTickerCell, renderNameTickerCellDetailed, renderCurrentValueCombinedCell, etc.)
 
 const calculateDaysHeld = (buyDateStr) => {
     const buyDate = parseDateRobust(buyDateStr);
@@ -280,6 +274,39 @@ const renderUnrealizedGainsDetailedCell = ({ row }) => {
     );
 };
 
+// --- NOVAS FUNÇÕES DE RENDERIZAÇÃO PARA DETAILED VIEW ---
+
+const renderDetailedCurrentValue = ({ row }) => {
+    const marketValue = row.marketValueEUR || 0;
+    const currentPrice = row.current_price_eur || 0;
+
+    return (
+        <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', justifyContent: 'center', height: '100%' }}>
+            <Typography variant="body2">{formatCurrency(marketValue)}</Typography>
+            <Typography variant="caption" sx={{ color: 'text.secondary' }}>@{formatCurrency(currentPrice)}</Typography>
+        </Box>
+    );
+};
+
+const renderDetailedPerformance = ({ row }) => {
+    const totalReturn = row.returnPercentage || 0;
+    const annualized = row.annualizedReturnStr || 'N/A';
+    const color = totalReturn >= 0 ? 'success.main' : 'error.main';
+
+    return (
+        <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', justifyContent: 'center', height: '100%' }}>
+            <Typography variant="body2" sx={{ fontWeight: 'bold', color: color }}>
+                {totalReturn > 0 ? '+' : ''}{totalReturn.toFixed(2)}%
+            </Typography>
+            <Typography variant="caption" sx={{ color: 'text.secondary', fontSize: '0.7rem' }}>
+                Anual: {annualized}
+            </Typography>
+        </Box>
+    );
+};
+
+// --------------------------------------------------------
+
 const renderRealizedGainsCell = ({ value, row }) => {
     if (row.isFetching) { return <CircularProgress size={20} />; }
     const textColor = value >= 0 ? 'success.main' : 'error.main';
@@ -397,23 +424,27 @@ const getGroupedColumns = (hiddenCols) => {
 // Function to generate Detailed Columns based on hidden settings
 const getDetailedColumns = (hiddenCols) => {
     let columns = [
-        { field: 'product_name_ticker', headerName: 'Nome / ISIN', flex: 1, minWidth: 200, renderCell: renderNameTickerCellDetailed },
-        { field: 'buy_date', headerName: 'Data Compra', width: 110, type: 'date', valueGetter: (value) => parseDateRobust(value) },
-        { field: 'daysHeld', headerName: 'Dias detidos', width: 90, type: 'number', align: 'center', headerAlign: 'center', renderCell: renderDaysHeldCell },
-        { field: 'quantity', headerName: 'Qtd', type: 'number', width: 80, align: 'right', headerAlign: 'right' },
+        { field: 'product_name_ticker', headerName: 'Nome / ISIN', flex: 1, minWidth: 180, renderCell: renderNameTickerCellDetailed },
+        { field: 'buy_date', headerName: 'Data Compra', width: 100, type: 'date', valueGetter: (value) => parseDateRobust(value) },
+        { field: 'daysHeld', headerName: 'Dias', width: 70, type: 'number', align: 'center', headerAlign: 'center', renderCell: renderDaysHeldCell },
+        { field: 'quantity', headerName: 'Qtd', type: 'number', width: 70, align: 'right', headerAlign: 'right' },
     ];
 
     if (!hiddenCols.originalCost) {
-        columns.push({ field: 'buy_amount', headerName: 'Custo Original', type: 'number', width: 140, align: 'right', headerAlign: 'right', renderCell: renderOriginalCostCell });
+        columns.push({ field: 'buy_amount', headerName: 'Custo Orig.', type: 'number', width: 120, align: 'right', headerAlign: 'right', renderCell: renderOriginalCostCell });
     }
 
     if (!hiddenCols.exchangeRate) {
-        columns.push({ field: 'exchangeRate', headerName: 'Exchange Rate', type: 'number', width: 140, align: 'right', headerAlign: 'right', renderCell: renderExchangeRateCell });
+        columns.push({ field: 'exchangeRate', headerName: 'Câmbio', type: 'number', width: 100, align: 'right', headerAlign: 'right', renderCell: renderExchangeRateCell });
     }
 
     columns.push(
-        { field: 'buy_amount_eur', headerName: 'Custo (€)', type: 'number', width: 130, align: 'right', headerAlign: 'right', renderCell: renderCostEURCell },
-        { field: 'unrealizedPLTotal', headerName: 'Ganhos Não Realizados', type: 'number', width: 170, align: 'right', headerAlign: 'right', renderCell: renderUnrealizedGainsDetailedCell }
+        { field: 'buy_amount_eur', headerName: 'Custo (€)', type: 'number', width: 120, align: 'right', headerAlign: 'right', renderCell: renderCostEURCell },
+        
+        // --- NOVAS COLUNAS ADICIONADAS AQUI ---
+        { field: 'marketValueEUR', headerName: 'Valor Atual', type: 'number', width: 130, align: 'right', headerAlign: 'right', renderCell: renderDetailedCurrentValue },
+        { field: 'unrealizedPLTotal', headerName: 'P/L (€)', type: 'number', width: 110, align: 'right', headerAlign: 'right', renderCell: renderUnrealizedGainsDetailedCell },
+        { field: 'performance', headerName: 'Rentabilidade', type: 'number', width: 140, align: 'right', headerAlign: 'right', renderCell: renderDetailedPerformance }
     );
 
     return columns;
@@ -550,17 +581,31 @@ export default function StockHoldingsSection({ groupedData, detailedData, isGrou
                 const daysHeld = calculateDaysHeld(holding.buy_date);
                 const quantity = holding.quantity || 0;
                 const currentPriceEUR = holding.current_price_eur || 0;
+                
+                // Custo em EUR (sempre positivo para cálculos de base)
                 const buyAmountEUR = Math.abs(holding.buy_amount_eur || 0);
                 const buyPricePerShareEUR = quantity > 0 ? (buyAmountEUR / quantity) : 0;
+                
+                // Cálculos de P/L com dados atualizados
+                const marketValueEUR = quantity * currentPriceEUR;
                 const unrealizedPLPerShare = currentPriceEUR - buyPricePerShareEUR;
-                const unrealizedPLTotal = unrealizedPLPerShare * quantity;
+                const unrealizedPLTotal = marketValueEUR - buyAmountEUR;
+
+                // Cálculos de Rentabilidade
+                const returnPercentage = buyAmountEUR > 0 ? (unrealizedPLTotal / buyAmountEUR) * 100 : 0;
+                const annualizedReturnStr = calculateAnnualizedReturn(unrealizedPLTotal, buyAmountEUR, daysHeld);
 
                 return {
                     id,
                     ...holding,
                     daysHeld,
+                    buy_amount_eur: buyAmountEUR, // Garantir positivo
+                    marketValueEUR,
+                    currentPriceEUR,
                     unrealizedPLTotal,
                     unrealizedPLPerShare,
+                    returnPercentage,
+                    annualizedReturnStr
                 };
             });
     }, [detailedData]);
