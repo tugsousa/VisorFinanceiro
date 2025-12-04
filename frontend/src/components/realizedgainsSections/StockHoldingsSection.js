@@ -208,26 +208,48 @@ const renderDaysHeldCell = ({ value }) => {
 
 // Renderer for Cost in Original Currency
 const renderOriginalCostCell = ({ row }) => {
+    console.log("Current Row Data:", row);
+    // Total amount spent for the lot
     const totalCost = row.buy_amount || 0;
+    const costPerShare = row.buyPrice || 0;
     const currency = row.buy_currency || 'EUR';
-    
+
+    // Helper to format currency for the original currency
+    const formatOriginalCurrency = (value) => formatCurrency(value, { currency: currency, showSymbol: true });
+
     return (
-        <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', justifyContent: 'center', height: '100%' }}>
-            <Typography variant="body2" sx={{ fontWeight: '500' }}>
-                {formatCurrency(totalCost, { currency: currency, showSymbol: true })}
-            </Typography>
+		<Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
+			<Typography variant="body2">{formatOriginalCurrency(totalCost)}</Typography>
+			<Typography variant="caption" sx={{ color: 'text.secondary' }}>@{formatOriginalCurrency(costPerShare)}</Typography>
         </Box>
     );
 };
 
 // Renderer for Cost in EUR
-const renderCostEURCell = ({ value }) => (
-    <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', justifyContent: 'center', height: '100%' }}>
-        <Typography variant="body2" sx={{ fontWeight: '500' }}>
-            {formatCurrency(value)}
-        </Typography>
-    </Box>
-);
+const renderCostEURCell = ({ row }) => {
+    // 1. Get the total cost in EUR from the row data
+    const totalCostEUR = row.buy_amount_eur || 0;
+    const quantity = row.quantity || 0;
+    
+    // 2. Calculate the cost per share in EUR.
+    // We use Math.abs() to ensure the price is positive, as 'buy_amount_eur' is negative in your sample data.
+    const costPerShareEUR = quantity > 0 ? Math.abs(totalCostEUR) / quantity : 0;
+    
+    // We assume 'formatCurrency' defaults to or is configured for EUR.
+
+    return (
+        <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', justifyContent: 'center', height: '100%' }}>
+            {/* Total amount spent in EUR */}
+            <Typography variant="body2" sx={{ fontWeight: '500' }}>
+                {formatCurrency(totalCostEUR)}
+            </Typography>
+            {/* Cost per share in EUR */}
+            <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+                @{formatCurrency(costPerShareEUR)}
+            </Typography>
+        </Box>
+    );
+};
 
 // Renderer for Exchange Rate
 const renderExchangeRateCell = ({ row }) => {
@@ -240,8 +262,13 @@ const renderExchangeRateCell = ({ row }) => {
     if (currency === 'EUR' || buyAmountOriginal === 0) {
         return (
             <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
-                <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+                {/* Display rate 1.0000 with bold weight */}
+                <Typography variant="body2" sx={{ fontWeight: '500' }}>
                     1.0000
+                </Typography>
+                {/* Display EUR/EUR currency pair */}
+                <Typography variant="caption" sx={{ color: 'text.secondary', fontSize: '0.7rem' }}>
+                    EUR/EUR
                 </Typography>
             </Box>
         );
