@@ -1,16 +1,10 @@
 import React, { useState, useMemo } from 'react';
 import { Doughnut } from 'react-chartjs-2';
 import { Chart as ChartJS, ArcElement, Tooltip, Legend, Title } from 'chart.js';
-import { Paper, Typography } from '@mui/material';
+import { Paper, Typography, Box, FormControlLabel, Switch } from '@mui/material';
 import { formatCurrency } from '../../utils/formatUtils';
 
 ChartJS.register(ArcElement, Tooltip, Legend, Title);
-
-const modernPalettes = {
-  greenTones: [
-    '#004d40', '#00796b', '#4DB6AC', '#2E7D32', '#66BB6A', '#AED581'
-  ]
-};
 
 const generateColorPalette = (count) => {
   if (count === 0) return [];
@@ -101,7 +95,7 @@ const centerTextPlugin = {
     } else {
       ctx.font = `500 13px ${fontFamily}`;
       ctx.fillStyle = '#666';
-      ctx.fillText('Valor Total do Portefólio', centerX, centerY - 15);
+      ctx.fillText('Valor Total', centerX, centerY - 15);
       
       ctx.font = `bold 18px ${fontFamily}`;
       ctx.fillStyle = '#111';
@@ -113,24 +107,56 @@ const centerTextPlugin = {
 
 const fadeColor = (colorString, alpha = 0.3) => {
     if (typeof colorString !== 'string' || !colorString.startsWith('hsl')) return 'rgba(200, 200, 200, 0.3)';
-    // Convert hsl(h, s%, l%) to hsla(h, s%, l%, a)
     return colorString.replace('hsl', 'hsla').replace(')', `, ${alpha})`);
 };
 
-export default function HoldingsAllocationChart({ chartData }) {
+export default function HoldingsAllocationChart({ holdings }) {
     const [hoveredIndex, setHoveredIndex] = useState(null);
+    const [showPurchaseValue, setShowPurchaseValue] = useState(false);
+
+    // --- DATA PROCESSING LOGIC MOVED HERE ---
+    const chartData = useMemo(() => {
+        if (!holdings || holdings.length === 0) return { labels: [], datasets: [] };
+
+        const isHistorical = holdings[0]?.isHistorical;
+
+        // Process items based on the selected mode
+        const chartItems = holdings.map(h => {
+            let value;
+            if (showPurchaseValue) {
+                // Mode: Purchase Value (Cost Basis)
+                value = Math.abs(h.total_cost_basis_eur || 0);
+            } else {
+                // Mode: Current Value (Market Value)
+                // Fallback to cost basis if historical and market value is missing/zero (existing logic preserved)
+                value = isHistorical ? Math.abs(h.total_cost_basis_eur || 0) : (h.marketValueEUR || 0);
+            }
+            return {
+                name: h.product_name,
+                value: value
+            };
+        }).sort((a, b) => b.value - a.value); // Sort descending
+
+        const topN = 7;
+        const top = chartItems.slice(0, topN);
+        const other = chartItems.slice(topN);
+        
+        const labels = top.map(item => item.name);
+        const data = top.map(item => item.value);
+
+        if (other.length > 0) {
+            labels.push('Outros');
+            data.push(other.reduce((sum, item) => sum + item.value, 0));
+        }
+
+        return { labels, datasets: [{ data }] };
+    }, [holdings, showPurchaseValue]);
+    // ----------------------------------------
 
     const totalValue = useMemo(() => {
-        // --- INÍCIO DA CORREÇÃO ---
-        // A verificação agora usa "optional chaining" (?.) para evitar o erro.
-        // Se qualquer parte do caminho (chartData, datasets, [0], data) for nula ou indefinida,
-        // a expressão retorna `undefined` sem causar um erro, e o `|| 0` trata disso.
         const data = chartData?.datasets?.[0]?.data || [];
-        if (data.length === 0) {
-            return 0;
-        }
+        if (data.length === 0) return 0;
         return data.reduce((sum, value) => sum + value, 0);
-        // --- FIM DA CORREÇÃO ---
     }, [chartData]);
 
     const baseColors = useMemo(() => {
@@ -165,8 +191,6 @@ export default function HoldingsAllocationChart({ chartData }) {
         return null;
     }, [hoveredIndex, chartData, totalValue]);
 
-    // --- INÍCIO DA CORREÇÃO ---
-    // A verificação de "sem dados" também é robustecida.
     const noData = !chartData?.datasets?.[0]?.data?.length > 0;
 
     if (noData) {
@@ -176,7 +200,6 @@ export default function HoldingsAllocationChart({ chartData }) {
             </Paper>
         );
     }
-    // --- FIM DA CORREÇÃO ---
 
     const dataWithColors = {
         ...chartData,
@@ -213,11 +236,34 @@ export default function HoldingsAllocationChart({ chartData }) {
     };
 
    return (
-      <div 
-        onMouseLeave={() => setHoveredIndex(null)}
-        style={{ position: 'relative', width: '100%', height: '100%', minHeight: '280px', margin: 'auto' }}
-      >
-        <Doughnut data={dataWithColors} options={options} plugins={[centerTextPlugin]} />
-      </div>
+      <Box sx={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+        {/* Header with Title and Toggle */}
+        <Box sx={{ width: '100%', display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1, px: 1 }}>
+            <Typography variant="subtitle1" fontWeight="600" color="text.secondary">Alocação</Typography>
+            <FormControlLabel
+                control={
+                    <Switch
+                        size="small"
+                        checked={showPurchaseValue}
+                        onChange={(e) => setShowPurchaseValue(e.target.checked)}
+                        color="primary"
+                    />
+                }
+                label={
+                    <Typography variant="caption" color="text.secondary">
+                        {showPurchaseValue ? "Valor de Compra" : "Valor Atual"}
+                    </Typography>
+                }
+                labelPlacement="start"
+            />
+        </Box>
+
+        <div 
+            onMouseLeave={() => setHoveredIndex(null)}
+            style={{ position: 'relative', width: '100%', flexGrow: 1, minHeight: '280px' }}
+        >
+            <Doughnut data={dataWithColors} options={options} plugins={[centerTextPlugin]} />
+        </div>
+      </Box>
     );
 }

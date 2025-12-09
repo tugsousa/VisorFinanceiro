@@ -3,8 +3,8 @@ import React, { useState, useEffect, useMemo } from 'react';
 import {
   Typography, Box, FormControl, InputLabel, Select, MenuItem,
   Paper, CircularProgress, Grid, Alert, Tabs, Tab, Card
-} from '@mui/material'; // Removed Tooltip from import to avoid conflict with local Tooltip usage if any, but added back in JSX
-import { Tooltip } from '@mui/material'; // Explicit import
+} from '@mui/material'; 
+import { Tooltip } from '@mui/material'; 
 import { useAuth } from '../context/AuthContext';
 import { useRealizedGains } from '../hooks/useRealizedGains';
 import { UI_TEXT, ALL_YEARS_OPTION } from '../constants';
@@ -16,9 +16,9 @@ import AttachMoneyIcon from '@mui/icons-material/AttachMoney';
 import AccountBalanceWalletIcon from '@mui/icons-material/AccountBalanceWallet';
 import TrendingUpIcon from '@mui/icons-material/TrendingUp';
 import RequestQuoteIcon from '@mui/icons-material/RequestQuote';
-import SavingsIcon from '@mui/icons-material/Savings'; // For Invested Capital
-import ThumbUpAltIcon from '@mui/icons-material/ThumbUpAlt'; // For Best Trade
-import ThumbDownAltIcon from '@mui/icons-material/ThumbDownAlt'; // For Worst Trade
+import SavingsIcon from '@mui/icons-material/Savings'; 
+import ThumbUpAltIcon from '@mui/icons-material/ThumbUpAlt'; 
+import ThumbDownAltIcon from '@mui/icons-material/ThumbDownAlt'; 
 
 import StockHoldingsSection from '../components/realizedgainsSections/StockHoldingsSection';
 import OptionHoldingsSection from '../components/realizedgainsSections/OptionHoldingsSection';
@@ -125,7 +125,7 @@ export default function RealizedGainsPage() {
     unrealizedStockPL,
     derivedDividendTaxSummary,
     availableYears,
-    holdingsChartData,
+    // holdingsChartData, // Removed: Not needed as we pass raw holdings now
     holdingsForGroupedView,
     isHoldingsValueFetching,
     isLoading,
@@ -300,7 +300,7 @@ export default function RealizedGainsPage() {
             {/* Holdings Chart */}
             <Grid item xs={12}>
               <Paper elevation={0} sx={{ p: 3, height: 400, borderRadius: 3, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <HoldingsAllocationChart chartData={holdingsChartData} />
+                <HoldingsAllocationChart holdings={holdingsForGroupedView} />
               </Paper>
             </Grid>
           </Grid>
@@ -334,7 +334,6 @@ export default function RealizedGainsPage() {
         </Grid>
       )}
 
-      {/* Other tabs remain unchanged... */}
       {currentTab === 'holdings' && (
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
           <StockHoldingsSection
