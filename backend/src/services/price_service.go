@@ -25,6 +25,8 @@ import (
 // This bypasses the search API for known problematic cases.
 var manualTickerOverrides = map[string]string{
 	"PLLVTSF00010": "TXT.WA", // Text S.A. (formerly LiveChat) on Warsaw SE
+	"IE000U9J8HX9": "JEPQ.L", // JPMorgan Nasdaq Equity Premium Income Active UCITS ETF
+	"IE00BK5BQT80": "VWRA.L",
 }
 
 // --- API Response Structs ---
@@ -266,21 +268,21 @@ func (s *priceServiceImpl) getTickerToPriceMap(isinToTickerMap map[string]string
 }
 
 func (s *priceServiceImpl) fetchTickerForISIN(isin string) (string, string, string, error) {
-	// 1. Strict Validation: Instant fail for invalid ISINs
 	if len(isin) != 12 {
 		return "", "", "", fmt.Errorf("invalid ISIN length: %s", isin)
 	}
 
-	// 2. Check Manual Overrides
 	if ticker, ok := manualTickerOverrides[isin]; ok {
 		logger.L.Info("Using manual ticker override", "isin", isin, "ticker", ticker)
-		// We return "Override" for exchange/currency as they will be fetched
-		// by the subsequent price call (GetPriceForTicker) anyway.
 		return ticker, "Override", "", nil
 	}
 
-	// 3. Call Yahoo API
 	searchURL := fmt.Sprintf("https://query1.finance.yahoo.com/v1/finance/search?q=%s&quotesCount=1&lang=en-US", isin)
+
+	// --- DEBUG LOGGING ---
+	logger.L.Debug("Yahoo SEARCH API Request", "url", searchURL)
+	// ---------------------
+
 	req, err := http.NewRequest("GET", searchURL, nil)
 	if err != nil {
 		return "", "", "", err
@@ -293,19 +295,26 @@ func (s *priceServiceImpl) fetchTickerForISIN(isin string) (string, string, stri
 	}
 	defer resp.Body.Close()
 
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", "", "", fmt.Errorf("failed to read response body: %w", err)
+	}
+
+	// --- DEBUG LOGGING ---
+	logger.L.Debug("Yahoo SEARCH API Response", "isin", isin, "status", resp.Status, "body", string(bodyBytes))
+	// ---------------------
+
 	if resp.StatusCode != http.StatusOK {
-		bodyBytes, _ := io.ReadAll(resp.Body)
-		logger.L.Error("Yahoo search API returned non-OK status", "status", resp.Status, "isin", isin, "responseBody", string(bodyBytes))
-		return "", "", "", fmt.Errorf("yahoo search API returned non-OK status %d for ISIN %s", resp.StatusCode, isin)
+		return "", "", "", fmt.Errorf("yahoo search API returned non-OK status %d", resp.StatusCode)
 	}
 
 	var searchData yahooSearchResponse
-	if err := json.NewDecoder(resp.Body).Decode(&searchData); err != nil {
-		return "", "", "", fmt.Errorf("failed to decode Yahoo search response for ISIN %s: %w", isin, err)
+	if err := json.Unmarshal(bodyBytes, &searchData); err != nil {
+		return "", "", "", fmt.Errorf("failed to decode Yahoo search response: %w", err)
 	}
 
 	if len(searchData.Quotes) == 0 || searchData.Quotes[0].Symbol == "" {
-		return "", "", "", fmt.Errorf("no ticker symbol found for ISIN %s on Yahoo Finance", isin)
+		return "", "", "", fmt.Errorf("no ticker symbol found for ISIN %s", isin)
 	}
 	quote := searchData.Quotes[0]
 	return quote.Symbol, quote.Exchange, quote.Currency, nil
@@ -313,6 +322,11 @@ func (s *priceServiceImpl) fetchTickerForISIN(isin string) (string, string, stri
 
 func (s *priceServiceImpl) getPriceForTicker(ticker string) (float64, string, error) {
 	quoteURL := fmt.Sprintf("https://query1.finance.yahoo.com/v8/finance/chart/%s", ticker)
+
+	// --- DEBUG LOGGING ---
+	logger.L.Debug("Yahoo CURRENT PRICE Request", "url", quoteURL)
+	// ---------------------
+
 	req, err := http.NewRequest("GET", quoteURL, nil)
 	if err != nil {
 		return 0, "", err
@@ -325,36 +339,34 @@ func (s *priceServiceImpl) getPriceForTicker(ticker string) (float64, string, er
 	}
 	defer resp.Body.Close()
 
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return 0, "", fmt.Errorf("failed to read response body: %w", err)
+	}
+
+	// --- DEBUG LOGGING ---
+	logger.L.Debug("Yahoo CURRENT PRICE Response", "ticker", ticker, "status", resp.Status, "bodyLength", len(bodyBytes))
+	// ---------------------
+
 	if resp.StatusCode != http.StatusOK {
-		bodyBytes, _ := io.ReadAll(resp.Body)
-		logger.L.Error("Yahoo chart API returned non-OK status", "status", resp.Status, "ticker", ticker, "responseBody", string(bodyBytes))
-		return 0, "", fmt.Errorf("yahoo chart API returned non-OK status %d for ticker %s", resp.StatusCode, ticker)
+		return 0, "", fmt.Errorf("yahoo chart API returned non-OK status %d", resp.StatusCode)
 	}
 
 	var chartData yahooChartResponse
-	if err := json.NewDecoder(resp.Body).Decode(&chartData); err != nil {
-		return 0, "", fmt.Errorf("failed to decode Yahoo chart response for ticker %s: %w", ticker, err)
+	if err := json.Unmarshal(bodyBytes, &chartData); err != nil {
+		return 0, "", fmt.Errorf("failed to decode Yahoo chart response: %w", err)
 	}
 
 	if chartData.Chart.Error != nil {
-		errorJSON, _ := json.Marshal(chartData.Chart.Error)
-		logger.L.Error("Yahoo chart API returned an error in its response", "ticker", ticker, "error", string(errorJSON))
-		return 0, "", fmt.Errorf("yahoo chart API returned an error for ticker %s: %s", ticker, string(errorJSON))
+		return 0, "", fmt.Errorf("yahoo chart API returned an error: %v", chartData.Chart.Error)
 	}
 
 	if len(chartData.Chart.Result) == 0 || chartData.Chart.Result[0].Meta.RegularMarketPrice == 0 {
-		return 0, "", fmt.Errorf("no price data found for ticker %s in chart response", ticker)
+		return 0, "", fmt.Errorf("no price data found for ticker %s", ticker)
 	}
 
 	meta := chartData.Chart.Result[0].Meta
-	price := meta.RegularMarketPrice
-	currency := meta.Currency
-
-	if currency == "" {
-		return 0, "", fmt.Errorf("currency not found in API response for ticker %s", ticker)
-	}
-
-	return price, currency, nil
+	return meta.RegularMarketPrice, meta.Currency, nil
 }
 
 // GetHistoricalPrices fetches full daily history for a ticker (10 years).
@@ -367,14 +379,16 @@ func (s *priceServiceImpl) GetHistoricalPrices(ticker string) (PriceMap, error) 
 		s.mu.Unlock()
 	}
 
-	// Fetch 10 years of daily data (covers most user histories)
 	url := fmt.Sprintf("https://query1.finance.yahoo.com/v8/finance/chart/%s?interval=1d&range=10y", ticker)
+
+	// --- DEBUG LOGGING ---
+	logger.L.Debug("Yahoo HISTORY Request", "url", url)
+	// ---------------------
 
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return nil, err
 	}
-	// Use a standard browser User-Agent
 	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36")
 
 	resp, err := s.httpClient.Do(req)
@@ -383,12 +397,22 @@ func (s *priceServiceImpl) GetHistoricalPrices(ticker string) (PriceMap, error) 
 	}
 	defer resp.Body.Close()
 
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response body: %w", err)
+	}
+
+	// --- DEBUG LOGGING ---
+	// Logging historical data can be HUGE, so we log size and maybe a snippet or just status
+	logger.L.Debug("Yahoo HISTORY Response", "ticker", ticker, "status", resp.Status, "bodySize", len(bodyBytes))
+	// ---------------------
+
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("yahoo history api returned %d for %s", resp.StatusCode, ticker)
 	}
 
 	var data yahooHistoryResponse
-	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
+	if err := json.Unmarshal(bodyBytes, &data); err != nil {
 		return nil, fmt.Errorf("failed to decode history json: %w", err)
 	}
 
@@ -398,7 +422,6 @@ func (s *priceServiceImpl) GetHistoricalPrices(ticker string) (PriceMap, error) 
 
 	result := data.Chart.Result[0]
 	timestamps := result.Timestamp
-	// Check if Quote data exists
 	if len(result.Indicators.Quote) == 0 {
 		return nil, fmt.Errorf("no quote data found for %s", ticker)
 	}
@@ -411,36 +434,27 @@ func (s *priceServiceImpl) GetHistoricalPrices(ticker string) (PriceMap, error) 
 	priceMap := make(PriceMap)
 	var sortedDates []string
 
-	// 1. Populate raw data
 	for i, ts := range timestamps {
-		// Yahoo sends 0 or null for missing data points
 		price := quotes[i]
 		if price == 0 {
 			continue
 		}
-
 		dateStr := time.Unix(ts, 0).Format("2006-01-02")
 		priceMap[dateStr] = price
 		sortedDates = append(sortedDates, dateStr)
 	}
 
-	// 2. Fill Forward (Handle weekends/holidays)
-	// If we have data for Fri and Mon, we fill Sat/Sun with Fri's price.
 	if len(sortedDates) > 0 {
 		sort.Strings(sortedDates)
-
 		startDate, _ := time.Parse("2006-01-02", sortedDates[0])
 		endDate := time.Now()
-
 		lastPrice := priceMap[sortedDates[0]]
 
 		for d := startDate; !d.After(endDate); d = d.AddDate(0, 0, 1) {
 			dateKey := d.Format("2006-01-02")
-
 			if val, ok := priceMap[dateKey]; ok {
 				lastPrice = val
 			} else {
-				// Missing day? Use the last known price
 				priceMap[dateKey] = lastPrice
 			}
 		}
