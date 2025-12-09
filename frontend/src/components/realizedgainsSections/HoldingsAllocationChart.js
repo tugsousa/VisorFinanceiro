@@ -1,3 +1,4 @@
+// frontend/src/components/realizedgainsSections/HoldingsAllocationChart.js
 import React, { useState, useMemo } from 'react';
 import { Doughnut } from 'react-chartjs-2';
 import { Chart as ChartJS, ArcElement, Tooltip, Legend, Title } from 'chart.js';
@@ -51,7 +52,10 @@ const centerTextPlugin = {
   beforeDraw(chart, args, options) {
     const { ctx, data } = chart;
     const { totalValue, hoveredData } = options;
-    if (!data.labels || data.labels.length === 0) return;
+
+    // --- FIX: Added safety check for 'data' ---
+    if (!data || !data.labels || data.labels.length === 0) return;
+    // ----------------------------------------
 
     ctx.save();
     const centerX = chart.getDatasetMeta(0).data[0]?.x || chart.width / 2;

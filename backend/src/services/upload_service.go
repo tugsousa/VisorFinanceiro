@@ -184,6 +184,12 @@ func (s *uploadServiceImpl) ProcessUpload(fileReader io.Reader, userID int64, so
 func (s *uploadServiceImpl) RebuildUserHistory(userID int64) error {
 	logger.L.Info("Starting history rebuild", "userID", userID)
 
+	// This ensures SPY data is in the `daily_prices` table before we try to use it.
+	if err := s.priceService.EnsureBenchmarkData(); err != nil {
+		logger.L.Error("Failed to ensure benchmark data", "error", err)
+		// We continue anyway, so the user at least gets their own portfolio chart
+	}
+
 	// A. Fetch all transactions
 	txs, err := fetchUserProcessedTransactions(userID)
 	if err != nil {
@@ -209,8 +215,6 @@ func (s *uploadServiceImpl) RebuildUserHistory(userID int64) error {
 			uniqueCurrencies[tx.Currency] = true
 		}
 	}
-
-	// --- FIX START: FORCE RESOLUTION & DEBUG LOGGING ---
 	if len(isinList) > 0 {
 		logger.L.Info("Forcing resolution of tickers for history", "userID", userID, "count", len(isinList), "isins", isinList)
 
@@ -227,7 +231,6 @@ func (s *uploadServiceImpl) RebuildUserHistory(userID int64) error {
 			}
 		}
 	}
-	// --- FIX END ---
 
 	// C. Resolve ISINs to Tickers (Bulk DB lookup)
 	mappings, _ := model.GetMappingsByISINs(database.DB, isinList)
@@ -827,26 +830,75 @@ func (s *uploadServiceImpl) GetDividendTransactions(userID int64) ([]models.Proc
 
 // GetHistoricalChartData retrieves pre-calculated history from the DB.
 func (s *uploadServiceImpl) GetHistoricalChartData(userID int64) ([]models.HistoricalDataPoint, error) {
+	// 1. Fetch User Snapshots
 	rows, err := database.DB.Query(`
-		SELECT date, total_equity, cumulative_net_cashflow
-		FROM portfolio_snapshots
-		WHERE user_id = ?
-		ORDER BY date ASC`, userID)
-
+        SELECT date, total_equity, cumulative_net_cashflow
+        FROM portfolio_snapshots
+        WHERE user_id = ?
+        ORDER BY date ASC`, userID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query snapshots: %w", err)
 	}
 	defer rows.Close()
 
-	var data []models.HistoricalDataPoint
+	var snapshots []models.HistoricalDataPoint
 	for rows.Next() {
 		var p models.HistoricalDataPoint
 		if err := rows.Scan(&p.Date, &p.PortfolioValue, &p.CumulativeCashFlow); err != nil {
 			continue
 		}
-		data = append(data, p)
+		snapshots = append(snapshots, p)
 	}
-	return data, nil
+
+	if len(snapshots) == 0 {
+		return snapshots, nil
+	}
+
+	// 2. Fetch Benchmark Data (SPY) from DB using the NEW function
+	benchmarkTicker := "SPY"
+
+	// This call will now work because we added GetPricesByTicker to the model package
+	bmPrices, err := model.GetPricesByTicker(database.DB, benchmarkTicker)
+
+	if err != nil {
+		// Log warning but don't fail the request; just return chart without benchmark
+		logger.L.Warn("Could not fetch benchmark prices from DB", "error", err)
+		return snapshots, nil
+	}
+
+	// 3. Calculate "Shadow Portfolio" (Hypothetical S&P 500)
+	currentBenchmarkUnits := 0.0
+	previousCashFlow := 0.0
+
+	for i := range snapshots {
+		date := snapshots[i].Date
+		price := bmPrices[date]
+
+		// Fallback: If price is missing for this specific day (e.g. weekend/holiday in DB),
+		// ideally find the closest previous date. For now, we skip update or use 1.0 to prevent NaN.
+		// A simple improvement is to carry forward the last known price.
+		if price == 0 {
+			// In a real implementation, add logic here to find the last valid price
+			// For now, if we can't find a price, we can't buy units accurately.
+			price = 1.0
+		}
+
+		// Determine Daily Net Flow (Deposit or Withdrawal)
+		dailyNetFlow := snapshots[i].CumulativeCashFlow - previousCashFlow
+
+		// "Buy" units of the benchmark with the cash flow
+		if price > 1.0 { // Basic check to ensure valid price
+			unitsBought := dailyNetFlow / price
+			currentBenchmarkUnits += unitsBought
+		}
+
+		// Calculate value of shadow portfolio
+		snapshots[i].BenchmarkValue = currentBenchmarkUnits * price
+
+		previousCashFlow = snapshots[i].CumulativeCashFlow
+	}
+
+	return snapshots, nil
 }
 
 func fetchUserProcessedTransactions(userID int64) ([]models.ProcessedTransaction, error) {

@@ -462,3 +462,70 @@ func (s *priceServiceImpl) GetHistoricalPrices(ticker string) (PriceMap, error) 
 
 	return priceMap, nil
 }
+
+// Call this in your main.go or a background job.
+func (s *priceServiceImpl) EnsureBenchmarkData() error {
+	benchmarkTicker := "SPY"
+
+	// 1. Optimization: Check if we already have recent data to avoid fetching every time
+	// We check if we have data for yesterday or today
+	var count int
+	yesterday := time.Now().AddDate(0, 0, -1).Format("2006-01-02")
+	err := database.DB.QueryRow("SELECT COUNT(*) FROM daily_prices WHERE ticker_symbol = ? AND date >= ?", benchmarkTicker, yesterday).Scan(&count)
+	if err == nil && count > 0 {
+		logger.L.Info("Benchmark data (SPY) is up to date", "ticker", benchmarkTicker)
+		return nil
+	}
+
+	logger.L.Info("Fetching Benchmark Data (SPY) from Yahoo", "ticker", benchmarkTicker)
+
+	// 2. Fetch from Yahoo
+	prices, err := s.GetHistoricalPrices(benchmarkTicker)
+	if err != nil {
+		return fmt.Errorf("failed to fetch benchmark history: %w", err)
+	}
+
+	if len(prices) == 0 {
+		return fmt.Errorf("no benchmark prices returned from API")
+	}
+
+	// 3. Save to DB using a TRANSACTION (Batch Insert)
+	// This is the critical fix for "database locked" errors
+	tx, err := database.DB.Begin()
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction for benchmark save: %w", err)
+	}
+	// Ensure rollback in case of panic or error
+	defer tx.Rollback()
+
+	// Prepare the statement once
+	stmt, err := tx.Prepare(`
+		INSERT INTO daily_prices (ticker_symbol, date, price, currency, updated_at)
+		VALUES (?, ?, ?, ?, ?)
+		ON CONFLICT(ticker_symbol, date) DO UPDATE SET
+			price = excluded.price,
+			updated_at = excluded.updated_at;
+	`)
+	if err != nil {
+		return fmt.Errorf("failed to prepare benchmark insert statement: %w", err)
+	}
+	defer stmt.Close()
+
+	rowsProcessed := 0
+	for date, price := range prices {
+		_, err := stmt.Exec(benchmarkTicker, date, price, "USD", time.Now())
+		if err != nil {
+			logger.L.Warn("Failed to save benchmark price row", "date", date, "error", err)
+			continue
+		}
+		rowsProcessed++
+	}
+
+	// Commit the transaction to save all rows at once
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("failed to commit benchmark transaction: %w", err)
+	}
+
+	logger.L.Info("Benchmark Data (SPY) saved to DB successfully", "rows_processed", rowsProcessed)
+	return nil
+}

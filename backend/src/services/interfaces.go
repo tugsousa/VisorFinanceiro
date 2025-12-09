@@ -58,8 +58,9 @@ type PriceMap map[string]float64
 // PriceService defines the interface for fetching current market prices.
 type PriceService interface {
 	GetCurrentPrices(isins []string) (map[string]PriceInfo, error)
-
 	// GetHistoricalPrices fetches full daily history for a ticker.
 	// Returns a map where key is "YYYY-MM-DD" and value is the close price.
 	GetHistoricalPrices(ticker string) (PriceMap, error)
+
+	EnsureBenchmarkData() error
 }
