@@ -150,7 +150,6 @@ func classifyDeGiroTransaction(raw RawTransaction) (txType, subType, buySell, pr
 		// This is a standalone fee and should be treated as such.
 		return "FEE", "", "", desc, 0, 0
 	}
-	// --- FIX END ---
 
 	// Handle non-trade types first
 	if strings.Contains(lowerDesc, "dividendo") {
@@ -163,13 +162,9 @@ func classifyDeGiroTransaction(raw RawTransaction) (txType, subType, buySell, pr
 	if strings.EqualFold(lowerDesc, "depósito") || strings.Contains(lowerDesc, "flatex deposit") {
 		return "CASH", "DEPOSIT", "", "Cash Deposit", 0, 0
 	}
-
-	// This part is now removed from the FIX above and handled more specifically
-	/*
-		if strings.Contains(lowerDesc, "comissões de transação") || strings.Contains(lowerDesc, "custo de conectividade") {
-			return "FEE", "", "", desc, 0, 0
-		}
-	*/
+	if strings.EqualFold(lowerDesc, "levantamento") || strings.Contains(lowerDesc, "flatex withdrawal") {
+		return "CASH", "WITHDRAWAL", "", "Cash Withdrawal", 0, 0
+	}
 
 	if strings.Contains(lowerDesc, "mudança de produto") {
 		return "PRODUCT_CHANGE", "", "", "Product Change", 0, 0
