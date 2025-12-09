@@ -1,4 +1,4 @@
-// portfolio_handler.go
+// backend/src/handlers/portfolio_handler.go
 package handlers
 
 import (
@@ -163,6 +163,7 @@ func (h *PortfolioHandler) HandleGetHistoricalChartData(w http.ResponseWriter, r
 		return
 	}
 
+	// Use the service method to fetch data from the DB
 	data, err := h.uploadService.GetHistoricalChartData(userID)
 	if err != nil {
 		logger.L.Error("Failed to get historical chart data", "userID", userID, "error", err)

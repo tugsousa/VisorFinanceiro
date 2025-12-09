@@ -1,3 +1,4 @@
+// frontend/src/components/realizedgainsSections/HistoricalPerformanceChart.js
 import React, { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Line } from 'react-chartjs-2';
@@ -43,21 +44,20 @@ export default function HistoricalPerformanceChart() {
       labels: chartDataPoints.map(p => p.date),
       datasets: [
         {
-          label: 'Investimento Líquido Acumulado (Net Cash Flow)',
+          label: 'Investimento Líquido (Cash Flow)',
           data: chartDataPoints.map(p => p.cumulative_cash_flow),
           borderColor: 'rgba(54, 162, 235, 1)', // Blue
           backgroundColor: 'rgba(54, 162, 235, 0.1)',
           borderWidth: 2,
-          pointRadius: 0, // Hide points for cleaner look on large history
+          pointRadius: 0, 
           pointHoverRadius: 4,
           fill: true,
-          tension: 0.1, // Slight curve
+          tension: 0.1, 
         },
-        // Uncomment this when you populate the portfolio_value in backend
-        /*
+        // --- UNCOMMENTED AND ACTIVE ---
         {
-          label: 'Valor Total do Portfólio',
-          data: chartDataPoints.map(p => p.portfolio_value),
+          label: 'Valor da Carteira',
+          data: chartDataPoints.map(p => p.portfolio_value), // Maps to total_equity from DB
           borderColor: 'rgba(75, 192, 192, 1)', // Green
           backgroundColor: 'transparent',
           borderWidth: 2,
@@ -65,7 +65,7 @@ export default function HistoricalPerformanceChart() {
           pointHoverRadius: 4,
           tension: 0.1,
         }
-        */
+        // -----------------------------
       ]
     };
   }, [chartDataPoints]);
@@ -109,10 +109,9 @@ export default function HistoricalPerformanceChart() {
         }
       },
       y: {
-        beginAtZero: false,
+        beginAtZero: false, // Better for charts that don't start at 0
         grid: { color: '#f0f0f0' },
         ticks: {
-            // FIX: Explicitly set minimum to 0 to match maximum
             callback: (value) => formatCurrency(value, { 
                 minimumFractionDigits: 0, 
                 maximumFractionDigits: 0 

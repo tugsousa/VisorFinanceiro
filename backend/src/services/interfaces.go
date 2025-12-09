@@ -40,9 +40,10 @@ type UploadService interface {
 	InvalidateUserCache(userID int64)
 	UpdateUserPortfolioMetrics(userID int64) error
 	GetCurrentHoldingsWithValue(userID int64) ([]models.HoldingWithValue, error)
-
-	// --- NEW METHOD ADDED HERE ---
 	GetHistoricalChartData(userID int64) ([]models.HistoricalDataPoint, error)
+
+	// RebuildUserHistory recalculates daily portfolio snapshots for the entire history.
+	RebuildUserHistory(userID int64) error
 }
 
 type PriceInfo struct {
@@ -51,7 +52,14 @@ type PriceInfo struct {
 	Currency string  // Should always be "EUR" in the final result
 }
 
+// PriceMap is a map of Date (YYYY-MM-DD) -> Price
+type PriceMap map[string]float64
+
 // PriceService defines the interface for fetching current market prices.
 type PriceService interface {
 	GetCurrentPrices(isins []string) (map[string]PriceInfo, error)
+
+	// GetHistoricalPrices fetches full daily history for a ticker.
+	// Returns a map where key is "YYYY-MM-DD" and value is the close price.
+	GetHistoricalPrices(ticker string) (PriceMap, error)
 }
