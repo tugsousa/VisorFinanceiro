@@ -82,4 +82,5 @@ type HistoricalDataPoint struct {
 	Date               string  `json:"date"`
 	CumulativeCashFlow float64 `json:"cumulative_cash_flow"`
 	PortfolioValue     float64 `json:"portfolio_value"` // To be populated via snapshots later
+	BenchmarkValue     float64 `json:"benchmark_value"`
 }
