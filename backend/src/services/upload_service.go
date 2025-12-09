@@ -160,15 +160,13 @@ func (s *uploadServiceImpl) ProcessUpload(fileReader io.Reader, userID int64, so
 		}(userID)
 
 		go func() {
-			// --- FIX: Execution Order Swapped ---
-			// 1. First, update metrics. This function fetches current prices and POPULATES the isin_ticker_map table.
+			// 1. Update Metrics (Attempts to resolve prices and populate isin_ticker_map)
 			logger.L.Info("Triggering portfolio metrics update (pre-requisite for history)", "userID", userID)
 			if err := s.UpdateUserPortfolioMetrics(userID); err != nil {
 				logger.L.Error("Failed to update user portfolio metrics", "userID", userID, "error", err)
-				// Even if this fails, we try to rebuild history, though it might miss tickers.
 			}
 
-			// 2. Then, rebuild history. Now the isin_ticker_map should be populated.
+			// 2. Rebuild History
 			logger.L.Info("Triggering history rebuild", "userID", userID)
 			if err := s.RebuildUserHistory(userID); err != nil {
 				logger.L.Error("Failed to rebuild user history", "userID", userID, "error", err)
@@ -212,10 +210,37 @@ func (s *uploadServiceImpl) RebuildUserHistory(userID int64) error {
 		}
 	}
 
+	// --- FIX START: FORCE RESOLUTION & DEBUG LOGGING ---
+	if len(isinList) > 0 {
+		logger.L.Info("Forcing resolution of tickers for history", "userID", userID, "count", len(isinList), "isins", isinList)
+
+		// Force the Price Service to fetch/resolve these ISINs. This should populate the DB map.
+		prices, err := s.priceService.GetCurrentPrices(isinList)
+		if err != nil {
+			logger.L.Warn("Force resolution GetCurrentPrices returned error", "error", err)
+		} else {
+			// DEBUG: Check if we got a price for the problematic ISIN
+			if info, ok := prices["IE000U9J8HX9"]; ok {
+				logger.L.Info("Force resolution: Price found for IE000U9J8HX9", "status", info.Status, "price", info.Price)
+			} else {
+				logger.L.Warn("Force resolution: IE000U9J8HX9 NOT RETURNED in price map (PriceService failure?)")
+			}
+		}
+	}
+	// --- FIX END ---
+
 	// C. Resolve ISINs to Tickers (Bulk DB lookup)
 	mappings, _ := model.GetMappingsByISINs(database.DB, isinList)
-	// --- DEBUG LOG ---
+
+	// --- DEBUG LOGGING ---
 	logger.L.Info("Resolved ISIN mappings for history", "userID", userID, "found", len(mappings), "total_unique_isins", len(isinList))
+
+	if entry, ok := mappings["IE000U9J8HX9"]; ok {
+		logger.L.Info("DB Mapping Check: IE000U9J8HX9 found in DB", "ticker", entry.TickerSymbol, "currency", entry.Currency)
+	} else {
+		logger.L.Error("DB Mapping Check: IE000U9J8HX9 NOT FOUND in DB after force resolution. Verify InsertMapping logic.")
+	}
+	// ---------------------
 
 	// D. Fetch Historical Data (Parallel)
 	var wg sync.WaitGroup
@@ -226,16 +251,22 @@ func (s *uploadServiceImpl) RebuildUserHistory(userID int64) error {
 	// Fetch Stocks
 	for isin := range uniqueISINs {
 		mapEntry, ok := mappings[isin]
-		if !ok || mapEntry.TickerSymbol == "" {
-			// If we still don't have a ticker here, this asset will have 0 value in the history.
-			// This typically happens for very new assets or manual entries without proper ISINs.
+		if !ok {
+			logger.L.Warn("History rebuild: Skipping ISIN (No Mapping in DB)", "isin", isin)
 			continue
 		}
+		if mapEntry.TickerSymbol == "" {
+			logger.L.Warn("History rebuild: Skipping ISIN (Empty Ticker in DB)", "isin", isin)
+			continue
+		}
+
 		ticker := mapEntry.TickerSymbol
 
 		wg.Add(1)
 		go func(t, i string) {
 			defer wg.Done()
+			// DEBUG: Log start of fetch
+			// logger.L.Debug("Fetching history for ticker", "ticker", t)
 			prices, err := s.priceService.GetHistoricalPrices(t)
 			if err == nil {
 				dataMu.Lock()
@@ -252,7 +283,6 @@ func (s *uploadServiceImpl) RebuildUserHistory(userID int64) error {
 		wg.Add(1)
 		go func(c string) {
 			defer wg.Done()
-			// Yahoo format: USDEUR=X gets the rate to convert USD to EUR
 			ticker := fmt.Sprintf("%sEUR=X", c)
 			rates, err := s.priceService.GetHistoricalPrices(ticker)
 			if err == nil {
@@ -272,8 +302,9 @@ func (s *uploadServiceImpl) RebuildUserHistory(userID int64) error {
 
 	// State Variables
 	type AssetInfo struct {
-		Quantity float64
-		Currency string
+		Quantity       float64
+		Currency       string
+		TotalCostBasis float64 // Tracks cost basis for fallback
 	}
 	holdings := make(map[string]AssetInfo) // ISIN -> Info
 	cumulativeNetInvested := 0.0           // Deposits - Withdrawals
@@ -320,9 +351,18 @@ func (s *uploadServiceImpl) RebuildUserHistory(userID int64) error {
 
 				if tx.BuySell == "BUY" {
 					info.Quantity += float64(tx.Quantity)
+					// Accumulate Cost Basis (using Abs because AmountEUR is negative for buys)
+					info.TotalCostBasis += math.Abs(tx.AmountEUR)
+
 					currentCash += tx.AmountEUR // Negative for buys
 					currentCash -= tx.Commission
 				} else if tx.BuySell == "SELL" {
+					// Reduce Cost Basis Proportionally
+					if info.Quantity > 0 {
+						ratio := float64(tx.Quantity) / info.Quantity
+						info.TotalCostBasis -= (info.TotalCostBasis * ratio)
+					}
+
 					info.Quantity -= float64(tx.Quantity)
 					currentCash += tx.AmountEUR // Positive for sells
 					currentCash -= tx.Commission
@@ -341,23 +381,51 @@ func (s *uploadServiceImpl) RebuildUserHistory(userID int64) error {
 			}
 
 			price := 0.0
+			priceMapFound := false
+
+			// Check if we have a price map for this ISIN
 			if pMap, ok := tickerPrices[isin]; ok {
 				price = pMap[dateStr]
-			}
-			if price == 0 {
-				continue
+				priceMapFound = true
 			}
 
-			rate := 1.0
-			if info.Currency != "EUR" && info.Currency != "" {
-				if rMap, ok := currencyRates[info.Currency]; ok {
-					if r, ok := rMap[dateStr]; ok {
-						rate = r
+			// --- DEBUG & FALLBACK LOGIC ---
+			if price > 0 {
+				// Case A: Price found successfully
+				rate := 1.0
+				if info.Currency != "EUR" && info.Currency != "" {
+					if rMap, ok := currencyRates[info.Currency]; ok {
+						if r, ok := rMap[dateStr]; ok {
+							rate = r
+						}
 					}
 				}
-			}
+				marketValueAssets += (info.Quantity * price) * rate
+			} else {
+				// Case B: Price missing (0). Fallback to Cost Basis.
 
-			marketValueAssets += (info.Quantity * price) * rate
+				// Identify the ticker symbol for clearer logs
+				var debugTicker string
+				if mapEntry, ok := mappings[isin]; ok {
+					debugTicker = mapEntry.TickerSymbol
+				}
+
+				// Only log if we actually hold the asset to avoid log spam
+				// Log the FIRST time we hit this issue for a date, or specifically for the problematic one
+				if info.Quantity > 0.0001 {
+					if !priceMapFound {
+						// Only log this warning ONCE per asset per run ideally, but here we log daily to be sure
+						// Reduced to DEBUG to avoid flooding, but helpful for diagnosis
+						logger.L.Debug("History: No price map for asset (using fallback)", "date", dateStr, "isin", isin, "ticker", debugTicker, "fallback_value", info.TotalCostBasis)
+					} else {
+						logger.L.Debug("History: Price missing for specific date (using fallback)", "date", dateStr, "isin", isin, "ticker", debugTicker, "fallback_value", info.TotalCostBasis)
+					}
+				}
+
+				// Apply Fallback
+				marketValueAssets += info.TotalCostBasis
+			}
+			// --- END DEBUG LOGIC ---
 		}
 
 		totalEquity := marketValueAssets + currentCash
