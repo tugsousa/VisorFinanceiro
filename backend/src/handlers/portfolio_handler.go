@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/username/taxfolio/backend/src/logger"
 	"github.com/username/taxfolio/backend/src/models"
 	"github.com/username/taxfolio/backend/src/services"
 	"github.com/username/taxfolio/backend/src/utils"
@@ -153,6 +154,24 @@ func (h *PortfolioHandler) HandleGetStockSales(w http.ResponseWriter, r *http.Re
 	}
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(stockSales)
+}
+
+func (h *PortfolioHandler) HandleGetHistoricalChartData(w http.ResponseWriter, r *http.Request) {
+	userID, ok := GetUserIDFromContext(r.Context())
+	if !ok {
+		utils.SendJSONError(w, "Authentication required", http.StatusUnauthorized)
+		return
+	}
+
+	data, err := h.uploadService.GetHistoricalChartData(userID)
+	if err != nil {
+		logger.L.Error("Failed to get historical chart data", "userID", userID, "error", err)
+		utils.SendJSONError(w, "Failed to retrieve chart data", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(data)
 }
 
 func (h *PortfolioHandler) HandleGetOptionSales(w http.ResponseWriter, r *http.Request) {

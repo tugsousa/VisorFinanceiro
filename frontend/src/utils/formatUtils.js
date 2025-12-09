@@ -16,9 +16,14 @@ export const formatCurrency = (value, options = {}) => {
 
   const finalOptions = { ...defaultOptions, ...options };
 
-  // A lógica de correção manual para garantir que maximumFractionDigits >= minimumFractionDigits
-  // foi removida. Confiamos na coerção e nas regras nativas do Intl.NumberFormat,
-  // simplificando o código conforme a recomendação.
+  // --- SAFETY FIX ---
+  // Ensure minimumFractionDigits is never greater than maximumFractionDigits
+  // to prevent RangeError: invalid digits value (e.g., min=2, max=0)
+  if (finalOptions.maximumFractionDigits !== undefined) {
+      if (finalOptions.minimumFractionDigits > finalOptions.maximumFractionDigits) {
+          finalOptions.minimumFractionDigits = finalOptions.maximumFractionDigits;
+      }
+  }
 
   // Alterado de 'de-DE' para 'pt-PT' para usar o formato de moeda português.
   return new Intl.NumberFormat('pt-PT', finalOptions).format(value || 0);

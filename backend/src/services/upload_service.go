@@ -17,6 +17,7 @@ import (
 	"github.com/username/taxfolio/backend/src/models"
 	"github.com/username/taxfolio/backend/src/parsers"
 	"github.com/username/taxfolio/backend/src/processors"
+	"github.com/username/taxfolio/backend/src/utils"
 )
 
 const (
@@ -355,7 +356,6 @@ func (s *uploadServiceImpl) UpdateUserPortfolioMetrics(userID int64) error {
 	return nil
 }
 
-// ... the rest of the file (InvalidateUserCache, getStockData, etc.) remains unchanged ...
 func (s *uploadServiceImpl) InvalidateUserCache(userID int64) {
 	keysToDelete := []string{
 		fmt.Sprintf(ckAllStockSales, userID),
@@ -516,6 +516,67 @@ func (s *uploadServiceImpl) GetDividendTransactions(userID int64) ([]models.Proc
 		}
 	}
 	return dividends, nil
+}
+
+// GetHistoricalChartData processes all transactions to generate a timeline of cumulative cash flow.
+func (s *uploadServiceImpl) GetHistoricalChartData(userID int64) ([]models.HistoricalDataPoint, error) {
+	// 1. Fetch all processed transactions ordered by date
+	txs, err := fetchUserProcessedTransactions(userID)
+	if err != nil {
+		return nil, err
+	}
+
+	// 2. Initialize variables
+	var timeline []models.HistoricalDataPoint
+	cumulativeCashFlow := 0.0
+
+	// 3. Iterate and calculate Cumulative Cash Flow
+	// We group by date to avoid multiple points for the same day
+	dailyMap := make(map[string]*models.HistoricalDataPoint)
+	var sortedDates []string
+
+	for _, tx := range txs {
+		// We only care about CASH movements for the "Net Cash Flow" line
+		// Deposits increase the total invested; Withdrawals decrease it.
+		if tx.TransactionType == "CASH" {
+			// FIX: Trust the signed AmountEUR from the database/parser.
+			// Do not force signs based on SubType, as corrections/reversals
+			// might share the same subtype but have opposite signs.
+			amount := tx.AmountEUR
+
+			cumulativeCashFlow += amount
+
+			// Create or Update the point for this date
+			date := utils.ParseDate(tx.Date).Format("2006-01-02")
+			if _, exists := dailyMap[date]; !exists {
+				dailyMap[date] = &models.HistoricalDataPoint{Date: date}
+				sortedDates = append(sortedDates, date)
+			}
+			dailyMap[date].CumulativeCashFlow = cumulativeCashFlow
+		}
+	}
+
+	// 4. Construct the final slice
+	for _, date := range sortedDates {
+		point := dailyMap[date]
+		timeline = append(timeline, *point)
+	}
+
+	// 5. Add "Today" point if not present
+	if len(timeline) > 0 {
+		lastPoint := timeline[len(timeline)-1]
+		today := time.Now().Format("2006-01-02")
+
+		if lastPoint.Date != today {
+			timeline = append(timeline, models.HistoricalDataPoint{
+				Date:               today,
+				CumulativeCashFlow: lastPoint.CumulativeCashFlow,
+				// PortfolioValue will be populated later
+			})
+		}
+	}
+
+	return timeline, nil
 }
 
 func fetchUserProcessedTransactions(userID int64) ([]models.ProcessedTransaction, error) {
