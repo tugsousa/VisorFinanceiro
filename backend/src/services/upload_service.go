@@ -9,15 +9,16 @@ import (
 	"math"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/patrickmn/go-cache"
 	"github.com/username/taxfolio/backend/src/database"
 	"github.com/username/taxfolio/backend/src/logger"
+	"github.com/username/taxfolio/backend/src/model"
 	"github.com/username/taxfolio/backend/src/models"
 	"github.com/username/taxfolio/backend/src/parsers"
 	"github.com/username/taxfolio/backend/src/processors"
-	"github.com/username/taxfolio/backend/src/utils"
 )
 
 const (
@@ -159,9 +160,18 @@ func (s *uploadServiceImpl) ProcessUpload(fileReader io.Reader, userID int64, so
 		}(userID)
 
 		go func() {
-			logger.L.Info("Triggering portfolio metrics update after upload", "userID", userID)
+			// --- FIX: Execution Order Swapped ---
+			// 1. First, update metrics. This function fetches current prices and POPULATES the isin_ticker_map table.
+			logger.L.Info("Triggering portfolio metrics update (pre-requisite for history)", "userID", userID)
 			if err := s.UpdateUserPortfolioMetrics(userID); err != nil {
-				logger.L.Error("Failed to update user portfolio metrics asynchronously", "userID", userID, "error", err)
+				logger.L.Error("Failed to update user portfolio metrics", "userID", userID, "error", err)
+				// Even if this fails, we try to rebuild history, though it might miss tickers.
+			}
+
+			// 2. Then, rebuild history. Now the isin_ticker_map should be populated.
+			logger.L.Info("Triggering history rebuild", "userID", userID)
+			if err := s.RebuildUserHistory(userID); err != nil {
+				logger.L.Error("Failed to rebuild user history", "userID", userID, "error", err)
 			}
 		}()
 	} else {
@@ -170,6 +180,232 @@ func (s *uploadServiceImpl) ProcessUpload(fileReader io.Reader, userID int64, so
 
 	logger.L.Info("ProcessUpload END", "userID", userID, "duration", time.Since(overallStartTime))
 	return s.GetLatestUploadResult(userID)
+}
+
+// RebuildUserHistory implements the calculation engine for daily portfolio snapshots.
+func (s *uploadServiceImpl) RebuildUserHistory(userID int64) error {
+	logger.L.Info("Starting history rebuild", "userID", userID)
+
+	// A. Fetch all transactions
+	txs, err := fetchUserProcessedTransactions(userID)
+	if err != nil {
+		return err
+	}
+	if len(txs) == 0 {
+		return nil
+	}
+
+	// B. Identify unique Assets (ISINs) and Currencies
+	uniqueISINs := make(map[string]bool)
+	uniqueCurrencies := make(map[string]bool)
+	var isinList []string
+
+	for _, tx := range txs {
+		if len(tx.ISIN) == 12 { // Only valid ISINs
+			if !uniqueISINs[tx.ISIN] {
+				uniqueISINs[tx.ISIN] = true
+				isinList = append(isinList, tx.ISIN)
+			}
+		}
+		if tx.Currency != "" && tx.Currency != "EUR" {
+			uniqueCurrencies[tx.Currency] = true
+		}
+	}
+
+	// C. Resolve ISINs to Tickers (Bulk DB lookup)
+	mappings, _ := model.GetMappingsByISINs(database.DB, isinList)
+	// --- DEBUG LOG ---
+	logger.L.Info("Resolved ISIN mappings for history", "userID", userID, "found", len(mappings), "total_unique_isins", len(isinList))
+
+	// D. Fetch Historical Data (Parallel)
+	var wg sync.WaitGroup
+	tickerPrices := make(map[string]PriceMap)  // ISIN -> Map[Date]Price
+	currencyRates := make(map[string]PriceMap) // Currency -> Map[Date]Rate
+	var dataMu sync.Mutex
+
+	// Fetch Stocks
+	for isin := range uniqueISINs {
+		mapEntry, ok := mappings[isin]
+		if !ok || mapEntry.TickerSymbol == "" {
+			// If we still don't have a ticker here, this asset will have 0 value in the history.
+			// This typically happens for very new assets or manual entries without proper ISINs.
+			continue
+		}
+		ticker := mapEntry.TickerSymbol
+
+		wg.Add(1)
+		go func(t, i string) {
+			defer wg.Done()
+			prices, err := s.priceService.GetHistoricalPrices(t)
+			if err == nil {
+				dataMu.Lock()
+				tickerPrices[i] = prices
+				dataMu.Unlock()
+			} else {
+				logger.L.Warn("History fetch failed", "ticker", t, "error", err)
+			}
+		}(ticker, isin)
+	}
+
+	// Fetch Currencies (e.g., USD -> USDEUR=X)
+	for curr := range uniqueCurrencies {
+		wg.Add(1)
+		go func(c string) {
+			defer wg.Done()
+			// Yahoo format: USDEUR=X gets the rate to convert USD to EUR
+			ticker := fmt.Sprintf("%sEUR=X", c)
+			rates, err := s.priceService.GetHistoricalPrices(ticker)
+			if err == nil {
+				dataMu.Lock()
+				currencyRates[c] = rates
+				dataMu.Unlock()
+			}
+		}(curr)
+	}
+
+	wg.Wait()
+
+	// E. The Daily Loop
+	// Determine Date Range
+	startDate, _ := time.Parse("02-01-2006", txs[0].Date)
+	endDate := time.Now()
+
+	// State Variables
+	type AssetInfo struct {
+		Quantity float64
+		Currency string
+	}
+	holdings := make(map[string]AssetInfo) // ISIN -> Info
+	cumulativeNetInvested := 0.0           // Deposits - Withdrawals
+	currentCash := 0.0                     // Tracks uninvested cash
+
+	// Buffer for DB insertion
+	type Snapshot struct {
+		Date        string
+		Equity      float64
+		NetInvested float64
+		Cash        float64
+	}
+	var snapshots []Snapshot
+
+	txIndex := 0
+	totalTxs := len(txs)
+
+	for d := startDate; !d.After(endDate); d = d.AddDate(0, 0, 1) {
+		dateStr := d.Format("2006-01-02")
+		txDateStr := d.Format("02-01-2006") // DB format
+
+		// 1. Process all transactions for this day
+		for txIndex < totalTxs && txs[txIndex].Date == txDateStr {
+			tx := txs[txIndex]
+
+			// --- Cash Flow Logic ---
+			if tx.TransactionType == "CASH" {
+				cumulativeNetInvested += tx.AmountEUR
+				if tx.TransactionSubType == "DEPOSIT" {
+					currentCash += tx.AmountEUR
+				} else if tx.TransactionSubType == "WITHDRAWAL" {
+					currentCash += tx.AmountEUR // Amount is negative
+				}
+			}
+
+			if tx.TransactionType == "DIVIDEND" || tx.TransactionType == "FEE" {
+				currentCash += tx.AmountEUR
+			}
+
+			// --- Trade Logic ---
+			if tx.TransactionType == "STOCK" || tx.TransactionType == "OPTION" || tx.TransactionType == "ETF" {
+				info := holdings[tx.ISIN]
+				info.Currency = tx.Currency
+
+				if tx.BuySell == "BUY" {
+					info.Quantity += float64(tx.Quantity)
+					currentCash += tx.AmountEUR // Negative for buys
+					currentCash -= tx.Commission
+				} else if tx.BuySell == "SELL" {
+					info.Quantity -= float64(tx.Quantity)
+					currentCash += tx.AmountEUR // Positive for sells
+					currentCash -= tx.Commission
+				}
+				holdings[tx.ISIN] = info
+			}
+			txIndex++
+		}
+
+		// 2. Calculate Total Market Value of Assets
+		marketValueAssets := 0.0
+
+		for isin, info := range holdings {
+			if info.Quantity <= 0.0001 {
+				continue
+			}
+
+			price := 0.0
+			if pMap, ok := tickerPrices[isin]; ok {
+				price = pMap[dateStr]
+			}
+			if price == 0 {
+				continue
+			}
+
+			rate := 1.0
+			if info.Currency != "EUR" && info.Currency != "" {
+				if rMap, ok := currencyRates[info.Currency]; ok {
+					if r, ok := rMap[dateStr]; ok {
+						rate = r
+					}
+				}
+			}
+
+			marketValueAssets += (info.Quantity * price) * rate
+		}
+
+		totalEquity := marketValueAssets + currentCash
+
+		snapshots = append(snapshots, Snapshot{
+			Date:        dateStr,
+			Equity:      totalEquity,
+			NetInvested: cumulativeNetInvested,
+			Cash:        currentCash,
+		})
+	}
+
+	// F. Batch Persistence
+	if len(snapshots) == 0 {
+		return nil
+	}
+
+	_, err = database.DB.Exec("DELETE FROM portfolio_snapshots WHERE user_id = ?", userID)
+	if err != nil {
+		return err
+	}
+
+	chunkSize := 500
+	for i := 0; i < len(snapshots); i += chunkSize {
+		end := i + chunkSize
+		if end > len(snapshots) {
+			end = len(snapshots)
+		}
+
+		batch := snapshots[i:end]
+
+		query := "INSERT INTO portfolio_snapshots (user_id, date, total_equity, cumulative_net_cashflow, cash_balance) VALUES "
+		vals := []interface{}{}
+
+		for _, s := range batch {
+			query += "(?, ?, ?, ?, ?),"
+			vals = append(vals, userID, s.Date, s.Equity, s.NetInvested, s.Cash)
+		}
+		query = query[:len(query)-1]
+
+		if _, err := database.DB.Exec(query, vals...); err != nil {
+			logger.L.Error("Batch insert failed", "error", err)
+			return err
+		}
+	}
+
+	logger.L.Info("History rebuild complete", "days", len(snapshots))
+	return nil
 }
 
 // Helper struct for aggregating purchase lots by ISIN, internal to the service.
@@ -303,7 +539,10 @@ func (s *uploadServiceImpl) UpdateUserPortfolioMetrics(userID int64) error {
 
 	uniqueISINs := make([]string, 0, len(groupedHoldings))
 	for isin := range groupedHoldings {
-		uniqueISINs = append(uniqueISINs, isin)
+		// FIX: Only fetch prices for valid ISINs
+		if len(isin) == 12 {
+			uniqueISINs = append(uniqueISINs, isin)
+		}
 	}
 	prices, err := s.priceService.GetCurrentPrices(uniqueISINs)
 	if err != nil {
@@ -518,74 +757,50 @@ func (s *uploadServiceImpl) GetDividendTransactions(userID int64) ([]models.Proc
 	return dividends, nil
 }
 
-// GetHistoricalChartData processes all transactions to generate a timeline of cumulative cash flow.
+// GetHistoricalChartData retrieves pre-calculated history from the DB.
 func (s *uploadServiceImpl) GetHistoricalChartData(userID int64) ([]models.HistoricalDataPoint, error) {
-	// 1. Fetch all processed transactions ordered by date
-	txs, err := fetchUserProcessedTransactions(userID)
+	rows, err := database.DB.Query(`
+		SELECT date, total_equity, cumulative_net_cashflow
+		FROM portfolio_snapshots
+		WHERE user_id = ?
+		ORDER BY date ASC`, userID)
+
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to query snapshots: %w", err)
 	}
+	defer rows.Close()
 
-	// 2. Initialize variables
-	var timeline []models.HistoricalDataPoint
-	cumulativeCashFlow := 0.0
-
-	// 3. Iterate and calculate Cumulative Cash Flow
-	// We group by date to avoid multiple points for the same day
-	dailyMap := make(map[string]*models.HistoricalDataPoint)
-	var sortedDates []string
-
-	for _, tx := range txs {
-		// We only care about CASH movements for the "Net Cash Flow" line
-		// Deposits increase the total invested; Withdrawals decrease it.
-		if tx.TransactionType == "CASH" {
-			// FIX: Trust the signed AmountEUR from the database/parser.
-			// Do not force signs based on SubType, as corrections/reversals
-			// might share the same subtype but have opposite signs.
-			amount := tx.AmountEUR
-
-			cumulativeCashFlow += amount
-
-			// Create or Update the point for this date
-			date := utils.ParseDate(tx.Date).Format("2006-01-02")
-			if _, exists := dailyMap[date]; !exists {
-				dailyMap[date] = &models.HistoricalDataPoint{Date: date}
-				sortedDates = append(sortedDates, date)
-			}
-			dailyMap[date].CumulativeCashFlow = cumulativeCashFlow
+	var data []models.HistoricalDataPoint
+	for rows.Next() {
+		var p models.HistoricalDataPoint
+		if err := rows.Scan(&p.Date, &p.PortfolioValue, &p.CumulativeCashFlow); err != nil {
+			continue
 		}
+		data = append(data, p)
 	}
-
-	// 4. Construct the final slice
-	for _, date := range sortedDates {
-		point := dailyMap[date]
-		timeline = append(timeline, *point)
-	}
-
-	// 5. Add "Today" point if not present
-	if len(timeline) > 0 {
-		lastPoint := timeline[len(timeline)-1]
-		today := time.Now().Format("2006-01-02")
-
-		if lastPoint.Date != today {
-			timeline = append(timeline, models.HistoricalDataPoint{
-				Date:               today,
-				CumulativeCashFlow: lastPoint.CumulativeCashFlow,
-				// PortfolioValue will be populated later
-			})
-		}
-	}
-
-	return timeline, nil
+	return data, nil
 }
 
 func fetchUserProcessedTransactions(userID int64) ([]models.ProcessedTransaction, error) {
 	logger.L.Debug("Fetching processed transactions from DB", "userID", userID)
-	rows, err := database.DB.Query(`SELECT id, date, source, product_name, isin, quantity, original_quantity, price, transaction_type, transaction_subtype, buy_sell, description, amount, currency, commission, order_id, exchange_rate, amount_eur, country_code, input_string, hash_id FROM processed_transactions WHERE user_id = ? ORDER BY date ASC, id ASC`, userID)
+	// FIX: Use SUBSTR to reformat DD-MM-YYYY to YYYY-MM-DD for correct chronological sorting
+	query := `
+		SELECT id, date, source, product_name, isin, quantity, original_quantity, price, 
+		       transaction_type, transaction_subtype, buy_sell, description, amount, 
+		       currency, commission, order_id, exchange_rate, amount_eur, country_code, 
+		       input_string, hash_id 
+		FROM processed_transactions 
+		WHERE user_id = ? 
+		ORDER BY 
+			SUBSTR(date, 7, 4) || '-' || SUBSTR(date, 4, 2) || '-' || SUBSTR(date, 1, 2) ASC, 
+			id ASC`
+
+	rows, err := database.DB.Query(query, userID)
 	if err != nil {
 		return nil, fmt.Errorf("error querying transactions for userID %d: %w", userID, err)
 	}
 	defer rows.Close()
+
 	var transactions []models.ProcessedTransaction
 	for rows.Next() {
 		var tx models.ProcessedTransaction
@@ -598,6 +813,6 @@ func fetchUserProcessedTransactions(userID int64) ([]models.ProcessedTransaction
 	if err = rows.Err(); err != nil {
 		return nil, fmt.Errorf("error iterating over transaction rows for userID %d: %w", userID, err)
 	}
-	logger.L.Info("DB fetch complete.", "userID", userID, "transactionCount", len(transactions))
+	logger.L.Info("DB fetch complete (Chronological).", "userID", userID, "transactionCount", len(transactions))
 	return transactions, nil
 }

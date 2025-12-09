@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/cookiejar"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -19,7 +20,15 @@ import (
 	"golang.org/x/net/publicsuffix"
 )
 
-// ... (struct definitions for yahooSearchResponse and yahooChartResponse remain the same)
+// --- Manual Overrides Configuration ---
+// Maps specific ISINs to their correct Yahoo Finance Ticker symbols.
+// This bypasses the search API for known problematic cases.
+var manualTickerOverrides = map[string]string{
+	"PLLVTSF00010": "TXT.WA", // Text S.A. (formerly LiveChat) on Warsaw SE
+}
+
+// --- API Response Structs ---
+
 // Struct for the v1 search API to convert ISIN to Ticker
 type yahooSearchResponse struct {
 	Quotes []struct {
@@ -31,7 +40,7 @@ type yahooSearchResponse struct {
 	} `json:"quotes"`
 }
 
-// Struct for the v8 chart/quote API to get the price
+// Struct for the v8 chart/quote API to get the current price
 type yahooChartResponse struct {
 	Chart struct {
 		Result []struct {
@@ -44,6 +53,23 @@ type yahooChartResponse struct {
 		Error interface{} `json:"error"`
 	} `json:"chart"`
 }
+
+// Struct to parse Yahoo's Historical JSON
+type yahooHistoryResponse struct {
+	Chart struct {
+		Result []struct {
+			Timestamp  []int64 `json:"timestamp"`
+			Indicators struct {
+				Quote []struct {
+					Close []float64 `json:"close"`
+				} `json:"quote"`
+			} `json:"indicators"`
+		} `json:"result"`
+		Error interface{} `json:"error"`
+	} `json:"chart"`
+}
+
+// --- Service Implementation ---
 
 type priceServiceImpl struct {
 	httpClient    http.Client
@@ -170,7 +196,9 @@ func (s *priceServiceImpl) getIsinToTickerMap(isins []string) (map[string]string
 
 	if len(isinsToFetch) > 0 {
 		for _, isin := range isinsToFetch {
+			// Small delay to be polite to the API
 			time.Sleep(250 * time.Millisecond)
+
 			ticker, exchange, currency, err := s.fetchTickerForISIN(isin)
 			if err != nil {
 				logger.L.Warn("Could not get ticker for ISIN from API", "isin", isin, "error", err)
@@ -237,9 +265,21 @@ func (s *priceServiceImpl) getTickerToPriceMap(isinToTickerMap map[string]string
 	return tickerToPriceMap, nil
 }
 
-// ... (fetchTickerForISIN and getPriceForTicker functions remain the same as in the previous response)
-// fetchTickerForISIN calls Yahoo and returns ticker, exchange, and currency.
 func (s *priceServiceImpl) fetchTickerForISIN(isin string) (string, string, string, error) {
+	// 1. Strict Validation: Instant fail for invalid ISINs
+	if len(isin) != 12 {
+		return "", "", "", fmt.Errorf("invalid ISIN length: %s", isin)
+	}
+
+	// 2. Check Manual Overrides
+	if ticker, ok := manualTickerOverrides[isin]; ok {
+		logger.L.Info("Using manual ticker override", "isin", isin, "ticker", ticker)
+		// We return "Override" for exchange/currency as they will be fetched
+		// by the subsequent price call (GetPriceForTicker) anyway.
+		return ticker, "Override", "", nil
+	}
+
+	// 3. Call Yahoo API
 	searchURL := fmt.Sprintf("https://query1.finance.yahoo.com/v1/finance/search?q=%s&quotesCount=1&lang=en-US", isin)
 	req, err := http.NewRequest("GET", searchURL, nil)
 	if err != nil {
@@ -271,7 +311,6 @@ func (s *priceServiceImpl) fetchTickerForISIN(isin string) (string, string, stri
 	return quote.Symbol, quote.Exchange, quote.Currency, nil
 }
 
-// getPriceForTicker remains largely the same
 func (s *priceServiceImpl) getPriceForTicker(ticker string) (float64, string, error) {
 	quoteURL := fmt.Sprintf("https://query1.finance.yahoo.com/v8/finance/chart/%s", ticker)
 	req, err := http.NewRequest("GET", quoteURL, nil)
@@ -316,4 +355,96 @@ func (s *priceServiceImpl) getPriceForTicker(ticker string) (float64, string, er
 	}
 
 	return price, currency, nil
+}
+
+// GetHistoricalPrices fetches full daily history for a ticker (10 years).
+func (s *priceServiceImpl) GetHistoricalPrices(ticker string) (PriceMap, error) {
+	s.mu.Lock()
+	if !s.isInitialized {
+		s.mu.Unlock()
+		s.initializeYahooSession()
+	} else {
+		s.mu.Unlock()
+	}
+
+	// Fetch 10 years of daily data (covers most user histories)
+	url := fmt.Sprintf("https://query1.finance.yahoo.com/v8/finance/chart/%s?interval=1d&range=10y", ticker)
+
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, err
+	}
+	// Use a standard browser User-Agent
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36")
+
+	resp, err := s.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch history for %s: %w", ticker, err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("yahoo history api returned %d for %s", resp.StatusCode, ticker)
+	}
+
+	var data yahooHistoryResponse
+	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
+		return nil, fmt.Errorf("failed to decode history json: %w", err)
+	}
+
+	if len(data.Chart.Result) == 0 {
+		return nil, fmt.Errorf("no history result found in json for %s", ticker)
+	}
+
+	result := data.Chart.Result[0]
+	timestamps := result.Timestamp
+	// Check if Quote data exists
+	if len(result.Indicators.Quote) == 0 {
+		return nil, fmt.Errorf("no quote data found for %s", ticker)
+	}
+	quotes := result.Indicators.Quote[0].Close
+
+	if len(timestamps) != len(quotes) {
+		return nil, fmt.Errorf("data mismatch: %d timestamps vs %d quotes", len(timestamps), len(quotes))
+	}
+
+	priceMap := make(PriceMap)
+	var sortedDates []string
+
+	// 1. Populate raw data
+	for i, ts := range timestamps {
+		// Yahoo sends 0 or null for missing data points
+		price := quotes[i]
+		if price == 0 {
+			continue
+		}
+
+		dateStr := time.Unix(ts, 0).Format("2006-01-02")
+		priceMap[dateStr] = price
+		sortedDates = append(sortedDates, dateStr)
+	}
+
+	// 2. Fill Forward (Handle weekends/holidays)
+	// If we have data for Fri and Mon, we fill Sat/Sun with Fri's price.
+	if len(sortedDates) > 0 {
+		sort.Strings(sortedDates)
+
+		startDate, _ := time.Parse("2006-01-02", sortedDates[0])
+		endDate := time.Now()
+
+		lastPrice := priceMap[sortedDates[0]]
+
+		for d := startDate; !d.After(endDate); d = d.AddDate(0, 0, 1) {
+			dateKey := d.Format("2006-01-02")
+
+			if val, ok := priceMap[dateKey]; ok {
+				lastPrice = val
+			} else {
+				// Missing day? Use the last known price
+				priceMap[dateKey] = lastPrice
+			}
+		}
+	}
+
+	return priceMap, nil
 }
