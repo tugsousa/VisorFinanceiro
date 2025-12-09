@@ -857,11 +857,9 @@ func (s *uploadServiceImpl) GetHistoricalChartData(userID int64) ([]models.Histo
 	// 2. Fetch Benchmark Data (SPY) from DB using the NEW function
 	benchmarkTicker := "SPY"
 
-	// This call will now work because we added GetPricesByTicker to the model package
 	bmPrices, err := model.GetPricesByTicker(database.DB, benchmarkTicker)
 
 	if err != nil {
-		// Log warning but don't fail the request; just return chart without benchmark
 		logger.L.Warn("Could not fetch benchmark prices from DB", "error", err)
 		return snapshots, nil
 	}
@@ -869,25 +867,33 @@ func (s *uploadServiceImpl) GetHistoricalChartData(userID int64) ([]models.Histo
 	// 3. Calculate "Shadow Portfolio" (Hypothetical S&P 500)
 	currentBenchmarkUnits := 0.0
 	previousCashFlow := 0.0
+	lastKnownPrice := 0.0 // <--- NEW: Track the last valid price
 
 	for i := range snapshots {
 		date := snapshots[i].Date
 		price := bmPrices[date]
 
-		// Fallback: If price is missing for this specific day (e.g. weekend/holiday in DB),
-		// ideally find the closest previous date. For now, we skip update or use 1.0 to prevent NaN.
-		// A simple improvement is to carry forward the last known price.
-		if price == 0 {
-			// In a real implementation, add logic here to find the last valid price
-			// For now, if we can't find a price, we can't buy units accurately.
-			price = 1.0
+		// --- FIX START: Fill Forward Logic ---
+		if price > 0 {
+			lastKnownPrice = price
+		} else if lastKnownPrice > 0 {
+			// If current date is missing (e.g. holiday/weekend/gap), use previous valid price
+			price = lastKnownPrice
+		} else {
+			// If we have NO price (start of chart and data is missing),
+			// skip calculation for this point to avoid the "1.0" crash.
+			// We update previousCashFlow to keep the flow logic correct for the next iteration.
+			previousCashFlow = snapshots[i].CumulativeCashFlow
+			continue
 		}
+		// --- FIX END ---
 
 		// Determine Daily Net Flow (Deposit or Withdrawal)
 		dailyNetFlow := snapshots[i].CumulativeCashFlow - previousCashFlow
 
 		// "Buy" units of the benchmark with the cash flow
-		if price > 1.0 { // Basic check to ensure valid price
+		// We use the price we resolved (either current or last known)
+		if price > 0 {
 			unitsBought := dailyNetFlow / price
 			currentBenchmarkUnits += unitsBought
 		}
