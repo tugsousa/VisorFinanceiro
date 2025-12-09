@@ -150,6 +150,7 @@ export const apiFetchOptionSales = () => apiClient.get(API_ENDPOINTS.OPTION_SALE
 export const apiFetchDividendTaxSummary = () => apiClient.get(API_ENDPOINTS.DIVIDEND_TAX_SUMMARY);
 export const apiFetchDividendTransactions = () => apiClient.get(API_ENDPOINTS.DIVIDEND_TRANSACTIONS);
 export const apiFetchFees = () => apiClient.get(API_ENDPOINTS.FEES_DATA);
+export const apiFetchHistoricalChartData = () => apiClient.get('/api/history/chart');
 
 /**
  * Busca a lista de utilizadores para o admin com suporte para paginação.

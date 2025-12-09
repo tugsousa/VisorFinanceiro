@@ -29,6 +29,7 @@ import OverallPLChart from '../components/realizedgainsSections/OverallPLChart';
 import HoldingsAllocationChart from '../components/realizedgainsSections/HoldingsAllocationChart';
 import PLContributionChart from '../components/realizedgainsSections/PLContributionChart';
 import FeesSection from '../components/realizedgainsSections/FeesSection';
+import HistoricalPerformanceChart from '../components/realizedgainsSections/HistoricalPerformanceChart';
 
 
 const isDataEmpty = (data) => {
@@ -297,6 +298,11 @@ export default function RealizedGainsPage() {
               </Box>
             </Grid>
             
+            {/* HistoricalPerformance Chart */}
+            <Grid item xs={12}>
+                <HistoricalPerformanceChart />
+            </Grid>
+
             {/* Holdings Chart */}
             <Grid item xs={12}>
               <Paper elevation={0} sx={{ p: 3, height: 400, borderRadius: 3, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>

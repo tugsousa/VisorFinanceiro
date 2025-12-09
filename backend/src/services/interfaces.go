@@ -40,6 +40,9 @@ type UploadService interface {
 	InvalidateUserCache(userID int64)
 	UpdateUserPortfolioMetrics(userID int64) error
 	GetCurrentHoldingsWithValue(userID int64) ([]models.HoldingWithValue, error)
+
+	// --- NEW METHOD ADDED HERE ---
+	GetHistoricalChartData(userID int64) ([]models.HistoricalDataPoint, error)
 }
 
 type PriceInfo struct {
