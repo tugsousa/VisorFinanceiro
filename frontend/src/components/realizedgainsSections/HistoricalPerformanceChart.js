@@ -1,3 +1,4 @@
+// frontend/src/components/realizedgainsSections/HistoricalPerformanceChart.js
 import React, { useMemo, useState, useRef, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Line } from 'react-chartjs-2';
@@ -39,25 +40,10 @@ ChartJS.register(
   Filler
 );
 
-// --- HELPER: Drawdown Calculation ---
-const calculateDrawdown = (data) => {
-    let maxPeak = -Infinity;
-    return data.map(point => {
-        if (point.portfolio_value > maxPeak) maxPeak = point.portfolio_value;
-        // Avoid division by zero
-        if (maxPeak === 0) return { ...point, drawdown: 0 };
-        return {
-            ...point,
-            drawdown: ((point.portfolio_value - maxPeak) / maxPeak) * 100
-        };
-    });
-};
-
 export default function HistoricalPerformanceChart() {
   const chartRef = useRef(null);
   const [timeRange, setTimeRange] = useState('ALL');
   const [showBenchmark, setShowBenchmark] = useState(false);
-  const [showDrawdown, setShowDrawdown] = useState(false);
   const [chartGradient, setChartGradient] = useState(null);
 
   const { data: rawData, isLoading, isError } = useQuery({
@@ -68,13 +54,12 @@ export default function HistoricalPerformanceChart() {
     }
   });
 
-  // Generate Gradient when chart is ready or data changes
+  // Generate Gradient
   useEffect(() => {
     const chart = chartRef.current;
     if (!chart) return;
 
     const ctx = chart.ctx;
-    // Create a gradient from top (0) to bottom (400px approx height)
     const gradient = ctx.createLinearGradient(0, 0, 0, 400);
     gradient.addColorStop(0, 'rgba(75, 192, 192, 0.5)'); 
     gradient.addColorStop(1, 'rgba(75, 192, 192, 0.0)');
@@ -84,47 +69,72 @@ export default function HistoricalPerformanceChart() {
   const processedData = useMemo(() => {
     if (!rawData || rawData.length === 0) return [];
     
-    // 1. Filter by Time Range
-    // Create a 'now' date set to the end of the day to include all data points up to today
+    // 1. Determine Start Date based on Time Range
     const now = new Date();
     now.setHours(23, 59, 59, 999); 
     
-    // Determine start date based on range
-    let startDate = new Date(rawData[0].date); // Default to first available date
+    let startDate = new Date(rawData[0].date); 
 
     if (timeRange !== 'ALL') {
         const tempStart = new Date();
         switch (timeRange) {
-            case '1W':
-                tempStart.setDate(now.getDate() - 7);
-                break;
-            case '1M':
-                tempStart.setMonth(now.getMonth() - 1);
-                break;
-            case 'YTD':
-                tempStart.setMonth(0, 1); // Jan 1st of current year
-                break;
-            case '1Y':
-                tempStart.setFullYear(now.getFullYear() - 1);
-                break;
-            case '5Y':
-                tempStart.setFullYear(now.getFullYear() - 5);
-                break;
-            default:
-                break;
+            case '1W': tempStart.setDate(now.getDate() - 7); break;
+            case '1M': tempStart.setMonth(now.getMonth() - 1); break;
+            case 'YTD': tempStart.setMonth(0, 1); break; // Jan 1st
+            case '1Y': tempStart.setFullYear(now.getFullYear() - 1); break;
+            case '5Y': tempStart.setFullYear(now.getFullYear() - 5); break;
+            default: break;
         }
         startDate = tempStart;
     }
 
+    // 2. Filter Data
     const filtered = rawData.filter(p => new Date(p.date) >= startDate);
+    if (filtered.length === 0) return [];
 
-    // 2. Calculate Drawdown if that mode is active
-    if (showDrawdown) {
-        return calculateDrawdown(filtered);
+    // --- LOGIC START: BENCHMARK REBASING ---
+    
+    // Initialize Benchmark Tracking
+    // We start the benchmark comparison based on the portfolio value at the START of the filter.
+    let benchmarkUnits = 0;
+    const initialSpyPrice = filtered[0].spy_price || 0;
+    
+    if (initialSpyPrice > 0) {
+        // Assume we invest the entire current Portfolio Value into SPY on Day 1 of the filter
+        benchmarkUnits = filtered[0].portfolio_value / initialSpyPrice;
     }
 
-    return filtered;
-  }, [rawData, timeRange, showDrawdown]);
+    let previousCashFlow = filtered[0].cumulative_cash_flow;
+
+    const calculatedData = filtered.map((point, index) => {
+        const currentSpyPrice = point.spy_price || 0;
+        
+        // Handle Cash Flows (Deposits/Withdrawals)
+        // Adjust Benchmark: "Buy/Sell" benchmark units when money enters/leaves
+        if (index > 0) {
+            const netFlow = point.cumulative_cash_flow - previousCashFlow;
+            
+            if (netFlow !== 0 && currentSpyPrice > 0) {
+                benchmarkUnits += (netFlow / currentSpyPrice);
+            }
+        }
+
+        // Calculate Today's Rebased Benchmark Value
+        // Ensure units don't drop below zero due to float imprecision
+        const safeBenchmarkUnits = Math.max(0, benchmarkUnits);
+        const rebasedBenchmarkValue = safeBenchmarkUnits * currentSpyPrice;
+
+        // Update previous cash flow for next loop
+        previousCashFlow = point.cumulative_cash_flow;
+
+        return {
+            ...point,
+            rebased_benchmark_value: rebasedBenchmarkValue,
+        };
+    });
+
+    return calculatedData;
+  }, [rawData, timeRange]);
 
   // --- CHART DATA CONSTRUCTION ---
   const chartData = useMemo(() => {
@@ -132,71 +142,55 @@ export default function HistoricalPerformanceChart() {
 
     const datasets = [];
 
-    if (showDrawdown) {
-        // DRAWDOWN DATASET (Under-water chart)
+    // 1. Invested Capital (Dashed Blue)
+    datasets.push({
+        label: 'Investimento Líquido',
+        data: processedData.map(p => p.cumulative_cash_flow),
+        borderColor: 'rgba(54, 162, 235, 0.5)',
+        backgroundColor: 'transparent',
+        borderDash: [5, 5],
+        borderWidth: 2,
+        pointRadius: 0,
+        pointHoverRadius: 0,
+        fill: false,
+        order: 2
+    });
+
+    // 2. Benchmark (Yellow) - Uses rebased value
+    if (showBenchmark) {
         datasets.push({
-            label: 'Drawdown (%)',
-            data: processedData.map(p => p.drawdown),
-            borderColor: 'rgba(239, 83, 80, 1)', // Red
-            backgroundColor: 'rgba(239, 83, 80, 0.2)', // Light Red Fill
+            label: 'Benchmark (S&P 500)',
+            data: processedData.map(p => p.rebased_benchmark_value),
+            borderColor: '#FFC107',
+            backgroundColor: 'transparent',
             borderWidth: 2,
             pointRadius: 0,
             pointHoverRadius: 4,
-            fill: true,
-        });
-    } else {
-        // STANDARD DATASETS
-        
-        // 1. Invested Capital (Dashed Blue)
-        datasets.push({
-            label: 'Investimento Líquido',
-            data: processedData.map(p => p.cumulative_cash_flow),
-            borderColor: 'rgba(54, 162, 235, 0.5)', // Light Blue
-            backgroundColor: 'transparent',
-            borderDash: [5, 5],
-            borderWidth: 2,
-            pointRadius: 0,
-            pointHoverRadius: 0,
             fill: false,
-            order: 2 // Draw this behind the portfolio line
-        });
-
-        // 2. Benchmark (Yellow) - Only if enabled
-        if (showBenchmark) {
-            datasets.push({
-                label: 'Benchmark (S&P 500)',
-                data: processedData.map(p => p.benchmark_value),
-                borderColor: '#FFC107', // Amber/Yellow
-                backgroundColor: 'transparent',
-                borderWidth: 2,
-                pointRadius: 0,
-                pointHoverRadius: 4,
-                fill: false,
-                tension: 0.4,
-                order: 1
-            });
-        }
-
-        // 3. Portfolio Value (Green with Gradient)
-        datasets.push({
-            label: 'Valor da Carteira',
-            data: processedData.map(p => p.portfolio_value),
-            borderColor: 'rgba(75, 192, 192, 1)', // Green
-            backgroundColor: chartGradient || 'rgba(75, 192, 192, 0.2)',
-            borderWidth: 2,
-            pointRadius: 0,
-            pointHoverRadius: 5,
-            fill: true,
-            tension: 0.1,
-            order: 0 // Draw this on top
+            tension: 0.4,
+            order: 1
         });
     }
+
+    // 3. Portfolio Value (Green with Gradient)
+    datasets.push({
+        label: 'Valor da Carteira',
+        data: processedData.map(p => p.portfolio_value),
+        borderColor: 'rgba(75, 192, 192, 1)',
+        backgroundColor: chartGradient || 'rgba(75, 192, 192, 0.2)',
+        borderWidth: 2,
+        pointRadius: 0,
+        pointHoverRadius: 5,
+        fill: true,
+        tension: 0.1,
+        order: 0
+    });
 
     return {
         labels: processedData.map(p => p.date),
         datasets: datasets
     };
-  }, [processedData, chartGradient, showBenchmark, showDrawdown]);
+  }, [processedData, chartGradient, showBenchmark]);
 
   // --- CHART OPTIONS ---
   const options = {
@@ -215,9 +209,7 @@ export default function HistoricalPerformanceChart() {
             boxWidth: 8
         }
       },
-      title: {
-        display: false, // We use a custom UI title
-      },
+      title: { display: false },
       tooltip: {
         backgroundColor: 'rgba(255, 255, 255, 0.9)',
         titleColor: '#000',
@@ -232,10 +224,7 @@ export default function HistoricalPerformanceChart() {
                 label += ': ';
             }
             if (context.parsed.y !== null) {
-                // If Drawdown mode, show percentage. Otherwise currency.
-                label += showDrawdown 
-                    ? `${context.parsed.y.toFixed(2)}%` 
-                    : formatCurrency(context.parsed.y);
+                label += formatCurrency(context.parsed.y);
             }
             return label;
           }
@@ -245,60 +234,32 @@ export default function HistoricalPerformanceChart() {
     scales: {
       x: {
         grid: { display: false },
-        ticks: {
-            maxTicksLimit: 8,
-            maxRotation: 0,
-            autoSkip: true
-        }
+        ticks: { maxTicksLimit: 8, maxRotation: 0, autoSkip: true }
       },
       y: {
         beginAtZero: false,
         grid: { color: '#f0f0f0' },
         ticks: {
-            // Format Y-axis labels
-            callback: (value) => {
-                return showDrawdown 
-                    ? `${value}%` 
-                    : formatCurrency(value, { 
-                        minimumFractionDigits: 0, 
-                        maximumFractionDigits: 0,
-                        compactDisplay: "short",
-                        notation: "compact"
-                    });
-            }
+            callback: (value) => formatCurrency(value, { 
+                minimumFractionDigits: 0, 
+                maximumFractionDigits: 0,
+                compactDisplay: "short",
+                notation: "compact"
+            })
         }
       }
     }
   };
 
-  // --- TOOLTIP CONTENT ---
+  // --- INFO TEXT ---
   const benchmarkInfo = (
     <Box sx={{ p: 1 }}>
         <Typography variant="subtitle2" fontWeight="bold">Benchmark S&P 500</Typography>
         <Typography variant="body2" sx={{ mt: 1 }}>
-            Esta linha simula um "Shadow Portfolio" (Carteira Sombra).
+            Esta linha compara a performance da sua carteira contra o S&P 500 para o período selecionado.
         </Typography>
         <Typography variant="body2" sx={{ mt: 1 }}>
-            Para cada depósito ou levantamento que fez na sua conta, o sistema calcula quantas unidades do índice S&P 500 poderia ter comprado (ou vendido) nesse exato dia.
-        </Typography>
-        <Typography variant="body2" sx={{ mt: 1 }}>
-            A linha amarela mostra quanto valeria esse investimento passivo hoje, permitindo comparar a sua gestão ativa contra o mercado.
-        </Typography>
-    </Box>
-  );
-
-  const drawdownInfo = (
-    <Box sx={{ p: 1 }}>
-        <Typography variant="subtitle2" fontWeight="bold">Drawdown (Risco)</Typography>
-        <Typography variant="body2" sx={{ mt: 1 }}>
-            Este gráfico inverte a perspectiva para mostrar o risco.
-        </Typography>
-        <Typography variant="body2" sx={{ mt: 1 }}>
-            Ele calcula a percentagem de desvalorização em relação ao máximo histórico anterior (All-Time High) da sua carteira.
-        </Typography>
-        <Typography variant="body2" sx={{ mt: 1 }}>
-            <strong>0%</strong> significa que a carteira está num novo máximo.<br/>
-            Valores negativos (ex: -15%) mostram quão "debaixo de água" está em relação ao seu pico anterior.
+            A comparação começa no primeiro dia do gráfico. Para cada depósito ou levantamento, o sistema ajusta o benchmark proporcionalmente, simulando que investiu esse dinheiro no índice no mesmo dia.
         </Typography>
     </Box>
   );
@@ -315,9 +276,9 @@ export default function HistoricalPerformanceChart() {
         {/* Title Area with Info Icon */}
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
             <Typography variant="h6" sx={{ fontWeight: 600 }}>
-                {showDrawdown ? 'Drawdown (Risco)' : 'Evolução Histórica'}
+                Evolução Histórica
             </Typography>
-            <Tooltip title={showDrawdown ? drawdownInfo : benchmarkInfo} arrow placement="right">
+            <Tooltip title={benchmarkInfo} arrow placement="right">
                 <IconButton size="small" sx={{ color: 'text.secondary' }}>
                     <InfoOutlinedIcon fontSize="small" />
                 </IconButton>
@@ -332,21 +293,9 @@ export default function HistoricalPerformanceChart() {
                         size="small" 
                         checked={showBenchmark} 
                         onChange={(e) => setShowBenchmark(e.target.checked)} 
-                        disabled={showDrawdown} // Disable benchmark toggle if in drawdown mode
                     />
                 } 
                 label={<Typography variant="body2" color="text.secondary">S&P 500</Typography>} 
-            />
-            <FormControlLabel 
-                control={
-                    <Switch 
-                        size="small" 
-                        color="error" 
-                        checked={showDrawdown} 
-                        onChange={(e) => setShowDrawdown(e.target.checked)} 
-                    />
-                } 
-                label={<Typography variant="body2" color="text.secondary">Drawdown</Typography>} 
             />
         </Box>
       </Box>

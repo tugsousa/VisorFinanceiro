@@ -749,6 +749,7 @@ func (s *uploadServiceImpl) GetHistoricalChartData(userID int64) ([]models.Histo
 			currentBenchmarkUnits += unitsBought
 		}
 		snapshots[i].BenchmarkValue = currentBenchmarkUnits * price
+		snapshots[i].SPYPrice = price
 		previousCashFlow = snapshots[i].CumulativeCashFlow
 	}
 	return snapshots, nil
