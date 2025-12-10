@@ -18,17 +18,26 @@ import (
 
 var DB *sql.DB
 
-// ... InitDB function remains the same ...
 func InitDB(databasePath string) {
-	db, err := sql.Open("sqlite", databasePath)
+	// Enable WAL mode and set a 5-second timeout for busy locks
+	// This allows readers and writers to coexist better
+	dsn := fmt.Sprintf("%s?_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)", databasePath)
+
+	db, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		stdlog.Fatalf("failed to open database at %s: %v", databasePath, err)
 	}
+
+	// IMPORTANT: Limit open connections.
+	// SQLite restricts to 1 writer at a time. Using 1 max connection essentially serializes
+	// database access in your Go app, preventing "database is locked" errors almost entirely.
+	db.SetMaxOpenConns(1)
+
 	if err = db.Ping(); err != nil {
 		stdlog.Fatalf("failed to ping database: %v", err)
 	}
 	DB = db
-	logger.L.Info("Database connection established.")
+	logger.L.Info("Database connection established with WAL mode and busy_timeout.")
 }
 
 func RunMigrations(databasePath string) {

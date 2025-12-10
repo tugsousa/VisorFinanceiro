@@ -78,6 +78,8 @@ func (p *TransactionProcessor) Process(txs []models.CanonicalTransaction) []mode
 			CountryCode:        tx.CountryCode,
 			InputString:        tx.RawText,
 			HashId:             tx.HashId,
+			CashBalance:        tx.CashBalance,
+			BalanceCurrency:    tx.BalanceCurrency,
 		}
 		processedTxs = append(processedTxs, processed)
 	}

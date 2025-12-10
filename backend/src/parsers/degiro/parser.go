@@ -16,10 +16,9 @@ import (
 )
 
 // RawTransaction holds the direct string values from a single row of a DeGiro CSV.
-// Added RawLine to store the full, unprocessed line.
 type RawTransaction struct {
-	OrderDate, OrderTime, ValueDate, Name, ISIN, Description, ExchangeRate, Currency, Amount, OrderID string
-	RawLine                                                                                           string
+	OrderDate, OrderTime, ValueDate, Name, ISIN, Description, ExchangeRate, Currency, Amount, BalanceCurrency, BalanceAmount, OrderID string
+	RawLine                                                                                                                           string
 }
 
 // DeGiroParser implements the parsers.Parser interface for DeGiro files.
@@ -42,9 +41,8 @@ func normalizeDecimalString(s string) string {
 }
 
 // Parse reads a DeGiro CSV file and converts its rows into a slice of CanonicalTransaction.
-// This method now contains the full logic, from reading the CSV to classifying transactions.
 func (p *DeGiroParser) Parse(file io.Reader) ([]models.CanonicalTransaction, error) {
-	// --- CSV Reading Logic (formerly in csv_parser.go) ---
+	// --- CSV Reading Logic ---
 	reader := csv.NewReader(file)
 	reader.FieldsPerRecord = -1 // Allow variable number of fields per record
 
@@ -63,14 +61,29 @@ func (p *DeGiroParser) Parse(file io.Reader) ([]models.CanonicalTransaction, err
 	for _, record := range records {
 		if len(record) >= 12 {
 			rawTxs = append(rawTxs, RawTransaction{
-				OrderDate: record[0], OrderTime: record[1], ValueDate: record[2],
-				Name: record[3], ISIN: record[4], Description: record[5],
-				ExchangeRate: record[6], Currency: record[7], Amount: record[8],
-				OrderID: record[11],
-				// Join the record back together to get the full raw line.
-				RawLine: strings.Join(record, ","),
+				OrderDate:       record[0],
+				OrderTime:       record[1],
+				ValueDate:       record[2],
+				Name:            record[3],
+				ISIN:            record[4],
+				Description:     record[5],
+				ExchangeRate:    record[6],
+				Currency:        record[7],
+				Amount:          record[8],
+				BalanceCurrency: record[9],
+				BalanceAmount:   record[10],
+				OrderID:         record[11],
+				RawLine:         strings.Join(record, ","),
 			})
 		}
+	}
+
+	// --- FIX: Reverse rawTxs to ensure Chronological Order (Oldest -> Newest) ---
+	// Degiro exports are Newest-First. We reverse them so they are inserted into the DB
+	// as Oldest-First. This ensures that when we sort by ID ASC later, we process
+	// the day's timeline correctly, ending with the latest balance.
+	for i, j := 0, len(rawTxs)-1; i < j; i, j = i+1, j-1 {
+		rawTxs[i], rawTxs[j] = rawTxs[j], rawTxs[i]
 	}
 
 	// --- Canonical Transaction Conversion ---
@@ -84,11 +97,9 @@ func (p *DeGiroParser) Parse(file io.Reader) ([]models.CanonicalTransaction, err
 
 		txType, subType, buySell, productName, quantity, price := classifyDeGiroTransaction(raw)
 
-		// --- FIX START: Ignore transaction lines that are only for commissions ---
 		if txType == "COMMISSION_IGNORE" {
-			continue // Skip creating a transaction for this, it will be handled by findCommissionForOrder
+			continue
 		}
-		// --- FIX END ---
 
 		if txType == "UNKNOWN" {
 			log.Printf("DeGiro Parser: Skipping unknown transaction type for description: '%s'", raw.Description)
@@ -97,25 +108,35 @@ func (p *DeGiroParser) Parse(file io.Reader) ([]models.CanonicalTransaction, err
 
 		normalizedAmount := normalizeDecimalString(raw.Amount)
 		sourceAmt, _ := strconv.ParseFloat(normalizedAmount, 64)
-		finalAmount := sourceAmt // For DeGiro, the sign is authoritative
+		finalAmount := sourceAmt
 
-		// Enforce sign for specific types to be safe
 		if txType == "FEE" || (txType == "DIVIDEND" && subType == "TAX") {
 			finalAmount = -math.Abs(sourceAmt)
 		}
 
 		commission, _ := findCommissionForOrder(raw.OrderID, rawTxs)
 
+		// --- Extract Balance ---
+		var cashBalance float64
+		var hasBalance bool
+
+		if raw.BalanceAmount != "" {
+			normalizedBalance := normalizeDecimalString(raw.BalanceAmount)
+			if bal, err := strconv.ParseFloat(normalizedBalance, 64); err == nil {
+				cashBalance = bal
+				hasBalance = true
+			}
+		}
+
 		tx := models.CanonicalTransaction{
-			Source:          "degiro",
-			TransactionDate: date,
-			ProductName:     productName,
-			ISIN:            strings.TrimSpace(raw.ISIN),
-			Quantity:        quantity,
-			Price:           price,
-			Currency:        raw.Currency,
-			OrderID:         raw.OrderID,
-			// Use the full line as RawText
+			Source:             "degiro",
+			TransactionDate:    date,
+			ProductName:        productName,
+			ISIN:               strings.TrimSpace(raw.ISIN),
+			Quantity:           quantity,
+			Price:              price,
+			Currency:           raw.Currency,
+			OrderID:            raw.OrderID,
 			RawText:            raw.RawLine,
 			SourceAmount:       sourceAmt,
 			Amount:             finalAmount,
@@ -123,6 +144,10 @@ func (p *DeGiroParser) Parse(file io.Reader) ([]models.CanonicalTransaction, err
 			TransactionSubType: subType,
 			BuySell:            buySell,
 			Commission:         commission,
+			// Balance Fields
+			CashBalance:     cashBalance,
+			BalanceCurrency: raw.BalanceCurrency,
+			HasBalance:      hasBalance,
 		}
 		canonicalTxs = append(canonicalTxs, tx)
 	}
@@ -130,29 +155,21 @@ func (p *DeGiroParser) Parse(file io.Reader) ([]models.CanonicalTransaction, err
 	return canonicalTxs, nil
 }
 
-// classifyDeGiroTransaction remains the same as before.
 func classifyDeGiroTransaction(raw RawTransaction) (txType, subType, buySell, productName string, quantity, price float64) {
 	desc := strings.TrimSpace(strings.ReplaceAll(raw.Description, "\u00A0", " "))
 	lowerDesc := strings.ToLower(desc)
 
-	// Handle Juros (Interest)
 	if strings.EqualFold(lowerDesc, "juros") {
 		return "FEE", "INTEREST", "", desc, 0, 0
 	}
 
-	// --- FIX START: Distinguish between trade commissions and other fees ---
 	if strings.Contains(lowerDesc, "comissões de transação") {
-		// This is a commission linked to a trade. We don't create a separate transaction for it.
-		// It will be found and attached to the main trade via findCommissionForOrder.
 		return "COMMISSION_IGNORE", "", "", "", 0, 0
 	}
 	if strings.Contains(lowerDesc, "custo de conectividade") {
-		// This is a standalone fee and should be treated as such.
 		return "FEE", "", "", desc, 0, 0
 	}
-	// --- FIX END ---
 
-	// Handle non-trade types first
 	if strings.Contains(lowerDesc, "dividendo") {
 		productName = strings.TrimSpace(raw.Name)
 		if strings.Contains(lowerDesc, "imposto sobre dividendo") {
@@ -163,26 +180,20 @@ func classifyDeGiroTransaction(raw RawTransaction) (txType, subType, buySell, pr
 	if strings.EqualFold(lowerDesc, "depósito") || strings.Contains(lowerDesc, "flatex deposit") {
 		return "CASH", "DEPOSIT", "", "Cash Deposit", 0, 0
 	}
-
-	// This part is now removed from the FIX above and handled more specifically
-	/*
-		if strings.Contains(lowerDesc, "comissões de transação") || strings.Contains(lowerDesc, "custo de conectividade") {
-			return "FEE", "", "", desc, 0, 0
-		}
-	*/
+	if strings.EqualFold(lowerDesc, "levantamento") || strings.Contains(lowerDesc, "flatex withdrawal") {
+		return "CASH", "WITHDRAWAL", "", "Cash Withdrawal", 0, 0
+	}
 
 	if strings.Contains(lowerDesc, "mudança de produto") {
 		return "PRODUCT_CHANGE", "", "", "Product Change", 0, 0
 	}
 
-	// Handle trades (Stocks and Options) using regex
 	stockOrOptionRe := regexp.MustCompile(`(?i)\s*(compra|venda)\s+([\d\s.,]+)\s+(.+?)\s*@([\d,.]+)`)
 	matches := stockOrOptionRe.FindStringSubmatch(desc)
 	if matches == nil {
 		return "UNKNOWN", "", "", "", 0, 0
 	}
 
-	// Extract details
 	buySellRaw := strings.ToLower(matches[1])
 	if buySellRaw == "compra" {
 		buySell = "BUY"
@@ -199,7 +210,6 @@ func classifyDeGiroTransaction(raw RawTransaction) (txType, subType, buySell, pr
 	priceStr := strings.ReplaceAll(matches[4], ",", ".")
 	price, _ = strconv.ParseFloat(priceStr, 64)
 
-	// Differentiate between Stock and Option
 	optionPatternRe := regexp.MustCompile(`\s+[CP]\d+(\.\d+)?\s+\d{2}[A-Z]{3}\d{2}$`)
 	if optionPatternRe.MatchString(productName) {
 		txType = "OPTION"
@@ -215,7 +225,6 @@ func classifyDeGiroTransaction(raw RawTransaction) (txType, subType, buySell, pr
 	return
 }
 
-// findCommissionForOrder remains the same as before.
 func findCommissionForOrder(orderId string, transactions []RawTransaction) (float64, error) {
 	if orderId == "" {
 		return 0, nil

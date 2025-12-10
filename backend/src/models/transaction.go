@@ -37,6 +37,8 @@ type ProcessedTransaction struct {
 	CountryCode        string  `json:"country_code,omitempty"` // Country code derived from ISIN
 	InputString        string  `json:"input_string"`           // The full description string for reference
 	HashId             string  `json:"hash_id"`                // Generated hash for potential duplicate checking
+	CashBalance        float64 `json:"cash_balance"`
+	BalanceCurrency    string  `json:"balance_currency"`
 }
 
 // CashMovement represents a cash deposit or withdrawal
