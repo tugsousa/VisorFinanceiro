@@ -7,8 +7,8 @@ import {
   getApiServiceCsrfToken,
   apiRefreshToken,
   setAuthRefresher,
-} from '../api/apiService';
-import logger from '../utils/logger';
+} from '../../lib/api';
+import logger from '../../lib/utils/logger';
 
 export const AuthContext = createContext();
 

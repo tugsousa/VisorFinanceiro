@@ -1,8 +1,8 @@
 // frontend/src/pages/UploadPage.js
 import React, { useState, useCallback, useRef } from 'react';
-import { useAuth } from '../context/AuthContext';
-import { usePortfolio } from '../context/PortfolioContext'; // <--- 1. Import Added
-import { apiUploadFile } from '../api/apiService';
+import { useAuth } from '../features/auth/AuthContext';
+import { usePortfolio } from '../features/portfolio/PortfolioContext';
+import { apiUploadFile } from '../lib/api';
 import { MAX_FILE_SIZE_BYTES, MAX_FILE_SIZE_MB } from '../constants';
 import { Typography, Box, Button, LinearProgress, Paper, Alert, Modal, IconButton, Link as MuiLink, CircularProgress } from '@mui/material';
 import { styled } from '@mui/material/styles';
@@ -10,7 +10,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { UploadFile as UploadFileIcon, CheckCircleOutline as CheckCircleIcon, ErrorOutline as ErrorIcon, Close as CloseIcon } from '@mui/icons-material';
 import IBKRGuidePage from './IBKRGuidePage';
 import DEGIROGuidePage from './DEGIROGuidePage';
-import logger from '../utils/logger';
+import logger from '../lib/utils/logger';
 
 const UploadDropzone = styled(Box)(({ theme, isDragActive }) => ({
     display: 'flex',

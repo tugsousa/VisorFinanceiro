@@ -6,8 +6,8 @@ import {
   DialogContent, DialogContentText, DialogTitle
 } from '@mui/material';
 import { useMutation } from '@tanstack/react-query';
-import { apiChangePassword, apiDeleteAccount } from '../api/apiService';
-import { AuthContext } from '../context/AuthContext';
+import { apiChangePassword, apiDeleteAccount } from '../lib/api';
+import { AuthContext } from '../features/auth/AuthContext';
 import { useNavigate } from 'react-router-dom';
 
 function SettingsPage() {

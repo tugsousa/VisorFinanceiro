@@ -17,8 +17,8 @@ import DashboardPage from './pages/DashboardPage';
 import PrivacyPolicyPage from './pages/policies/PrivacyPolicyPage';
 import TermsOfServicePage from './pages/policies/TermsOfServicePage';
 import ContactInformationPage from './pages/policies/ContactInformationPage';
-import { AuthProvider, useAuth } from './context/AuthContext';
-import { PortfolioProvider } from './context/PortfolioContext'; // Added
+import { AuthProvider, useAuth } from './features/auth/AuthContext';
+import { PortfolioProvider } from './features/portfolio/PortfolioContext';
 import { CircularProgress, Box } from '@mui/material';
 import GoogleAuthCallbackPage from './pages/GoogleAuthCallbackPage';
 import AdminDashboardPage from './pages/AdminDashboardPage';

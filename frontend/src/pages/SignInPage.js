@@ -1,7 +1,7 @@
 // frontend/src/pages/SignInPage.js
 import React, { useState, useContext, useEffect } from 'react';
 import { Link as RouterLink } from 'react-router-dom';
-import { AuthContext } from '../context/AuthContext';
+import { AuthContext } from '../features/auth/AuthContext';
 import {
   Box, Typography, TextField, Button, Alert, CircularProgress, Grid, Link, Divider, SvgIcon
 } from '@mui/material';
