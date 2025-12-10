@@ -201,7 +201,7 @@ func (s *uploadServiceImpl) ProcessUpload(fileReader io.Reader, userID int64, so
 
 // RebuildUserHistory implements the calculation engine for daily portfolio snapshots.
 func (s *uploadServiceImpl) RebuildUserHistory(userID int64) error {
-	logger.L.Info("Starting history rebuild", "userID", userID)
+	logger.L.Info("Starting history rebuild (Currency Correction Mode)", "userID", userID)
 
 	// Ensure benchmark data
 	if err := s.priceService.EnsureBenchmarkData(); err != nil {
@@ -229,19 +229,21 @@ func (s *uploadServiceImpl) RebuildUserHistory(userID int64) error {
 				isinList = append(isinList, tx.ISIN)
 			}
 		}
+		// We still track transaction currencies to ensure we have rates for Cash balances
 		if tx.Currency != "" && tx.Currency != "EUR" {
 			uniqueCurrencies[tx.Currency] = true
 		}
 	}
-	if len(isinList) > 0 {
-		_, err := s.priceService.GetCurrentPrices(isinList)
-		if err != nil {
-			logger.L.Warn("Force resolution GetCurrentPrices returned error", "error", err)
+
+	// C. Resolve ISINs to Tickers & Currencies
+	mappings, _ := model.GetMappingsByISINs(database.DB, isinList)
+
+	// Add Ticker Currencies to the list of currencies to fetch rates for
+	for _, mapping := range mappings {
+		if mapping.Currency != "" && mapping.Currency != "EUR" {
+			uniqueCurrencies[mapping.Currency] = true
 		}
 	}
-
-	// C. Resolve ISINs to Tickers
-	mappings, _ := model.GetMappingsByISINs(database.DB, isinList)
 
 	// D. Fetch Historical Data
 	var wg sync.WaitGroup
@@ -249,6 +251,7 @@ func (s *uploadServiceImpl) RebuildUserHistory(userID int64) error {
 	currencyRates := make(map[string]PriceMap)
 	var dataMu sync.Mutex
 
+	// Fetch Stock Prices
 	for isin := range uniqueISINs {
 		mapEntry, ok := mappings[isin]
 		if !ok || mapEntry.TickerSymbol == "" {
@@ -267,6 +270,7 @@ func (s *uploadServiceImpl) RebuildUserHistory(userID int64) error {
 		}(ticker, isin)
 	}
 
+	// Fetch Exchange Rates
 	for curr := range uniqueCurrencies {
 		wg.Add(1)
 		go func(c string) {
@@ -289,12 +293,17 @@ func (s *uploadServiceImpl) RebuildUserHistory(userID int64) error {
 
 	type AssetInfo struct {
 		Quantity       float64
-		Currency       string
+		Currency       string // This is the Transaction Currency (e.g. EUR)
 		TotalCostBasis float64
+		Name           string
 	}
 	holdings := make(map[string]AssetInfo)
 	cumulativeNetInvested := 0.0
 	currentCash := 0.0
+
+	// Memories for Fill-Forward
+	lastKnownPrices := make(map[string]float64)
+	lastKnownRates := make(map[string]float64)
 
 	type Snapshot struct {
 		Date        string
@@ -311,21 +320,16 @@ func (s *uploadServiceImpl) RebuildUserHistory(userID int64) error {
 		dateStr := d.Format("2006-01-02")
 		txDateStr := d.Format("02-01-2006")
 
+		// --- 1. Process Transactions ---
 		for txIndex < totalTxs && txs[txIndex].Date == txDateStr {
 			tx := txs[txIndex]
-
-			// --- 1. Net Invested Calculation (Always calculated) ---
-			// We still need this for the "Net Invested" line on the chart
 			if tx.TransactionType == "CASH" {
 				cumulativeNetInvested += tx.AmountEUR
 			}
-
-			// --- 2. Holdings Logic (Always calculated) ---
-			// We still need to track quantities to know asset value
-			if tx.TransactionType == "STOCK" || tx.TransactionType == "OPTION" || tx.TransactionType == "ETF" {
+			if tx.TransactionType == "STOCK" || tx.TransactionType == "ETF" {
 				info := holdings[tx.ISIN]
 				info.Currency = tx.Currency
-
+				info.Name = tx.ProductName
 				if tx.BuySell == "BUY" {
 					info.Quantity += float64(tx.Quantity)
 					info.TotalCostBasis += math.Abs(tx.AmountEUR)
@@ -338,49 +342,85 @@ func (s *uploadServiceImpl) RebuildUserHistory(userID int64) error {
 				}
 				holdings[tx.ISIN] = info
 			}
-
-			// --- 3. Cash Balance Logic (STRICT MODE) ---
-			// We DO NOT calculate cash incrementally anymore.
-			// We ONLY take the cash balance if it is explicitly provided by the parser.
 			if tx.BalanceCurrency == "EUR" {
-				// We check BalanceCurrency to ensure we actually have a record (even if the balance is 0.0)
 				currentCash = tx.CashBalance
 			}
-
 			txIndex++
 		}
 
-		// Calculate Total Market Value of Assets
+		// --- 2. Calculate Market Value ---
 		marketValueAssets := 0.0
+
+		// Debug logging specifically for your crash dates
+		enableDebugLog := (dateStr == "2025-06-05" || dateStr == "2025-06-06")
+		if enableDebugLog {
+			fmt.Printf("\n--- DEBUG DATE: %s ---\n", dateStr)
+		}
+
 		for isin, info := range holdings {
 			if info.Quantity <= 0.0001 {
 				continue
 			}
+
+			// A. Resolve Price (Fill-Forward)
 			price := 0.0
 			if pMap, ok := tickerPrices[isin]; ok {
 				price = pMap[dateStr]
 			}
-
 			if price > 0 {
-				rate := 1.0
-				if info.Currency != "EUR" && info.Currency != "" {
-					if rMap, ok := currencyRates[info.Currency]; ok {
-						if r, ok := rMap[dateStr]; ok {
-							rate = r
-						}
+				lastKnownPrices[isin] = price
+			} else if lastPrice, exists := lastKnownPrices[isin]; exists {
+				price = lastPrice
+			}
+
+			// B. Resolve Currency & Rate (THE FIX)
+			// Instead of info.Currency (Transaction Currency), we use the Ticker Currency
+			pricingCurrency := info.Currency // Default fallback
+			if mapping, ok := mappings[isin]; ok && mapping.Currency != "" {
+				pricingCurrency = mapping.Currency // Use the currency Yahoo gave us (e.g., HKD)
+			}
+
+			rate := 1.0
+			rateSource := "EUR-BASE"
+
+			if pricingCurrency != "EUR" {
+				foundRate := false
+				if rMap, ok := currencyRates[pricingCurrency]; ok {
+					if r, ok := rMap[dateStr]; ok {
+						rate = r
+						foundRate = true
+						rateSource = "LIVE"
 					}
 				}
-				marketValueAssets += (info.Quantity * price) * rate
+				if !foundRate {
+					if lastRate, exists := lastKnownRates[pricingCurrency]; exists {
+						rate = lastRate
+						rateSource = "FILLED"
+					}
+				}
+				if rate > 0 {
+					lastKnownRates[pricingCurrency] = rate
+				}
+			}
+
+			// C. Calculate
+			var assetValue float64
+			if price > 0 {
+				assetValue = (info.Quantity * price) * rate
 			} else {
-				marketValueAssets += info.TotalCostBasis
+				assetValue = info.TotalCostBasis
+			}
+			marketValueAssets += assetValue
+
+			if enableDebugLog {
+				fmt.Printf("ASSET: %s | ISIN: %s | PriceCur: %s | Qty: %.2f | Price: %.2f | Rate: %.4f (%s) | VAL: %.2f\n",
+					info.Name, isin, pricingCurrency, info.Quantity, price, rate, rateSource, assetValue)
 			}
 		}
 
-		totalEquity := marketValueAssets + currentCash
-
 		snapshots = append(snapshots, Snapshot{
 			Date:        dateStr,
-			Equity:      totalEquity,
+			Equity:      marketValueAssets + currentCash,
 			NetInvested: cumulativeNetInvested,
 			Cash:        currentCash,
 		})
