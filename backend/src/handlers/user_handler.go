@@ -6,7 +6,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
-	"errors"
+	"fmt"
 	"net/http"
 	"regexp"
 	"strconv"
@@ -150,19 +150,285 @@ func (h *UserHandler) AdminMiddleware(next http.Handler) http.Handler {
 	})
 }
 
+// Stats Structure updated to include all fields required by AdminDashboardPage.js
+type AdminStats struct {
+	TotalPortfolioValue      float64 `json:"totalPortfolioValue"`
+	TotalUsers               int     `json:"totalUsers"`
+	DeletedUserCount         int     `json:"deletedUserCount"`
+	TotalUploads             int     `json:"totalUploads"`
+	DailyActiveUsers         int     `json:"dailyActiveUsers"`
+	MonthlyActiveUsers       int     `json:"monthlyActiveUsers"`
+	AvgTimeToFirstUploadDays float64 `json:"avgTimeToFirstUploadDays"`
+	NewUsersToday            int     `json:"newUsersToday"`
+	NewUsersThisWeek         int     `json:"newUsersThisWeek"`
+	NewUsersThisMonth        int     `json:"newUsersThisMonth"`
+
+	// Period Specific Metrics
+	NewUsersInPeriod                  int     `json:"newUsersInPeriod"`
+	ActiveUsersInPeriod               int     `json:"activeUsersInPeriod"`
+	UploadsInPeriod                   int     `json:"uploadsInPeriod"`
+	UploadFailureRate                 float64 `json:"uploadFailureRate"`
+	TotalCashDepositedEURInPeriod     float64 `json:"totalCashDepositedEURInPeriod"`
+	CashDepositsInPeriod              int     `json:"cashDepositsInPeriod"`
+	TotalDividendsReceivedEURInPeriod float64 `json:"totalDividendsReceivedEURInPeriod"`
+	AvgDividendReceivedEURInPeriod    float64 `json:"avgDividendReceivedEURInPeriod"`
+
+	// Lists / Charts
+	TopUsersByLogins                []AdminUserView `json:"topUsersByLogins"`
+	TopUsersByUploads               []AdminUserView `json:"topUsersByUploads"`
+	VerificationStats               map[string]int  `json:"verificationStats"`
+	AuthProviderStats               []ChartData     `json:"authProviderStats"`
+	ValueByBroker                   []ChartData     `json:"valueByBroker"`
+	DepositsByBroker                []ChartData     `json:"depositsByBroker"`
+	TopStocksByValue                []StockMetric   `json:"topStocksByValue"`
+	TopStocksByTrades               []StockMetric   `json:"topStocksByTrades"`
+	InvestmentDistributionByCountry []ChartData     `json:"investmentDistributionByCountry"`
+
+	// Time Series
+	ActiveUsersPerDay []TimeSeriesData `json:"activeUsersPerDay"`
+	UsersPerDay       []TimeSeriesData `json:"usersPerDay"`
+}
+
+type ChartData struct {
+	Name  string  `json:"name"`
+	Value float64 `json:"value"`
+}
+
+type StockMetric struct {
+	ProductName string  `json:"productName"`
+	ISIN        string  `json:"isin"`
+	Value       float64 `json:"value"`
+}
+
+type TimeSeriesData struct {
+	Date  string `json:"date"`
+	Count int    `json:"count"`
+}
+
 func (h *UserHandler) HandleGetAdminStats(w http.ResponseWriter, r *http.Request) {
-	// Assuming previous Admin Stats logic is here or imported.
-	// If you need the full stats logic again, let me know.
-	// This function is kept to prevent "missing method" errors if routed.
-	w.WriteHeader(http.StatusNotImplemented)
+	stats := AdminStats{
+		VerificationStats: make(map[string]int),
+	}
+
+	rangeParam := r.URL.Query().Get("range")
+	var timeFilter string
+	var loginFilter string
+	var uploadFilter string
+
+	// Determine SQL filter based on range parameter
+	switch rangeParam {
+	case "last_7_days":
+		timeFilter = "created_at >= date('now', '-7 days')"
+		loginFilter = "login_at >= date('now', '-7 days')"
+		uploadFilter = "uploaded_at >= date('now', '-7 days')"
+	case "last_30_days":
+		timeFilter = "created_at >= date('now', '-30 days')"
+		loginFilter = "login_at >= date('now', '-30 days')"
+		uploadFilter = "uploaded_at >= date('now', '-30 days')"
+	case "last_365_days":
+		timeFilter = "created_at >= date('now', '-365 days')"
+		loginFilter = "login_at >= date('now', '-365 days')"
+		uploadFilter = "uploaded_at >= date('now', '-365 days')"
+	default: // "all_time"
+		timeFilter = "1=1"
+		loginFilter = "1=1"
+		uploadFilter = "1=1"
+	}
+
+	// 1. Basic Counts (Always Global)
+	database.DB.QueryRow("SELECT COUNT(*) FROM users").Scan(&stats.TotalUsers)
+	database.DB.QueryRow("SELECT COALESCE(SUM(portfolio_value_eur), 0) FROM users").Scan(&stats.TotalPortfolioValue)
+	database.DB.QueryRow("SELECT metric_value FROM system_metrics WHERE metric_name = 'deleted_user_count'").Scan(&stats.DeletedUserCount)
+	database.DB.QueryRow("SELECT COUNT(*) FROM uploads_history").Scan(&stats.TotalUploads)
+
+	// 2. Active Users (Global Snapshot)
+	database.DB.QueryRow("SELECT COUNT(DISTINCT user_id) FROM login_history WHERE login_at > date('now', '-1 day')").Scan(&stats.DailyActiveUsers)
+	database.DB.QueryRow("SELECT COUNT(DISTINCT user_id) FROM login_history WHERE login_at > date('now', '-30 days')").Scan(&stats.MonthlyActiveUsers)
+
+	// 3. New Users (Global Snapshot)
+	database.DB.QueryRow("SELECT COUNT(*) FROM users WHERE created_at > date('now', 'start of day')").Scan(&stats.NewUsersToday)
+	database.DB.QueryRow("SELECT COUNT(*) FROM users WHERE created_at > date('now', '-7 days')").Scan(&stats.NewUsersThisWeek)
+	database.DB.QueryRow("SELECT COUNT(*) FROM users WHERE created_at > date('now', 'start of month')").Scan(&stats.NewUsersThisMonth)
+
+	// 4. Period Specific Metrics (Dynamic based on 'range')
+	database.DB.QueryRow("SELECT COUNT(*) FROM users WHERE " + timeFilter).Scan(&stats.NewUsersInPeriod)
+	database.DB.QueryRow("SELECT COUNT(DISTINCT user_id) FROM login_history WHERE " + loginFilter).Scan(&stats.ActiveUsersInPeriod)
+
+	// Uploads & Failures
+	var successfulUploads int
+	database.DB.QueryRow("SELECT COUNT(*) FROM uploads_history WHERE " + uploadFilter).Scan(&successfulUploads)
+	stats.UploadsInPeriod = successfulUploads
+
+	var failedUploads int
+	failureTimeFilter := strings.Replace(uploadFilter, "uploaded_at", "failed_at", 1)
+	database.DB.QueryRow("SELECT COUNT(*) FROM upload_failures WHERE " + failureTimeFilter).Scan(&failedUploads)
+
+	totalAttempts := successfulUploads + failedUploads
+	if totalAttempts > 0 {
+		stats.UploadFailureRate = (float64(failedUploads) / float64(totalAttempts)) * 100
+	} else {
+		stats.UploadFailureRate = 0
+	}
+
+	// 5. Financials in Period
+	if rangeParam == "all_time" || rangeParam == "" {
+		database.DB.QueryRow(`
+			SELECT COALESCE(SUM(amount_eur), 0) 
+			FROM processed_transactions 
+			WHERE transaction_type = 'CASH' AND transaction_subtype = 'DEPOSIT'`).Scan(&stats.TotalCashDepositedEURInPeriod)
+
+		database.DB.QueryRow(`
+			SELECT COUNT(*) 
+			FROM processed_transactions 
+			WHERE transaction_type = 'CASH' AND transaction_subtype = 'DEPOSIT'`).Scan(&stats.CashDepositsInPeriod)
+
+		database.DB.QueryRow(`
+			SELECT COALESCE(SUM(amount_eur), 0) 
+			FROM processed_transactions 
+			WHERE transaction_type = 'DIVIDEND' AND transaction_subtype != 'TAX'`).Scan(&stats.TotalDividendsReceivedEURInPeriod)
+
+		database.DB.QueryRow(`
+			SELECT COALESCE(AVG(amount_eur), 0) 
+			FROM processed_transactions 
+			WHERE transaction_type = 'DIVIDEND' AND transaction_subtype != 'TAX'`).Scan(&stats.AvgDividendReceivedEURInPeriod)
+	} else {
+		// Placeholder for time-filtered queries to prevent breaking.
+		// Future improvement: implement proper date filtering on processed_transactions.
+		stats.TotalCashDepositedEURInPeriod = 0
+		stats.CashDepositsInPeriod = 0
+		stats.TotalDividendsReceivedEURInPeriod = 0
+		stats.AvgDividendReceivedEURInPeriod = 0
+	}
+
+	// 6. Avg Time to First Upload (Global)
+	database.DB.QueryRow(`
+		SELECT COALESCE(AVG(JULIANDAY(first_upload_at) - JULIANDAY(created_at)), 0) 
+		FROM users WHERE first_upload_at IS NOT NULL
+	`).Scan(&stats.AvgTimeToFirstUploadDays)
+
+	// 7. Verification Stats
+	var verified, unverified int
+	database.DB.QueryRow("SELECT COUNT(*) FROM users WHERE is_email_verified = 1").Scan(&verified)
+	database.DB.QueryRow("SELECT COUNT(*) FROM users WHERE is_email_verified = 0").Scan(&unverified)
+	stats.VerificationStats = map[string]int{"verified": verified, "unverified": unverified}
+
+	// 8. Top Users (Logins & Uploads)
+	fetchUsers := func(query string) []AdminUserView {
+		rows, _ := database.DB.Query(query)
+		if rows == nil {
+			return []AdminUserView{}
+		}
+		defer rows.Close()
+		var users []AdminUserView
+		for rows.Next() {
+			var u AdminUserView
+			var lastLogin, topHoldings sql.NullString
+			var lastLoginAt sql.NullTime
+			rows.Scan(&u.ID, &u.Email, &u.LoginCount, &u.TotalUploadCount, &u.PortfolioValueEUR, &lastLoginAt, &lastLogin, &topHoldings)
+			u.LastLoginAt = lastLoginAt
+			u.LastLoginIP = lastLogin.String
+			u.Top5Holdings = topHoldings.String
+			users = append(users, u)
+		}
+		return users
+	}
+
+	stats.TopUsersByLogins = fetchUsers(`
+		SELECT id, email, login_count, total_upload_count, portfolio_value_eur, last_login_at, last_login_ip, top_5_holdings 
+		FROM users ORDER BY login_count DESC LIMIT 5`)
+	stats.TopUsersByUploads = fetchUsers(`
+		SELECT id, email, login_count, total_upload_count, portfolio_value_eur, last_login_at, last_login_ip, top_5_holdings 
+		FROM users ORDER BY total_upload_count DESC LIMIT 5`)
+
+	// 9. Broker Distribution
+	brokerRows, _ := database.DB.Query("SELECT source, COUNT(*) FROM processed_transactions GROUP BY source")
+	if brokerRows != nil {
+		defer brokerRows.Close()
+		for brokerRows.Next() {
+			var name string
+			var val float64
+			brokerRows.Scan(&name, &val)
+			stats.ValueByBroker = append(stats.ValueByBroker, ChartData{Name: name, Value: val})
+		}
+	}
+
+	// 10. Auth Provider Stats
+	authRows, _ := database.DB.Query("SELECT auth_provider, COUNT(*) FROM users GROUP BY auth_provider")
+	if authRows != nil {
+		defer authRows.Close()
+		for authRows.Next() {
+			var name string
+			var val float64
+			authRows.Scan(&name, &val)
+			stats.AuthProviderStats = append(stats.AuthProviderStats, ChartData{Name: name, Value: val})
+		}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(stats)
 }
 
 func (h *UserHandler) HandleGetAdminUsers(w http.ResponseWriter, r *http.Request) {
-	// ... (Previous implementation for fetching admin users list) ...
-	// Placeholder to keep file compilable if logic exists elsewhere or previously provided
-	w.WriteHeader(http.StatusNotImplemented)
+	page, _ := strconv.Atoi(r.URL.Query().Get("page"))
+	if page < 1 {
+		page = 1
+	}
+	pageSize, _ := strconv.Atoi(r.URL.Query().Get("pageSize"))
+	if pageSize < 1 {
+		pageSize = 25
+	}
+	offset := (page - 1) * pageSize
+
+	sortBy := r.URL.Query().Get("sortBy")
+	order := r.URL.Query().Get("order")
+
+	validSorts := map[string]bool{"created_at": true, "login_count": true, "portfolio_value_eur": true, "total_upload_count": true, "email": true}
+	if !validSorts[sortBy] {
+		sortBy = "created_at"
+	}
+	if order != "asc" {
+		order = "desc"
+	}
+
+	query := fmt.Sprintf(`
+		SELECT id, username, email, auth_provider, created_at, total_upload_count, upload_count,
+		(SELECT COUNT(DISTINCT source) FROM processed_transactions WHERE user_id = u.id) as distinct_broker_count,
+		portfolio_value_eur, top_5_holdings, last_login_at, last_login_ip, login_count
+		FROM users u
+		ORDER BY %s %s LIMIT ? OFFSET ?`, sortBy, order)
+
+	rows, err := database.DB.Query(query, pageSize, offset)
+	if err != nil {
+		logger.L.Error("Failed to list users", "error", err)
+		sendJSONError(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+	defer rows.Close()
+
+	var users []AdminUserView
+	for rows.Next() {
+		var u AdminUserView
+		var lastLoginIP, topHoldings sql.NullString
+		var lastLoginAt sql.NullTime
+		if err := rows.Scan(&u.ID, &u.Username, &u.Email, &u.AuthProvider, &u.CreatedAt, &u.TotalUploadCount, &u.CurrentFileCount, &u.DistinctBrokerCount, &u.PortfolioValueEUR, &topHoldings, &lastLoginAt, &lastLoginIP, &u.LoginCount); err == nil {
+			u.LastLoginAt = lastLoginAt
+			u.LastLoginIP = lastLoginIP.String
+			u.Top5Holdings = topHoldings.String
+			users = append(users, u)
+		}
+	}
+
+	var totalRows int
+	database.DB.QueryRow("SELECT COUNT(*) FROM users").Scan(&totalRows)
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"users":     users,
+		"totalRows": totalRows,
+	})
 }
 
+// HandleAdminRefreshUserMetrics refreshes metrics for all portfolios of a user.
 func (h *UserHandler) HandleAdminRefreshUserMetrics(w http.ResponseWriter, r *http.Request) {
 	userIDStr := chi.URLParam(r, "userID")
 	userID, err := strconv.ParseInt(userIDStr, 10, 64)
@@ -173,25 +439,29 @@ func (h *UserHandler) HandleAdminRefreshUserMetrics(w http.ResponseWriter, r *ht
 
 	logger.L.Info("Admin triggered portfolio metrics refresh for user", "targetUserID", userID)
 
-	// Fetch all portfolios for the user and refresh each one
 	rows, err := database.DB.Query("SELECT id FROM portfolios WHERE user_id = ?", userID)
 	if err != nil {
 		logger.L.Error("Failed to fetch user portfolios for refresh", "userID", userID, "error", err)
 		sendJSONError(w, "Failed to fetch user portfolios", http.StatusInternalServerError)
 		return
 	}
-	defer rows.Close()
 
-	var successCount, failCount int
+	var portfolioIDs []int64
 	for rows.Next() {
 		var pfID int64
 		if err := rows.Scan(&pfID); err == nil {
-			if err := h.uploadService.UpdateUserPortfolioMetrics(userID, pfID); err != nil {
-				logger.L.Error("Failed to refresh metrics for portfolio", "pfID", pfID, "error", err)
-				failCount++
-			} else {
-				successCount++
-			}
+			portfolioIDs = append(portfolioIDs, pfID)
+		}
+	}
+	rows.Close()
+
+	var successCount, failCount int
+	for _, pfID := range portfolioIDs {
+		if err := h.uploadService.UpdateUserPortfolioMetrics(userID, pfID); err != nil {
+			logger.L.Error("Failed to refresh metrics for portfolio", "pfID", pfID, "error", err)
+			failCount++
+		} else {
+			successCount++
 		}
 	}
 
@@ -226,12 +496,14 @@ type AdminUserView struct {
 }
 
 type AdminUserDetailsResponse struct {
-	User               AdminUserView                 `json:"user"`
-	UploadHistory      []UploadHistoryEntry          `json:"upload_history"`
-	Transactions       []models.ProcessedTransaction `json:"transactions"`
-	Metrics            *services.UploadResult        `json:"metrics,omitempty"`
-	CurrentHoldings    []models.HoldingWithValue     `json:"current_holdings"`
-	DefaultPortfolioID int64                         `json:"default_portfolio_id"`
+	User                AdminUserView                 `json:"user"`
+	Portfolios          []models.Portfolio            `json:"portfolios"`
+	UploadHistory       []UploadHistoryEntry          `json:"upload_history"`
+	Transactions        []models.ProcessedTransaction `json:"transactions"`
+	Metrics             *services.UploadResult        `json:"metrics,omitempty"`
+	CurrentHoldings     []models.HoldingWithValue     `json:"current_holdings"`
+	DefaultPortfolioID  int64                         `json:"default_portfolio_id"`
+	SelectedPortfolioID int64                         `json:"selected_portfolio_id"`
 }
 
 func (h *UserHandler) HandleGetAdminUserDetails(w http.ResponseWriter, r *http.Request) {
@@ -242,22 +514,47 @@ func (h *UserHandler) HandleGetAdminUserDetails(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	// 1. Fetch Default Portfolio ID
-	var defaultPortfolioID int64
-	err = database.DB.QueryRow("SELECT id FROM portfolios WHERE user_id = ? AND is_default = TRUE", userID).Scan(&defaultPortfolioID)
+	var portfolios []models.Portfolio
+	pRows, err := database.DB.Query("SELECT id, user_id, name, description, is_default, created_at FROM portfolios WHERE user_id = ?", userID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			err = database.DB.QueryRow("SELECT id FROM portfolios WHERE user_id = ? LIMIT 1", userID).Scan(&defaultPortfolioID)
+		logger.L.Error("Failed to fetch user portfolios", "error", err)
+		sendJSONError(w, "DB Error", http.StatusInternalServerError)
+		return
+	}
+	defer pRows.Close()
+
+	var defaultPortfolioID int64
+	for pRows.Next() {
+		var p models.Portfolio
+		if err := pRows.Scan(&p.ID, &p.UserID, &p.Name, &p.Description, &p.IsDefault, &p.CreatedAt); err == nil {
+			portfolios = append(portfolios, p)
+			if p.IsDefault {
+				defaultPortfolioID = p.ID
+			}
 		}
-		if err != nil {
-			logger.L.Warn("User has no portfolios", "userID", userID)
+	}
+
+	targetPortfolioID := defaultPortfolioID
+	if queryPID := r.URL.Query().Get("portfolio_id"); queryPID != "" {
+		if pid, err := strconv.ParseInt(queryPID, 10, 64); err == nil {
+			for _, p := range portfolios {
+				if p.ID == pid {
+					targetPortfolioID = pid
+					break
+				}
+			}
 		}
+	}
+
+	if targetPortfolioID == 0 && len(portfolios) > 0 {
+		targetPortfolioID = portfolios[0].ID
 	}
 
 	var response AdminUserDetailsResponse
 	response.DefaultPortfolioID = defaultPortfolioID
+	response.SelectedPortfolioID = targetPortfolioID
+	response.Portfolios = portfolios
 
-	// 2. Fetch User Details
 	queryUser := `
 		SELECT u.id, u.username, u.email, u.auth_provider, u.created_at, u.total_upload_count, u.upload_count,
 			(SELECT COUNT(DISTINCT source) FROM processed_transactions WHERE user_id = u.id) as distinct_broker_count,
@@ -282,7 +579,6 @@ func (h *UserHandler) HandleGetAdminUserDetails(w http.ResponseWriter, r *http.R
 	u.Top5Holdings = topHoldings.String
 	response.User = u
 
-	// 3. Fetch Upload History
 	rowsUploads, err := database.DB.Query(`
         SELECT uh.id, uh.uploaded_at, uh.source, uh.filename, uh.file_size, uh.transaction_count, p.name
         FROM uploads_history uh
@@ -304,13 +600,12 @@ func (h *UserHandler) HandleGetAdminUserDetails(w http.ResponseWriter, r *http.R
 		}
 	}
 
-	// 4. Fetch Transactions (Only for Default Portfolio)
-	if defaultPortfolioID > 0 {
+	if targetPortfolioID > 0 {
 		rowsTxs, err := database.DB.Query(`
 			SELECT id, date, source, product_name, isin, quantity, original_quantity, price, 
 			       transaction_type, transaction_subtype, buy_sell, description, amount, currency, commission, 
 			       order_id, exchange_rate, amount_eur, country_code, input_string, hash_id
-			FROM processed_transactions WHERE user_id = ? AND portfolio_id = ? ORDER BY date DESC LIMIT 500`, userID, defaultPortfolioID)
+			FROM processed_transactions WHERE user_id = ? AND portfolio_id = ? ORDER BY date DESC LIMIT 500`, userID, targetPortfolioID)
 		if err == nil {
 			defer rowsTxs.Close()
 			for rowsTxs.Next() {
@@ -325,13 +620,12 @@ func (h *UserHandler) HandleGetAdminUserDetails(w http.ResponseWriter, r *http.R
 			}
 		}
 
-		// 5. Fetch Metrics and Holdings for Default Portfolio
-		metrics, err := h.uploadService.GetLatestUploadResult(userID, defaultPortfolioID)
+		metrics, err := h.uploadService.GetLatestUploadResult(userID, targetPortfolioID)
 		if err == nil {
 			response.Metrics = metrics
 		}
 
-		currentHoldings, err := h.uploadService.GetCurrentHoldingsWithValue(userID, defaultPortfolioID)
+		currentHoldings, err := h.uploadService.GetCurrentHoldingsWithValue(userID, targetPortfolioID)
 		if err == nil {
 			response.CurrentHoldings = currentHoldings
 		} else {
