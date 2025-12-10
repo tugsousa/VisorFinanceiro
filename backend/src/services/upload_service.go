@@ -3,9 +3,11 @@ package services
 
 import (
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"io"
 	"math"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -475,36 +477,89 @@ func (s *uploadServiceImpl) GetCurrentHoldingsWithValue(userID int64, portfolioI
 	return response, nil
 }
 
+// UpdateUserPortfolioMetrics updates the global metrics for a user.
+// FIXED: This function now properly handles DB connections to avoid deadlocks.
 func (s *uploadServiceImpl) UpdateUserPortfolioMetrics(userID int64, portfolioID int64) error {
+	// 1. Invalidate cache for the specific portfolio that changed
 	s.InvalidateUserCache(userID, portfolioID)
-	_, holdingsByYear, err := s.getStockData(userID, portfolioID)
+
+	// 2. Fetch ALL portfolio IDs for this user first
+	// We read all IDs into memory and close the rows immediately.
+	// This prevents holding the connection open while we process (which causes deadlock in SQLite).
+	rows, err := database.DB.Query("SELECT id FROM portfolios WHERE user_id = ?", userID)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to list portfolios for metrics update: %w", err)
 	}
-	latestYear := ""
-	for year := range holdingsByYear {
-		if latestYear == "" || year > latestYear {
-			latestYear = year
+
+	var portfolioIDs []int64
+	for rows.Next() {
+		var pid int64
+		if err := rows.Scan(&pid); err == nil {
+			portfolioIDs = append(portfolioIDs, pid)
 		}
 	}
-	currentLots := holdingsByYear[latestYear]
+	rows.Close() // <--- CRITICAL: Close rows before starting heavy processing
 
-	// Note: We might want to store portfolio-specific value in the portfolios table,
-	// but the `users` table fields are still used for the Admin Dashboard overview.
-	// For now, we only update the user global metrics if this is the DEFAULT portfolio,
-	// or we calculate a sum of all portfolios.
-	// To simplify, let's skip updating user global fields here and rely on a separate aggregation if needed.
-	// OR, just log it for now.
+	// 3. Recalculate Global User Metrics (Sum of ALL portfolios)
+	var totalUserValue float64
+	allHoldings := make(map[string]models.HoldingWithValue)
 
-	if len(currentLots) == 0 {
-		return nil
+	for _, pid := range portfolioIDs {
+		// Get value for this portfolio
+		// This triggers new DB queries, which is now safe because 'rows' is closed.
+		holdings, err := s.GetCurrentHoldingsWithValue(userID, pid)
+		if err != nil {
+			logger.L.Warn("Failed to get holdings for metrics aggregation", "userID", userID, "portfolioID", pid, "error", err)
+			continue
+		}
+
+		for _, h := range holdings {
+			totalUserValue += h.MarketValueEUR
+
+			// Aggregate for Top 5 calculation
+			if existing, exists := allHoldings[h.ISIN]; exists {
+				existing.MarketValueEUR += h.MarketValueEUR
+				existing.Quantity += h.Quantity
+				allHoldings[h.ISIN] = existing
+			} else {
+				allHoldings[h.ISIN] = h
+			}
+		}
 	}
 
-	// ... logic to calculate top 5 ...
-	// NOTE: In a multi-portfolio system, updating the `users` table directly based on ONE portfolio
-	// is misleading. Ideally, we should sum all portfolios.
-	// For this implementation, I will leave this as a no-op or TODO, as it requires iterating all portfolios.
+	// 4. Determine Top 5 Holdings Global
+	type HoldingSort struct {
+		Name  string  `json:"name"`
+		Value float64 `json:"value"`
+	}
+	var sortedHoldings []HoldingSort
+	for _, h := range allHoldings {
+		sortedHoldings = append(sortedHoldings, HoldingSort{Name: h.ProductName, Value: h.MarketValueEUR})
+	}
+	// Sort descending by value
+	sort.Slice(sortedHoldings, func(i, j int) bool {
+		return sortedHoldings[i].Value > sortedHoldings[j].Value
+	})
 
+	// Take top 5
+	if len(sortedHoldings) > 5 {
+		sortedHoldings = sortedHoldings[:5]
+	}
+
+	top5JSON, _ := json.Marshal(sortedHoldings)
+
+	// 5. Update the User Table
+	_, err = database.DB.Exec(`
+		UPDATE users 
+		SET portfolio_value_eur = ?, top_5_holdings = ? 
+		WHERE id = ?`,
+		totalUserValue, string(top5JSON), userID,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to update user global metrics: %w", err)
+	}
+
+	logger.L.Info("Updated user global metrics", "userID", userID, "totalValue", totalUserValue)
 	return nil
 }
 
