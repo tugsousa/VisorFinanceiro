@@ -15,7 +15,7 @@ import (
 	"github.com/username/taxfolio/backend/src/database"
 	"github.com/username/taxfolio/backend/src/logger"
 	"github.com/username/taxfolio/backend/src/model"
-	"github.com/username/taxfolio/backend/src/security/validation" // Adicionado
+	"github.com/username/taxfolio/backend/src/security/validation"
 )
 
 // Helper function to check if an email belongs to an admin.
@@ -80,17 +80,16 @@ func (h *UserHandler) RegisterUserHandler(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	// --- CORREÇÃO: Sanitização Imediata ---
+	// Sanitization
 	credentials.Username = validation.SanitizeText(strings.TrimSpace(credentials.Username))
 	credentials.Email = strings.ToLower(validation.SanitizeText(strings.TrimSpace(credentials.Email)))
-	credentials.Password = strings.TrimSpace(credentials.Password) // Password should only be trimmed, hashing handles sanitization later
-	// --- FIM DA CORREÇÃO ---
+	credentials.Password = strings.TrimSpace(credentials.Password)
 
 	if credentials.Username == "" && strings.Contains(credentials.Email, "@") {
 		credentials.Username = strings.Split(credentials.Email, "@")[0]
 	}
 
-	// --- CORREÇÃO: Validação Centralizada ---
+	// Validation
 	if credentials.Username == "" {
 		sendJSONError(w, "Username is required", http.StatusBadRequest)
 		return
@@ -115,14 +114,13 @@ func (h *UserHandler) RegisterUserHandler(w http.ResponseWriter, r *http.Request
 		sendJSONError(w, "Password must be at least 6 characters long", http.StatusBadRequest)
 		return
 	}
-	// --- FIM DA CORREÇÃO ---
 
 	// Check username uniqueness
 	_, err := model.GetUserByUsername(database.DB, credentials.Username)
 	if err == nil {
 		sendJSONError(w, "Username already exists", http.StatusConflict)
 		return
-	} else if !errors.Is(err, sql.ErrNoRows) { // CORREÇÃO: Apenas verificar por sql.ErrNoRows
+	} else if !errors.Is(err, sql.ErrNoRows) {
 		logger.L.Error("Error checking username uniqueness", "error", err)
 		sendJSONError(w, "Failed to process registration", http.StatusInternalServerError)
 		return
@@ -133,7 +131,7 @@ func (h *UserHandler) RegisterUserHandler(w http.ResponseWriter, r *http.Request
 	if err == nil {
 		sendJSONError(w, "Email address already in use", http.StatusConflict)
 		return
-	} else if !errors.Is(err, sql.ErrNoRows) { // CORREÇÃO: Apenas verificar por sql.ErrNoRows
+	} else if !errors.Is(err, sql.ErrNoRows) {
 		logger.L.Error("Error checking email uniqueness", "error", err)
 		sendJSONError(w, "Failed to process registration", http.StatusInternalServerError)
 		return
@@ -170,6 +168,17 @@ func (h *UserHandler) RegisterUserHandler(w http.ResponseWriter, r *http.Request
 		sendJSONError(w, "Failed to create user", http.StatusInternalServerError)
 		return
 	}
+
+	// --- MULTI-PORTFOLIO CHANGE START ---
+	// Create a default portfolio for the new user
+	_, err = database.DB.Exec("INSERT INTO portfolios (user_id, name, description, is_default) VALUES (?, ?, ?, ?)", user.ID, "Main Portfolio", "Default Portfolio", true)
+	if err != nil {
+		// Log error but don't fail the request (email still needs sending).
+		// User might see an empty dashboard and can create one manually later.
+		logger.L.Error("Failed to create default portfolio for new user", "userID", user.ID, "error", err)
+	}
+	// --- MULTI-PORTFOLIO CHANGE END ---
+
 	logger.L.Info("User registered, verification email to be sent", "userID", user.ID)
 
 	err = h.emailService.SendVerificationEmail(user.Email, user.Username, verificationToken)
@@ -210,14 +219,11 @@ func (h *UserHandler) LoginUserHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// --- CORREÇÃO: Sanitização Imediata ---
 	credentials.Email = strings.ToLower(validation.SanitizeText(strings.TrimSpace(credentials.Email)))
-	// --- FIM DA CORREÇÃO ---
 
 	logger.L.Info("Login attempt received")
 	user, err := model.GetUserByEmail(database.DB, credentials.Email)
 	if err != nil {
-		// CORREÇÃO: Usar sql.ErrNoRows para evitar verificação de string
 		if errors.Is(err, sql.ErrNoRows) {
 			logger.L.Warn("User lookup by email failed for login: user not found", "email", credentials.Email)
 			sendJSONError(w, "Invalid email or password", http.StatusUnauthorized)
@@ -299,7 +305,6 @@ func (h *UserHandler) LoginUserHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// NOVO: Log de sucesso de login
 	logger.L.Info("User login successful, tokens generated", "userID", user.ID)
 
 	userData := map[string]interface{}{

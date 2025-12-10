@@ -1,6 +1,5 @@
 // frontend/src/hooks/useRealizedGains.js
 
-// ... imports remain the same
 import { useMemo } from 'react';
 import { useQueries } from '@tanstack/react-query';
 import {
@@ -15,22 +14,79 @@ import {
     apiFetchProcessedTransactions
 } from '../api/apiService';
 import { ALL_YEARS_OPTION, NO_YEAR_SELECTED } from '../constants';
-import { getYearString, extractYearsFromData } from '../utils/dateUtils'; // Removed calculateDaysHeld
+import { getYearString, extractYearsFromData } from '../utils/dateUtils'; 
 import { calculateCombinedAggregatedMetricsByISIN } from '../utils/aggregationUtils';
+import { usePortfolio } from '../context/PortfolioContext';
 
 export const useRealizedGains = (token, selectedYear) => {
-    // ... [Previous useQueries code remains exactly the same] ...
+    const { activePortfolio } = usePortfolio();
+    const portfolioId = activePortfolio?.id;
+
     const results = useQueries({
         queries: [
-            { queryKey: ['stockSales', token], queryFn: apiFetchStockSales, enabled: !!token, staleTime: 1000 * 60 * 5, select: (res) => res.data || [] },
-            { queryKey: ['optionSales', token], queryFn: apiFetchOptionSales, enabled: !!token, staleTime: 1000 * 60 * 5, select: (res) => res.data?.OptionSaleDetails || [] },
-            { queryKey: ['dividendSummary', token], queryFn: apiFetchDividendTaxSummary, enabled: !!token, staleTime: 1000 * 60 * 5, select: (res) => res.data || {} },
-            { queryKey: ['dividendTransactions', token], queryFn: apiFetchDividendTransactions, enabled: !!token, staleTime: 1000 * 60 * 5, select: (res) => res.data || [] },
-            { queryKey: ['stockHoldingsByYear', token], queryFn: apiFetchStockHoldings, enabled: !!token, staleTime: 1000 * 60 * 5, select: (res) => res.data || {} },
-            { queryKey: ['optionHoldings', token], queryFn: apiFetchOptionHoldings, enabled: !!token, staleTime: 1000 * 60 * 5, select: (res) => res.data || [] },
-            { queryKey: ['currentHoldingsValue', token], queryFn: apiFetchCurrentHoldingsValue, enabled: !!token, staleTime: 1000 * 60 * 5, select: (res) => res.data || [] },
-            { queryKey: ['fees', token], queryFn: apiFetchFees, enabled: !!token, staleTime: 1000 * 60 * 5, select: (res) => res.data || [] },
-            { queryKey: ['allProcessedTransactions', token], queryFn: apiFetchProcessedTransactions, enabled: !!token, staleTime: 1000 * 60 * 5, select: (res) => res.data || [] },
+            { 
+                queryKey: ['stockSales', token, portfolioId], 
+                queryFn: () => apiFetchStockSales(portfolioId), 
+                enabled: !!token && !!portfolioId, 
+                staleTime: 1000 * 60 * 5, 
+                select: (res) => res.data || [] 
+            },
+            { 
+                queryKey: ['optionSales', token, portfolioId], 
+                queryFn: () => apiFetchOptionSales(portfolioId), 
+                enabled: !!token && !!portfolioId, 
+                staleTime: 1000 * 60 * 5, 
+                select: (res) => res.data?.OptionSaleDetails || [] 
+            },
+            { 
+                queryKey: ['dividendSummary', token, portfolioId], 
+                queryFn: () => apiFetchDividendTaxSummary(portfolioId), 
+                enabled: !!token && !!portfolioId, 
+                staleTime: 1000 * 60 * 5, 
+                select: (res) => res.data || {} 
+            },
+            { 
+                queryKey: ['dividendTransactions', token, portfolioId], 
+                queryFn: () => apiFetchDividendTransactions(portfolioId), 
+                enabled: !!token && !!portfolioId, 
+                staleTime: 1000 * 60 * 5, 
+                select: (res) => res.data || [] 
+            },
+            { 
+                queryKey: ['stockHoldingsByYear', token, portfolioId], 
+                queryFn: () => apiFetchStockHoldings(portfolioId), 
+                enabled: !!token && !!portfolioId, 
+                staleTime: 1000 * 60 * 5, 
+                select: (res) => res.data || {} 
+            },
+            { 
+                queryKey: ['optionHoldings', token, portfolioId], 
+                queryFn: () => apiFetchOptionHoldings(portfolioId), 
+                enabled: !!token && !!portfolioId, 
+                staleTime: 1000 * 60 * 5, 
+                select: (res) => res.data || [] 
+            },
+            { 
+                queryKey: ['currentHoldingsValue', token, portfolioId], 
+                queryFn: () => apiFetchCurrentHoldingsValue(portfolioId), 
+                enabled: !!token && !!portfolioId, 
+                staleTime: 1000 * 60 * 5, 
+                select: (res) => res.data || [] 
+            },
+            { 
+                queryKey: ['fees', token, portfolioId], 
+                queryFn: () => apiFetchFees(portfolioId), 
+                enabled: !!token && !!portfolioId, 
+                staleTime: 1000 * 60 * 5, 
+                select: (res) => res.data || [] 
+            },
+            { 
+                queryKey: ['allProcessedTransactions', token, portfolioId], 
+                queryFn: () => apiFetchProcessedTransactions(portfolioId), 
+                enabled: !!token && !!portfolioId, 
+                staleTime: 1000 * 60 * 5, 
+                select: (res) => res.data || [] 
+            },
         ]
     });
 
@@ -54,8 +110,9 @@ export const useRealizedGains = (token, selectedYear) => {
     const isError = results.some(q => q.isError);
     const error = results.find(q => q.error)?.error;
 
-    // ... [portfolioMetrics, availableYears, aggregatedMetrics, periodSpecificAggregatedMetricsByISIN, periodSpecificData, holdingsForGroupedView LOGIC REMAINS THE SAME] ...
-    // Copying the previous logic for context, but skipping lines for brevity where unchanged.
+    // ... [Previous logic for calculations, filtering, and aggregation remains exactly the same] ...
+    // The rest of this file processes the fetched data locally, so it does not need changes
+    // beyond using the data variables defined above.
     
     // !!! Insert this block to ensure periodSpecificData is defined before summaryData use !!!
     const periodSpecificData = useMemo(() => {
@@ -79,8 +136,6 @@ export const useRealizedGains = (token, selectedYear) => {
         };
     }, [stockSalesData, optionSalesData, dividendTransactionsData, feesData, optionHoldingsData, selectedYear, isLoading]);
 
-    // ... [holdingsForGroupedView and unrealizedStockPL logic remain the same] ...
-    
     const availableYears = useMemo(() => {
         if (isLoading) return [ALL_YEARS_OPTION];
         const dateAccessors = { stockSales: 'SaleDate', optionSales: 'close_date', DividendTaxResult: null };
@@ -205,7 +260,7 @@ export const useRealizedGains = (token, selectedYear) => {
             txsForCapital = allTransactionsData.filter(tx => getYearString(tx.date) === selectedYear);
         }
 
-        // UPDATED LOGIC: Sum all CASH transactions to get Net (Deposits are +, Withdrawals are -)
+        // Sum all CASH transactions to get Net (Deposits are +, Withdrawals are -)
         netDeposits = txsForCapital.reduce((sum, tx) => {
             if (tx.transaction_type === 'CASH') {
                 return sum + (tx.amount_eur || 0);
@@ -216,12 +271,10 @@ export const useRealizedGains = (token, selectedYear) => {
         // 4. ROI Calculation
         let returnPercentage = 0;
         if (selectedYear === ALL_YEARS_OPTION) {
-             // We use netDeposits as the denominator. 
-             // If Net Deposits <= 0 (you withdrew more than you put in), simple ROI is undefined.
             if (netDeposits > 0) {
                 returnPercentage = (totalPL / netDeposits) * 100;
             } else {
-                returnPercentage = null; // Hide % if capital is 0 or negative (infinite/undefined return)
+                returnPercentage = null;
             }
         } else {
             returnPercentage = null; 
