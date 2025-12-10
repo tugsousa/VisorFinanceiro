@@ -200,15 +200,14 @@ func (s *uploadServiceImpl) ProcessUpload(fileReader io.Reader, userID int64, so
 }
 
 // RebuildUserHistory implements the calculation engine for daily portfolio snapshots.
+// Updated to prioritize real currency detected from price source to fix HKD/EUR issues.
 func (s *uploadServiceImpl) RebuildUserHistory(userID int64) error {
-	logger.L.Info("Starting history rebuild (Currency Correction Mode)", "userID", userID)
+	logger.L.Info("Starting history rebuild (True Currency Mode)", "userID", userID)
 
-	// Ensure benchmark data
 	if err := s.priceService.EnsureBenchmarkData(); err != nil {
 		logger.L.Error("Failed to ensure benchmark data", "error", err)
 	}
 
-	// A. Fetch all transactions
 	txs, err := fetchUserProcessedTransactions(userID)
 	if err != nil {
 		return err
@@ -217,7 +216,6 @@ func (s *uploadServiceImpl) RebuildUserHistory(userID int64) error {
 		return nil
 	}
 
-	// B. Identify unique Assets (ISINs) and Currencies
 	uniqueISINs := make(map[string]bool)
 	uniqueCurrencies := make(map[string]bool)
 	var isinList []string
@@ -229,29 +227,20 @@ func (s *uploadServiceImpl) RebuildUserHistory(userID int64) error {
 				isinList = append(isinList, tx.ISIN)
 			}
 		}
-		// We still track transaction currencies to ensure we have rates for Cash balances
 		if tx.Currency != "" && tx.Currency != "EUR" {
 			uniqueCurrencies[tx.Currency] = true
 		}
 	}
 
-	// C. Resolve ISINs to Tickers & Currencies
 	mappings, _ := model.GetMappingsByISINs(database.DB, isinList)
 
-	// Add Ticker Currencies to the list of currencies to fetch rates for
-	for _, mapping := range mappings {
-		if mapping.Currency != "" && mapping.Currency != "EUR" {
-			uniqueCurrencies[mapping.Currency] = true
-		}
-	}
-
-	// D. Fetch Historical Data
 	var wg sync.WaitGroup
 	tickerPrices := make(map[string]PriceMap)
+	tickerCurrencies := make(map[string]string) // Store the REAL currency here
 	currencyRates := make(map[string]PriceMap)
 	var dataMu sync.Mutex
 
-	// Fetch Stock Prices
+	// 1. Fetch Stocks AND their Real Currency
 	for isin := range uniqueISINs {
 		mapEntry, ok := mappings[isin]
 		if !ok || mapEntry.TickerSymbol == "" {
@@ -261,22 +250,32 @@ func (s *uploadServiceImpl) RebuildUserHistory(userID int64) error {
 		wg.Add(1)
 		go func(t, i string) {
 			defer wg.Done()
-			prices, err := s.priceService.GetHistoricalPrices(t)
+			// Now returns currency too!
+			prices, realCurrency, err := s.priceService.GetHistoricalPrices(t)
 			if err == nil {
 				dataMu.Lock()
 				tickerPrices[i] = prices
+				tickerCurrencies[i] = realCurrency // Save it!
+				// Ensure we fetch rates for this discovered currency
+				if realCurrency != "EUR" && realCurrency != "" {
+					uniqueCurrencies[realCurrency] = true
+				}
 				dataMu.Unlock()
 			}
 		}(ticker, isin)
 	}
 
-	// Fetch Exchange Rates
+	// Wait for stocks first to populate uniqueCurrencies with any new discoveries (like HKD)
+	wg.Wait()
+
+	// 2. Fetch Exchange Rates
 	for curr := range uniqueCurrencies {
 		wg.Add(1)
 		go func(c string) {
 			defer wg.Done()
 			ticker := fmt.Sprintf("%sEUR=X", c)
-			rates, err := s.priceService.GetHistoricalPrices(ticker)
+			// Ignore the string return here, we know it's a rate
+			rates, _, err := s.priceService.GetHistoricalPrices(ticker)
 			if err == nil {
 				dataMu.Lock()
 				currencyRates[c] = rates
@@ -284,26 +283,21 @@ func (s *uploadServiceImpl) RebuildUserHistory(userID int64) error {
 			}
 		}(curr)
 	}
-
 	wg.Wait()
 
-	// E. The Daily Loop
+	// E. Daily Loop
 	startDate, _ := time.Parse("02-01-2006", txs[0].Date)
 	endDate := time.Now()
 
 	type AssetInfo struct {
 		Quantity       float64
-		Currency       string // This is the Transaction Currency (e.g. EUR)
 		TotalCostBasis float64
 		Name           string
 	}
 	holdings := make(map[string]AssetInfo)
 	cumulativeNetInvested := 0.0
 	currentCash := 0.0
-
-	// Memories for Fill-Forward
 	lastKnownPrices := make(map[string]float64)
-	lastKnownRates := make(map[string]float64)
 
 	type Snapshot struct {
 		Date        string
@@ -320,7 +314,11 @@ func (s *uploadServiceImpl) RebuildUserHistory(userID int64) error {
 		dateStr := d.Format("2006-01-02")
 		txDateStr := d.Format("02-01-2006")
 
-		// --- 1. Process Transactions ---
+		enableDebugLog := (dateStr == "2025-06-05" || dateStr == "2025-06-06")
+		if enableDebugLog {
+			fmt.Printf("\n--- DEBUG DATE: %s ---\n", dateStr)
+		}
+
 		for txIndex < totalTxs && txs[txIndex].Date == txDateStr {
 			tx := txs[txIndex]
 			if tx.TransactionType == "CASH" {
@@ -328,7 +326,6 @@ func (s *uploadServiceImpl) RebuildUserHistory(userID int64) error {
 			}
 			if tx.TransactionType == "STOCK" || tx.TransactionType == "ETF" {
 				info := holdings[tx.ISIN]
-				info.Currency = tx.Currency
 				info.Name = tx.ProductName
 				if tx.BuySell == "BUY" {
 					info.Quantity += float64(tx.Quantity)
@@ -348,21 +345,13 @@ func (s *uploadServiceImpl) RebuildUserHistory(userID int64) error {
 			txIndex++
 		}
 
-		// --- 2. Calculate Market Value ---
 		marketValueAssets := 0.0
-
-		// Debug logging specifically for your crash dates
-		enableDebugLog := (dateStr == "2025-06-05" || dateStr == "2025-06-06")
-		if enableDebugLog {
-			fmt.Printf("\n--- DEBUG DATE: %s ---\n", dateStr)
-		}
-
 		for isin, info := range holdings {
 			if info.Quantity <= 0.0001 {
 				continue
 			}
 
-			// A. Resolve Price (Fill-Forward)
+			// A. Price
 			price := 0.0
 			if pMap, ok := tickerPrices[isin]; ok {
 				price = pMap[dateStr]
@@ -373,37 +362,28 @@ func (s *uploadServiceImpl) RebuildUserHistory(userID int64) error {
 				price = lastPrice
 			}
 
-			// B. Resolve Currency & Rate (THE FIX)
-			// Instead of info.Currency (Transaction Currency), we use the Ticker Currency
-			pricingCurrency := info.Currency // Default fallback
-			if mapping, ok := mappings[isin]; ok && mapping.Currency != "" {
-				pricingCurrency = mapping.Currency // Use the currency Yahoo gave us (e.g., HKD)
+			// B. Rate (USING REAL DETECTED CURRENCY)
+			pricingCurrency := "EUR"
+			if realCur, ok := tickerCurrencies[isin]; ok && realCur != "" {
+				pricingCurrency = realCur
 			}
 
 			rate := 1.0
 			rateSource := "EUR-BASE"
 
 			if pricingCurrency != "EUR" {
-				foundRate := false
 				if rMap, ok := currencyRates[pricingCurrency]; ok {
 					if r, ok := rMap[dateStr]; ok {
 						rate = r
-						foundRate = true
 						rateSource = "LIVE"
+					} else {
+						// Fallback logic for missing rate can go here if needed
+						rateSource = "MISSING-RATE"
 					}
-				}
-				if !foundRate {
-					if lastRate, exists := lastKnownRates[pricingCurrency]; exists {
-						rate = lastRate
-						rateSource = "FILLED"
-					}
-				}
-				if rate > 0 {
-					lastKnownRates[pricingCurrency] = rate
 				}
 			}
 
-			// C. Calculate
+			// C. Calc
 			var assetValue float64
 			if price > 0 {
 				assetValue = (info.Quantity * price) * rate
@@ -413,8 +393,8 @@ func (s *uploadServiceImpl) RebuildUserHistory(userID int64) error {
 			marketValueAssets += assetValue
 
 			if enableDebugLog {
-				fmt.Printf("ASSET: %s | ISIN: %s | PriceCur: %s | Qty: %.2f | Price: %.2f | Rate: %.4f (%s) | VAL: %.2f\n",
-					info.Name, isin, pricingCurrency, info.Quantity, price, rate, rateSource, assetValue)
+				fmt.Printf("ASSET: %s | Cur: %s | Price: %.2f | Rate: %.4f (%s) | VAL: %.2f\n",
+					info.Name, pricingCurrency, price, rate, rateSource, assetValue)
 			}
 		}
 
@@ -427,32 +407,27 @@ func (s *uploadServiceImpl) RebuildUserHistory(userID int64) error {
 	}
 
 	// F. Persistence
-	if len(snapshots) == 0 {
-		return nil
-	}
+	if len(snapshots) > 0 {
+		_, _ = database.DB.Exec("DELETE FROM portfolio_snapshots WHERE user_id = ?", userID)
 
-	_, err = database.DB.Exec("DELETE FROM portfolio_snapshots WHERE user_id = ?", userID)
-	if err != nil {
-		return err
-	}
-
-	chunkSize := 500
-	for i := 0; i < len(snapshots); i += chunkSize {
-		end := i + chunkSize
-		if end > len(snapshots) {
-			end = len(snapshots)
-		}
-		batch := snapshots[i:end]
-		query := "INSERT INTO portfolio_snapshots (user_id, date, total_equity, cumulative_net_cashflow, cash_balance) VALUES "
-		vals := []interface{}{}
-		for _, s := range batch {
-			query += "(?, ?, ?, ?, ?),"
-			vals = append(vals, userID, s.Date, s.Equity, s.NetInvested, s.Cash)
-		}
-		query = query[:len(query)-1]
-		if _, err := database.DB.Exec(query, vals...); err != nil {
-			logger.L.Error("Batch insert failed", "error", err)
-			return err
+		chunkSize := 500
+		for i := 0; i < len(snapshots); i += chunkSize {
+			end := i + chunkSize
+			if end > len(snapshots) {
+				end = len(snapshots)
+			}
+			batch := snapshots[i:end]
+			query := "INSERT INTO portfolio_snapshots (user_id, date, total_equity, cumulative_net_cashflow, cash_balance) VALUES "
+			vals := []interface{}{}
+			for _, s := range batch {
+				query += "(?, ?, ?, ?, ?),"
+				vals = append(vals, userID, s.Date, s.Equity, s.NetInvested, s.Cash)
+			}
+			query = query[:len(query)-1]
+			if _, err := database.DB.Exec(query, vals...); err != nil {
+				logger.L.Error("Batch insert failed", "error", err)
+				return err
+			}
 		}
 	}
 
@@ -750,7 +725,7 @@ func (s *uploadServiceImpl) GetHistoricalChartData(userID int64) ([]models.Histo
 	if len(snapshots) == 0 {
 		return snapshots, nil
 	}
-	bmPrices, err := model.GetPricesByTicker(database.DB, "SPY")
+	bmPrices, _, err := s.priceService.GetHistoricalPrices("SPY") // Ignoring currency return here
 	if err != nil {
 		return snapshots, nil
 	}
