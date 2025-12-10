@@ -4,11 +4,11 @@ import { Typography, Box, Paper, Alert, CircularProgress, Button } from '@mui/ma
 import { DataGrid } from '@mui/x-data-grid';
 import { ptPT } from '@mui/x-data-grid/locales';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { apiFetchProcessedTransactions, apiDeleteTransactions } from '../api/apiService';
-import { useAuth } from '../context/AuthContext';
-import { usePortfolio } from '../context/PortfolioContext'; // <--- IMPORT CONTEXT
+import { apiFetchProcessedTransactions, apiDeleteTransactions } from '../lib/api';
+import { useAuth } from '../features/auth/AuthContext';
+import { usePortfolio } from '../features/portfolio/PortfolioContext'; 
 import { UI_TEXT } from '../constants';
-import { parseDateRobust } from '../utils/dateUtils';
+import { parseDateRobust } from '../lib/utils/dateUtils';
 import DeleteTransactionsModal from '../components/DeleteTransactionsModal';
 import AddTransactionModal from '../components/AddTransactionModal';
 import AddCircleOutlineIcon from '@mui/icons-material/AddCircleOutline';

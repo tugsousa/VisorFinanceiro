@@ -5,10 +5,10 @@ import {
   Paper, CircularProgress, Grid, Alert, Tabs, Tab, Card
 } from '@mui/material'; 
 import { Tooltip } from '@mui/material'; 
-import { useAuth } from '../context/AuthContext';
+import { useAuth } from '../features/auth/AuthContext';
 import { useRealizedGains } from '../hooks/useRealizedGains';
 import { UI_TEXT, ALL_YEARS_OPTION } from '../constants';
-import { formatCurrency } from '../utils/formatUtils';
+import { formatCurrency } from '../lib/utils/formatUtils';
 
 import ShowChartIcon from '@mui/icons-material/ShowChart';
 import CandlestickChartIcon from '@mui/icons-material/CandlestickChart';

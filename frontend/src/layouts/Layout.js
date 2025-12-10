@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { Box, AppBar, Toolbar, Typography, IconButton, Tooltip, Avatar, Menu, MenuItem, Divider, Button, Container, Link as MuiLink } from '@mui/material';
 import { Link as RouterLink, useNavigate } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
+import { useAuth } from '../features/auth/AuthContext';
 import CookieConsent from "react-cookie-consent";
 // IMPORT PORTFOLIO SELECTOR
 import PortfolioSelector from '../components/PortfolioSelector'; 
@@ -13,7 +13,7 @@ import {
     AutoGraph as AutoGraphIcon,
     AdminPanelSettings as AdminPanelSettingsIcon,
 } from '@mui/icons-material';
-import logger from '../utils/logger';
+import logger from '../lib/utils/logger';
 
 export default function Layout({ children }) {
     const { user, logout } = useAuth();

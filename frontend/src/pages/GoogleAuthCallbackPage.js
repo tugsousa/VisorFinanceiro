@@ -1,9 +1,9 @@
 // frontend/src/pages/GoogleAuthCallbackPage.js
 import React, { useEffect, useContext } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { AuthContext } from '../context/AuthContext';
+import { AuthContext } from '../features/auth/AuthContext';
 import { Box, CircularProgress, Typography } from '@mui/material';
-import logger from '../utils/logger';
+import logger from '../lib/utils/logger';
 
 const GoogleAuthCallbackPage = () => {
     const location = useLocation();

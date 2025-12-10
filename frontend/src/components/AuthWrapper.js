@@ -1,6 +1,6 @@
 import React, { useContext } from 'react';
 import { Navigate } from 'react-router-dom';
-import { AuthContext } from '../context/AuthContext';
+import { AuthContext } from '../features/auth/AuthContext'
 
 const AuthWrapper = ({ children }) => {
   const { user, loading, error } = useContext(AuthContext);

@@ -7,7 +7,7 @@ import reportWebVitals from './reportWebVitals';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
 import { ThemeProvider } from '@mui/material/styles'; // Import ThemeProvider
-import theme from './theme'; // Import your new theme file
+import theme from './lib/theme'; // Import your new theme file
 import { HelmetProvider } from 'react-helmet-async';
 
 // Import the Poppins font weights you want to use

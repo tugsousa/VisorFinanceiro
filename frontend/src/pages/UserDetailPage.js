@@ -3,15 +3,15 @@
 import React, { useMemo, useState } from 'react';
 import { useParams, Link as RouterLink } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { apiFetchAdminUserDetails } from '../api/apiService';
+import { apiFetchAdminUserDetails } from '../lib/api';
 import { 
     Box, Typography, CircularProgress, Alert, Paper, Grid, Divider, Link, Card, 
     Tabs, Tab, Tooltip, FormControl, Select, MenuItem, InputLabel 
 } from '@mui/material';
-import { useAuth } from '../context/AuthContext';
+import { useAuth } from '../features/auth/AuthContext';
 import { DataGrid } from '@mui/x-data-grid';
-import { parseDateRobust, calculateDaysHeld } from '../utils/dateUtils';
-import { formatCurrency } from '../utils/formatUtils';
+import { parseDateRobust, calculateDaysHeld } from '../lib/utils/dateUtils';
+import { formatCurrency } from '../lib/utils/formatUtils';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import ShowChartIcon from '@mui/icons-material/ShowChart';
 import CandlestickChartIcon from '@mui/icons-material/CandlestickChart';
