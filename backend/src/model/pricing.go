@@ -80,6 +80,32 @@ func InsertMapping(db *sql.DB, mapping ISINTickerMap) error {
 	return err
 }
 
+// Returns a map of Date (YYYY-MM-DD) -> Price.
+func GetPricesByTicker(db *sql.DB, ticker string) (map[string]float64, error) {
+	prices := make(map[string]float64)
+
+	// Query to get all recorded dates and prices for this ticker
+	query := `SELECT date, price FROM daily_prices WHERE ticker_symbol = ? ORDER BY date ASC`
+
+	rows, err := db.Query(query, ticker)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var date string
+		var price float64
+		if err := rows.Scan(&date, &price); err != nil {
+			logger.L.Error("Error scanning price row", "ticker", ticker, "error", err)
+			continue
+		}
+		prices[date] = price
+	}
+
+	return prices, rows.Err()
+}
+
 // GetPricesByTickersAndDate retrieves cached prices for a list of tickers on a specific date.
 func GetPricesByTickersAndDate(db *sql.DB, tickers []string, date string) (map[string]DailyPrice, error) {
 	prices := make(map[string]DailyPrice)

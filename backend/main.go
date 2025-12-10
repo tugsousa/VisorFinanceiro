@@ -192,6 +192,7 @@ func main() {
 			r.Get("/user/has-data", userHandler.HandleCheckUserData)
 			r.Post("/user/change-password", userHandler.ChangePasswordHandler)
 			r.Post("/user/delete-account", userHandler.DeleteAccountHandler)
+			r.Get("/history/chart", portfolioHandler.HandleGetHistoricalChartData)
 
 			// Admin Routes
 			r.Group(func(r chi.Router) {

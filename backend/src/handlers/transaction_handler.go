@@ -119,7 +119,15 @@ func (h *TransactionHandler) HandleDeleteAllProcessedTransactions(w http.Respons
 	var result sql.Result
 	switch req.Type {
 	case "all":
+		// 1. Delete Transactions
 		result, err = txDB.Exec("DELETE FROM processed_transactions WHERE user_id = ?", userID)
+		if err != nil {
+			break // Go to error handling
+		}
+
+		// 2. NEW: Delete Portfolio Snapshots (Only needed when deleting ALL)
+		_, err = txDB.Exec("DELETE FROM portfolio_snapshots WHERE user_id = ?", userID)
+
 	case "source":
 		if len(req.Values) == 0 {
 			err = fmt.Errorf("source values cannot be empty for type 'source'")
@@ -133,6 +141,17 @@ func (h *TransactionHandler) HandleDeleteAllProcessedTransactions(w http.Respons
 			args[i+1] = v
 		}
 		result, err = txDB.Exec(query, args...)
+
+		// Note: We DO NOT delete snapshots here because partial deletion makes the
+		// remaining snapshots historically inaccurate.
+		// Ideally, we should trigger a RebuildUserHistory() after this,
+		// but for now, we leave the snapshots as "best effort" or clear them too
+		// if you prefer strict consistency.
+		// For safety, let's clear them to force a rebuild on next upload.
+		if err == nil {
+			_, err = txDB.Exec("DELETE FROM portfolio_snapshots WHERE user_id = ?", userID)
+		}
+
 	case "year":
 		if len(req.Values) != 1 {
 			err = fmt.Errorf("exactly one year value is required for type 'year'")
@@ -140,6 +159,12 @@ func (h *TransactionHandler) HandleDeleteAllProcessedTransactions(w http.Respons
 			return
 		}
 		result, err = txDB.Exec("DELETE FROM processed_transactions WHERE user_id = ? AND SUBSTR(date, 7, 4) = ?", userID, req.Values[0])
+
+		// Same logic: partial delete invalidates history logic. Clear snapshots.
+		if err == nil {
+			_, err = txDB.Exec("DELETE FROM portfolio_snapshots WHERE user_id = ?", userID)
+		}
+
 	default:
 		err = fmt.Errorf("invalid deletion type specified")
 		utils.SendJSONError(w, err.Error(), http.StatusBadRequest)
@@ -174,7 +199,7 @@ func (h *TransactionHandler) HandleDeleteAllProcessedTransactions(w http.Respons
 	}
 
 	rowsAffected, _ := result.RowsAffected()
-	logger.L.Info("Successfully deleted transactions and updated upload count", "userID", userID, "type", req.Type, "rowsAffected", rowsAffected, "newUploadCount", newUploadCount)
+	logger.L.Info("Successfully deleted transactions and snapshots", "userID", userID, "type", req.Type, "rowsAffected", rowsAffected)
 
 	h.uploadService.InvalidateUserCache(userID)
 	logger.L.Info("User cache invalidated after deleting transactions", "userID", userID)
