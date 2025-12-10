@@ -22,7 +22,6 @@ import (
 
 // --- Manual Overrides Configuration ---
 // Maps specific ISINs to their correct Yahoo Finance Ticker symbols.
-// This bypasses the search API for known problematic cases.
 var manualTickerOverrides = map[string]string{
 	"PLLVTSF00010": "TXT.WA", // Text S.A. (formerly LiveChat) on Warsaw SE
 	"IE000U9J8HX9": "JEPQ.L", // JPMorgan Nasdaq Equity Premium Income Active UCITS ETF
@@ -60,6 +59,10 @@ type yahooChartResponse struct {
 type yahooHistoryResponse struct {
 	Chart struct {
 		Result []struct {
+			// Updated to capture Meta data including Currency
+			Meta struct {
+				Currency string `json:"currency"`
+			} `json:"meta"`
 			Timestamp  []int64 `json:"timestamp"`
 			Indicators struct {
 				Quote []struct {
@@ -138,19 +141,16 @@ func (s *priceServiceImpl) GetCurrentPrices(isins []string) (map[string]PriceInf
 		return results, nil
 	}
 
-	// 1. Get ISIN -> Ticker mappings (from DB cache or API)
 	isinToTickerMap, err := s.getIsinToTickerMap(isins)
 	if err != nil {
 		return results, err
 	}
 
-	// 2. Get Ticker -> Price mappings (from DB cache or API for today)
 	tickerToPriceMap, err := s.getTickerToPriceMap(isinToTickerMap)
 	if err != nil {
 		return results, err
 	}
 
-	// 3. Combine results and convert to EUR
 	for _, isin := range isins {
 		ticker, ok := isinToTickerMap[isin]
 		if !ok {
@@ -198,7 +198,6 @@ func (s *priceServiceImpl) getIsinToTickerMap(isins []string) (map[string]string
 
 	if len(isinsToFetch) > 0 {
 		for _, isin := range isinsToFetch {
-			// Small delay to be polite to the API
 			time.Sleep(250 * time.Millisecond)
 
 			ticker, exchange, currency, err := s.fetchTickerForISIN(isin)
@@ -278,10 +277,7 @@ func (s *priceServiceImpl) fetchTickerForISIN(isin string) (string, string, stri
 	}
 
 	searchURL := fmt.Sprintf("https://query1.finance.yahoo.com/v1/finance/search?q=%s&quotesCount=1&lang=en-US", isin)
-
-	// --- DEBUG LOGGING ---
 	logger.L.Debug("Yahoo SEARCH API Request", "url", searchURL)
-	// ---------------------
 
 	req, err := http.NewRequest("GET", searchURL, nil)
 	if err != nil {
@@ -299,10 +295,6 @@ func (s *priceServiceImpl) fetchTickerForISIN(isin string) (string, string, stri
 	if err != nil {
 		return "", "", "", fmt.Errorf("failed to read response body: %w", err)
 	}
-
-	// --- DEBUG LOGGING ---
-	logger.L.Debug("Yahoo SEARCH API Response", "isin", isin, "status", resp.Status, "body", string(bodyBytes))
-	// ---------------------
 
 	if resp.StatusCode != http.StatusOK {
 		return "", "", "", fmt.Errorf("yahoo search API returned non-OK status %d", resp.StatusCode)
@@ -322,11 +314,6 @@ func (s *priceServiceImpl) fetchTickerForISIN(isin string) (string, string, stri
 
 func (s *priceServiceImpl) getPriceForTicker(ticker string) (float64, string, error) {
 	quoteURL := fmt.Sprintf("https://query1.finance.yahoo.com/v8/finance/chart/%s", ticker)
-
-	// --- DEBUG LOGGING ---
-	logger.L.Debug("Yahoo CURRENT PRICE Request", "url", quoteURL)
-	// ---------------------
-
 	req, err := http.NewRequest("GET", quoteURL, nil)
 	if err != nil {
 		return 0, "", err
@@ -343,10 +330,6 @@ func (s *priceServiceImpl) getPriceForTicker(ticker string) (float64, string, er
 	if err != nil {
 		return 0, "", fmt.Errorf("failed to read response body: %w", err)
 	}
-
-	// --- DEBUG LOGGING ---
-	logger.L.Debug("Yahoo CURRENT PRICE Response", "ticker", ticker, "status", resp.Status, "bodyLength", len(bodyBytes))
-	// ---------------------
 
 	if resp.StatusCode != http.StatusOK {
 		return 0, "", fmt.Errorf("yahoo chart API returned non-OK status %d", resp.StatusCode)
@@ -370,7 +353,8 @@ func (s *priceServiceImpl) getPriceForTicker(ticker string) (float64, string, er
 }
 
 // GetHistoricalPrices fetches full daily history for a ticker (10 years).
-func (s *priceServiceImpl) GetHistoricalPrices(ticker string) (PriceMap, error) {
+// Updated signature to return detected currency.
+func (s *priceServiceImpl) GetHistoricalPrices(ticker string) (PriceMap, string, error) {
 	s.mu.Lock()
 	if !s.isInitialized {
 		s.mu.Unlock()
@@ -381,54 +365,50 @@ func (s *priceServiceImpl) GetHistoricalPrices(ticker string) (PriceMap, error) 
 
 	url := fmt.Sprintf("https://query1.finance.yahoo.com/v8/finance/chart/%s?interval=1d&range=10y", ticker)
 
-	// --- DEBUG LOGGING ---
-	logger.L.Debug("Yahoo HISTORY Request", "url", url)
-	// ---------------------
-
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36")
 
 	resp, err := s.httpClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("failed to fetch history for %s: %w", ticker, err)
+		return nil, "", fmt.Errorf("failed to fetch history for %s: %w", ticker, err)
 	}
 	defer resp.Body.Close()
 
 	bodyBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read response body: %w", err)
+		return nil, "", fmt.Errorf("failed to read response body: %w", err)
 	}
 
-	// --- DEBUG LOGGING ---
-	// Logging historical data can be HUGE, so we log size and maybe a snippet or just status
-	logger.L.Debug("Yahoo HISTORY Response", "ticker", ticker, "status", resp.Status, "bodySize", len(bodyBytes))
-	// ---------------------
-
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("yahoo history api returned %d for %s", resp.StatusCode, ticker)
+		return nil, "", fmt.Errorf("yahoo history api returned %d for %s", resp.StatusCode, ticker)
 	}
 
 	var data yahooHistoryResponse
 	if err := json.Unmarshal(bodyBytes, &data); err != nil {
-		return nil, fmt.Errorf("failed to decode history json: %w", err)
+		return nil, "", fmt.Errorf("failed to decode history json: %w", err)
 	}
 
 	if len(data.Chart.Result) == 0 {
-		return nil, fmt.Errorf("no history result found in json for %s", ticker)
+		return nil, "", fmt.Errorf("no history result found in json for %s", ticker)
 	}
 
 	result := data.Chart.Result[0]
+
+	// --- CAPTURE CURRENCY FROM METADATA ---
+	detectedCurrency := result.Meta.Currency
+	// --------------------------------------
+
 	timestamps := result.Timestamp
 	if len(result.Indicators.Quote) == 0 {
-		return nil, fmt.Errorf("no quote data found for %s", ticker)
+		return nil, "", fmt.Errorf("no quote data found for %s", ticker)
 	}
 	quotes := result.Indicators.Quote[0].Close
 
 	if len(timestamps) != len(quotes) {
-		return nil, fmt.Errorf("data mismatch: %d timestamps vs %d quotes", len(timestamps), len(quotes))
+		return nil, "", fmt.Errorf("data mismatch: %d timestamps vs %d quotes", len(timestamps), len(quotes))
 	}
 
 	priceMap := make(PriceMap)
@@ -460,27 +440,23 @@ func (s *priceServiceImpl) GetHistoricalPrices(ticker string) (PriceMap, error) 
 		}
 	}
 
-	return priceMap, nil
+	return priceMap, detectedCurrency, nil
 }
 
-// Call this in your main.go or a background job.
 func (s *priceServiceImpl) EnsureBenchmarkData() error {
 	benchmarkTicker := "SPY"
 
-	// 1. Optimization: Check if we already have recent data to avoid fetching every time
-	// We check if we have data for yesterday or today
 	var count int
 	yesterday := time.Now().AddDate(0, 0, -1).Format("2006-01-02")
 	err := database.DB.QueryRow("SELECT COUNT(*) FROM daily_prices WHERE ticker_symbol = ? AND date >= ?", benchmarkTicker, yesterday).Scan(&count)
 	if err == nil && count > 0 {
-		logger.L.Info("Benchmark data (SPY) is up to date", "ticker", benchmarkTicker)
 		return nil
 	}
 
 	logger.L.Info("Fetching Benchmark Data (SPY) from Yahoo", "ticker", benchmarkTicker)
 
-	// 2. Fetch from Yahoo
-	prices, err := s.GetHistoricalPrices(benchmarkTicker)
+	// Update call to handle multiple return values
+	prices, _, err := s.GetHistoricalPrices(benchmarkTicker)
 	if err != nil {
 		return fmt.Errorf("failed to fetch benchmark history: %w", err)
 	}
@@ -489,16 +465,12 @@ func (s *priceServiceImpl) EnsureBenchmarkData() error {
 		return fmt.Errorf("no benchmark prices returned from API")
 	}
 
-	// 3. Save to DB using a TRANSACTION (Batch Insert)
-	// This is the critical fix for "database locked" errors
 	tx, err := database.DB.Begin()
 	if err != nil {
 		return fmt.Errorf("failed to begin transaction for benchmark save: %w", err)
 	}
-	// Ensure rollback in case of panic or error
 	defer tx.Rollback()
 
-	// Prepare the statement once
 	stmt, err := tx.Prepare(`
 		INSERT INTO daily_prices (ticker_symbol, date, price, currency, updated_at)
 		VALUES (?, ?, ?, ?, ?)
@@ -511,21 +483,17 @@ func (s *priceServiceImpl) EnsureBenchmarkData() error {
 	}
 	defer stmt.Close()
 
-	rowsProcessed := 0
 	for date, price := range prices {
 		_, err := stmt.Exec(benchmarkTicker, date, price, "USD", time.Now())
 		if err != nil {
 			logger.L.Warn("Failed to save benchmark price row", "date", date, "error", err)
 			continue
 		}
-		rowsProcessed++
 	}
 
-	// Commit the transaction to save all rows at once
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("failed to commit benchmark transaction: %w", err)
 	}
 
-	logger.L.Info("Benchmark Data (SPY) saved to DB successfully", "rows_processed", rowsProcessed)
 	return nil
 }
