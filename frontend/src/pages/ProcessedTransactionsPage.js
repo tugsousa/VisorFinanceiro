@@ -6,94 +6,40 @@ import { ptPT } from '@mui/x-data-grid/locales';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiFetchProcessedTransactions, apiDeleteTransactions } from '../api/apiService';
 import { useAuth } from '../context/AuthContext';
+import { usePortfolio } from '../context/PortfolioContext'; // <--- IMPORT CONTEXT
 import { UI_TEXT } from '../constants';
 import { parseDateRobust } from '../utils/dateUtils';
 import DeleteTransactionsModal from '../components/DeleteTransactionsModal';
 import AddTransactionModal from '../components/AddTransactionModal';
 import AddCircleOutlineIcon from '@mui/icons-material/AddCircleOutline';
 
-const fetchProcessedTransactions = async () => {
-  const response = await apiFetchProcessedTransactions();
-  return (response.data || []).map(tx => ({ ...tx, id: tx.hash_id || `${tx.date}-${tx.order_id}-${Math.random()}` }));
-};
-
 const NoRowsOverlay = () => (
-  <Box 
-    sx={{ 
-      display: 'flex', 
-      flexDirection: 'column',
-      alignItems: 'center', 
-      justifyContent: 'center', 
-      height: '100%', 
-      py: 4, 
-      color: 'text.secondary',
-      fontSize: '0.9rem'
-    }}
-  >
+  <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', py: 4, color: 'text.secondary', fontSize: '0.9rem' }}>
     Não existem transações registadas.
   </Box>
 );
 
-
 const columns = [
-    { 
-      field: 'date',
-      headerName: 'Data', 
-      width: 110,
-      type: 'date',
-      valueGetter: (value) => parseDateRobust(value),
-      valueFormatter: (value) => {
-        if (!value) return '';
-        const day = String(value.getDate()).padStart(2, '0');
-        const month = String(value.getMonth() + 1).padStart(2, '0');
-        const year = value.getFullYear();
-        return `${day}-${month}-${year}`;
-      }
-    },
+    { field: 'date', headerName: 'Data', width: 110, type: 'date', valueGetter: (value) => parseDateRobust(value), valueFormatter: (value) => { if (!value) return ''; const day = String(value.getDate()).padStart(2, '0'); const month = String(value.getMonth() + 1).padStart(2, '0'); const year = value.getFullYear(); return `${day}-${month}-${year}`; } },
     { field: 'source', headerName: 'Origem', width: 90 },
     { field: 'product_name', headerName: 'Produto', flex: 1, minWidth: 200 },
     { field: 'transaction_type', headerName: 'Tipo', width: 110 },
     { field: 'transaction_subtype', headerName: 'Subtipo', width: 110 },
     { field: 'buy_sell', headerName: 'Ação', width: 90 },
     { field: 'quantity', headerName: 'Qtd.', type: 'number', width: 80, align: 'right', headerAlign: 'right' },
-    { 
-      field: 'price',
-      headerName: 'Preço', 
-      type: 'number', 
-      width: 110,
-      align: 'right', headerAlign: 'right',
-      valueFormatter: (value) => typeof value === 'number' ? value.toFixed(4) : ''
-    },
-    { 
-      field: 'amount',
-      headerName: 'Montante (Orig.)', 
-      type: 'number', 
-      width: 130,
-      align: 'right', headerAlign: 'right',
-      valueFormatter: (value) => typeof value === 'number' ? value.toFixed(2) : ''
-    },
+    { field: 'price', headerName: 'Preço', type: 'number', width: 110, align: 'right', headerAlign: 'right', valueFormatter: (value) => typeof value === 'number' ? value.toFixed(4) : '' },
+    { field: 'amount', headerName: 'Montante (Orig.)', type: 'number', width: 130, align: 'right', headerAlign: 'right', valueFormatter: (value) => typeof value === 'number' ? value.toFixed(2) : '' },
     { field: 'currency', headerName: 'Moeda', width: 80 },
-    { 
-      field: 'exchange_rate',
-      headerName: 'Câmbio', 
-      type: 'number', 
-      width: 100,
-      align: 'right', headerAlign: 'right',
-      valueFormatter: (value) => typeof value === 'number' ? value.toFixed(4) : ''
-    },
-    { 
-      field: 'amount_eur',
-      headerName: 'Montante (€)', 
-      type: 'number', 
-      width: 130,
-      align: 'right', headerAlign: 'right',
-      valueFormatter: (value) => typeof value === 'number' ? value.toFixed(2) : ''
-    },
+    { field: 'exchange_rate', headerName: 'Câmbio', type: 'number', width: 100, align: 'right', headerAlign: 'right', valueFormatter: (value) => typeof value === 'number' ? value.toFixed(4) : '' },
+    { field: 'amount_eur', headerName: 'Montante (€)', type: 'number', width: 130, align: 'right', headerAlign: 'right', valueFormatter: (value) => typeof value === 'number' ? value.toFixed(2) : '' },
 ];
 
 const ProcessedTransactionsPage = () => {
   const { token, refreshUserDataCheck } = useAuth();
+  const { activePortfolio } = usePortfolio(); // <--- GET ACTIVE PORTFOLIO
   const queryClient = useQueryClient();
+
+  const portfolioId = activePortfolio?.id;
 
   const { 
     data: processedTransactions = [],
@@ -101,16 +47,20 @@ const ProcessedTransactionsPage = () => {
     error: transactionsErrorObj,
     isError: isTransactionsError,
   } = useQuery({
-    queryKey: ['processedTransactions', token],
-    queryFn: fetchProcessedTransactions,
-    enabled: !!token,
+    queryKey: ['processedTransactions', token, portfolioId],
+    queryFn: async () => {
+        if (!portfolioId) return [];
+        const response = await apiFetchProcessedTransactions(portfolioId);
+        return (response.data || []).map(tx => ({ ...tx, id: tx.hash_id || `${tx.date}-${tx.order_id}-${Math.random()}` }));
+    },
+    enabled: !!token && !!portfolioId, // <--- Only run if portfolio is selected
   });
 
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
 
   const deleteTransactionsMutation = useMutation({
-    mutationFn: (criteria) => apiDeleteTransactions(criteria),
+    mutationFn: (criteria) => apiDeleteTransactions({ ...criteria, portfolio_id: portfolioId }), // Pass ID
     onSuccess: () => {
       queryClient.invalidateQueries();
       refreshUserDataCheck();
@@ -121,19 +71,9 @@ const ProcessedTransactionsPage = () => {
     },
   });
 
-  const handleDeleteClick = () => {
-    setIsDeleteModalOpen(true);
-  };
-
-  const handleConfirmDelete = (criteria) => {
-    deleteTransactionsMutation.mutate(criteria);
-  };
-
-  const handleCloseDeleteModal = () => {
-    if (!deleteTransactionsMutation.isPending) {
-        setIsDeleteModalOpen(false);
-    }
-  };
+  const handleDeleteClick = () => setIsDeleteModalOpen(true);
+  const handleConfirmDelete = (criteria) => deleteTransactionsMutation.mutate(criteria);
+  const handleCloseDeleteModal = () => { if (!deleteTransactionsMutation.isPending) setIsDeleteModalOpen(false); };
 
   const transactionsError = isTransactionsError ? (transactionsErrorObj?.message || UI_TEXT.errorLoadingData) : null;
   const deleteError = deleteTransactionsMutation.isError ? (deleteTransactionsMutation.error.response?.data?.error || deleteTransactionsMutation.error.message || "Falha a excluir as transações.") : null;
@@ -142,26 +82,24 @@ const ProcessedTransactionsPage = () => {
     return <Alert severity="error" sx={{ my: 2, mx: { xs: 2, sm: 3 } }}>{transactionsError}</Alert>;
   }
   
+  if (!activePortfolio) {
+      return (
+        <Box sx={{ p: 4, textAlign: 'center' }}>
+            <Typography variant="h6">Selecione ou crie um portfólio para ver as transações.</Typography>
+        </Box>
+      );
+  }
+
   return (
     <Box sx={{ p: { xs: 2, sm: 3 } }}>
         <Typography variant="h4" component="h1" gutterBottom>
-          Transações Processadas
+          Transações: {activePortfolio.name}
         </Typography>
         <Box sx={{ mb: 2, display: 'flex', justifyContent: 'flex-end', gap: 2 }}>
-          <Button
-            variant="contained"
-            color="primary"
-            startIcon={<AddCircleOutlineIcon />}
-            onClick={() => setIsAddModalOpen(true)}
-          >
+          <Button variant="contained" color="primary" startIcon={<AddCircleOutlineIcon />} onClick={() => setIsAddModalOpen(true)}>
             Adicionar Transação
           </Button>
-          <Button
-            variant="contained"
-            color="error"
-            onClick={handleDeleteClick}
-            disabled={deleteTransactionsMutation.isPending || transactionsLoading}
-          >
+          <Button variant="contained" color="error" onClick={handleDeleteClick} disabled={deleteTransactionsMutation.isPending || transactionsLoading}>
             {deleteTransactionsMutation.isPending ? <CircularProgress size={24} color="inherit" /> : "Eliminar Transações"}
           </Button>
         </Box>
@@ -171,14 +109,7 @@ const ProcessedTransactionsPage = () => {
             columns={columns}
             loading={transactionsLoading} 
             autoHeight
-            initialState={{
-              pagination: {
-                paginationModel: { pageSize: 10, page: 0 },
-              },
-              sorting: {
-                sortModel: [{ field: 'date', sort: 'desc' }],
-              },
-            }}
+            initialState={{ pagination: { paginationModel: { pageSize: 10, page: 0 } }, sorting: { sortModel: [{ field: 'date', sort: 'desc' }] } }}
             pageSizeOptions={[10, 25, 50, 100]}
             disableRowSelectionOnClick
             density="compact"
@@ -199,6 +130,9 @@ const ProcessedTransactionsPage = () => {
       <AddTransactionModal
         open={isAddModalOpen}
         onClose={() => setIsAddModalOpen(false)}
+        // Note: You must update AddTransactionModal to accept portfolioId prop if it doesn't get it from context!
+        // But since we updated apiAddManualTransaction to handle it in previous steps, 
+        // ensure AddTransactionModal logic includes portfolio_id in the mutation payload.
       />
     </Box>
   );
