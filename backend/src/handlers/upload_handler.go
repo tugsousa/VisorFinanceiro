@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/username/taxfolio/backend/src/config"
@@ -77,7 +78,33 @@ func (h *UploadHandler) HandleUpload(w http.ResponseWriter, r *http.Request) {
 		utils.SendJSONError(w, errMsg, http.StatusBadRequest)
 		return
 	}
-	logger.L.Info("Received upload for source", "source", source, "userID", userID)
+
+	// --- MULTI-PORTFOLIO CHANGE START ---
+	portfolioIDStr := r.FormValue("portfolio_id")
+	if portfolioIDStr == "" {
+		errMsg := "Portfolio ID is required."
+		logger.L.Warn("Upload request missing 'portfolio_id' field", "userID", userID)
+		go logUploadFailure(userID, source, "", "Portfolio ID missing")
+		utils.SendJSONError(w, errMsg, http.StatusBadRequest)
+		return
+	}
+	portfolioID, err := strconv.ParseInt(portfolioIDStr, 10, 64)
+	if err != nil {
+		utils.SendJSONError(w, "Invalid Portfolio ID format", http.StatusBadRequest)
+		return
+	}
+
+	// Verify ownership
+	var exists int
+	err = database.DB.QueryRow("SELECT 1 FROM portfolios WHERE id = ? AND user_id = ?", portfolioID, userID).Scan(&exists)
+	if err != nil {
+		logger.L.Warn("User attempted upload to invalid/unauthorized portfolio", "userID", userID, "portfolioID", portfolioID)
+		utils.SendJSONError(w, "Invalid Portfolio ID", http.StatusForbidden)
+		return
+	}
+	// --- MULTI-PORTFOLIO CHANGE END ---
+
+	logger.L.Info("Received upload for source", "source", source, "userID", userID, "portfolioID", portfolioID)
 
 	file, fileHeader, err := r.FormFile("file")
 	if err != nil {
@@ -117,7 +144,8 @@ func (h *UploadHandler) HandleUpload(w http.ResponseWriter, r *http.Request) {
 
 	logger.L.Info("Processing upload request", "userID", userID, "filename", fileHeader.Filename)
 
-	result, err := h.uploadService.ProcessUpload(file, userID, source, fileHeader.Filename, fileHeader.Size)
+	// Pass portfolioID to service
+	result, err := h.uploadService.ProcessUpload(file, userID, portfolioID, source, fileHeader.Filename, fileHeader.Size)
 	if err != nil {
 		// This error comes from the service layer (parsing/processing)
 		go logUploadFailure(userID, source, fileHeader.Filename, err.Error())
@@ -138,9 +166,23 @@ func (h *UploadHandler) HandleGetRealizedGainsData(w http.ResponseWriter, r *htt
 		utils.SendJSONError(w, "authentication required or user ID not found in context", http.StatusUnauthorized)
 		return
 	}
-	logger.L.Debug("Handling GetRealizedGainsData request with ETag support", "userID", userID)
 
-	realizedgainsData, err := h.uploadService.GetLatestUploadResult(userID)
+	// --- MULTI-PORTFOLIO CHANGE START ---
+	portfolioIDStr := r.URL.Query().Get("portfolio_id")
+	if portfolioIDStr == "" {
+		utils.SendJSONError(w, "Portfolio ID is required", http.StatusBadRequest)
+		return
+	}
+	portfolioID, err := strconv.ParseInt(portfolioIDStr, 10, 64)
+	if err != nil {
+		utils.SendJSONError(w, "Invalid Portfolio ID", http.StatusBadRequest)
+		return
+	}
+	// --- MULTI-PORTFOLIO CHANGE END ---
+
+	logger.L.Debug("Handling GetRealizedGainsData request with ETag support", "userID", userID, "portfolioID", portfolioID)
+
+	realizedgainsData, err := h.uploadService.GetLatestUploadResult(userID, portfolioID)
 	if err != nil {
 		logger.L.Error("Error retrieving realizedgains data from service", "userID", userID, "error", err)
 		utils.SendJSONError(w, fmt.Sprintf("Error retrieving realizedgains data for userID %d: %v", userID, err), http.StatusInternalServerError)

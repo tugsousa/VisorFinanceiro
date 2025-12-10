@@ -18,13 +18,11 @@ import PrivacyPolicyPage from './pages/policies/PrivacyPolicyPage';
 import TermsOfServicePage from './pages/policies/TermsOfServicePage';
 import ContactInformationPage from './pages/policies/ContactInformationPage';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import { PortfolioProvider } from './context/PortfolioContext'; // Added
 import { CircularProgress, Box } from '@mui/material';
 import GoogleAuthCallbackPage from './pages/GoogleAuthCallbackPage';
 import AdminDashboardPage from './pages/AdminDashboardPage';
-// --- INÍCIO DA NOVA IMPORTAÇÃO ---
-// NOTA: Terá de criar este ficheiro `UserDetailPage.js` na sua pasta `src/pages/`.
 import UserDetailPage from './pages/UserDetailPage'; 
-// --- FIM DA NOVA IMPORTAÇÃO ---
 
 
 const HomePage = () => {
@@ -91,38 +89,38 @@ const AdminRoute = ({ children }) => {
 function App() {
     return (
         <AuthProvider>
-            <Router>
-                <Layout>
-                    <Routes>
-                        <Route path="/" element={<HomePage />} />
+            <PortfolioProvider> 
+                <Router>
+                    <Layout>
+                        <Routes>
+                            <Route path="/" element={<HomePage />} />
 
-                        <Route path="/signin" element={<PublicRoute><SignInPage /></PublicRoute>} />
-                        <Route path="/signup" element={<PublicRoute><SignUpPage /></PublicRoute>} />
-                        <Route path="/request-password-reset" element={<PublicRoute><RequestPasswordResetPage /></PublicRoute>} />
-                        <Route path="/reset-password" element={<PublicRoute><ResetPasswordPage /></PublicRoute>} />
-                        <Route path="/auth/google/callback" element={<GoogleAuthCallbackPage />} />
+                            <Route path="/signin" element={<PublicRoute><SignInPage /></PublicRoute>} />
+                            <Route path="/signup" element={<PublicRoute><SignUpPage /></PublicRoute>} />
+                            <Route path="/request-password-reset" element={<PublicRoute><RequestPasswordResetPage /></PublicRoute>} />
+                            <Route path="/reset-password" element={<PublicRoute><ResetPasswordPage /></PublicRoute>} />
+                            <Route path="/auth/google/callback" element={<GoogleAuthCallbackPage />} />
 
-                        <Route path="/verify-email" element={<VerifyEmailPage />} />
-                        <Route path="/policies/privacy-policy" element={<PrivacyPolicyPage />} />
-                        <Route path="/policies/terms-of-service" element={<TermsOfServicePage />} />
-                        <Route path="/policies/contact-information" element={<ContactInformationPage />} />
+                            <Route path="/verify-email" element={<VerifyEmailPage />} />
+                            <Route path="/policies/privacy-policy" element={<PrivacyPolicyPage />} />
+                            <Route path="/policies/terms-of-service" element={<TermsOfServicePage />} />
+                            <Route path="/policies/contact-information" element={<ContactInformationPage />} />
 
-                        <Route path="/dashboard" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
-                        <Route path="/upload" element={<ProtectedRoute><UploadPage /></ProtectedRoute>} />
-                        <Route path="/realizedgains" element={<ProtectedRoute><RealizedGainsPage /></ProtectedRoute>} />
-                        <Route path="/tax" element={<ProtectedRoute><TaxPage /></ProtectedRoute>} />
-                        <Route path="/transactions" element={<ProtectedRoute><ProcessedTransactionsPage /></ProtectedRoute>} />
-                        <Route path="/settings" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
-                        
-                        {/* --- ROTAS DE ADMIN ATUALIZADAS --- */}
-                        <Route path="/admin" element={<AdminRoute><AdminDashboardPage /></AdminRoute>} />
-                        <Route path="/admin/users/:userId" element={<AdminRoute><UserDetailPage /></AdminRoute>} />
-                        {/* --- FIM DAS ROTAS DE ADMIN ATUALIZADAS --- */}
+                            <Route path="/dashboard" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
+                            <Route path="/upload" element={<ProtectedRoute><UploadPage /></ProtectedRoute>} />
+                            <Route path="/realizedgains" element={<ProtectedRoute><RealizedGainsPage /></ProtectedRoute>} />
+                            <Route path="/tax" element={<ProtectedRoute><TaxPage /></ProtectedRoute>} />
+                            <Route path="/transactions" element={<ProtectedRoute><ProcessedTransactionsPage /></ProtectedRoute>} />
+                            <Route path="/settings" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
+                            
+                            <Route path="/admin" element={<AdminRoute><AdminDashboardPage /></AdminRoute>} />
+                            <Route path="/admin/users/:userId" element={<AdminRoute><UserDetailPage /></AdminRoute>} />
 
-                        <Route path="*" element={<NotFoundPage />} />
-                    </Routes>
-                </Layout>
-            </Router>
+                            <Route path="*" element={<NotFoundPage />} />
+                        </Routes>
+                    </Layout>
+                </Router>
+            </PortfolioProvider>
         </AuthProvider>
     );
 }

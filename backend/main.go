@@ -25,7 +25,7 @@ import (
 	"golang.org/x/time/rate"
 )
 
-// --- Funções de middleware (proxyHeadersMiddleware, rateLimitMiddleware, enableCORS) permanecem as mesmas ---
+// --- Middleware functions (proxyHeadersMiddleware, rateLimitMiddleware, enableCORS) remain the same ---
 func proxyHeadersMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("X-Forwarded-Proto") == "https" {
@@ -42,10 +42,7 @@ func rateLimitMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !limiter.Allow() {
 			http.Error(w, http.StatusText(http.StatusTooManyRequests), http.StatusTooManyRequests)
-			logger.L.Warn("Rate limit exceeded",
-				"method", r.Method,
-				"path", r.URL.Path,
-				"remoteAddr", r.RemoteAddr)
+			logger.L.Warn("Rate limit exceeded", "path", r.URL.Path)
 			return
 		}
 		next.ServeHTTP(w, r)
@@ -71,7 +68,6 @@ func enableCORS(next http.Handler) http.Handler {
 		}
 
 		if r.Method == "OPTIONS" {
-			logger.L.Debug("Handling OPTIONS preflight request", "path", r.URL.Path, "origin", origin)
 			w.WriteHeader(http.StatusOK)
 			return
 		}
@@ -85,11 +81,7 @@ func main() {
 	logger.L.Info("VisorFinanceiro backend server starting...")
 
 	if config.Cfg.JWTSecret == "" || len(config.Cfg.JWTSecret) < 32 {
-		logger.L.Error("JWT_SECRET configuration invalid. Must be at least 32 bytes.")
-		os.Exit(1)
-	}
-	if len(config.Cfg.CSRFAuthKey) < 32 {
-		logger.L.Error("CSRF_AUTH_KEY must be at least 32 bytes long.")
+		logger.L.Error("JWT_SECRET configuration invalid.")
 		os.Exit(1)
 	}
 
@@ -101,13 +93,9 @@ func main() {
 	logger.L.Info("Initializing database...", "path", config.Cfg.DatabasePath)
 	database.InitDB(config.Cfg.DatabasePath)
 	database.RunMigrations(config.Cfg.DatabasePath)
-	logger.L.Info("Database initialized successfully.")
 
-	logger.L.Info("Initializing report cache...")
 	reportCache := cache.New(services.DefaultCacheExpiration, services.CacheCleanupInterval)
-	logger.L.Info("Report cache initialized.")
 
-	logger.L.Info("Initializing services and handlers...")
 	handlers.InitializeGoogleOAuthConfig()
 	authService := security.NewAuthService(config.Cfg.JWTSecret)
 	emailService := services.NewEmailService()
@@ -133,26 +121,23 @@ func main() {
 	dividendHandler := handlers.NewDividendHandler(uploadService)
 	txHandler := handlers.NewTransactionHandler(uploadService)
 	feeHandler := handlers.NewFeeHandler(uploadService)
+	// NEW HANDLER
+	pfManagerHandler := handlers.NewPortfolioManagerHandler()
 
-	logger.L.Info("Configuring routes...")
 	r := chi.NewRouter()
 
 	r.Use(middleware.Recoverer)
-	r.Use(handlers.ContextualLoggerMiddleware) // <-- NOVO MIDDLEWARE APLICADO
+	r.Use(handlers.ContextualLoggerMiddleware)
 	r.Use(proxyHeadersMiddleware)
 	r.Use(enableCORS)
 	r.Use(rateLimitMiddleware)
 
 	r.Get("/", func(w http.ResponseWriter, r *http.Request) {
-		ctxLogger := logger.FromContext(r.Context()) // Logger contextual
-		ctxLogger.Debug("Root path access")
-
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]string{"message": "VisorFinanceiro Backend is running"})
 	})
 
 	r.Route("/api", func(r chi.Router) {
-		// Public auth routes
 		r.Group(func(r chi.Router) {
 			r.Get("/auth/csrf", handlers.GetCSRFToken)
 			r.Get("/auth/verify-email", userHandler.VerifyEmailHandler)
@@ -160,7 +145,6 @@ func main() {
 			r.Get("/auth/google/callback", userHandler.HandleGoogleCallback)
 		})
 
-		// Auth actions with CSRF protection
 		r.Group(func(r chi.Router) {
 			r.Use(handlers.CSRFMiddleware(config.Cfg.CSRFAuthKey))
 			r.Post("/auth/login", userHandler.LoginUserHandler)
@@ -171,10 +155,15 @@ func main() {
 			r.Post("/auth/reset-password", userHandler.ResetPasswordHandler)
 		})
 
-		// Protected API routes with CSRF and Auth
 		r.Group(func(r chi.Router) {
 			r.Use(handlers.CSRFMiddleware(config.Cfg.CSRFAuthKey))
 			r.Use(userHandler.AuthMiddleware)
+
+			// --- PORTFOLIO MANAGEMENT ROUTES (NEW) ---
+			r.Get("/portfolios", pfManagerHandler.ListPortfolios)
+			r.Post("/portfolios", pfManagerHandler.CreatePortfolio)
+			r.Delete("/portfolios/{id}", pfManagerHandler.DeletePortfolio)
+			// -----------------------------------------
 
 			r.Post("/upload", uploadHandler.HandleUpload)
 			r.Get("/realizedgains-data", uploadHandler.HandleGetRealizedGainsData)
@@ -194,7 +183,6 @@ func main() {
 			r.Post("/user/delete-account", userHandler.DeleteAccountHandler)
 			r.Get("/history/chart", portfolioHandler.HandleGetHistoricalChartData)
 
-			// Admin Routes
 			r.Group(func(r chi.Router) {
 				r.Use(userHandler.AdminMiddleware)
 				r.Get("/admin/stats", userHandler.HandleGetAdminStats)
@@ -209,8 +197,6 @@ func main() {
 
 	r.NotFound(func(w http.ResponseWriter, r *http.Request) {
 		if !strings.HasPrefix(r.URL.Path, "/api/") {
-			ctxLogger := logger.FromContext(r.Context())
-			ctxLogger.Warn("Root level path not found", "method", r.Method, "path", r.URL.Path)
 			http.NotFound(w, r)
 		}
 	})
@@ -226,9 +212,6 @@ func main() {
 
 	logger.L.Info("Server starting", "address", serverAddr)
 	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-		logger.L.Error("Failed to start server", "error", err)
 		stdlog.Fatalf("Failed to start server: %v", err)
-	} else if err == http.ErrServerClosed {
-		logger.L.Info("Server stopped gracefully.")
 	}
 }
