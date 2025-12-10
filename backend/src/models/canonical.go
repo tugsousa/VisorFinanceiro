@@ -23,10 +23,11 @@ type CanonicalTransaction struct {
 	TransactionType    string    `json:"transaction_type"`     // e.g., "STOCK", "OPTION", "DIVIDEND", "FEE", "CASH"
 	TransactionSubType string    `json:"transaction_sub_type"` // e.g., "CALL", "PUT", "TAX", "DEPOSIT"
 	BuySell            string    `json:"buy_sell"`             // e.g., "BUY", "SELL"
-
-	// --- Fields to be filled by the Enricher/Processor ---
-	ExchangeRate float64 `json:"exchange_rate"` // Exchange rate to EUR
-	AmountEUR    float64 `json:"amount_eur"`    // Final amount in EUR
-	CountryCode  string  `json:"country_code"`
-	HashId       string  `json:"hash_id"`
+	CashBalance        float64   `json:"cash_balance"`         // The explicit balance reported by the broker
+	BalanceCurrency    string    `json:"balance_currency"`     // The currency of that balance
+	HasBalance         bool      `json:"has_balance"`          // Flag to indicate if balance was extracted
+	ExchangeRate       float64   `json:"exchange_rate"`        // Exchange rate to EUR
+	AmountEUR          float64   `json:"amount_eur"`           // Final amount in EUR
+	CountryCode        string    `json:"country_code"`
+	HashId             string    `json:"hash_id"`
 }
