@@ -1,9 +1,9 @@
 // frontend/src/pages/TaxPage.js
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   Typography, Box, FormControl, InputLabel, Select, MenuItem, Table,
   TableBody, TableCell, TableContainer, TableHead, TableRow, Paper,
-  styled, CircularProgress, Alert, Grid
+  styled, CircularProgress, Alert
 } from '@mui/material';
 import { useQuery } from '@tanstack/react-query';
 import {
@@ -12,6 +12,7 @@ import {
   apiFetchDividendTaxSummary
 } from '../api/apiService';
 import { useAuth } from '../context/AuthContext';
+import { usePortfolio } from '../context/PortfolioContext'; // <--- 1. Import Context
 import { UI_TEXT, NO_YEAR_SELECTED, ALL_YEARS_OPTION } from '../constants';
 import { getYear, getMonth, getDay, extractYearsFromData } from '../utils/dateUtils';
 import './TaxPage.css';
@@ -33,11 +34,14 @@ const StyledTableBodyCell = styled(TableCell)(({ theme, align = 'center' }) => (
   padding: '4px 6px', fontSize: '0.8rem', verticalAlign: 'middle',
 }));
 
-const fetchTaxReportData = async () => {
+// Updated fetcher to accept portfolioId
+const fetchTaxReportData = async (portfolioId) => {
+  if (!portfolioId) return { stockSales: [], optionSales: [], dividendSummary: {} };
+  
   const [stockRes, optionRes, dividendRes] = await Promise.all([
-    apiFetchStockSales(),
-    apiFetchOptionSales(),
-    apiFetchDividendTaxSummary(),
+    apiFetchStockSales(portfolioId),
+    apiFetchOptionSales(portfolioId),
+    apiFetchDividendTaxSummary(portfolioId),
   ]);
   return {
     stockSales: stockRes.data || [],
@@ -48,15 +52,18 @@ const fetchTaxReportData = async () => {
 
 export default function TaxPage() {
   const { token } = useAuth();
+  const { activePortfolio } = usePortfolio(); // <--- 2. Get active portfolio
+  const portfolioId = activePortfolio?.id;
+
   const {
     data: taxApiData,
     isLoading: queryLoading,
     error: queryError,
     isError: isQueryError
   } = useQuery({
-    queryKey: ['taxReportData', token],
-    queryFn: fetchTaxReportData,
-    enabled: !!token,
+    queryKey: ['taxReportData', token, portfolioId], // <--- 3. Include ID in key
+    queryFn: () => fetchTaxReportData(portfolioId), // <--- 4. Pass ID to fetcher
+    enabled: !!token && !!portfolioId, // Only run if portfolio is selected
     staleTime: 1000 * 60 * 10,
   });
 
@@ -198,6 +205,14 @@ export default function TaxPage() {
     }, { rendimentoBruto: 0, impostoFonte: 0, impostoRetido: 0, retencaoFonte: 0 }
   ), [dividendTaxReportRows]);
 
+  if (!portfolioId) {
+    return (
+        <Box sx={{ p: 4, textAlign: 'center' }}>
+            <Typography variant="h6">Selecione ou crie um portfólio para ver o relatório fiscal.</Typography>
+        </Box>
+    );
+  }
+
   if (loading) {
     return <CircularProgress sx={{ display: 'block', margin: '20px auto' }} />;
   }
@@ -205,7 +220,6 @@ export default function TaxPage() {
     return <Alert severity="error" sx={{ m: 2 }}>{apiError}</Alert>;
   }
   
-  // No data state
   if (availableYears.length === 0 && !loading) {
     return (
         <Box sx={{ p: 4, textAlign: 'center' }}>
@@ -225,7 +239,7 @@ export default function TaxPage() {
         mb: 3 
       }}>
         <Typography variant="h4" component="h1" sx={{ mb: { xs: 2, sm: 0 } }}>
-          Preencher Declaração IRS
+          Preencher Declaração IRS ({activePortfolio?.name})
         </Typography>
         <FormControl 
           sx={{ 

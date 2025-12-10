@@ -1,6 +1,7 @@
 // frontend/src/pages/UploadPage.js
 import React, { useState, useCallback, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { usePortfolio } from '../context/PortfolioContext'; // <--- 1. Import Added
 import { apiUploadFile } from '../api/apiService';
 import { MAX_FILE_SIZE_BYTES, MAX_FILE_SIZE_MB } from '../constants';
 import { Typography, Box, Button, LinearProgress, Paper, Alert, Modal, IconButton, Link as MuiLink, CircularProgress } from '@mui/material';
@@ -70,6 +71,7 @@ const uploadWithRetry = async (formData, onUploadProgress) => {
 
 const UploadPage = () => {
     const { token, refreshUserDataCheck } = useAuth();
+    const { activePortfolio } = usePortfolio(); // <--- 2. Get activePortfolio from Context
     const queryClient = useQueryClient();
 
     const [selectedFile, setSelectedFile] = useState(null);
@@ -93,11 +95,16 @@ const UploadPage = () => {
         }
     };
     
-    // --- START OF CORRECTION ---
-    // This logic is now cleaner and more robust.
     const handleFileSelected = useCallback(async (file) => {
         resetState();
         if (!file) return;
+
+        // --- 3. Check for Active Portfolio ---
+        if (!activePortfolio) {
+            setFileError('Selecione um portfólio ativo antes de carregar ficheiros.');
+            setUploadStatus('error');
+            return;
+        }
 
         // 1. Client-side validation
         const fileName = file.name.toLowerCase();
@@ -122,7 +129,8 @@ const UploadPage = () => {
         // 2. Prepare FormData
         const formData = new FormData();
         formData.append('file', file);
-        formData.append('source', brokerType); // Explicitly set the source
+        formData.append('source', brokerType);
+        formData.append('portfolio_id', activePortfolio.id); // <--- 4. Append Portfolio ID
 
         // 3. Attempt upload
         try {
@@ -147,8 +155,7 @@ const UploadPage = () => {
             setUploadStatus('error');
             setFileError(err.response?.data?.error || err.message || 'Falha no carregamento. Por favor tente de novo.');
         }
-    }, [token, queryClient, refreshUserDataCheck]);
-    // --- END OF CORRECTION ---
+    }, [token, queryClient, refreshUserDataCheck, activePortfolio]); // Added activePortfolio dependency
 
     const handleDragEnter = (e) => { e.preventDefault(); e.stopPropagation(); setIsDragActive(true); };
     const handleDragLeave = (e) => { e.preventDefault(); e.stopPropagation(); setIsDragActive(false); };
@@ -174,6 +181,14 @@ const UploadPage = () => {
             <Typography variant="h4" component="h1" gutterBottom align="center">
                 Carregar Transações
             </Typography>
+            
+            {/* Display active portfolio context */}
+            {activePortfolio && (
+                <Typography variant="subtitle1" align="center" color="primary" sx={{ mb: 1, fontWeight: 'bold' }}>
+                    Portfólio Ativo: {activePortfolio.name}
+                </Typography>
+            )}
+
             <Typography variant="body1" color="text.secondary" align="center" sx={{ mb: 1 }}>
                 Arraste e solte o seu ficheiro de transações abaixo para começar o processamento automático.
             </Typography>
@@ -233,7 +248,7 @@ const UploadPage = () => {
                     <Box sx={{ textAlign: 'center' }}>
                         <CheckCircleIcon color="success" sx={{ fontSize: 60, mb: 2 }} />
                         <Typography variant="h6" color="success.main">Carregamento com sucesso</Typography>
-                        <Typography sx={{ mb: 3 }}>As tuas transações foram processadas.</Typography>
+                        <Typography sx={{ mb: 3 }}>As tuas transações foram processadas no portfólio <strong>{activePortfolio?.name}</strong>.</Typography>
                         <Button variant="outlined" onClick={resetState}>Carregar outro ficheiro</Button>
                     </Box>
                 )}

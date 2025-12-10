@@ -7,6 +7,7 @@ import (
 	"log"
 	"math"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/username/taxfolio/backend/src/logger"
@@ -27,37 +28,33 @@ func NewPortfolioHandler(uploadService services.UploadService, priceService serv
 	}
 }
 
-// Helper struct for aggregating purchase lots by ISIN
-type AggregatedHolding struct {
-	ISIN              string
-	ProductName       string
-	TotalQuantity     int
-	TotalCostBasisEUR float64
-}
-
-// Final response struct that the frontend will receive
-type HoldingWithValue struct {
-	ISIN              string  `json:"isin"`
-	ProductName       string  `json:"product_name"`
-	Quantity          int     `json:"quantity"`
-	TotalCostBasisEUR float64 `json:"total_cost_basis_eur"`
-	CurrentPriceEUR   float64 `json:"current_price_eur"`
-	MarketValueEUR    float64 `json:"market_value_eur"`
-	Status            string  `json:"status"`
+// Helper to extract portfolio ID from query params
+func getPortfolioID(r *http.Request) (int64, error) {
+	pidStr := r.URL.Query().Get("portfolio_id")
+	if pidStr == "" {
+		return 0, fmt.Errorf("portfolio_id is required")
+	}
+	return strconv.ParseInt(pidStr, 10, 64)
 }
 
 func (h *PortfolioHandler) HandleGetCurrentHoldingsValue(w http.ResponseWriter, r *http.Request) {
 	userID, ok := GetUserIDFromContext(r.Context())
 	if !ok {
-		utils.SendJSONError(w, "authentication required or user ID not found in context", http.StatusUnauthorized)
+		utils.SendJSONError(w, "authentication required", http.StatusUnauthorized)
 		return
 	}
-	log.Printf("Handling GetCurrentHoldingsValue for userID: %d", userID)
-
-	// 1. Get all individual purchase lots.
-	holdingsByYear, err := h.uploadService.GetStockHoldings(userID)
+	portfolioID, err := getPortfolioID(r)
 	if err != nil {
-		utils.SendJSONError(w, fmt.Sprintf("Error retrieving stock holdings for userID %d: %v", userID, err), http.StatusInternalServerError)
+		utils.SendJSONError(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	log.Printf("Handling GetCurrentHoldingsValue for userID: %d, portfolioID: %d", userID, portfolioID)
+
+	// Updated call
+	holdingsByYear, err := h.uploadService.GetStockHoldings(userID, portfolioID)
+	if err != nil {
+		utils.SendJSONError(w, fmt.Sprintf("Error retrieving stock holdings: %v", err), http.StatusInternalServerError)
 		return
 	}
 
@@ -69,27 +66,27 @@ func (h *PortfolioHandler) HandleGetCurrentHoldingsValue(w http.ResponseWriter, 
 	}
 	individualLots := holdingsByYear[latestYear]
 
-	// 2. Aggregate these lots by ISIN.
+	// Aggregation logic...
+	type AggregatedHolding struct {
+		ISIN              string
+		ProductName       string
+		TotalQuantity     int
+		TotalCostBasisEUR float64
+	}
 	groupedHoldings := make(map[string]AggregatedHolding)
 	for _, lot := range individualLots {
 		if lot.ISIN == "" {
-			continue // Skip lots without an ISIN
+			continue
 		}
-
 		agg, exists := groupedHoldings[lot.ISIN]
 		if !exists {
-			agg = AggregatedHolding{
-				ISIN:        lot.ISIN,
-				ProductName: lot.ProductName, // Use the name from the first lot encountered
-			}
+			agg = AggregatedHolding{ISIN: lot.ISIN, ProductName: lot.ProductName}
 		}
 		agg.TotalQuantity += lot.Quantity
 		agg.TotalCostBasisEUR += lot.BuyAmountEUR
-
 		groupedHoldings[lot.ISIN] = agg
 	}
 
-	// 3. Extract unique ISINs from the aggregated map.
 	uniqueISINs := make([]string, 0, len(groupedHoldings))
 	for isin := range groupedHoldings {
 		if !strings.HasPrefix(strings.ToLower(isin), "unknown") {
@@ -97,35 +94,28 @@ func (h *PortfolioHandler) HandleGetCurrentHoldingsValue(w http.ResponseWriter, 
 		}
 	}
 
-	// 4. Call the PriceService to get current prices for the unique ISINs.
 	prices, err := h.priceService.GetCurrentPrices(uniqueISINs)
 	if err != nil {
-		// Log the error but don't fail the request. We can still return holdings with purchase data.
-		log.Printf("Warning: could not fetch some or all current prices for userID %d: %v", userID, err)
+		log.Printf("Warning: could not fetch prices: %v", err)
 	}
 
-	// 5. Combine the aggregated holding data with the price data for the final response.
-	response := []HoldingWithValue{}
+	response := []models.HoldingWithValue{}
 	for isin, holding := range groupedHoldings {
 		priceInfo, found := prices[isin]
-
 		currentPrice := 0.0
-		// CORREÇÃO: Default market value to the ABSOLUTE cost basis.
 		marketValue := math.Abs(holding.TotalCostBasisEUR)
 		status := "UNAVAILABLE"
 
-		// If we found a live price, override the fallback values
 		if found && priceInfo.Status == "OK" {
 			status = "OK"
 			currentPrice = priceInfo.Price
-			marketValue = priceInfo.Price * float64(holding.TotalQuantity) // The correct calculation
+			marketValue = priceInfo.Price * float64(holding.TotalQuantity)
 		}
 
-		response = append(response, HoldingWithValue{
-			ISIN:        holding.ISIN,
-			ProductName: holding.ProductName,
-			Quantity:    holding.TotalQuantity,
-			// CORREÇÃO: Ensure cost basis sent to frontend is always positive.
+		response = append(response, models.HoldingWithValue{
+			ISIN:              holding.ISIN,
+			ProductName:       holding.ProductName,
+			Quantity:          holding.TotalQuantity,
 			TotalCostBasisEUR: math.Abs(holding.TotalCostBasisEUR),
 			CurrentPriceEUR:   currentPrice,
 			MarketValueEUR:    marketValue,
@@ -140,18 +130,24 @@ func (h *PortfolioHandler) HandleGetCurrentHoldingsValue(w http.ResponseWriter, 
 func (h *PortfolioHandler) HandleGetStockSales(w http.ResponseWriter, r *http.Request) {
 	userID, ok := GetUserIDFromContext(r.Context())
 	if !ok {
-		utils.SendJSONError(w, "authentication required or user ID not found in context", http.StatusUnauthorized)
+		utils.SendJSONError(w, "authentication required", http.StatusUnauthorized)
 		return
 	}
-	log.Printf("Handling GetStockSales for userID: %d", userID)
-	stockSales, err := h.uploadService.GetStockSaleDetails(userID)
+	portfolioID, err := getPortfolioID(r)
 	if err != nil {
-		utils.SendJSONError(w, fmt.Sprintf("Error retrieving stock sales for userID %d: %v", userID, err), http.StatusInternalServerError)
+		utils.SendJSONError(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	stockSales, err := h.uploadService.GetStockSaleDetails(userID, portfolioID)
+	if err != nil {
+		utils.SendJSONError(w, fmt.Sprintf("Error retrieving stock sales: %v", err), http.StatusInternalServerError)
 		return
 	}
 	if stockSales == nil {
 		stockSales = []models.SaleDetail{}
 	}
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(stockSales)
 }
@@ -162,9 +158,13 @@ func (h *PortfolioHandler) HandleGetHistoricalChartData(w http.ResponseWriter, r
 		utils.SendJSONError(w, "Authentication required", http.StatusUnauthorized)
 		return
 	}
+	portfolioID, err := getPortfolioID(r)
+	if err != nil {
+		utils.SendJSONError(w, err.Error(), http.StatusBadRequest)
+		return
+	}
 
-	// Use the service method to fetch data from the DB
-	data, err := h.uploadService.GetHistoricalChartData(userID)
+	data, err := h.uploadService.GetHistoricalChartData(userID, portfolioID)
 	if err != nil {
 		logger.L.Error("Failed to get historical chart data", "userID", userID, "error", err)
 		utils.SendJSONError(w, "Failed to retrieve chart data", http.StatusInternalServerError)
@@ -178,19 +178,26 @@ func (h *PortfolioHandler) HandleGetHistoricalChartData(w http.ResponseWriter, r
 func (h *PortfolioHandler) HandleGetOptionSales(w http.ResponseWriter, r *http.Request) {
 	userID, ok := GetUserIDFromContext(r.Context())
 	if !ok {
-		utils.SendJSONError(w, "authentication required or user ID not found in context", http.StatusUnauthorized)
+		utils.SendJSONError(w, "authentication required", http.StatusUnauthorized)
 		return
 	}
-	log.Printf("Handling GetOptionSales for userID: %d", userID)
-	optionSales, err := h.uploadService.GetOptionSaleDetails(userID)
+	portfolioID, err := getPortfolioID(r)
 	if err != nil {
-		utils.SendJSONError(w, fmt.Sprintf("Error retrieving option sales for userID %d: %v", userID, err), http.StatusInternalServerError)
+		utils.SendJSONError(w, err.Error(), http.StatusBadRequest)
 		return
 	}
+
+	optionSales, err := h.uploadService.GetOptionSaleDetails(userID, portfolioID)
+	if err != nil {
+		utils.SendJSONError(w, fmt.Sprintf("Error retrieving option sales: %v", err), http.StatusInternalServerError)
+		return
+	}
+
 	response := map[string]interface{}{"OptionSaleDetails": optionSales}
 	if optionSales == nil {
 		response["OptionSaleDetails"] = []models.OptionSaleDetail{}
 	}
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(response)
 }
@@ -198,18 +205,24 @@ func (h *PortfolioHandler) HandleGetOptionSales(w http.ResponseWriter, r *http.R
 func (h *PortfolioHandler) HandleGetStockHoldings(w http.ResponseWriter, r *http.Request) {
 	userID, ok := GetUserIDFromContext(r.Context())
 	if !ok {
-		utils.SendJSONError(w, "authentication required or user ID not found in context", http.StatusUnauthorized)
+		utils.SendJSONError(w, "authentication required", http.StatusUnauthorized)
 		return
 	}
-	log.Printf("Handling GetStockHoldings for userID: %d", userID)
-	stockHoldings, err := h.uploadService.GetStockHoldings(userID)
+	portfolioID, err := getPortfolioID(r)
 	if err != nil {
-		utils.SendJSONError(w, fmt.Sprintf("Error retrieving stock holdings for userID %d: %v", userID, err), http.StatusInternalServerError)
+		utils.SendJSONError(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	stockHoldings, err := h.uploadService.GetStockHoldings(userID, portfolioID)
+	if err != nil {
+		utils.SendJSONError(w, fmt.Sprintf("Error retrieving stock holdings: %v", err), http.StatusInternalServerError)
 		return
 	}
 	if stockHoldings == nil {
 		stockHoldings = make(map[string][]models.PurchaseLot)
 	}
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(stockHoldings)
 }
@@ -217,18 +230,24 @@ func (h *PortfolioHandler) HandleGetStockHoldings(w http.ResponseWriter, r *http
 func (h *PortfolioHandler) HandleGetOptionHoldings(w http.ResponseWriter, r *http.Request) {
 	userID, ok := GetUserIDFromContext(r.Context())
 	if !ok {
-		utils.SendJSONError(w, "authentication required or user ID not found in context", http.StatusUnauthorized)
+		utils.SendJSONError(w, "authentication required", http.StatusUnauthorized)
 		return
 	}
-	log.Printf("Handling GetOptionHoldings for userID: %d", userID)
-	optionHoldings, err := h.uploadService.GetOptionHoldings(userID)
+	portfolioID, err := getPortfolioID(r)
 	if err != nil {
-		utils.SendJSONError(w, fmt.Sprintf("Error retrieving option holdings for userID %d: %v", userID, err), http.StatusInternalServerError)
+		utils.SendJSONError(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	optionHoldings, err := h.uploadService.GetOptionHoldings(userID, portfolioID)
+	if err != nil {
+		utils.SendJSONError(w, fmt.Sprintf("Error retrieving option holdings: %v", err), http.StatusInternalServerError)
 		return
 	}
 	if optionHoldings == nil {
 		optionHoldings = []models.OptionHolding{}
 	}
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(optionHoldings)
 }
