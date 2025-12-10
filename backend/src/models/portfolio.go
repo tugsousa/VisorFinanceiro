@@ -1,5 +1,7 @@
 package models
 
+import "time"
+
 // HoldingWithValue represents a user's holding with its current market value.
 type HoldingWithValue struct {
 	ISIN              string  `json:"isin"`
@@ -84,4 +86,13 @@ type HistoricalDataPoint struct {
 	PortfolioValue     float64 `json:"portfolio_value"` // To be populated via snapshots later
 	BenchmarkValue     float64 `json:"benchmark_value"`
 	SPYPrice           float64 `json:"spy_price"`
+}
+
+type Portfolio struct {
+	ID          int64     `json:"id"`
+	UserID      int64     `json:"user_id"`
+	Name        string    `json:"name"`
+	Description string    `json:"description"`
+	IsDefault   bool      `json:"is_default"`
+	CreatedAt   time.Time `json:"created_at"`
 }

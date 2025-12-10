@@ -4,6 +4,8 @@ import { Box, AppBar, Toolbar, Typography, IconButton, Tooltip, Avatar, Menu, Me
 import { Link as RouterLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import CookieConsent from "react-cookie-consent";
+// IMPORT PORTFOLIO SELECTOR
+import PortfolioSelector from '../components/PortfolioSelector'; 
 import {
     Person as PersonIcon,
     Settings as SettingsIcon,
@@ -78,7 +80,7 @@ export default function Layout({ children }) {
 
                         {user ? (
                             <>
-                                <Box sx={{ display: { xs: 'none', sm: 'block' } }}>
+                                <Box sx={{ display: { xs: 'none', sm: 'block' }, mr: 2 }}>
                                     {navItems.map((item) => (
                                         <Button key={item.title} component={RouterLink} to={item.to} sx={{
                                             color: '#4b5563',
@@ -92,7 +94,14 @@ export default function Layout({ children }) {
                                         </Button>
                                     ))}
                                 </Box>
-                                <Box sx={{ display: 'flex', alignItems: 'center', ml: 2 }}>
+
+                                {/* --- PORTFOLIO SELECTOR ADDED HERE --- */}
+                                <Box sx={{ mr: 2 }}>
+                                    <PortfolioSelector />
+                                </Box>
+                                {/* ------------------------------------- */}
+
+                                <Box sx={{ display: 'flex', alignItems: 'center' }}>
                                     <Tooltip title={user.username || "User Account"} placement="bottom">
                                         <IconButton
                                             onClick={handleMenuClick}
@@ -138,7 +147,6 @@ export default function Layout({ children }) {
                                             ))}
                                             <Divider sx={{ my: 0.5 }} />
                                         </Box>
-                                        {/* --- CONDIÇÃO PARA O LINK DE ADMIN --- */}
                                         {user && user.is_admin && (
                                             <MenuItem component={RouterLink} to="/admin" onClick={handleMenuClose}>
                                                 <AdminPanelSettingsIcon sx={{ mr: 1, color: 'text.secondary' }} fontSize="small" />

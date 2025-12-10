@@ -150,69 +150,333 @@ func (h *UserHandler) AdminMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-type TimeSeriesDataPoint struct {
-	Date  string `json:"date"`
-	Count int    `json:"count"`
+// Stats Structure updated to include all fields required by AdminDashboardPage.js
+type AdminStats struct {
+	TotalPortfolioValue      float64 `json:"totalPortfolioValue"`
+	TotalUsers               int     `json:"totalUsers"`
+	DeletedUserCount         int     `json:"deletedUserCount"`
+	TotalUploads             int     `json:"totalUploads"`
+	DailyActiveUsers         int     `json:"dailyActiveUsers"`
+	MonthlyActiveUsers       int     `json:"monthlyActiveUsers"`
+	AvgTimeToFirstUploadDays float64 `json:"avgTimeToFirstUploadDays"`
+	NewUsersToday            int     `json:"newUsersToday"`
+	NewUsersThisWeek         int     `json:"newUsersThisWeek"`
+	NewUsersThisMonth        int     `json:"newUsersThisMonth"`
+
+	// Period Specific Metrics
+	NewUsersInPeriod                  int     `json:"newUsersInPeriod"`
+	ActiveUsersInPeriod               int     `json:"activeUsersInPeriod"`
+	UploadsInPeriod                   int     `json:"uploadsInPeriod"`
+	UploadFailureRate                 float64 `json:"uploadFailureRate"`
+	TotalCashDepositedEURInPeriod     float64 `json:"totalCashDepositedEURInPeriod"`
+	CashDepositsInPeriod              int     `json:"cashDepositsInPeriod"`
+	TotalDividendsReceivedEURInPeriod float64 `json:"totalDividendsReceivedEURInPeriod"`
+	AvgDividendReceivedEURInPeriod    float64 `json:"avgDividendReceivedEURInPeriod"`
+
+	// Lists / Charts
+	TopUsersByLogins                []AdminUserView `json:"topUsersByLogins"`
+	TopUsersByUploads               []AdminUserView `json:"topUsersByUploads"`
+	VerificationStats               map[string]int  `json:"verificationStats"`
+	AuthProviderStats               []ChartData     `json:"authProviderStats"`
+	ValueByBroker                   []ChartData     `json:"valueByBroker"`
+	DepositsByBroker                []ChartData     `json:"depositsByBroker"`
+	TopStocksByValue                []StockMetric   `json:"topStocksByValue"`
+	TopStocksByTrades               []StockMetric   `json:"topStocksByTrades"`
+	InvestmentDistributionByCountry []ChartData     `json:"investmentDistributionByCountry"`
+
+	// Time Series
+	ActiveUsersPerDay []TimeSeriesData `json:"activeUsersPerDay"`
+	UsersPerDay       []TimeSeriesData `json:"usersPerDay"`
 }
 
-type NameValueDataPoint struct {
+type ChartData struct {
 	Name  string  `json:"name"`
 	Value float64 `json:"value"`
 }
 
-type VerificationStatsData struct {
-	Verified   int `json:"verified"`
-	Unverified int `json:"unverified"`
+type StockMetric struct {
+	ProductName string  `json:"productName"`
+	ISIN        string  `json:"isin"`
+	Value       float64 `json:"value"`
 }
 
-type TopUser struct {
-	Email string `json:"email"`
-	Value int    `json:"value"`
+type TimeSeriesData struct {
+	Date  string `json:"date"`
+	Count int    `json:"count"`
 }
 
-type AdminStats struct {
-	// Period-specific metrics, controlled by the date range filter
-	NewUsersInPeriod                  int                   `json:"newUsersInPeriod"`
-	ActiveUsersInPeriod               int                   `json:"activeUsersInPeriod"`
-	UploadsInPeriod                   int                   `json:"uploadsInPeriod"`
-	TransactionsInPeriod              int                   `json:"transactionsInPeriod"`
-	AvgFileSizeMBInPeriod             float64               `json:"avgFileSizeMBInPeriod"`
-	AvgTransactionsPerUploadInPeriod  float64               `json:"avgTransactionsPerUploadInPeriod"`
-	UsersPerDay                       []TimeSeriesDataPoint `json:"usersPerDay"`
-	UploadsPerDay                     []TimeSeriesDataPoint `json:"uploadsPerDay"`
-	TransactionsPerDay                []TimeSeriesDataPoint `json:"transactionsPerDay"`
-	ActiveUsersPerDay                 []TimeSeriesDataPoint `json:"activeUsersPerDay"`
-	ValueByBroker                     []NameValueDataPoint  `json:"valueByBroker"`
-	DepositsByBroker                  []NameValueDataPoint  `json:"depositsByBroker"`
-	TopStocksByValue                  []TopStockInfo        `json:"topStocksByValue"`
-	TopStocksByTrades                 []TopStockInfo        `json:"topStocksByTrades"`
-	InvestmentDistributionByCountry   []NameValueDataPoint  `json:"investmentDistributionByCountry"`
-	CashDepositsInPeriod              int                   `json:"cashDepositsInPeriod"`
-	TotalCashDepositedEURInPeriod     float64               `json:"totalCashDepositedEURInPeriod"`
-	AvgCashDepositEURInPeriod         float64               `json:"avgCashDepositEURInPeriod"`
-	TotalDividendsReceivedEURInPeriod float64               `json:"totalDividendsReceivedEURInPeriod"`
-	AvgDividendReceivedEURInPeriod    float64               `json:"avgDividendReceivedEURInPeriod"`
-	UploadFailureRate                 float64               `json:"uploadFailureRate"`
+func (h *UserHandler) HandleGetAdminStats(w http.ResponseWriter, r *http.Request) {
+	stats := AdminStats{
+		VerificationStats: make(map[string]int),
+	}
 
-	// All-Time / Static Metrics
-	TotalUsers               int                   `json:"totalUsers"`
-	DailyActiveUsers         int                   `json:"dailyActiveUsers"`
-	MonthlyActiveUsers       int                   `json:"monthlyActiveUsers"`
-	DeletedUserCount         int                   `json:"deletedUserCount"`
-	TotalUploads             int                   `json:"totalUploads"`
-	TotalTransactions        int                   `json:"totalTransactions"`
-	NewUsersToday            int                   `json:"newUsersToday"`
-	NewUsersThisWeek         int                   `json:"newUsersThisWeek"`
-	NewUsersThisMonth        int                   `json:"newUsersThisMonth"`
-	TotalPortfolioValue      float64               `json:"totalPortfolioValue"`
-	VerificationStats        VerificationStatsData `json:"verificationStats"`
-	AuthProviderStats        []NameValueDataPoint  `json:"authProviderStats"`
-	UploadsByBroker          []NameValueDataPoint  `json:"uploadsByBroker"`
-	AvgFileSizeMB            float64               `json:"avgFileSizeMB"`
-	AvgTransactionsPerUpload float64               `json:"avgTransactionsPerUpload"`
-	AvgTimeToFirstUploadDays float64               `json:"avgTimeToFirstUploadDays"`
-	TopUsersByUploads        []TopUser             `json:"topUsersByUploads"`
-	TopUsersByLogins         []TopUser             `json:"topUsersByLogins"`
+	rangeParam := r.URL.Query().Get("range")
+	var timeFilter string
+	var loginFilter string
+	var uploadFilter string
+
+	// Determine SQL filter based on range parameter
+	switch rangeParam {
+	case "last_7_days":
+		timeFilter = "created_at >= date('now', '-7 days')"
+		loginFilter = "login_at >= date('now', '-7 days')"
+		uploadFilter = "uploaded_at >= date('now', '-7 days')"
+	case "last_30_days":
+		timeFilter = "created_at >= date('now', '-30 days')"
+		loginFilter = "login_at >= date('now', '-30 days')"
+		uploadFilter = "uploaded_at >= date('now', '-30 days')"
+	case "last_365_days":
+		timeFilter = "created_at >= date('now', '-365 days')"
+		loginFilter = "login_at >= date('now', '-365 days')"
+		uploadFilter = "uploaded_at >= date('now', '-365 days')"
+	default: // "all_time"
+		timeFilter = "1=1"
+		loginFilter = "1=1"
+		uploadFilter = "1=1"
+	}
+
+	// 1. Basic Counts (Always Global)
+	database.DB.QueryRow("SELECT COUNT(*) FROM users").Scan(&stats.TotalUsers)
+	database.DB.QueryRow("SELECT COALESCE(SUM(portfolio_value_eur), 0) FROM users").Scan(&stats.TotalPortfolioValue)
+	database.DB.QueryRow("SELECT metric_value FROM system_metrics WHERE metric_name = 'deleted_user_count'").Scan(&stats.DeletedUserCount)
+	database.DB.QueryRow("SELECT COUNT(*) FROM uploads_history").Scan(&stats.TotalUploads)
+
+	// 2. Active Users (Global Snapshot)
+	database.DB.QueryRow("SELECT COUNT(DISTINCT user_id) FROM login_history WHERE login_at > date('now', '-1 day')").Scan(&stats.DailyActiveUsers)
+	database.DB.QueryRow("SELECT COUNT(DISTINCT user_id) FROM login_history WHERE login_at > date('now', '-30 days')").Scan(&stats.MonthlyActiveUsers)
+
+	// 3. New Users (Global Snapshot)
+	database.DB.QueryRow("SELECT COUNT(*) FROM users WHERE created_at > date('now', 'start of day')").Scan(&stats.NewUsersToday)
+	database.DB.QueryRow("SELECT COUNT(*) FROM users WHERE created_at > date('now', '-7 days')").Scan(&stats.NewUsersThisWeek)
+	database.DB.QueryRow("SELECT COUNT(*) FROM users WHERE created_at > date('now', 'start of month')").Scan(&stats.NewUsersThisMonth)
+
+	// 4. Period Specific Metrics (Dynamic based on 'range')
+	database.DB.QueryRow("SELECT COUNT(*) FROM users WHERE " + timeFilter).Scan(&stats.NewUsersInPeriod)
+	database.DB.QueryRow("SELECT COUNT(DISTINCT user_id) FROM login_history WHERE " + loginFilter).Scan(&stats.ActiveUsersInPeriod)
+
+	// Uploads & Failures
+	var successfulUploads int
+	database.DB.QueryRow("SELECT COUNT(*) FROM uploads_history WHERE " + uploadFilter).Scan(&successfulUploads)
+	stats.UploadsInPeriod = successfulUploads
+
+	var failedUploads int
+	failureTimeFilter := strings.Replace(uploadFilter, "uploaded_at", "failed_at", 1)
+	database.DB.QueryRow("SELECT COUNT(*) FROM upload_failures WHERE " + failureTimeFilter).Scan(&failedUploads)
+
+	totalAttempts := successfulUploads + failedUploads
+	if totalAttempts > 0 {
+		stats.UploadFailureRate = (float64(failedUploads) / float64(totalAttempts)) * 100
+	} else {
+		stats.UploadFailureRate = 0
+	}
+
+	// 5. Financials in Period
+	if rangeParam == "all_time" || rangeParam == "" {
+		database.DB.QueryRow(`
+			SELECT COALESCE(SUM(amount_eur), 0) 
+			FROM processed_transactions 
+			WHERE transaction_type = 'CASH' AND transaction_subtype = 'DEPOSIT'`).Scan(&stats.TotalCashDepositedEURInPeriod)
+
+		database.DB.QueryRow(`
+			SELECT COUNT(*) 
+			FROM processed_transactions 
+			WHERE transaction_type = 'CASH' AND transaction_subtype = 'DEPOSIT'`).Scan(&stats.CashDepositsInPeriod)
+
+		database.DB.QueryRow(`
+			SELECT COALESCE(SUM(amount_eur), 0) 
+			FROM processed_transactions 
+			WHERE transaction_type = 'DIVIDEND' AND transaction_subtype != 'TAX'`).Scan(&stats.TotalDividendsReceivedEURInPeriod)
+
+		database.DB.QueryRow(`
+			SELECT COALESCE(AVG(amount_eur), 0) 
+			FROM processed_transactions 
+			WHERE transaction_type = 'DIVIDEND' AND transaction_subtype != 'TAX'`).Scan(&stats.AvgDividendReceivedEURInPeriod)
+	} else {
+		// Placeholder for time-filtered queries to prevent breaking.
+		// Future improvement: implement proper date filtering on processed_transactions.
+		stats.TotalCashDepositedEURInPeriod = 0
+		stats.CashDepositsInPeriod = 0
+		stats.TotalDividendsReceivedEURInPeriod = 0
+		stats.AvgDividendReceivedEURInPeriod = 0
+	}
+
+	// 6. Avg Time to First Upload (Global)
+	database.DB.QueryRow(`
+		SELECT COALESCE(AVG(JULIANDAY(first_upload_at) - JULIANDAY(created_at)), 0) 
+		FROM users WHERE first_upload_at IS NOT NULL
+	`).Scan(&stats.AvgTimeToFirstUploadDays)
+
+	// 7. Verification Stats
+	var verified, unverified int
+	database.DB.QueryRow("SELECT COUNT(*) FROM users WHERE is_email_verified = 1").Scan(&verified)
+	database.DB.QueryRow("SELECT COUNT(*) FROM users WHERE is_email_verified = 0").Scan(&unverified)
+	stats.VerificationStats = map[string]int{"verified": verified, "unverified": unverified}
+
+	// 8. Top Users (Logins & Uploads)
+	fetchUsers := func(query string) []AdminUserView {
+		rows, _ := database.DB.Query(query)
+		if rows == nil {
+			return []AdminUserView{}
+		}
+		defer rows.Close()
+		var users []AdminUserView
+		for rows.Next() {
+			var u AdminUserView
+			var lastLogin, topHoldings sql.NullString
+			var lastLoginAt sql.NullTime
+			rows.Scan(&u.ID, &u.Email, &u.LoginCount, &u.TotalUploadCount, &u.PortfolioValueEUR, &lastLoginAt, &lastLogin, &topHoldings)
+			u.LastLoginAt = lastLoginAt
+			u.LastLoginIP = lastLogin.String
+			u.Top5Holdings = topHoldings.String
+			users = append(users, u)
+		}
+		return users
+	}
+
+	stats.TopUsersByLogins = fetchUsers(`
+		SELECT id, email, login_count, total_upload_count, portfolio_value_eur, last_login_at, last_login_ip, top_5_holdings 
+		FROM users ORDER BY login_count DESC LIMIT 5`)
+	stats.TopUsersByUploads = fetchUsers(`
+		SELECT id, email, login_count, total_upload_count, portfolio_value_eur, last_login_at, last_login_ip, top_5_holdings 
+		FROM users ORDER BY total_upload_count DESC LIMIT 5`)
+
+	// 9. Broker Distribution
+	brokerRows, _ := database.DB.Query("SELECT source, COUNT(*) FROM processed_transactions GROUP BY source")
+	if brokerRows != nil {
+		defer brokerRows.Close()
+		for brokerRows.Next() {
+			var name string
+			var val float64
+			brokerRows.Scan(&name, &val)
+			stats.ValueByBroker = append(stats.ValueByBroker, ChartData{Name: name, Value: val})
+		}
+	}
+
+	// 10. Auth Provider Stats
+	authRows, _ := database.DB.Query("SELECT auth_provider, COUNT(*) FROM users GROUP BY auth_provider")
+	if authRows != nil {
+		defer authRows.Close()
+		for authRows.Next() {
+			var name string
+			var val float64
+			authRows.Scan(&name, &val)
+			stats.AuthProviderStats = append(stats.AuthProviderStats, ChartData{Name: name, Value: val})
+		}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(stats)
+}
+
+func (h *UserHandler) HandleGetAdminUsers(w http.ResponseWriter, r *http.Request) {
+	page, _ := strconv.Atoi(r.URL.Query().Get("page"))
+	if page < 1 {
+		page = 1
+	}
+	pageSize, _ := strconv.Atoi(r.URL.Query().Get("pageSize"))
+	if pageSize < 1 {
+		pageSize = 25
+	}
+	offset := (page - 1) * pageSize
+
+	sortBy := r.URL.Query().Get("sortBy")
+	order := r.URL.Query().Get("order")
+
+	validSorts := map[string]bool{"created_at": true, "login_count": true, "portfolio_value_eur": true, "total_upload_count": true, "email": true}
+	if !validSorts[sortBy] {
+		sortBy = "created_at"
+	}
+	if order != "asc" {
+		order = "desc"
+	}
+
+	query := fmt.Sprintf(`
+		SELECT id, username, email, auth_provider, created_at, total_upload_count, upload_count,
+		(SELECT COUNT(DISTINCT source) FROM processed_transactions WHERE user_id = u.id) as distinct_broker_count,
+		portfolio_value_eur, top_5_holdings, last_login_at, last_login_ip, login_count
+		FROM users u
+		ORDER BY %s %s LIMIT ? OFFSET ?`, sortBy, order)
+
+	rows, err := database.DB.Query(query, pageSize, offset)
+	if err != nil {
+		logger.L.Error("Failed to list users", "error", err)
+		sendJSONError(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+	defer rows.Close()
+
+	var users []AdminUserView
+	for rows.Next() {
+		var u AdminUserView
+		var lastLoginIP, topHoldings sql.NullString
+		var lastLoginAt sql.NullTime
+		if err := rows.Scan(&u.ID, &u.Username, &u.Email, &u.AuthProvider, &u.CreatedAt, &u.TotalUploadCount, &u.CurrentFileCount, &u.DistinctBrokerCount, &u.PortfolioValueEUR, &topHoldings, &lastLoginAt, &lastLoginIP, &u.LoginCount); err == nil {
+			u.LastLoginAt = lastLoginAt
+			u.LastLoginIP = lastLoginIP.String
+			u.Top5Holdings = topHoldings.String
+			users = append(users, u)
+		}
+	}
+
+	var totalRows int
+	database.DB.QueryRow("SELECT COUNT(*) FROM users").Scan(&totalRows)
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"users":     users,
+		"totalRows": totalRows,
+	})
+}
+
+// HandleAdminRefreshUserMetrics refreshes metrics for all portfolios of a user.
+func (h *UserHandler) HandleAdminRefreshUserMetrics(w http.ResponseWriter, r *http.Request) {
+	userIDStr := chi.URLParam(r, "userID")
+	userID, err := strconv.ParseInt(userIDStr, 10, 64)
+	if err != nil {
+		sendJSONError(w, "Invalid user ID format", http.StatusBadRequest)
+		return
+	}
+
+	logger.L.Info("Admin triggered portfolio metrics refresh for user", "targetUserID", userID)
+
+	rows, err := database.DB.Query("SELECT id FROM portfolios WHERE user_id = ?", userID)
+	if err != nil {
+		logger.L.Error("Failed to fetch user portfolios for refresh", "userID", userID, "error", err)
+		sendJSONError(w, "Failed to fetch user portfolios", http.StatusInternalServerError)
+		return
+	}
+
+	var portfolioIDs []int64
+	for rows.Next() {
+		var pfID int64
+		if err := rows.Scan(&pfID); err == nil {
+			portfolioIDs = append(portfolioIDs, pfID)
+		}
+	}
+	rows.Close()
+
+	var successCount, failCount int
+	for _, pfID := range portfolioIDs {
+		if err := h.uploadService.UpdateUserPortfolioMetrics(userID, pfID); err != nil {
+			logger.L.Error("Failed to refresh metrics for portfolio", "pfID", pfID, "error", err)
+			failCount++
+		} else {
+			successCount++
+		}
+	}
+
+	logger.L.Info("Refreshed user portfolios", "userID", userID, "success", successCount, "fail", failCount)
+	w.WriteHeader(http.StatusNoContent)
+}
+
+type UploadHistoryEntry struct {
+	ID               int       `json:"id"`
+	UploadedAt       time.Time `json:"uploaded_at"`
+	Source           string    `json:"source"`
+	Filename         string    `json:"filename"`
+	FileSize         int64     `json:"file_size"`
+	TransactionCount int       `json:"transaction_count"`
+	PortfolioName    string    `json:"portfolio_name"`
 }
 
 type AdminUserView struct {
@@ -231,496 +495,15 @@ type AdminUserView struct {
 	LoginCount          int          `json:"login_count"`
 }
 
-type AdminUsersPaginatedResponse struct {
-	Users     []AdminUserView `json:"users"`
-	TotalRows int             `json:"totalRows"`
-}
-
-func queryTimeSeries(query string) ([]TimeSeriesDataPoint, error) {
-	rows, err := database.DB.Query(query)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var results []TimeSeriesDataPoint
-	for rows.Next() {
-		var point TimeSeriesDataPoint
-		var nullableDate sql.NullString
-		if err := rows.Scan(&nullableDate, &point.Count); err != nil {
-			return nil, err
-		}
-		if nullableDate.Valid {
-			point.Date = nullableDate.String
-			results = append(results, point)
-		}
-	}
-	return results, nil
-}
-
-func (h *UserHandler) HandleGetAdminStats(w http.ResponseWriter, r *http.Request) {
-	dateRange := r.URL.Query().Get("range")
-	if dateRange == "" {
-		dateRange = "all_time"
-	}
-
-	cacheKey := fmt.Sprintf("admin_stats_%s", dateRange)
-	if cached, found := h.cache.Get(cacheKey); found {
-		logger.L.Info("Admin stats cache hit", "key", cacheKey)
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(cached)
-		return
-	}
-	logger.L.Info("Admin stats cache miss", "key", cacheKey)
-
-	var stats AdminStats
-	var err error
-
-	// --- START REFACTOR: Consolidated Scalar Queries ---
-
-	var startDate, endDate string
-	now := time.Now()
-	endDate = now.Format("2006-01-02 15:04:05")
-
-	switch dateRange {
-	case "last_7_days":
-		startDate = now.AddDate(0, 0, -7).Format("2006-01-02 00:00:00")
-	case "last_30_days":
-		startDate = now.AddDate(0, 0, -30).Format("2006-01-02 00:00:00")
-	case "last_365_days":
-		startDate = now.AddDate(0, 0, -365).Format("2006-01-02 00:00:00")
-	default: // "all_time"
-		startDate = "1970-01-01 00:00:00"
-	}
-
-	// Helper string for handling the DD-MM-YYYY format in the processed_transactions table
-	txDateColumn := "SUBSTR(date, 7, 4) || '-' || SUBSTR(date, 4, 2) || '-' || SUBSTR(date, 1, 2)"
-	txDateFilter := fmt.Sprintf("DATE(%s) BETWEEN DATE(?) AND DATE(?)", txDateColumn)
-
-	consolidatedQuery := `
-	SELECT
-		-- Period-specific metrics (args: startDate, endDate)
-		COALESCE((SELECT COUNT(*) FROM users WHERE created_at BETWEEN ? AND ?), 0),
-		COALESCE((SELECT COUNT(DISTINCT user_id) FROM login_history WHERE login_at BETWEEN ? AND ?), 0),
-		COALESCE((SELECT COUNT(*) FROM uploads_history WHERE uploaded_at BETWEEN ? AND ?), 0),
-		COALESCE((SELECT SUM(transaction_count) FROM uploads_history WHERE uploaded_at BETWEEN ? AND ?), 0),
-		COALESCE((SELECT COUNT(*) FROM upload_failures WHERE failed_at BETWEEN ? AND ?), 0),
-		COALESCE((SELECT COUNT(*) FROM uploads_history WHERE uploaded_at BETWEEN ? AND ?), 0),
-		COALESCE((SELECT COUNT(*) FROM processed_transactions WHERE ` + txDateFilter + ` AND transaction_type = 'CASH' AND transaction_subtype = 'DEPOSIT'), 0),
-		COALESCE((SELECT SUM(amount_eur) FROM processed_transactions WHERE ` + txDateFilter + ` AND transaction_type = 'CASH' AND transaction_subtype = 'DEPOSIT'), 0),
-		COALESCE((SELECT AVG(amount_eur) FROM processed_transactions WHERE ` + txDateFilter + ` AND transaction_type = 'CASH' AND transaction_subtype = 'DEPOSIT'), 0),
-		COALESCE((SELECT SUM(amount_eur) FROM processed_transactions WHERE ` + txDateFilter + ` AND transaction_type = 'DIVIDEND' AND transaction_subtype != 'TAX'), 0),
-		COALESCE((SELECT AVG(amount_eur) FROM processed_transactions WHERE ` + txDateFilter + ` AND transaction_type = 'DIVIDEND' AND transaction_subtype != 'TAX'), 0),
-		COALESCE((SELECT AVG(file_size) / (1024*1024) FROM uploads_history WHERE uploaded_at BETWEEN ? AND ?), 0),
-		COALESCE((SELECT AVG(transaction_count) FROM uploads_history WHERE uploaded_at BETWEEN ? AND ?), 0),
-
-		-- All-Time / Static Metrics (no args)
-		COALESCE((SELECT COUNT(*) FROM users), 0),
-		COALESCE((SELECT COUNT(DISTINCT user_id) FROM login_history WHERE DATE(login_at) = DATE('now')), 0),
-		COALESCE((SELECT COUNT(DISTINCT user_id) FROM login_history WHERE login_at >= DATE('now', '-30 days')), 0),
-		COALESCE((SELECT metric_value FROM system_metrics WHERE metric_name = 'deleted_user_count'), 0),
-		COALESCE((SELECT COUNT(*) FROM uploads_history), 0),
-		COALESCE((SELECT SUM(transaction_count) FROM uploads_history), 0),
-		COALESCE((SELECT COUNT(*) FROM users WHERE DATE(created_at) = DATE('now')), 0),
-		COALESCE((SELECT COUNT(*) FROM users WHERE created_at >= DATE('now', '-7 days')), 0),
-		COALESCE((SELECT COUNT(*) FROM users WHERE STRFTIME('%Y-%m', created_at) = STRFTIME('%Y-%m', 'now')), 0),
-		COALESCE((SELECT AVG(file_size) / (1024*1024) FROM uploads_history), 0),
-		COALESCE((SELECT AVG(transaction_count) FROM uploads_history), 0),
-		COALESCE((SELECT AVG(JULIANDAY(first_upload_at) - JULIANDAY(created_at)) FROM users WHERE first_upload_at IS NOT NULL), 0),
-		COALESCE((SELECT SUM(portfolio_value_eur) FROM users), 0)
-	`
-	var successfulUploadsInPeriod, failedUploadsInPeriod float64
-
-	err = database.DB.QueryRow(consolidatedQuery,
-		// Arguments for period-specific metrics
-		startDate, endDate, // new users
-		startDate, endDate, // active users
-		startDate, endDate, // uploads in period
-		startDate, endDate, // transactions in period
-		startDate, endDate, // failed uploads
-		startDate, endDate, // successful uploads
-		startDate, endDate, // cash deposits count
-		startDate, endDate, // cash deposits sum
-		startDate, endDate, // cash deposits avg
-		startDate, endDate, // dividends sum
-		startDate, endDate, // dividends avg
-		startDate, endDate, // avg file size
-		startDate, endDate, // avg tx count
-	).Scan(
-		// Pointers for period-specific metrics
-		&stats.NewUsersInPeriod,
-		&stats.ActiveUsersInPeriod,
-		&stats.UploadsInPeriod,
-		&stats.TransactionsInPeriod,
-		&failedUploadsInPeriod,
-		&successfulUploadsInPeriod,
-		&stats.CashDepositsInPeriod,
-		&stats.TotalCashDepositedEURInPeriod,
-		&stats.AvgCashDepositEURInPeriod,
-		&stats.TotalDividendsReceivedEURInPeriod,
-		&stats.AvgDividendReceivedEURInPeriod,
-		&stats.AvgFileSizeMBInPeriod,
-		&stats.AvgTransactionsPerUploadInPeriod,
-		// Pointers for all-time metrics
-		&stats.TotalUsers,
-		&stats.DailyActiveUsers,
-		&stats.MonthlyActiveUsers,
-		&stats.DeletedUserCount,
-		&stats.TotalUploads,
-		&stats.TotalTransactions,
-		&stats.NewUsersToday,
-		&stats.NewUsersThisWeek,
-		&stats.NewUsersThisMonth,
-		&stats.AvgFileSizeMB,
-		&stats.AvgTransactionsPerUpload,
-		&stats.AvgTimeToFirstUploadDays,
-		&stats.TotalPortfolioValue,
-	)
-
-	if err != nil {
-		logger.L.Error("Failed to execute consolidated admin stats query", "error", err)
-		sendJSONError(w, "Failed to retrieve admin statistics", http.StatusInternalServerError)
-		return
-	}
-
-	if (successfulUploadsInPeriod + failedUploadsInPeriod) > 0 {
-		stats.UploadFailureRate = (failedUploadsInPeriod / (successfulUploadsInPeriod + failedUploadsInPeriod)) * 100
-	} else {
-		stats.UploadFailureRate = 0
-	}
-
-	// --- END REFACTOR ---
-
-	// --- Row-set and Time Series queries remain separate as they are more complex ---
-	getFilterClause := func(columnName, prefix string) string {
-		baseClause := fmt.Sprintf(" %s %s IS NOT NULL ", prefix, columnName)
-		dateFilter := ""
-		switch dateRange {
-		case "last_7_days":
-			dateFilter = fmt.Sprintf(" AND %s >= DATE('now', '-7 days')", columnName)
-		case "last_30_days":
-			dateFilter = fmt.Sprintf(" AND %s >= DATE('now', '-30 days')", columnName)
-		case "last_365_days":
-			dateFilter = fmt.Sprintf(" AND %s >= DATE('now', '-365 days')", columnName)
-		}
-		return baseClause + dateFilter
-	}
-
-	getTransactionsWhereClause := func(alias string) string {
-		dateColumn := "date"
-		if alias != "" {
-			dateColumn = alias + ".date"
-		}
-		formattedDate := fmt.Sprintf("SUBSTR(%s, 7, 4) || '-' || SUBSTR(%s, 4, 2) || '-' || SUBSTR(%s, 1, 2)", dateColumn, dateColumn, dateColumn)
-
-		switch dateRange {
-		case "last_7_days":
-			return fmt.Sprintf(" WHERE %s >= DATE('now', '-7 days')", formattedDate)
-		case "last_30_days":
-			return fmt.Sprintf(" WHERE %s >= DATE('now', '-30 days')", formattedDate)
-		case "last_365_days":
-			return fmt.Sprintf(" WHERE %s >= DATE('now', '-365 days')", formattedDate)
-		default:
-			return ""
-		}
-	}
-
-	getTransactionsAdditionalWhereClause := func(alias string) string {
-		whereClause := getTransactionsWhereClause(alias)
-		if whereClause == "" {
-			return " WHERE "
-		}
-		return whereClause + " AND "
-	}
-
-	stats.UsersPerDay, _ = queryTimeSeries("SELECT DATE(SUBSTR(created_at, 1, 19)) as date, COUNT(*) as count FROM users" + getFilterClause("created_at", "WHERE") + " GROUP BY date ORDER BY date ASC")
-	stats.UploadsPerDay, _ = queryTimeSeries("SELECT DATE(SUBSTR(uploaded_at, 1, 19)) as date, COUNT(*) as count FROM uploads_history" + getFilterClause("uploaded_at", "WHERE") + " GROUP BY date ORDER BY date ASC")
-	stats.TransactionsPerDay, _ = queryTimeSeries("SELECT DATE(SUBSTR(uploaded_at, 1, 19)) as date, SUM(transaction_count) as count FROM uploads_history" + getFilterClause("uploaded_at", "WHERE") + " GROUP BY date ORDER BY date ASC")
-	stats.ActiveUsersPerDay, _ = queryTimeSeries("SELECT DATE(SUBSTR(login_at, 1, 19)) as date, COUNT(DISTINCT user_id) as count FROM login_history" + getFilterClause("login_at", "WHERE") + " GROUP BY date ORDER BY date ASC")
-
-	rows, err := database.DB.Query("SELECT is_email_verified, COUNT(*) FROM users GROUP BY is_email_verified")
-	if err == nil {
-		for rows.Next() {
-			var isVerified bool
-			var count int
-			if err := rows.Scan(&isVerified, &count); err == nil {
-				if isVerified {
-					stats.VerificationStats.Verified = count
-				} else {
-					stats.VerificationStats.Unverified = count
-				}
-			}
-		}
-		rows.Close()
-	}
-
-	rows, err = database.DB.Query("SELECT auth_provider, COUNT(*) FROM users GROUP BY auth_provider")
-	if err == nil {
-		for rows.Next() {
-			var point NameValueDataPoint
-			if err := rows.Scan(&point.Name, &point.Value); err == nil {
-				stats.AuthProviderStats = append(stats.AuthProviderStats, point)
-			}
-		}
-		rows.Close()
-	}
-
-	rows, err = database.DB.Query("SELECT source, COUNT(*) as count FROM uploads_history GROUP BY source ORDER BY count DESC")
-	if err == nil {
-		for rows.Next() {
-			var point NameValueDataPoint
-			if err := rows.Scan(&point.Name, &point.Value); err == nil {
-				stats.UploadsByBroker = append(stats.UploadsByBroker, point)
-			}
-		}
-		rows.Close()
-	}
-
-	rows, err = database.DB.Query("SELECT email, total_upload_count FROM users ORDER BY total_upload_count DESC LIMIT 10")
-	if err == nil {
-		for rows.Next() {
-			var user TopUser
-			if err := rows.Scan(&user.Email, &user.Value); err == nil {
-				stats.TopUsersByUploads = append(stats.TopUsersByUploads, user)
-			}
-		}
-		rows.Close()
-	}
-
-	rows, err = database.DB.Query("SELECT email, login_count FROM users ORDER BY login_count DESC LIMIT 10")
-	if err == nil {
-		for rows.Next() {
-			var user TopUser
-			if err := rows.Scan(&user.Email, &user.Value); err == nil {
-				stats.TopUsersByLogins = append(stats.TopUsersByLogins, user)
-			}
-		}
-		rows.Close()
-	}
-
-	rows, err = database.DB.Query(`
-        SELECT source, COALESCE(SUM(ABS(amount_eur)), 0) as total_value
-        FROM processed_transactions
-    ` + getTransactionsAdditionalWhereClause("") + ` transaction_type NOT IN ('DIVIDEND', 'CASH')
-        GROUP BY source
-        ORDER BY total_value DESC
-    `)
-	if err == nil {
-		for rows.Next() {
-			var point NameValueDataPoint
-			if err := rows.Scan(&point.Name, &point.Value); err == nil {
-				stats.ValueByBroker = append(stats.ValueByBroker, point)
-			}
-		}
-		rows.Close()
-	}
-
-	rows, err = database.DB.Query(`
-		SELECT source, COALESCE(SUM(amount_eur), 0) as total_deposits
-		FROM processed_transactions
-	` + getTransactionsAdditionalWhereClause("") + ` transaction_type = 'CASH' AND transaction_subtype = 'DEPOSIT'
-		GROUP BY source
-		ORDER BY total_deposits DESC
-	`)
-	if err == nil {
-		for rows.Next() {
-			var point NameValueDataPoint
-			if err := rows.Scan(&point.Name, &point.Value); err == nil {
-				stats.DepositsByBroker = append(stats.DepositsByBroker, point)
-			}
-		}
-		rows.Close()
-	}
-
-	rows, err = database.DB.Query(`
-        SELECT p.isin, COALESCE(m.company_name, p.product_name), SUM(ABS(p.amount_eur)) as total_invested
-        FROM processed_transactions p
-        LEFT JOIN isin_ticker_map m ON p.isin = m.isin
-    ` + getTransactionsAdditionalWhereClause("p") + ` p.transaction_type = 'STOCK' AND p.buy_sell = 'BUY'
-        GROUP BY p.isin, p.product_name
-        ORDER BY total_invested DESC
-        LIMIT 10
-    `)
-	if err == nil {
-		for rows.Next() {
-			var stock TopStockInfo
-			var companyName sql.NullString
-			if err := rows.Scan(&stock.ISIN, &companyName, &stock.Value); err == nil {
-				stock.ProductName = companyName.String
-				stats.TopStocksByValue = append(stats.TopStocksByValue, stock)
-			}
-		}
-		rows.Close()
-	}
-
-	rows, err = database.DB.Query(`
-        SELECT p.isin, COALESCE(m.company_name, p.product_name), COUNT(*) as trade_count
-        FROM processed_transactions p
-        LEFT JOIN isin_ticker_map m ON p.isin = m.isin
-    ` + getTransactionsAdditionalWhereClause("p") + ` p.transaction_type = 'STOCK'
-        GROUP BY p.isin, p.product_name
-        ORDER BY trade_count DESC
-        LIMIT 10
-    `)
-	if err == nil {
-		for rows.Next() {
-			var stock TopStockInfo
-			var companyName sql.NullString
-			if err := rows.Scan(&stock.ISIN, &companyName, &stock.Value); err == nil {
-				stock.ProductName = companyName.String
-				stats.TopStocksByTrades = append(stats.TopStocksByTrades, stock)
-			}
-		}
-		rows.Close()
-	}
-
-	rows, err = database.DB.Query(`
-        SELECT country_code, COUNT(*) as count
-        FROM processed_transactions
-    ` + getTransactionsAdditionalWhereClause("") + ` country_code IS NOT NULL AND country_code != '' AND transaction_type = 'STOCK'
-        GROUP BY country_code
-        ORDER BY count DESC
-        LIMIT 10
-    `)
-	if err == nil {
-		for rows.Next() {
-			var point NameValueDataPoint
-			if err := rows.Scan(&point.Name, &point.Value); err == nil {
-				stats.InvestmentDistributionByCountry = append(stats.InvestmentDistributionByCountry, point)
-			}
-		}
-		rows.Close()
-	}
-
-	h.cache.Set(cacheKey, stats, 10*time.Minute)
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(stats)
-}
-
-func (h *UserHandler) HandleGetAdminUsers(w http.ResponseWriter, r *http.Request) {
-	page, _ := strconv.Atoi(r.URL.Query().Get("page"))
-	if page < 1 {
-		page = 1
-	}
-	pageSize, _ := strconv.Atoi(r.URL.Query().Get("pageSize"))
-	if pageSize < 10 {
-		pageSize = 10
-	} else if pageSize > 100 {
-		pageSize = 100
-	}
-
-	sortBy := r.URL.Query().Get("sortBy")
-	order := strings.ToUpper(r.URL.Query().Get("order"))
-	if order != "ASC" && order != "DESC" {
-		order = "DESC"
-	}
-
-	allowedSortBy := map[string]string{
-		"id":                  "u.id",
-		"email":               "u.email",
-		"created_at":          "u.created_at",
-		"total_upload_count":  "u.total_upload_count",
-		"portfolio_value_eur": "u.portfolio_value_eur",
-		"login_count":         "u.login_count",
-		"last_login_at":       "u.last_login_at",
-	}
-	sortByColumn, ok := allowedSortBy[sortBy]
-	if !ok {
-		sortByColumn = "u.created_at"
-	}
-
-	offset := (page - 1) * pageSize
-
-	var totalRows int
-	countQuery := "SELECT COUNT(*) FROM users"
-	if err := database.DB.QueryRow(countQuery).Scan(&totalRows); err != nil {
-		logger.L.Error("Failed to count admin users", "error", err)
-		sendJSONError(w, "Failed to retrieve user count", http.StatusInternalServerError)
-		return
-	}
-
-	query := fmt.Sprintf(`
-		SELECT u.id, u.username, u.email, u.auth_provider, u.created_at, u.total_upload_count, u.upload_count,
-			(SELECT COUNT(DISTINCT source) FROM processed_transactions WHERE user_id = u.id) as distinct_broker_count,
-			u.portfolio_value_eur, u.top_5_holdings, u.last_login_at, u.last_login_ip, u.login_count
-		FROM users u
-		ORDER BY %s %s
-		LIMIT ? OFFSET ?
-	`, sortByColumn, order)
-
-	rows, err := database.DB.Query(query, pageSize, offset)
-	if err != nil {
-		logger.L.Error("Failed to get paginated admin user list", "error", err)
-		sendJSONError(w, "Failed to retrieve user list", http.StatusInternalServerError)
-		return
-	}
-	defer rows.Close()
-
-	var users []AdminUserView
-	for rows.Next() {
-		var u AdminUserView
-		var lastLoginIP, topHoldings sql.NullString
-		var lastLoginAt sql.NullTime
-		if err := rows.Scan(
-			&u.ID, &u.Username, &u.Email, &u.AuthProvider, &u.CreatedAt, &u.TotalUploadCount,
-			&u.CurrentFileCount, &u.DistinctBrokerCount, &u.PortfolioValueEUR, &topHoldings,
-			&lastLoginAt, &lastLoginIP, &u.LoginCount,
-		); err != nil {
-			logger.L.Error("Failed to scan admin user row", "error", err)
-			continue
-		}
-		u.LastLoginAt = lastLoginAt
-		u.LastLoginIP = lastLoginIP.String
-		u.Top5Holdings = topHoldings.String
-		users = append(users, u)
-	}
-
-	response := AdminUsersPaginatedResponse{
-		Users:     users,
-		TotalRows: totalRows,
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(response)
-}
-
-func (h *UserHandler) HandleAdminRefreshUserMetrics(w http.ResponseWriter, r *http.Request) {
-	userIDStr := chi.URLParam(r, "userID")
-	userID, err := strconv.ParseInt(userIDStr, 10, 64)
-	if err != nil {
-		sendJSONError(w, "Invalid user ID format", http.StatusBadRequest)
-		return
-	}
-
-	logger.L.Info("Admin triggered portfolio metrics refresh for user", "targetUserID", userID)
-
-	err = h.uploadService.UpdateUserPortfolioMetrics(userID)
-	if err != nil {
-		logger.L.Error("Failed to refresh user portfolio metrics", "targetUserID", userID, "error", err)
-		sendJSONError(w, "Failed to update portfolio metrics", http.StatusInternalServerError)
-		return
-	}
-
-	logger.L.Info("Successfully refreshed portfolio metrics for user", "targetUserID", userID)
-	w.WriteHeader(http.StatusNoContent)
-}
-
-type UploadHistoryEntry struct {
-	ID               int       `json:"id"`
-	UploadedAt       time.Time `json:"uploaded_at"`
-	Source           string    `json:"source"`
-	Filename         string    `json:"filename"`
-	FileSize         int64     `json:"file_size"`
-	TransactionCount int       `json:"transaction_count"`
-}
-
 type AdminUserDetailsResponse struct {
-	User            AdminUserView                 `json:"user"`
-	UploadHistory   []UploadHistoryEntry          `json:"upload_history"`
-	Transactions    []models.ProcessedTransaction `json:"transactions"`
-	Metrics         *services.UploadResult        `json:"metrics,omitempty"`
-	CurrentHoldings []models.HoldingWithValue     `json:"current_holdings"`
+	User                AdminUserView                 `json:"user"`
+	Portfolios          []models.Portfolio            `json:"portfolios"`
+	UploadHistory       []UploadHistoryEntry          `json:"upload_history"`
+	Transactions        []models.ProcessedTransaction `json:"transactions"`
+	Metrics             *services.UploadResult        `json:"metrics,omitempty"`
+	CurrentHoldings     []models.HoldingWithValue     `json:"current_holdings"`
+	DefaultPortfolioID  int64                         `json:"default_portfolio_id"`
+	SelectedPortfolioID int64                         `json:"selected_portfolio_id"`
 }
 
 func (h *UserHandler) HandleGetAdminUserDetails(w http.ResponseWriter, r *http.Request) {
@@ -731,7 +514,46 @@ func (h *UserHandler) HandleGetAdminUserDetails(w http.ResponseWriter, r *http.R
 		return
 	}
 
+	var portfolios []models.Portfolio
+	pRows, err := database.DB.Query("SELECT id, user_id, name, description, is_default, created_at FROM portfolios WHERE user_id = ?", userID)
+	if err != nil {
+		logger.L.Error("Failed to fetch user portfolios", "error", err)
+		sendJSONError(w, "DB Error", http.StatusInternalServerError)
+		return
+	}
+	defer pRows.Close()
+
+	var defaultPortfolioID int64
+	for pRows.Next() {
+		var p models.Portfolio
+		if err := pRows.Scan(&p.ID, &p.UserID, &p.Name, &p.Description, &p.IsDefault, &p.CreatedAt); err == nil {
+			portfolios = append(portfolios, p)
+			if p.IsDefault {
+				defaultPortfolioID = p.ID
+			}
+		}
+	}
+
+	targetPortfolioID := defaultPortfolioID
+	if queryPID := r.URL.Query().Get("portfolio_id"); queryPID != "" {
+		if pid, err := strconv.ParseInt(queryPID, 10, 64); err == nil {
+			for _, p := range portfolios {
+				if p.ID == pid {
+					targetPortfolioID = pid
+					break
+				}
+			}
+		}
+	}
+
+	if targetPortfolioID == 0 && len(portfolios) > 0 {
+		targetPortfolioID = portfolios[0].ID
+	}
+
 	var response AdminUserDetailsResponse
+	response.DefaultPortfolioID = defaultPortfolioID
+	response.SelectedPortfolioID = targetPortfolioID
+	response.Portfolios = portfolios
 
 	queryUser := `
 		SELECT u.id, u.username, u.email, u.auth_provider, u.created_at, u.total_upload_count, u.upload_count,
@@ -748,7 +570,7 @@ func (h *UserHandler) HandleGetAdminUserDetails(w http.ResponseWriter, r *http.R
 			sendJSONError(w, "Utilizador não encontrado", http.StatusNotFound)
 			return
 		}
-		logger.L.Error("Falha ao obter detalhes do utilizador para drill-down", "error", err, "userID", userID)
+		logger.L.Error("Falha ao obter detalhes do utilizador", "error", err)
 		sendJSONError(w, "Falha ao obter detalhes do utilizador", http.StatusInternalServerError)
 		return
 	}
@@ -757,63 +579,58 @@ func (h *UserHandler) HandleGetAdminUserDetails(w http.ResponseWriter, r *http.R
 	u.Top5Holdings = topHoldings.String
 	response.User = u
 
-	rowsUploads, err := database.DB.Query("SELECT id, uploaded_at, source, filename, file_size, transaction_count FROM uploads_history WHERE user_id = ? ORDER BY uploaded_at DESC LIMIT 100", userID)
-	if err != nil {
-		logger.L.Error("Falha ao obter histórico de uploads para drill-down do utilizador", "error", err, "userID", userID)
-	} else {
+	rowsUploads, err := database.DB.Query(`
+        SELECT uh.id, uh.uploaded_at, uh.source, uh.filename, uh.file_size, uh.transaction_count, p.name
+        FROM uploads_history uh
+        LEFT JOIN portfolios p ON uh.portfolio_id = p.id
+        WHERE uh.user_id = ? 
+        ORDER BY uh.uploaded_at DESC LIMIT 100`, userID)
+	if err == nil {
 		defer rowsUploads.Close()
 		for rowsUploads.Next() {
 			var entry UploadHistoryEntry
-			var filename sql.NullString
+			var filename, pfName sql.NullString
 			var filesize sql.NullInt64
-			if err := rowsUploads.Scan(&entry.ID, &entry.UploadedAt, &entry.Source, &filename, &filesize, &entry.TransactionCount); err == nil {
+			if err := rowsUploads.Scan(&entry.ID, &entry.UploadedAt, &entry.Source, &filename, &filesize, &entry.TransactionCount, &pfName); err == nil {
 				entry.Filename = filename.String
 				entry.FileSize = filesize.Int64
+				entry.PortfolioName = pfName.String
 				response.UploadHistory = append(response.UploadHistory, entry)
 			}
 		}
 	}
 
-	rowsTxs, err := database.DB.Query(`
-		SELECT id, date, source, product_name, isin, quantity, original_quantity, price, 
-		       transaction_type, transaction_subtype, buy_sell, description, amount, currency, commission, 
-		       order_id, exchange_rate, amount_eur, country_code, input_string, hash_id
-		FROM processed_transactions WHERE user_id = ? ORDER BY date DESC`, userID)
-	if err != nil {
-		logger.L.Error("Falha ao obter transações para drill-down do utilizador", "error", err, "userID", userID)
-		sendJSONError(w, "Falha ao obter transações do utilizador", http.StatusInternalServerError)
-		return
-	}
-	defer rowsTxs.Close()
-
-	for rowsTxs.Next() {
-		var tx models.ProcessedTransaction
-		if err := rowsTxs.Scan(
-			&tx.ID, &tx.Date, &tx.Source, &tx.ProductName, &tx.ISIN, &tx.Quantity, &tx.OriginalQuantity, &tx.Price,
-			&tx.TransactionType, &tx.TransactionSubType, &tx.BuySell, &tx.Description, &tx.Amount, &tx.Currency,
-			&tx.Commission, &tx.OrderID, &tx.ExchangeRate, &tx.AmountEUR, &tx.CountryCode, &tx.InputString, &tx.HashId,
-		); err == nil {
-			response.Transactions = append(response.Transactions, tx)
-		} else {
-			logger.L.Error("Falha ao ler a linha da transação para drill-down do utilizador", "error", err, "userID", userID)
+	if targetPortfolioID > 0 {
+		rowsTxs, err := database.DB.Query(`
+			SELECT id, date, source, product_name, isin, quantity, original_quantity, price, 
+			       transaction_type, transaction_subtype, buy_sell, description, amount, currency, commission, 
+			       order_id, exchange_rate, amount_eur, country_code, input_string, hash_id
+			FROM processed_transactions WHERE user_id = ? AND portfolio_id = ? ORDER BY date DESC LIMIT 500`, userID, targetPortfolioID)
+		if err == nil {
+			defer rowsTxs.Close()
+			for rowsTxs.Next() {
+				var tx models.ProcessedTransaction
+				if err := rowsTxs.Scan(
+					&tx.ID, &tx.Date, &tx.Source, &tx.ProductName, &tx.ISIN, &tx.Quantity, &tx.OriginalQuantity, &tx.Price,
+					&tx.TransactionType, &tx.TransactionSubType, &tx.BuySell, &tx.Description, &tx.Amount, &tx.Currency,
+					&tx.Commission, &tx.OrderID, &tx.ExchangeRate, &tx.AmountEUR, &tx.CountryCode, &tx.InputString, &tx.HashId,
+				); err == nil {
+					response.Transactions = append(response.Transactions, tx)
+				}
+			}
 		}
-	}
 
-	metrics, err := h.uploadService.GetLatestUploadResult(userID)
-	if err != nil {
-		logger.L.Error("Falha ao obter métricas agregadas para drill-down do utilizador", "error", err, "userID", userID)
-		response.Metrics = nil
-	} else {
-		response.Metrics = metrics
-	}
+		metrics, err := h.uploadService.GetLatestUploadResult(userID, targetPortfolioID)
+		if err == nil {
+			response.Metrics = metrics
+		}
 
-	// Fetch and add current holdings with market value
-	currentHoldings, err := h.uploadService.GetCurrentHoldingsWithValue(userID)
-	if err != nil {
-		logger.L.Error("Falha ao obter valor da carteira atual para drill-down do utilizador", "error", err, "userID", userID)
-		response.CurrentHoldings = []models.HoldingWithValue{} // Return empty slice on error
-	} else {
-		response.CurrentHoldings = currentHoldings
+		currentHoldings, err := h.uploadService.GetCurrentHoldingsWithValue(userID, targetPortfolioID)
+		if err == nil {
+			response.CurrentHoldings = currentHoldings
+		} else {
+			response.CurrentHoldings = []models.HoldingWithValue{}
+		}
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -825,42 +642,10 @@ type BatchRequest struct {
 }
 
 func (h *UserHandler) HandleAdminRefreshMultipleUserMetrics(w http.ResponseWriter, r *http.Request) {
-	var req BatchRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		sendJSONError(w, "Corpo do pedido inválido", http.StatusBadRequest)
-		return
-	}
-
-	if len(req.UserIDs) == 0 {
-		sendJSONError(w, "Nenhum ID de utilizador fornecido", http.StatusBadRequest)
-		return
-	}
-
-	var errors []string
-	for _, userID := range req.UserIDs {
-		logger.L.Info("Admin acionou atualização de métricas de portfólio em lote para o utilizador", "targetUserID", userID)
-		err := h.uploadService.UpdateUserPortfolioMetrics(userID)
-		if err != nil {
-			errMsg := fmt.Sprintf("Falha ao atualizar métricas para o utilizador %d: %v", userID, err)
-			logger.L.Error(errMsg)
-			errors = append(errors, errMsg)
-		}
-	}
-
-	if len(errors) > 0 {
-		sendJSONError(w, fmt.Sprintf("Concluído com %d erros. Verifique os logs para mais detalhes.", len(errors)), http.StatusInternalServerError)
-		return
-	}
-
-	logger.L.Info("Atualização em lote para utilizadores concluída com sucesso", "count", len(req.UserIDs))
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// --- NEW HANDLER FUNCTION ---
-// HandleAdminClearStatsCache handles the request to clear the admin stats cache.
 func (h *UserHandler) HandleAdminClearStatsCache(w http.ResponseWriter, r *http.Request) {
-	logger.L.Info("Admin triggered admin stats cache clear")
-	h.cache.Flush() // Flushes all items from the cache
-	logger.L.Info("Admin stats cache flushed successfully.")
+	h.cache.Flush()
 	w.WriteHeader(http.StatusNoContent)
 }
