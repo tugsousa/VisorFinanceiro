@@ -1,4 +1,3 @@
-// frontend/src/components/realizedgainsSections/HistoricalPerformanceChart.js
 import React, { useMemo, useState, useRef, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Line } from 'react-chartjs-2';
@@ -23,88 +22,121 @@ ChartJS.register(
 export default function HistoricalPerformanceChart() {
   const chartRef = useRef(null);
   const [timeRange, setTimeRange] = useState('ALL');
+  const [viewMode, setViewMode] = useState('VALUE'); // 'VALUE' or 'PERCENT'
   const [showBenchmark, setShowBenchmark] = useState(false);
   const [chartGradient, setChartGradient] = useState(null);
 
-  // --- USE PORTFOLIO CONTEXT ---
   const { activePortfolio } = usePortfolio();
   const portfolioId = activePortfolio?.id;
 
   const { data: rawData, isLoading, isError } = useQuery({
-    queryKey: ['historicalChartData', portfolioId], // Include portfolioId in key
+    queryKey: ['historicalChartData', portfolioId], 
     queryFn: async () => {
         if (!portfolioId) return [];
-        const res = await apiFetchHistoricalChartData(portfolioId); // Pass ID to API
+        const res = await apiFetchHistoricalChartData(portfolioId); 
         return res.data;
     },
-    enabled: !!portfolioId, // Only fetch if portfolio exists
+    enabled: !!portfolioId, 
   });
 
   // Generate Gradient
   useEffect(() => {
     const chart = chartRef.current;
     if (!chart) return;
-
     const ctx = chart.ctx;
     const gradient = ctx.createLinearGradient(0, 0, 0, 400);
     gradient.addColorStop(0, 'rgba(75, 192, 192, 0.5)'); 
     gradient.addColorStop(1, 'rgba(75, 192, 192, 0.0)');
     setChartGradient(gradient);
-  }, [rawData]);
+  }, [rawData, viewMode]);
 
   const processedData = useMemo(() => {
     if (!rawData || rawData.length === 0) return [];
-    
-    // 1. Determine Start Date based on Time Range
+
+    // 1. Filter Date Range
     const now = new Date();
+    // Set to end of day to ensure we include today's data points if they exist
     now.setHours(23, 59, 59, 999); 
     
     let startDate = new Date(rawData[0].date); 
-
+    
     if (timeRange !== 'ALL') {
         const tempStart = new Date();
         switch (timeRange) {
-            case '1W': tempStart.setDate(now.getDate() - 7); break;
-            case '1M': tempStart.setMonth(now.getMonth() - 1); break;
-            case 'YTD': tempStart.setMonth(0, 1); break; // Jan 1st
-            case '1Y': tempStart.setFullYear(now.getFullYear() - 1); break;
-            case '5Y': tempStart.setFullYear(now.getFullYear() - 5); break;
+            case '1W': 
+                tempStart.setDate(now.getDate() - 7); 
+                break;
+            case '1M': 
+                tempStart.setMonth(now.getMonth() - 1); 
+                break;
+            case '3M': 
+                tempStart.setMonth(now.getMonth() - 3); 
+                break;
+            case 'YTD': 
+                tempStart.setFullYear(now.getFullYear(), 0, 1); // Jan 1st of current year
+                break;
+            case '1Y': 
+                tempStart.setFullYear(now.getFullYear() - 1); 
+                break;
+            case '5Y': 
+                tempStart.setFullYear(now.getFullYear() - 5); 
+                break;
             default: break;
         }
-        startDate = tempStart;
+        // Ensure we don't go before the first available data point
+        // If calculated start date is older than first data point, use first data point
+        const firstDataDate = new Date(rawData[0].date);
+        startDate = tempStart < firstDataDate ? firstDataDate : tempStart;
     }
 
-    // 2. Filter Data
     const filtered = rawData.filter(p => new Date(p.date) >= startDate);
+    
+    // Safety check: if filter returns empty (e.g., user selected "Today" but no data yet), return empty
     if (filtered.length === 0) return [];
 
-    // Initialize Benchmark Tracking
+    // 2. Calculate Benchmark & Percentage Logic
+    // We rebase benchmark to the start of the visible period
     let benchmarkUnits = 0;
-    const initialSpyPrice = filtered[0].spy_price || 0;
+    const startPoint = filtered[0];
+    const initialSpyPrice = startPoint.spy_price || 0;
     
+    // For Value View: Standard Benchmark Tracking (adjusting for cashflows)
     if (initialSpyPrice > 0) {
-        benchmarkUnits = filtered[0].portfolio_value / initialSpyPrice;
+        benchmarkUnits = startPoint.portfolio_value / initialSpyPrice;
     }
-
-    let previousCashFlow = filtered[0].cumulative_cash_flow;
+    let previousCashFlow = startPoint.cumulative_cash_flow;
 
     return filtered.map((point, index) => {
         const currentSpyPrice = point.spy_price || 0;
         
+        // --- Benchmark Value Logic ---
         if (index > 0) {
             const netFlow = point.cumulative_cash_flow - previousCashFlow;
             if (netFlow !== 0 && currentSpyPrice > 0) {
                 benchmarkUnits += (netFlow / currentSpyPrice);
             }
         }
-
-        const safeBenchmarkUnits = Math.max(0, benchmarkUnits);
-        const rebasedBenchmarkValue = safeBenchmarkUnits * currentSpyPrice;
         previousCashFlow = point.cumulative_cash_flow;
+        const benchmarkValue = Math.max(0, benchmarkUnits) * currentSpyPrice;
+
+        // --- Percentage Logic ---
+        // Portfolio % Return = (Total Value - Net Invested) / Net Invested
+        // Avoid division by zero
+        const invested = point.cumulative_cash_flow;
+        const portfolioReturnPct = invested > 0 
+            ? ((point.portfolio_value - invested) / invested) * 100 
+            : 0;
+
+        // Benchmark % Return 
+        const benchmarkReturnPct = invested > 0
+            ? ((benchmarkValue - invested) / invested) * 100
+            : 0;
 
         return {
             ...point,
-            rebased_benchmark_value: rebasedBenchmarkValue,
+            benchmark_value_view: benchmarkValue,
+            portfolio_pct_view: portfolioReturnPct,
+            benchmark_pct_view: benchmarkReturnPct
         };
     });
   }, [rawData, timeRange]);
@@ -113,25 +145,29 @@ export default function HistoricalPerformanceChart() {
     if (!processedData || processedData.length === 0) return null;
 
     const datasets = [];
+    const isPercent = viewMode === 'PERCENT';
 
-    datasets.push({
-        label: 'Investimento Líquido',
-        data: processedData.map(p => p.cumulative_cash_flow),
-        borderColor: 'rgba(54, 162, 235, 0.5)',
-        backgroundColor: 'transparent',
-        borderDash: [5, 5],
-        borderWidth: 2,
-        pointRadius: 0,
-        pointHoverRadius: 0,
-        fill: false,
-        order: 2
-    });
+    // 1. Invested Capital (Only relevant in Value Mode)
+    if (!isPercent) {
+        datasets.push({
+            label: 'Investimento Líquido',
+            data: processedData.map(p => p.cumulative_cash_flow),
+            borderColor: 'rgba(54, 162, 235, 0.5)',
+            borderDash: [5, 5],
+            borderWidth: 2,
+            pointRadius: 0,
+            pointHoverRadius: 0,
+            fill: false,
+            order: 2
+        });
+    }
 
+    // 2. Benchmark (SPY)
     if (showBenchmark) {
         datasets.push({
-            label: 'Benchmark (S&P 500)',
-            data: processedData.map(p => p.rebased_benchmark_value),
-            borderColor: '#FFC107',
+            label: isPercent ? 'S&P 500 (%)' : 'S&P 500 (Simulado)',
+            data: processedData.map(p => isPercent ? p.benchmark_pct_view : p.benchmark_value_view),
+            borderColor: '#FFC107', // Amber/Yellow
             backgroundColor: 'transparent',
             borderWidth: 2,
             pointRadius: 0,
@@ -142,15 +178,16 @@ export default function HistoricalPerformanceChart() {
         });
     }
 
+    // 3. Portfolio Main Line
     datasets.push({
-        label: 'Valor da Carteira',
-        data: processedData.map(p => p.portfolio_value),
-        borderColor: 'rgba(75, 192, 192, 1)',
+        label: isPercent ? 'Retorno (%)' : 'Valor da Carteira',
+        data: processedData.map(p => isPercent ? p.portfolio_pct_view : p.portfolio_value),
+        borderColor: isPercent ? '#9C27B0' : 'rgba(75, 192, 192, 1)', // Purple for %, Teal for Value
         backgroundColor: chartGradient || 'rgba(75, 192, 192, 0.2)',
         borderWidth: 2,
         pointRadius: 0,
         pointHoverRadius: 5,
-        fill: true,
+        fill: !isPercent, // Don't fill percentage chart to keep it clean
         tension: 0.1,
         order: 0
     });
@@ -159,7 +196,7 @@ export default function HistoricalPerformanceChart() {
         labels: processedData.map(p => p.date),
         datasets: datasets
     };
-  }, [processedData, chartGradient, showBenchmark]);
+  }, [processedData, chartGradient, showBenchmark, viewMode]);
 
   const options = {
     responsive: true,
@@ -179,7 +216,13 @@ export default function HistoricalPerformanceChart() {
           label: function(context) {
             let label = context.dataset.label || '';
             if (label) { label += ': '; }
-            if (context.parsed.y !== null) { label += formatCurrency(context.parsed.y); }
+            if (context.parsed.y !== null) {
+                if (viewMode === 'PERCENT') {
+                    label += context.parsed.y.toFixed(2) + '%';
+                } else {
+                    label += formatCurrency(context.parsed.y);
+                }
+            }
             return label;
           }
         }
@@ -190,7 +233,12 @@ export default function HistoricalPerformanceChart() {
       y: {
         beginAtZero: false,
         grid: { color: '#f0f0f0' },
-        ticks: { callback: (value) => formatCurrency(value, { minimumFractionDigits: 0, maximumFractionDigits: 0, compactDisplay: "short", notation: "compact" }) }
+        ticks: { 
+            callback: (value) => {
+                if (viewMode === 'PERCENT') return value.toFixed(1) + '%';
+                return formatCurrency(value, { minimumFractionDigits: 0, maximumFractionDigits: 0, notation: "compact" });
+            }
+        }
       }
     }
   };
@@ -199,54 +247,77 @@ export default function HistoricalPerformanceChart() {
     <Box sx={{ p: 1 }}>
         <Typography variant="subtitle2" fontWeight="bold">Benchmark S&P 500</Typography>
         <Typography variant="body2" sx={{ mt: 1 }}>
-            Esta linha compara a performance da sua carteira contra o S&P 500 para o período selecionado.
+            Compara a tua performance com o índice S&P 500.
         </Typography>
         <Typography variant="body2" sx={{ mt: 1 }}>
-            A comparação começa no primeiro dia do gráfico. Para cada depósito ou levantamento, o sistema ajusta o benchmark proporcionalmente.
+            O sistema simula que compraste S&P 500 no mesmo momento em que depositaste dinheiro na tua carteira.
         </Typography>
     </Box>
   );
 
   if (isLoading) return <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}><CircularProgress /></Box>;
-  // Don't error out if just missing portfolio, return null
   if (!portfolioId) return null;
   if (isError || !chartData) return null; 
 
   return (
-    <Paper elevation={0} sx={{ p: 3, mb: 3, border: 'none', height: 600, display: 'flex', flexDirection: 'column' }}>
+    <Paper elevation={0} sx={{ p: 3, mb: 3, border: 'none', height: 500, display: 'flex', flexDirection: 'column' }}>
+      
+      {/* TOOLBAR ROW */}
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2, flexWrap: 'wrap', gap: 2 }}>
+        
+        {/* Left: Title & Info */}
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <Typography variant="h6" sx={{ fontWeight: 600 }}>Evolução Histórica</Typography>
+            <Typography variant="h6" sx={{ fontWeight: 600 }}>Evolução</Typography>
             <Tooltip title={benchmarkInfo} arrow placement="right">
                 <IconButton size="small" sx={{ color: 'text.secondary' }}>
                     <InfoOutlinedIcon fontSize="small" />
                 </IconButton>
             </Tooltip>
         </Box>
-        <Box sx={{ display: 'flex', gap: 3, alignItems: 'center' }}>
+
+        {/* Right: Controls */}
+        <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', flexWrap: 'wrap' }}>
+            
+            {/* View Mode Toggle: Value vs % */}
+            <ToggleButtonGroup
+                value={viewMode}
+                exclusive
+                onChange={(e, newMode) => newMode && setViewMode(newMode)}
+                size="small"
+                sx={{ height: 32 }}
+            >
+                <ToggleButton value="VALUE">€</ToggleButton>
+                <ToggleButton value="PERCENT">%</ToggleButton>
+            </ToggleButtonGroup>
+
+            <Box sx={{ height: 24, width: 1, bgcolor: 'divider', mx: 1 }} />
+
+            {/* Time Range */}
+            <ToggleButtonGroup
+                value={timeRange}
+                exclusive
+                onChange={(e, newRange) => newRange && setTimeRange(newRange)}
+                size="small"
+                sx={{ '& .MuiToggleButton-root': { px: 1.5, py: 0.5, fontSize: '0.75rem', fontWeight: 600 } }}
+            >
+                <ToggleButton value="1W">1S</ToggleButton>
+                <ToggleButton value="1M">1M</ToggleButton>
+                <ToggleButton value="3M">3M</ToggleButton>
+                <ToggleButton value="YTD">YTD</ToggleButton>
+                <ToggleButton value="1Y">1A</ToggleButton>
+                <ToggleButton value="5Y">5A</ToggleButton>
+                <ToggleButton value="ALL">Tudo</ToggleButton>
+            </ToggleButtonGroup>
+
+            {/* Benchmark Switch */}
             <FormControlLabel 
                 control={<Switch size="small" checked={showBenchmark} onChange={(e) => setShowBenchmark(e.target.checked)} />} 
-                label={<Typography variant="body2" color="text.secondary">S&P 500</Typography>} 
+                label={<Typography variant="caption" sx={{fontWeight: 600}}>SPY</Typography>} 
+                sx={{ ml: 1, mr: 0 }}
             />
         </Box>
       </Box>
-      <Box sx={{ mb: 2, display: 'flex', justifyContent: 'flex-end' }}>
-        <ToggleButtonGroup
-            value={timeRange}
-            exclusive
-            onChange={(e, newRange) => newRange && setTimeRange(newRange)}
-            aria-label="time range"
-            size="small"
-            sx={{ '& .MuiToggleButton-root': { py: 0.5, px: 1.5, fontSize: '0.75rem', fontWeight: 600, textTransform: 'none', border: '1px solid #e0e0e0' }, '& .Mui-selected': { backgroundColor: 'rgba(25, 118, 210, 0.08)', color: '#1976d2', borderColor: '#1976d2' } }}
-        >
-            <ToggleButton value="1W">1S</ToggleButton>
-            <ToggleButton value="1M">1M</ToggleButton>
-            <ToggleButton value="YTD">YTD</ToggleButton>
-            <ToggleButton value="1Y">1A</ToggleButton>
-            <ToggleButton value="5Y">5A</ToggleButton>
-            <ToggleButton value="ALL">Tudo</ToggleButton>
-        </ToggleButtonGroup>
-      </Box>
+
       <Box sx={{ flexGrow: 1, minHeight: 0, position: 'relative' }}>
         <Line ref={chartRef} data={chartData} options={options} />
       </Box>
