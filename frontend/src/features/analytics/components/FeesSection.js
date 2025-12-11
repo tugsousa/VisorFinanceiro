@@ -6,10 +6,10 @@ import { ptPT } from '@mui/x-data-grid/locales';
 import { Bar, Doughnut } from 'react-chartjs-2';
 import { Chart as ChartJS, ArcElement, CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend } from 'chart.js';
 
-import { parseDateRobust, getYearString, getMonthIndex } from '../../utils/dateUtils';
-import { formatCurrency } from '../../utils/formatUtils';
-import { ALL_YEARS_OPTION, MONTH_NAMES_CHART } from '../../constants';
-import { generateRedTonePalette } from '../../utils/chartUtils';
+import { parseDateRobust, getYearString, getMonthIndex } from '../../../lib/utils/dateUtils';
+import { formatCurrency } from '../../../lib/utils/formatUtils';
+import { ALL_YEARS_OPTION, MONTH_NAMES_CHART } from '../../../constants';
+import { generateRedTonePalette } from '../../../lib/utils/chartUtils';
 
 
 // Register all necessary components for Chart.js

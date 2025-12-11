@@ -2,9 +2,9 @@
 import React, { useMemo } from 'react';
 import { Box, Typography } from '@mui/material';
 import { Bar } from 'react-chartjs-2';
-import { getYearString, getMonthIndex, extractYearsFromData } from '../../utils/dateUtils';
-import { ALL_YEARS_OPTION, NO_YEAR_SELECTED, MONTH_NAMES_CHART } from '../../constants';
-import { formatCurrency } from '../../utils/formatUtils';
+import { getYearString, getMonthIndex, extractYearsFromData } from '../../../lib/utils/dateUtils';
+import { ALL_YEARS_OPTION, NO_YEAR_SELECTED, MONTH_NAMES_CHART } from '../../../constants';
+import { formatCurrency } from '../../../lib/utils/formatUtils';
 
 
 const COLORS = {

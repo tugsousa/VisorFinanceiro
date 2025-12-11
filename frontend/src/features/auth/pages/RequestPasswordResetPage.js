@@ -1,12 +1,12 @@
 // frontend/src/pages/RequestPasswordResetPage.js
 import React, { useState, useContext } from 'react';
 import { Link as RouterLink } from 'react-router-dom';
-import { AuthContext } from '../features/auth/AuthContext';
-import { apiRequestPasswordReset } from '../lib/api';
+import { AuthContext } from '../AuthContext';
+import { apiRequestPasswordReset } from '../../../lib/api';
 import {
   Box, Typography, TextField, Button, Alert, CircularProgress, Link, Grid
 } from '@mui/material';
-import AuthModal from '../components/auth/AuthModal'; // Import the AuthModal
+import AuthModal from '../components/AuthModal';
 
 function RequestPasswordResetPage() {
   const [email, setEmail] = useState('');

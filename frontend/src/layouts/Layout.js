@@ -4,8 +4,8 @@ import { Box, AppBar, Toolbar, Typography, IconButton, Tooltip, Avatar, Menu, Me
 import { Link as RouterLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../features/auth/AuthContext';
 import CookieConsent from "react-cookie-consent";
-// IMPORT PORTFOLIO SELECTOR
-import PortfolioSelector from '../components/PortfolioSelector'; 
+
+import PortfolioSelector from '../features/portfolio/components/PortfolioSelector';
 import {
     Person as PersonIcon,
     Settings as SettingsIcon,

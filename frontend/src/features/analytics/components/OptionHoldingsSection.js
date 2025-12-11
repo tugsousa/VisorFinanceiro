@@ -1,9 +1,9 @@
 // frontend/src/components/realizedgainsSections/OptionHoldingsSection.js
 import React from 'react';
-import { Typography, Paper, Box, CircularProgress } from '@mui/material'; // <-- Adicionado CircularProgress
+import { Typography, Paper, Box, CircularProgress } from '@mui/material';
 import { DataGrid } from '@mui/x-data-grid';
 import { ptPT } from '@mui/x-data-grid/locales';
-import { formatCurrency } from '../../utils/formatUtils'; // Import the utility
+import { formatCurrency } from '../../../lib/utils/formatUtils';
 
 const columns = [
     { field: 'product_name', headerName: 'Produto', flex: 1, minWidth: 200 },

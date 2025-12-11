@@ -1,13 +1,13 @@
 // frontend/src/components/realizedgainsSections/DividendsSection.js
 import React, { useMemo } from 'react';
-import { Typography, Paper, Box, Grid, CircularProgress } from '@mui/material'; // <-- Adicionado CircularProgress
+import { Typography, Paper, Box, Grid, CircularProgress } from '@mui/material';
 import { DataGrid } from '@mui/x-data-grid';
 import { ptPT } from '@mui/x-data-grid/locales';
 import { Bar } from 'react-chartjs-2';
-import { ALL_YEARS_OPTION, MONTH_NAMES_CHART } from '../../constants';
-import { getBaseProductName } from '../../utils/chartUtils';
-import { getYearString, getMonthIndex, parseDateRobust } from '../../utils/dateUtils';
-import { formatCurrency } from '../../utils/formatUtils';
+import { ALL_YEARS_OPTION, MONTH_NAMES_CHART } from '../../../constants';
+import { getBaseProductName } from '../../../lib/utils/chartUtils';
+import { getYearString, getMonthIndex, parseDateRobust } from '../../../lib/utils/dateUtils';
+import { formatCurrency } from '../../../lib/utils/formatUtils';
 
 const columns = [
   {

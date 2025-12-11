@@ -1,17 +1,18 @@
-// frontend/src/pages/ProcessedTransactionsPage.js
+// frontend/src/features/portfolio/pages/TransactionsList.js
 import React, { useState } from 'react';
 import { Typography, Box, Paper, Alert, CircularProgress, Button } from '@mui/material';
 import { DataGrid } from '@mui/x-data-grid';
 import { ptPT } from '@mui/x-data-grid/locales';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { apiFetchProcessedTransactions, apiDeleteTransactions } from '../lib/api';
-import { useAuth } from '../features/auth/AuthContext';
-import { usePortfolio } from '../features/portfolio/PortfolioContext'; 
-import { UI_TEXT } from '../constants';
-import { parseDateRobust } from '../lib/utils/dateUtils';
-import DeleteTransactionsModal from '../components/DeleteTransactionsModal';
-import AddTransactionModal from '../components/AddTransactionModal';
 import AddCircleOutlineIcon from '@mui/icons-material/AddCircleOutline';
+
+import { apiFetchProcessedTransactions, apiDeleteTransactions } from '../../../lib/api';
+import { useAuth } from '../../auth/AuthContext';
+import { usePortfolio } from '../PortfolioContext';
+import { UI_TEXT } from '../../../constants';
+import { parseDateRobust } from '../../../lib/utils/dateUtils';
+import DeleteTransactionsModal from '../../../components/DeleteTransactionsModal';
+import TransactionAddModal from '../components/TransactionAddModal'; // Correct Import Name
 
 const NoRowsOverlay = () => (
   <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', py: 4, color: 'text.secondary', fontSize: '0.9rem' }}>
@@ -34,9 +35,9 @@ const columns = [
     { field: 'amount_eur', headerName: 'Montante (€)', type: 'number', width: 130, align: 'right', headerAlign: 'right', valueFormatter: (value) => typeof value === 'number' ? value.toFixed(2) : '' },
 ];
 
-const ProcessedTransactionsPage = () => {
+const TransactionsList = () => {
   const { token, refreshUserDataCheck } = useAuth();
-  const { activePortfolio } = usePortfolio(); // <--- GET ACTIVE PORTFOLIO
+  const { activePortfolio } = usePortfolio(); 
   const queryClient = useQueryClient();
 
   const portfolioId = activePortfolio?.id;
@@ -53,14 +54,14 @@ const ProcessedTransactionsPage = () => {
         const response = await apiFetchProcessedTransactions(portfolioId);
         return (response.data || []).map(tx => ({ ...tx, id: tx.hash_id || `${tx.date}-${tx.order_id}-${Math.random()}` }));
     },
-    enabled: !!token && !!portfolioId, // <--- Only run if portfolio is selected
+    enabled: !!token && !!portfolioId, 
   });
 
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
 
   const deleteTransactionsMutation = useMutation({
-    mutationFn: (criteria) => apiDeleteTransactions({ ...criteria, portfolio_id: portfolioId }), // Pass ID
+    mutationFn: (criteria) => apiDeleteTransactions({ ...criteria, portfolio_id: portfolioId }), 
     onSuccess: () => {
       queryClient.invalidateQueries();
       refreshUserDataCheck();
@@ -127,15 +128,13 @@ const ProcessedTransactionsPage = () => {
         deleteError={deleteError}
       />
       
-      <AddTransactionModal
+      {/* FIX: Use the imported variable name here */}
+      <TransactionAddModal
         open={isAddModalOpen}
         onClose={() => setIsAddModalOpen(false)}
-        // Note: You must update AddTransactionModal to accept portfolioId prop if it doesn't get it from context!
-        // But since we updated apiAddManualTransaction to handle it in previous steps, 
-        // ensure AddTransactionModal logic includes portfolio_id in the mutation payload.
       />
     </Box>
   );
 };
 
-export default ProcessedTransactionsPage;
+export default TransactionsList;
