@@ -4,12 +4,12 @@ import { Box, Divider } from '@mui/material';
 import { Helmet } from 'react-helmet-async';
 
 // Importe as novas secções que vamos criar
-import HeroSection from '../components/landing/HeroSection';
-import HowItWorksSection from '../components/landing/HowItWorksSection';
-import FeaturesSection from '../components/landing/FeaturesSection';
-import TrustSection from '../components/landing/TrustSection';
-import FaqSection from '../components/landing/FaqSection';
-import FinalCTASection from '../components/landing/FinalCTASection';
+import HeroSection from '../components/HeroSection';
+import HowItWorksSection from '../components/HowItWorksSection';
+import FeaturesSection from '../components/FeaturesSection';
+import TrustSection from '../components/TrustSection';
+import FaqSection from '../components/FaqSection';
+import FinalCTASection from '../components/FinalCTASection';
 
 const LandingPage = () => {
   return (

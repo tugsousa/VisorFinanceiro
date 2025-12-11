@@ -6,7 +6,7 @@ import {
   ReceiptLong as TaxIcon, 
   TableView as TableViewIcon, 
 } from '@mui/icons-material';
-import { useAuth } from '../features/auth/AuthContext';
+import { useAuth } from '../../auth/AuthContext';
 import { Link as RouterLink } from 'react-router-dom';
 
 const dashboardItems = [
