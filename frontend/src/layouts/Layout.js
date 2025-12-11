@@ -275,6 +275,7 @@ export default function Layout({ children }) {
                 <Box sx={{ mt: 1, display: 'flex', justifyContent: 'center', gap: 2 }}>
                     <MuiLink component={RouterLink} to="/policies/privacy-policy" variant="caption" color="text.secondary" underline="hover">Privacidade</MuiLink>
                     <MuiLink component={RouterLink} to="/policies/terms-of-service" variant="caption" color="text.secondary" underline="hover">Termos</MuiLink>
+                    <MuiLink component={RouterLink} to="/policies/contact-information" variant="caption" color="text.secondary" underline="hover">Contactos</MuiLink>
                 </Box>
             </Box>
 
