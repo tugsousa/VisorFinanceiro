@@ -12,17 +12,9 @@ import { calculateDaysHeld } from 'lib/utils/dateUtils';
 export const transformGroupedHoldings = (groupedData, isGroupedFetching, isHistorical) => {
     if (!groupedData || groupedData.length === 0) return [];
 
-    const standardRows = groupedData.map(item => {
-        // Safe division to calculate cost per share
+   const standardRows = groupedData.map(item => {
         const costPerShare = item.quantity > 0 ? item.total_cost_basis_eur / item.quantity : 0;
-        
-        // Calculate realized gains: Dividends + Realized Sales P/L - Commissions
         const realizedGains = (item.totalDividends || 0) + (item.totalRealizedStockPL || 0) - Math.abs(item.totalCommissions || 0);
-        
-        // Calculate unrealized P/L: Market Value - Cost Basis
-        // If viewing historical snapshots (isHistorical=true), market values are static/snapshot based, 
-        // so we often treat unrealized as 0 for P/L calculation purposes in this specific view logic 
-        // unless explicitly provided otherwise.
         const unrealizedPL = !isHistorical ? ((item.marketValueEUR || 0) - (item.total_cost_basis_eur || 0)) : 0;
         
         let unrealizedPLPercentage = 0;
@@ -31,7 +23,6 @@ export const transformGroupedHoldings = (groupedData, isGroupedFetching, isHisto
         }
 
         const totalProfitAmount = unrealizedPL + realizedGains;
-        // Total Profit % relative to cost basis
         const totalProfitPercentage = (item.total_cost_basis_eur > 0) ? (totalProfitAmount / item.total_cost_basis_eur) * 100 : 0;
 
         return {
@@ -59,14 +50,9 @@ export const transformGroupedHoldings = (groupedData, isGroupedFetching, isHisto
         unrealizedPL: acc.unrealizedPL + (row.unrealizedPL || 0),
         totalProfitAmount: acc.totalProfitAmount + (row.totalProfitAmount || 0),
     }), {
-        total_cost_basis_eur: 0, 
-        marketValueEUR: 0, 
-        totalDividends: 0, 
-        totalCommissions: 0,
-        totalRealizedStockPL: 0, 
-        realizedGains: 0, 
-        unrealizedPL: 0, 
-        totalProfitAmount: 0
+        total_cost_basis_eur: 0, marketValueEUR: 0, totalDividends: 0, 
+        totalCommissions: 0, totalRealizedStockPL: 0, realizedGains: 0, 
+        unrealizedPL: 0, totalProfitAmount: 0
     });
 
     const totalProfitPercentage = totals.total_cost_basis_eur > 0 
@@ -94,15 +80,20 @@ export const transformGroupedHoldings = (groupedData, isGroupedFetching, isHisto
  */
 export const transformDetailedHoldings = (detailedData) => {
     if (!detailedData) return [];
+    
+    // Get today's date string for calculation
+    const today = new Date().toISOString().split('T')[0];
+
     return detailedData
         .filter(holding => holding)
         .map((holding, index) => {
             const id = `${holding.isin}-${holding.buy_date}-${index}`;
-            const daysHeld = calculateDaysHeld(holding.buy_date);
+            // FIX: Pass 'today' as the second argument so it calculates days from buy_date until now
+            const daysHeld = calculateDaysHeld(holding.buy_date, today);
+            
             const quantity = holding.quantity || 0;
             const currentPriceEUR = holding.current_price_eur || 0;
             
-            // Ensure cost is positive for base calculations
             const buyAmountEUR = Math.abs(holding.buy_amount_eur || 0);
             const buyPricePerShareEUR = quantity > 0 ? (buyAmountEUR / quantity) : 0;
             
@@ -117,7 +108,7 @@ export const transformDetailedHoldings = (detailedData) => {
                 id,
                 ...holding,
                 daysHeld,
-                buy_amount_eur: buyAmountEUR, // Ensure positive
+                buy_amount_eur: buyAmountEUR, 
                 marketValueEUR,
                 currentPriceEUR,
                 unrealizedPLTotal,
