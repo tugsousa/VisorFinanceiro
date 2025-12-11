@@ -1,6 +1,7 @@
 // frontend/src/App.js
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import Layout from './layouts/Layout';
+import { CircularProgress, Box } from '@mui/material';
 
 // --- Feature: Authentication ---
 import { AuthProvider, useAuth } from './features/auth/AuthContext';
@@ -11,31 +12,31 @@ import ResetPasswordPage from './features/auth/pages/ResetPasswordPage';
 
 // --- Feature: Portfolio ---
 import { PortfolioProvider } from './features/portfolio/PortfolioContext';
-import TransactionsList from './features/portfolio/pages/TransactionsList'; // Renamed from ProcessedTransactionsPage
+import TransactionsList from './features/portfolio/pages/TransactionsList';
 
 // --- Feature: Analytics ---
-import AnalyticsDashboard from './features/analytics/pages/AnalyticsDashboard'; // Renamed from RealizedGainsPage
+import AnalyticsDashboard from './features/analytics/pages/AnalyticsDashboard';
 
 // --- Feature: Tax ---
-import TaxPage from './features/tax/TaxPage'; // Isolated in its own folder
+import TaxPage from './features/tax/TaxPage';
+
+// --- Feature: Admin ---
+import AdminDashboardPage from './features/admin/pages/AdminDashboardPage';
+import UserDetailPage from './features/admin/pages/UserDetailPage';
 
 // --- Shared / Generic Pages ---
-import UploadPage from './pages/UploadPage'; // Kept generic
+import UploadPage from './pages/UploadPage';
 import GoogleAuthCallbackPage from './pages/GoogleAuthCallbackPage';
 import NotFoundPage from './pages/NotFoundPage';
 import VerifyEmailPage from './pages/VerifyEmailPage';
 import SettingsPage from './pages/SettingsPage';
 import LandingPage from './pages/LandingPage';
 import DashboardPage from './pages/DashboardPage';
-import AdminDashboardPage from './pages/AdminDashboardPage';
-import UserDetailPage from './pages/UserDetailPage'; 
 
 // --- Policies ---
 import PrivacyPolicyPage from './pages/policies/PrivacyPolicyPage';
 import TermsOfServicePage from './pages/policies/TermsOfServicePage';
 import ContactInformationPage from './pages/policies/ContactInformationPage';
-
-import { CircularProgress, Box } from '@mui/material';
 
 // --- Route Guards ---
 
