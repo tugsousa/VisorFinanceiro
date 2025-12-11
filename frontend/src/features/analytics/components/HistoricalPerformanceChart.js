@@ -7,9 +7,9 @@ import {
     ToggleButtonGroup, Switch, FormControlLabel, Tooltip, IconButton
 } from '@mui/material';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
-import { apiFetchHistoricalChartData } from '../../lib/api';
-import { formatCurrency } from '../../utils/formatUtils';
-import { usePortfolio } from '../../features/portfolio/PortfolioContext';
+import { apiFetchHistoricalChartData } from '../../../lib/api';
+import { formatCurrency } from '../../../lib/utils/formatUtils';
+import { usePortfolio } from '../../portfolio/PortfolioContext';
 import {
   Chart as ChartJS, CategoryScale, LinearScale, PointElement, 
   LineElement, Title, Tooltip as ChartTooltip, Legend, Filler

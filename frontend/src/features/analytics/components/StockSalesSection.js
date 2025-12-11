@@ -1,22 +1,22 @@
-// frontend/src/components/realizedgainsSections/OptionSalesSection.js
+// frontend/src/components/realizedgainsSections/StockSalesSection.js
 import React, { useMemo } from 'react';
 import { Typography, Paper, Box, Grid, CircularProgress } from '@mui/material'; // <-- Adicionado CircularProgress
 import { DataGrid } from '@mui/x-data-grid';
 import { ptPT } from '@mui/x-data-grid/locales';
 import { Bar } from 'react-chartjs-2';
-import { ALL_YEARS_OPTION, MONTH_NAMES_CHART } from '../../constants';
-import { getYearString, getMonthIndex, calculateDaysHeld, parseDateRobust } from '../../utils/dateUtils';
-import { getBaseProductName } from '../../utils/chartUtils';
-import { formatCurrency, calculateAnnualizedReturn } from '../../utils/formatUtils';
+import { ALL_YEARS_OPTION, MONTH_NAMES_CHART } from '../../../constants';
+import { getYearString, getMonthIndex, calculateDaysHeld, parseDateRobust } from '../../../lib/utils/dateUtils';
+import { getBaseProductName } from '../../../lib/utils/chartUtils';
+import { formatCurrency, calculateAnnualizedReturn } from '../../../lib/utils/formatUtils';
 
-const calculateAnnualizedReturnForOptionsLocal = (sale) => {
-    const daysHeld = calculateDaysHeld(sale.open_date, sale.close_date);
-    return calculateAnnualizedReturn(sale.delta, Math.abs(sale.open_amount_eur), daysHeld);
+const calculateAnnualizedReturnForStocksLocal = (sale) => {
+    const daysHeld = calculateDaysHeld(sale.BuyDate, sale.SaleDate);
+    return calculateAnnualizedReturn(sale.Delta, sale.BuyAmountEUR, daysHeld);
 };
 
 const columns = [
     {
-      field: 'open_date',
+      field: 'BuyDate',
       headerName: 'Dt. abertura',
       width: 110,
       type: 'date',
@@ -30,7 +30,7 @@ const columns = [
       }
     },
         {
-      field: 'close_date',
+      field: 'SaleDate',
       headerName: 'Dt. fecho',
       width: 110,
       type: 'date',
@@ -41,13 +41,13 @@ const columns = [
         headerName: 'Dias em posse',
         width: 100,
         type: 'number',
-        valueGetter: (_, row) => calculateDaysHeld(row.open_date, row.close_date),
+        valueGetter: (_, row) => calculateDaysHeld(row.BuyDate, row.SaleDate),
     },
-    { field: 'product_name', headerName: 'Produto', flex: 1, width: 140 },
-    { field: 'quantity', headerName: 'Qtd', type: 'number', width: 80 },
-    { field: 'open_amount_eur', headerName: 'Mont. abertura (€)', type: 'number', width: 130, valueFormatter: (value) => typeof value === 'number' ? value.toFixed(2) : '' },
-    { field: 'close_amount_eur', headerName: 'Mont. fecho (€)', type: 'number', width: 130, valueFormatter: (value) => typeof value === 'number' ? value.toFixed(2) : '' },
-    { field: 'delta', headerName: 'L/P (€)', type: 'number', width: 120, headerAlign: 'right', align: 'right',
+    { field: 'ProductName', headerName: 'Produto', flex: 1, minWidth: 200 },
+    { field: 'Quantity', headerName: 'Qtd', type: 'number', width: 80 },
+    { field: 'BuyAmountEUR', headerName: 'Mont. abertura (€)', type: 'number', width: 130, valueFormatter: (value) => typeof value === 'number' ? value.toFixed(2) : '' },
+    { field: 'SaleAmountEUR', headerName: 'Mont. fecho (€)', type: 'number', width: 130, valueFormatter: (value) => typeof value === 'number' ? value.toFixed(2) : '' },
+    { field: 'Delta', headerName: 'L/P (€)', type: 'number', width: 120, headerAlign: 'right', align: 'right',
         renderCell: (params) => (
             <Box sx={{ color: params.value >= 0 ? 'success.main' : 'error.main' }}>
                 {params.value?.toFixed(2)}
@@ -57,22 +57,23 @@ const columns = [
 ];
 
 // Adicionado prop isLoading e NoRowsOverlay
-export default function OptionSalesSection({ optionSalesData, selectedYear, isLoading, NoRowsOverlay }) {
+export default function StockSalesSection({ stockSalesData, selectedYear, isLoading, NoRowsOverlay }) {
     const { salesByProductChartData, salesByTimeSeriesChartData } = useMemo(() => {
         const emptyResult = {
             salesByProductChartData: { labels: [], datasets: [] },
             salesByTimeSeriesChartData: { labels: [], datasets: [] },
         };
-        if (!optionSalesData || optionSalesData.length === 0) return emptyResult;
+        if (!stockSalesData || stockSalesData.length === 0) return emptyResult;
 
         const maxThickness = 60;
         const smallDataSetThreshold = 5;
+
         // --- P/L by Product Chart Data ---
         const productPLMap = {};
-        optionSalesData.forEach(sale => {
-            if (sale.delta != null) {
-                const baseProduct = getBaseProductName(sale.product_name);
-                productPLMap[baseProduct] = (productPLMap[baseProduct] || 0) + sale.delta;
+        stockSalesData.forEach(sale => {
+            if (sale.Delta != null) {
+                const baseProduct = getBaseProductName(sale.ProductName);
+                productPLMap[baseProduct] = (productPLMap[baseProduct] || 0) + sale.Delta;
             }
         });
 
@@ -84,7 +85,7 @@ export default function OptionSalesSection({ optionSalesData, selectedYear, isLo
         const chartItems = topItems.map(([name, pl]) => ({ name, pl }));
         if (otherItems.length > 0) {
             const othersPL = otherItems.reduce((sum, [, pl]) => sum + pl, 0);
-            chartItems.push({ name: 'Others', pl: othersPL });
+            chartItems.push({ name: 'Outros', pl: othersPL });
         }
         chartItems.sort((a, b) => a.pl - b.pl);
 
@@ -99,17 +100,19 @@ export default function OptionSalesSection({ optionSalesData, selectedYear, isLo
                 hoverBorderWidth: 2,
             }]
         };
+
         if (productChart.labels.length > 0 && productChart.labels.length <= smallDataSetThreshold) {
             productChart.datasets[0].maxBarThickness = maxThickness;
         }
+
         // --- P/L by Time-Series Chart Data ---
         let timeSeriesChart;
         if (selectedYear === ALL_YEARS_OPTION) {
             const yearlyMap = {};
-            optionSalesData.forEach(sale => {
-                const year = getYearString(sale.close_date);
-                if (year && sale.delta != null) {
-                    yearlyMap[year] = (yearlyMap[year] || 0) + sale.delta;
+            stockSalesData.forEach(sale => {
+                const year = getYearString(sale.SaleDate);
+                if (year && sale.Delta != null) {
+                    yearlyMap[year] = (yearlyMap[year] || 0) + sale.Delta;
                 }
             });
             const sortedYears = Object.keys(yearlyMap).sort((a, b) => a.localeCompare(b));
@@ -126,10 +129,10 @@ export default function OptionSalesSection({ optionSalesData, selectedYear, isLo
             };
         } else {
             const monthlyData = new Array(12).fill(0);
-            optionSalesData.forEach(sale => {
-                const monthIndex = getMonthIndex(sale.close_date);
-                if (monthIndex !== null && sale.delta != null) {
-                    monthlyData[monthIndex] += sale.delta;
+            stockSalesData.forEach(sale => {
+                const monthIndex = getMonthIndex(sale.SaleDate);
+                if (monthIndex !== null && sale.Delta != null) {
+                    monthlyData[monthIndex] += sale.Delta;
                 }
             });
             timeSeriesChart = {
@@ -150,7 +153,7 @@ export default function OptionSalesSection({ optionSalesData, selectedYear, isLo
         }
 
         return { salesByProductChartData: productChart, salesByTimeSeriesChartData: timeSeriesChart };
-    }, [optionSalesData, selectedYear]);
+    }, [stockSalesData, selectedYear]);
 
     const salesByProductChartOptions = useMemo(() => ({
         responsive: true, maintainAspectRatio: false,
@@ -223,8 +226,8 @@ export default function OptionSalesSection({ optionSalesData, selectedYear, isLo
         }
     }), [selectedYear]);
 
-    const rows = optionSalesData.map((sale, index) => ({
-        id: `${sale.product_name}-${sale.close_date}-${index}`,
+    const rows = stockSalesData.map((sale, index) => ({
+        id: `${sale.ISIN}-${sale.SaleDate}-${index}`,
         ...sale
     }));
     
@@ -232,7 +235,8 @@ export default function OptionSalesSection({ optionSalesData, selectedYear, isLo
 
     return (
         <Paper elevation={0} sx={{ p: 2, mb: 3, border: 'none' }}>
-            {isLoading && !hasData ? (
+             {/* Exibir loading se estiver a carregar e não houver dados, ou mostrar os gráficos se houver dados */}
+             {isLoading && !hasData ? (
                 <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}><CircularProgress /></Box>
             ) : (
                 <>
@@ -250,9 +254,9 @@ export default function OptionSalesSection({ optionSalesData, selectedYear, isLo
                             </Grid>
                         </Grid>
                     ) : (
-                         <Typography align="center" sx={{ my: 4, color: 'text.secondary' }}>Não existe informação de vendas de opções para este período.</Typography>
+                         <Typography align="center" sx={{ my: 4, color: 'text.secondary' }}>Não existe informação de vendas de ações para este período.</Typography>
                     )}
-        
+
                     <Box sx={{ width: '100%' }}>
                         <DataGrid
                             rows={rows}
@@ -262,7 +266,7 @@ export default function OptionSalesSection({ optionSalesData, selectedYear, isLo
                             initialState={{
                                 pagination: { paginationModel: { pageSize: 10 } },
                                 sorting: {
-                                    sortModel: [{ field: 'open_date', sort: 'desc' }],
+                                    sortModel: [{ field: 'BuyDate', sort: 'desc' }],
                                 },
                             }}
                             pageSizeOptions={[10, 25, 50]}

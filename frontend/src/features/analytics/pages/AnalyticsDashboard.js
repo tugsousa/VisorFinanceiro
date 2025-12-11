@@ -5,10 +5,10 @@ import {
   Paper, CircularProgress, Grid, Alert, Tabs, Tab, Card
 } from '@mui/material'; 
 import { Tooltip } from '@mui/material'; 
-import { useAuth } from '../features/auth/AuthContext';
+import { useAuth } from '../../auth/AuthContext';
 import { useRealizedGains } from '../hooks/useRealizedGains';
-import { UI_TEXT, ALL_YEARS_OPTION } from '../constants';
-import { formatCurrency } from '../lib/utils/formatUtils';
+import { UI_TEXT, ALL_YEARS_OPTION } from '../../../constants';
+import { formatCurrency } from '../../../lib/utils/formatUtils';
 
 import ShowChartIcon from '@mui/icons-material/ShowChart';
 import CandlestickChartIcon from '@mui/icons-material/CandlestickChart';
@@ -20,16 +20,16 @@ import SavingsIcon from '@mui/icons-material/Savings';
 import ThumbUpAltIcon from '@mui/icons-material/ThumbUpAlt'; 
 import ThumbDownAltIcon from '@mui/icons-material/ThumbDownAlt'; 
 
-import StockHoldingsSection from '../components/realizedgainsSections/StockHoldingsSection';
-import OptionHoldingsSection from '../components/realizedgainsSections/OptionHoldingsSection';
-import StockSalesSection from '../components/realizedgainsSections/StockSalesSection';
-import OptionSalesSection from '../components/realizedgainsSections/OptionSalesSection';
-import DividendsSection from '../components/realizedgainsSections/DividendsSection';
-import OverallPLChart from '../components/realizedgainsSections/OverallPLChart';
-import HoldingsAllocationChart from '../components/realizedgainsSections/HoldingsAllocationChart';
-import PLContributionChart from '../components/realizedgainsSections/PLContributionChart';
-import FeesSection from '../components/realizedgainsSections/FeesSection';
-import HistoricalPerformanceChart from '../components/realizedgainsSections/HistoricalPerformanceChart';
+import StockHoldingsSection from '../components/StockHoldingsSection';
+import OptionHoldingsSection from '../components/OptionHoldingsSection';
+import StockSalesSection from '../components/StockSalesSection';
+import OptionSalesSection from '../components/OptionSalesSection';
+import DividendsSection from '../components/DividendsSection';
+import OverallPLChart from '../components/OverallPLChart';
+import HoldingsAllocationChart from '../components/HoldingsAllocationChart';
+import PLContributionChart from '../components/PLContributionChart';
+import FeesSection from '../components/FeesSection';
+import HistoricalPerformanceChart from '../components/HistoricalPerformanceChart';
 
 
 const isDataEmpty = (data) => {

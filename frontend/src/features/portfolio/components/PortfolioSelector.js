@@ -12,7 +12,7 @@ import {
     Delete as DeleteIcon,
     Add as AddIcon
 } from '@mui/icons-material';
-import { usePortfolio } from '../features/portfolio/PortfolioContext';
+import { usePortfolio } from '../PortfolioContext';
 
 export default function PortfolioSelector() {
     const { portfolios, activePortfolio, switchPortfolio, createPortfolio, deletePortfolio, loading } = usePortfolio();

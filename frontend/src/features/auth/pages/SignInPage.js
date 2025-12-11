@@ -1,13 +1,13 @@
 // frontend/src/pages/SignInPage.js
 import React, { useState, useContext, useEffect } from 'react';
 import { Link as RouterLink } from 'react-router-dom';
-import { AuthContext } from '../features/auth/AuthContext';
+import { AuthContext } from '../AuthContext';
 import {
   Box, Typography, TextField, Button, Alert, CircularProgress, Grid, Link, Divider, SvgIcon
 } from '@mui/material';
-import AuthModal from '../components/auth/AuthModal';
+import AuthModal from '../components/AuthModal';
 // import GoogleIcon from '@mui/icons-material/Google'; // We will replace this.
-import { API_ENDPOINTS } from '../constants'; // Importe os endpoints
+import { API_ENDPOINTS } from '../../../constants'; // Importe os endpoints
 
 // Create a new component for the colorful Google icon
 const GoogleColorIcon = (props) => (

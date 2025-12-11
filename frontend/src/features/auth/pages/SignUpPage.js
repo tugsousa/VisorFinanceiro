@@ -1,11 +1,11 @@
 // frontend/src/pages/SignUpPage.js
 import React, { useState, useContext, useRef } from 'react';
 import { Link as RouterLink } from 'react-router-dom';
-import { AuthContext } from '../features/auth/AuthContext';
+import { AuthContext } from '../AuthContext';
 import {
   Box, Typography, TextField, Button, Alert, Link, Divider
 } from '@mui/material';
-import AuthModal from '../components/auth/AuthModal';
+import AuthModal from '../components/AuthModal';
 
 function SignUpPage() {
   const [username, setUsername] = useState('');

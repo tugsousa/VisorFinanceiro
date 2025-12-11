@@ -3,9 +3,9 @@ import React, { useMemo } from 'react';
 import { Box, Typography } from '@mui/material';
 import { Bar } from 'react-chartjs-2';
 import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend } from 'chart.js';
-import { ALL_YEARS_OPTION } from '../../constants';
-import { getYearString } from '../../utils/dateUtils';
-import { formatCurrency } from '../../utils/formatUtils';
+import { ALL_YEARS_OPTION } from '../../../constants';
+import { getYearString } from '../../../lib/utils/dateUtils';
+import { formatCurrency } from '../../../lib/utils/formatUtils';
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend);
 

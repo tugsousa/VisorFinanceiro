@@ -10,11 +10,11 @@ import {
   apiFetchStockSales,
   apiFetchOptionSales,
   apiFetchDividendTaxSummary
-} from '../lib/api';
-import { useAuth } from '../features/auth/AuthContext';
-import { usePortfolio } from '../features/portfolio/PortfolioContext';
-import { UI_TEXT, NO_YEAR_SELECTED, ALL_YEARS_OPTION } from '../constants';
-import { getYear, getMonth, getDay, extractYearsFromData } from '../lib/utils/dateUtils';
+} from '../../lib/api';
+import { useAuth } from '../auth/AuthContext';
+import { usePortfolio } from '../portfolio/PortfolioContext';
+import { UI_TEXT, NO_YEAR_SELECTED, ALL_YEARS_OPTION } from '../../constants';
+import { getYear, getMonth, getDay, extractYearsFromData } from '../../lib/utils/dateUtils';
 import './TaxPage.css';
 
 const StyledTableCell = styled(TableCell)(({ theme }) => ({

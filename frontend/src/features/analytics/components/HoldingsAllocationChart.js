@@ -3,7 +3,7 @@ import React, { useState, useMemo } from 'react';
 import { Doughnut } from 'react-chartjs-2';
 import { Chart as ChartJS, ArcElement, Tooltip, Legend, Title } from 'chart.js';
 import { Paper, Typography, Box, FormControlLabel, Switch } from '@mui/material';
-import { formatCurrency } from '../../utils/formatUtils';
+import { formatCurrency } from '../../../lib/utils/formatUtils';
 
 ChartJS.register(ArcElement, Tooltip, Legend, Title);
 

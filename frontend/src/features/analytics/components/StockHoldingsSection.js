@@ -7,15 +7,14 @@ import {
 } from '@mui/material';
 import { DataGrid } from '@mui/x-data-grid';
 import { ptPT } from '@mui/x-data-grid/locales';
-import { parseDateRobust } from '../../utils/dateUtils';
-// CORREÇÃO: Adicionado calculateAnnualizedReturn à importação
-import { formatCurrency, calculateAnnualizedReturn } from '../../utils/formatUtils';
+import { parseDateRobust } from '../../../lib/utils/dateUtils';
+import { formatCurrency, calculateAnnualizedReturn } from '../../../lib/utils/formatUtils';
 import SettingsIcon from '@mui/icons-material/Settings';
 import TrendingUpIcon from '@mui/icons-material/TrendingUp';
 import TrendingDownIcon from '@mui/icons-material/TrendingDown';
 import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
-import { ALL_YEARS_OPTION } from '../../constants';
+import { ALL_YEARS_OPTION } from '../../../constants';
 
 const LightTooltip = styled(({ className, ...props }) => (
     <Tooltip {...props} classes={{ popper: className }} />
