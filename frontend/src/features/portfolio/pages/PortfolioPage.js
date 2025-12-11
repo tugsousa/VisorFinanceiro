@@ -26,14 +26,6 @@ const PortfolioPage = () => {
                 <Typography variant="h4" component="h1" fontWeight="bold">
                     A Minha Carteira
                 </Typography>
-                
-                {/* Small Summary Card for Portfolio Page */}
-                <Paper elevation={0} sx={{ p: 2, border: '1px solid', borderColor: 'divider', borderRadius: 2, bgcolor: 'background.paper' }}>
-                    <Typography variant="caption" color="text.secondary" display="block">P/L Aberto</Typography>
-                    <Typography variant="h6" sx={{ color: unrealizedStockPL >= 0 ? 'success.main' : 'error.main', fontWeight: 'bold' }}>
-                        {formatCurrency(unrealizedStockPL)}
-                    </Typography>
-                </Paper>
             </Box>
 
             <Grid container spacing={3}>
