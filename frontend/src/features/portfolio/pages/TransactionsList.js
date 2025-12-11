@@ -11,8 +11,8 @@ import { useAuth } from '../../auth/AuthContext';
 import { usePortfolio } from '../PortfolioContext';
 import { UI_TEXT } from '../../../constants';
 import { parseDateRobust } from '../../../lib/utils/dateUtils';
-import DeleteTransactionsModal from '../../../components/DeleteTransactionsModal';
-import TransactionAddModal from '../components/TransactionAddModal'; // Correct Import Name
+import DeleteTransactionsModal from '../components/DeleteTransactionsModal';
+import TransactionAddModal from '../components/TransactionAddModal';
 
 const NoRowsOverlay = () => (
   <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', py: 4, color: 'text.secondary', fontSize: '0.9rem' }}>

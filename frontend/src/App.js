@@ -1,14 +1,15 @@
 // frontend/src/App.js
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import Layout from './layouts/Layout';
-import { CircularProgress, Box } from '@mui/material';
 
 // --- Feature: Authentication ---
-import { AuthProvider, useAuth } from './features/auth/AuthContext';
+import { AuthProvider } from './features/auth/AuthContext';
 import SignInPage from './features/auth/pages/SignInPage';
 import SignUpPage from './features/auth/pages/SignUpPage';
 import RequestPasswordResetPage from './features/auth/pages/RequestPasswordResetPage';
 import ResetPasswordPage from './features/auth/pages/ResetPasswordPage';
+// NEW: Import RouteGuards from the new feature location
+import { HomePage, ProtectedRoute, PublicRoute, AdminRoute } from './features/auth/components/RouteGuards';
 
 // --- Feature: Portfolio ---
 import { PortfolioProvider } from './features/portfolio/PortfolioContext';
@@ -30,75 +31,12 @@ import GoogleAuthCallbackPage from './pages/GoogleAuthCallbackPage';
 import NotFoundPage from './pages/NotFoundPage';
 import VerifyEmailPage from './pages/VerifyEmailPage';
 import SettingsPage from './pages/SettingsPage';
-import LandingPage from './pages/LandingPage';
 import DashboardPage from './pages/DashboardPage';
 
 // --- Policies ---
 import PrivacyPolicyPage from './pages/policies/PrivacyPolicyPage';
 import TermsOfServicePage from './pages/policies/TermsOfServicePage';
 import ContactInformationPage from './pages/policies/ContactInformationPage';
-
-// --- Route Guards ---
-
-const HomePage = () => {
-    const { user, isInitialAuthLoading } = useAuth();
-    if (isInitialAuthLoading) {
-        return (
-            <Box display="flex" justifyContent="center" alignItems="center" minHeight="80vh">
-                <CircularProgress />
-            </Box>
-        );
-    }
-    return user ? <Navigate to="/dashboard" replace /> : <LandingPage />;
-};
-
-const ProtectedRoute = ({ children }) => {
-    const { user, isInitialAuthLoading } = useAuth();
-    if (isInitialAuthLoading) {
-        return (
-            <Box display="flex" justifyContent="center" alignItems="center" minHeight="80vh">
-                <CircularProgress />
-            </Box>
-        );
-    }
-    if (!user) {
-        return <Navigate to="/signin" replace />;
-    }
-    return children;
-};
-
-const PublicRoute = ({ children }) => {
-    const { user, isInitialAuthLoading } = useAuth();
-    if (isInitialAuthLoading) {
-        return (
-            <Box display="flex" justifyContent="center" alignItems="center" minHeight="80vh">
-                <CircularProgress />
-            </Box>
-        );
-    }
-    if (user) {
-        return <Navigate to="/dashboard" replace />;
-    }
-    return children;
-};
-
-const AdminRoute = ({ children }) => {
-    const { user, isInitialAuthLoading } = useAuth();
-    if (isInitialAuthLoading) {
-        return (
-            <Box display="flex" justifyContent="center" alignItems="center" minHeight="80vh">
-                <CircularProgress />
-            </Box>
-        );
-    }
-    if (!user) {
-        return <Navigate to="/signin" replace />;
-    }
-    if (!user.is_admin) {
-        return <Navigate to="/dashboard" replace />;
-    }
-    return children;
-};
 
 function App() {
     return (
@@ -107,6 +45,7 @@ function App() {
                 <Router>
                     <Layout>
                         <Routes>
+                            {/* Home / Landing */}
                             <Route path="/" element={<HomePage />} />
 
                             {/* Authentication Feature Routes */}
