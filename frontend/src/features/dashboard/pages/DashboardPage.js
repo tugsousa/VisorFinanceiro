@@ -1,52 +1,49 @@
 import React from 'react';
-import { Box, Typography, Grid, Paper, Card, CardActionArea, CardContent } from '@mui/material';
-import {
-  Upload as UploadIcon,
-  Paid as RealizedGainsIcon,
-  ReceiptLong as TaxIcon, 
-  TableView as TableViewIcon, 
-} from '@mui/icons-material';
+import { Box, Typography, Grid, Paper, Button } from '@mui/material';
 import { useAuth } from '../../auth/AuthContext';
+import { usePortfolio } from '../../portfolio/PortfolioContext';
+import HistoricalPerformanceChart from '../../analytics/components/HistoricalPerformanceChart';
+import UploadFileIcon from '@mui/icons-material/UploadFile';
 import { Link as RouterLink } from 'react-router-dom';
 
-const dashboardItems = [
-  { title: "Carregar Transacções", to: "/upload", icon: <UploadIcon fontSize="large" />, description: "Carregue o seu ficheiro CSV com as transacções mais recentes." },
-  { title: "Consultar Mais-Valias Realizadas", to: "/realizedgains", icon: <RealizedGainsIcon fontSize="large" />, description: "Analise o desempenho do seu portefólio e os seus resultados (P/L)." },
-  { title: "Gerar Relatório Fiscal", to: "/tax", icon: <TaxIcon fontSize="large" />, description: "Prepare os dados para a sua declaração anual de impostos." },
-  { title: "Consultar Transacções", to: "/transactions", icon: <TableViewIcon fontSize="large" />, description: "Ver todas as transacções já processadas." },
-];
+// Simple hook for dashboard high-level metrics could be added here
+// For now, we use the chart which fetches its own data
 
 const DashboardPage = () => {
     const { user } = useAuth();
+    const { activePortfolio } = usePortfolio();
 
     return (
         <Box sx={{ p: { xs: 2, sm: 3 } }}>
-            <Typography variant="h4" component="h1" gutterBottom>
-                Bem-vindo, {user?.username || 'User'}!
-            </Typography>
-            <Typography variant="subtitle1" color="text.secondary" sx={{ mb: 4 }}>
-                
-            </Typography>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+                <Box>
+                    <Typography variant="h4" component="h1" gutterBottom>
+                        Olá, {user?.username || 'Investidor'}!
+                    </Typography>
+                    <Typography variant="body1" color="text.secondary">
+                        Aqui está o resumo do teu portfólio: <strong>{activePortfolio?.name || 'Nenhum selecionado'}</strong>
+                    </Typography>
+                </Box>
+                <Button 
+                    variant="contained" 
+                    startIcon={<UploadFileIcon />} 
+                    component={RouterLink} 
+                    to="/upload"
+                >
+                    Importar Dados
+                </Button>
+            </Box>
+
             <Grid container spacing={3}>
-                {dashboardItems.map((item) => (
-                    <Grid item xs={12} sm={6} md={4} key={item.title}>
-                        <Card component={RouterLink} to={item.to} sx={{ textDecoration: 'none', height: '100%' }}>
-                            <CardActionArea sx={{ p: 2, display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', height: '100%' }}>
-                                <Box sx={{ color: 'primary.main', mb: 2 }}>
-                                    {item.icon}
-                                </Box>
-                                <CardContent>
-                                    <Typography gutterBottom variant="h6" component="div">
-                                        {item.title}
-                                    </Typography>
-                                    <Typography variant="body2" color="text.secondary">
-                                        {item.description}
-                                    </Typography>
-                                </CardContent>
-                            </CardActionArea>
-                        </Card>
-                    </Grid>
-                ))}
+                {/* Historical Chart Section */}
+                <Grid item xs={12}>
+                    <Paper elevation={0} sx={{ p: 2, borderRadius: 2, border: '1px solid', borderColor: 'divider' }}>
+                        <Typography variant="h6" gutterBottom sx={{ px: 2, pt: 1 }}>Performance Histórica</Typography>
+                        <HistoricalPerformanceChart />
+                    </Paper>
+                </Grid>
+
+                {/* We can add KPI cards here later using a useDashboardData hook */}
             </Grid>
         </Box>
     );

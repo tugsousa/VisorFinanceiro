@@ -1,3 +1,4 @@
+// frontend/src/features/tax/TaxPage.js
 import React, { useState, useEffect, useMemo } from 'react';
 import {
   Typography, Box, FormControl, InputLabel, Select, MenuItem, Table,
@@ -14,17 +15,8 @@ import { useAuth } from '../auth/AuthContext';
 import { usePortfolio } from '../portfolio/PortfolioContext';
 import { UI_TEXT, NO_YEAR_SELECTED, ALL_YEARS_OPTION } from '../../constants';
 import { getYear, getMonth, getDay, extractYearsFromData } from '../../lib/utils/dateUtils';
-import { 
-    filterAndGroupStockSales, 
-    transformDividendsForTable, 
-    groupOptionsByCountry, 
-    calculateStockTotals, 
-    calculateOptionTotals, 
-    calculateDividendTotals 
-} from './logic/taxTransformers';
 import './TaxPage.css';
 
-// Styled Components
 const StyledTableCell = styled(TableCell)(({ theme }) => ({
   backgroundColor: '#e5f5ff', color: '#50809b', fontWeight: 'normal',
   border: '1px solid #0084cc', textAlign: 'center', padding: '1px 2px',
@@ -42,7 +34,6 @@ const StyledTableBodyCell = styled(TableCell)(({ theme, align = 'center' }) => (
   padding: '4px 6px', fontSize: '0.8rem', verticalAlign: 'middle',
 }));
 
-// Fetcher
 const fetchTaxReportData = async (portfolioId) => {
   if (!portfolioId) return { stockSales: [], optionSales: [], dividendSummary: {} };
   
@@ -60,24 +51,37 @@ const fetchTaxReportData = async (portfolioId) => {
 
 export default function TaxPage() {
   const { token } = useAuth();
-  const { activePortfolio } = usePortfolio();
+  const { activePortfolio } = usePortfolio(); 
   const portfolioId = activePortfolio?.id;
 
-  const { data: taxApiData, isLoading: queryLoading, isError: isQueryError, error: queryError } = useQuery({
-    queryKey: ['taxReportData', token, portfolioId],
+  const {
+    data: taxApiData,
+    isLoading: queryLoading,
+    error: queryError,
+    isError: isQueryError
+  } = useQuery({
+    queryKey: ['taxReportData', token, portfolioId], 
     queryFn: () => fetchTaxReportData(portfolioId),
-    enabled: !!token && !!portfolioId,
+    enabled: !!token && !!portfolioId, 
     staleTime: 1000 * 60 * 10,
   });
 
   const apiError = isQueryError ? (queryError?.message || UI_TEXT.errorLoadingData) : null;
+
   const [selectedYear, setSelectedYear] = useState(NO_YEAR_SELECTED);
 
   const availableYears = useMemo(() => {
     if (!taxApiData) return [];
-    const dateAccessors = { stockSales: 'SaleDate', optionSales: 'close_date', DividendTaxResult: null };
-    const dataForYearExtraction = { stockSales: taxApiData.stockSales, optionSales: taxApiData.optionSales, DividendTaxResult: taxApiData.dividendSummary };
-    
+    const dateAccessors = {
+      stockSales: 'SaleDate',
+      optionSales: 'close_date',
+      DividendTaxResult: null,
+    };
+    const dataForYearExtraction = {
+      stockSales: taxApiData.stockSales || [],
+      optionSales: taxApiData.optionSales || [],
+      DividendTaxResult: taxApiData.dividendSummary || {},
+    };
     const yearsFromUtil = extractYearsFromData(dataForYearExtraction, dateAccessors);
     return yearsFromUtil
       .filter(y => y && y !== NO_YEAR_SELECTED && y !== ALL_YEARS_OPTION)
@@ -89,49 +93,166 @@ export default function TaxPage() {
     if (availableYears.length > 0) {
       const currentSystemYear = new Date().getFullYear();
       const targetDefaultYearStr = String(currentSystemYear - 1);
-      setSelectedYear(availableYears.includes(targetDefaultYearStr) ? targetDefaultYearStr : availableYears[0]);
+      if (availableYears.includes(targetDefaultYearStr)) {
+        setSelectedYear(targetDefaultYearStr);
+      } else {
+        setSelectedYear(availableYears[0]);
+      }
     } else if (!queryLoading) {
       setSelectedYear(NO_YEAR_SELECTED);
     }
   }, [availableYears, queryLoading]);
 
   const { stockSaleDetails, optionSaleDetails, dividendTaxReportRows, groupedOptionData } = useMemo(() => {
-    if (selectedYear === NO_YEAR_SELECTED || !taxApiData) {
+    const year = selectedYear;
+    if (year === NO_YEAR_SELECTED || !taxApiData) {
       return { stockSaleDetails: [], optionSaleDetails: [], dividendTaxReportRows: [], groupedOptionData: [] };
     }
 
-    const groupedStockSales = filterAndGroupStockSales(taxApiData.stockSales, selectedYear);
-    const transformedDividends = transformDividendsForTable(taxApiData.dividendSummary, selectedYear);
-    const { filteredOptionSales, groupedOptionData } = groupOptionsByCountry(taxApiData.optionSales, selectedYear);
+    const numYear = Number(year);
+    const filteredStockSales = (taxApiData.stockSales || []).filter(item => getYear(item.SaleDate) === numYear);
+    
+    const groupedSalesMap = filteredStockSales.reduce((acc, sale) => {
+      const groupingKey = `${sale.country_code}|${sale.SaleDate}|${sale.BuyDate}`;
+
+      if (!acc[groupingKey]) {
+        acc[groupingKey] = {
+          ...sale,
+          SaleAmountEUR: sale.SaleAmountEUR || 0,
+          BuyAmountEUR: Math.abs(sale.BuyAmountEUR || 0),
+          Commission: sale.Commission || 0,
+        };
+      } else {
+        acc[groupingKey].SaleAmountEUR += sale.SaleAmountEUR || 0;
+        acc[groupingKey].BuyAmountEUR += Math.abs(sale.BuyAmountEUR || 0);
+        acc[groupingKey].Commission += sale.Commission || 0;
+      }
+
+      return acc;
+    }, {});
+
+    const groupedStockSales = Object.values(groupedSalesMap);
+
+    const filteredOptionSales = (taxApiData.optionSales || []).filter(item => getYear(item.close_date) === numYear);
+    
+    const dividendYearData = taxApiData.dividendSummary?.[year] || {};
+    const transformedDividends = Object.entries(dividendYearData).map(([country, details], index) => ({
+      id: `${year}-${country}-${index}`,
+      linha: 801 + index,
+      codigo: 'E11',
+      paisFonte: country,
+      rendimentoBruto: details.gross_amt || 0,
+      impostoFonte: Math.abs(details.taxed_amt || 0),
+      impostoRetido: 0,
+      nifEntidade: '',
+      retencaoFonte: 0,
+    }));
+
+    const groupedOptions = filteredOptionSales.reduce((acc, row) => {
+      const country = row.country_code || 'Unknown';
+      if (!acc[country]) {
+        acc[country] = { country_code: country, rendimentoLiquido: 0, impostoPago: 0 };
+      }
+      acc[country].rendimentoLiquido += (row.delta || 0);
+      acc[country].impostoPago += 0; // Assuming options usually have no withholding tax, explicitly summing 0
+      return acc;
+    }, {});
 
     return {
       stockSaleDetails: groupedStockSales,
       optionSaleDetails: filteredOptionSales,
       dividendTaxReportRows: transformedDividends,
-      groupedOptionData: groupedOptionData,
+      groupedOptionData: Object.values(groupedOptions),
     };
   }, [selectedYear, taxApiData]);
 
-  const stockTotals = useMemo(() => calculateStockTotals(stockSaleDetails), [stockSaleDetails]);
-  const optionTotals = useMemo(() => calculateOptionTotals(groupedOptionData), [groupedOptionData]);
-  const dividendTotals = useMemo(() => calculateDividendTotals(dividendTaxReportRows), [dividendTaxReportRows]);
-
   const loading = queryLoading || (token && !taxApiData && !apiError);
 
-  if (!portfolioId) return <Box sx={{ p: 4, textAlign: 'center' }}><Typography variant="h6">Selecione ou crie um portfólio para ver o relatório fiscal.</Typography></Box>;
-  if (loading) return <CircularProgress sx={{ display: 'block', margin: '20px auto' }} />;
-  if (apiError && availableYears.length === 0) return <Alert severity="error" sx={{ m: 2 }}>{apiError}</Alert>;
-  if (availableYears.length === 0 && !loading) return <Box sx={{ p: 4, textAlign: 'center' }}><Typography variant="h4" gutterBottom>Preencher Declaração IRS</Typography><Typography variant="body1">Sem dados disponíveis. Por favor, carregue primeiro um ficheiro de transações.</Typography></Box>;
+  const handleYearChange = (event) => {
+    setSelectedYear(event.target.value);
+  };
+
+  const stockTotals = useMemo(() => stockSaleDetails.reduce(
+    (acc, row) => {
+      acc.realizacao += row.SaleAmountEUR || 0;
+      acc.aquisicao += Math.abs(row.BuyAmountEUR || 0);
+      acc.despesas += row.Commission || 0;
+      return acc;
+    }, { realizacao: 0, aquisicao: 0, despesas: 0, imposto: 0 }
+  ), [stockSaleDetails]);
+
+  const optionTotals = useMemo(() => groupedOptionData.reduce(
+    (acc, group) => {
+      acc.rendimentoLiquido += group.rendimentoLiquido || 0;
+      acc.imposto += group.impostoPago || 0;
+      return acc;
+    }, { rendimentoLiquido: 0, imposto: 0 }
+  ), [groupedOptionData]);
+
+  const dividendTotals = useMemo(() => dividendTaxReportRows.reduce(
+    (acc, row) => {
+      acc.rendimentoBruto += row.rendimentoBruto || 0;
+      acc.impostoFonte += row.impostoFonte || 0;
+      acc.impostoRetido += row.impostoRetido || 0;
+      acc.retencaoFonte += row.retencaoFonte || 0;
+      return acc;
+    }, { rendimentoBruto: 0, impostoFonte: 0, impostoRetido: 0, retencaoFonte: 0 }
+  ), [dividendTaxReportRows]);
+
+  if (!portfolioId) {
+    return (
+        <Box sx={{ p: 4, textAlign: 'center' }}>
+            <Typography variant="h6">Selecione ou crie um portfólio para ver o relatório fiscal.</Typography>
+        </Box>
+    );
+  }
+
+  if (loading) {
+    return <CircularProgress sx={{ display: 'block', margin: '20px auto' }} />;
+  }
+  if (apiError && availableYears.length === 0) {
+    return <Alert severity="error" sx={{ m: 2 }}>{apiError}</Alert>;
+  }
+  
+  if (availableYears.length === 0 && !loading) {
+    return (
+        <Box sx={{ p: 4, textAlign: 'center' }}>
+            <Typography variant="h4" gutterBottom>Preencher Declaração IRS</Typography>
+            <Typography variant="body1">Sem dados disponíveis. Por favor, carregue primeiro um ficheiro de transações.</Typography>
+        </Box>
+    );
+  }
 
   return (
     <Box sx={{ p: { xs: 2, sm: 3 } }}>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: { xs: 'flex-start', sm: 'center' }, flexDirection: { xs: 'column', sm: 'row' }, mb: 3 }}>
-        <Typography variant="h4" component="h1" sx={{ mb: { xs: 2, sm: 0 } }}>Preencher Declaração IRS ({activePortfolio?.name})</Typography>
-        <FormControl sx={{ minWidth: 150, width: { xs: '100%', sm: 'auto' } }} size="small">
+      <Box sx={{ 
+        display: 'flex', 
+        justifyContent: 'space-between', 
+        alignItems: { xs: 'flex-start', sm: 'center' }, 
+        flexDirection: { xs: 'column', sm: 'row' },
+        mb: 3 
+      }}>
+        <Typography variant="h4" component="h1" sx={{ mb: { xs: 2, sm: 0 } }}>
+          Preencher Declaração IRS ({activePortfolio?.name})
+        </Typography>
+        <FormControl 
+          sx={{ 
+            minWidth: 150,
+            width: { xs: '100%', sm: 'auto' } 
+          }} 
+          size="small"
+        >
           <InputLabel id="year-select-taxpage-label">Ano</InputLabel>
-          <Select labelId="year-select-taxpage-label" value={selectedYear} label="Year" onChange={(e) => setSelectedYear(e.target.value)}>
+          <Select
+            labelId="year-select-taxpage-label"
+            value={selectedYear}
+            label="Year"
+            onChange={handleYearChange}
+          >
             <MenuItem value={NO_YEAR_SELECTED} disabled>Selecione o Ano</MenuItem>
-            {availableYears.map(year => (<MenuItem key={year} value={String(year)}>{year}</MenuItem>))}
+            {availableYears.map(year => (
+              <MenuItem key={year} value={String(year)}>{year}</MenuItem>
+            ))}
           </Select>
         </FormControl>
       </Box>
@@ -144,6 +265,10 @@ export default function TaxPage() {
             Anexo J - Quadro 8: Rendimentos de Capitais (Categoria E) - Obtidos no Estrangeiro
           </Typography>
           <Box sx={{ pl: { xs: 0, sm: 2 } }}>
+            <Box sx={{ mt: 2, display: 'flex', alignItems: 'baseline', mb: 1 }}>
+              <Typography variant="subtitle1" component="span" sx={{ border: '0.5px solid grey', padding: '2px 8px', display: 'inline-block', mr: 1, color: '#8d98a8', fontSize: '0.7rem' }}>A</Typography>
+              <Typography variant="subtitle2" component="span" sx={{ color: '#8d98a8', fontSize: '0.7rem' }}>Rendimentos que não respeitam a depósitos ou seguros</Typography>
+            </Box>
             <TableContainer component={Paper} sx={{ mb: 1, overflowX: 'auto' }}>
               <Table size="small" aria-label="dividend tax details table">
                 <TableHead>
@@ -157,7 +282,7 @@ export default function TaxPage() {
                   </TableRow>
                   <TableRow>
                     <StyledNestedTableCell>No país da fonte</StyledNestedTableCell>
-                    <StyledNestedTableCell>País Agente Pagador</StyledNestedTableCell>
+                    <StyledNestedTableCell>País Agente Pagador<br />(Dir. Poupança)</StyledNestedTableCell>
                     <StyledNestedTableCell>Imposto retido</StyledNestedTableCell>
                     <StyledNestedTableCell>NIF Ent. Retentora</StyledNestedTableCell>
                     <StyledNestedTableCell>Retenção Fonte</StyledNestedTableCell>
@@ -172,7 +297,7 @@ export default function TaxPage() {
                         <StyledTableBodyCell align="left">{row.paisFonte}</StyledTableBodyCell>
                         <StyledTableBodyCell>{row.rendimentoBruto.toFixed(2)}</StyledTableBodyCell>
                         <StyledTableBodyCell>{row.impostoFonte.toFixed(2)}</StyledTableBodyCell>
-                        <StyledTableBodyCell></StyledTableBodyCell>
+                        <StyledTableBodyCell>{/* Dir. Poupança - usually empty */}</StyledTableBodyCell>
                         <StyledTableBodyCell>{row.impostoRetido.toFixed(2)}</StyledTableBodyCell>
                         <StyledTableBodyCell align="left">{row.nifEntidade}</StyledTableBodyCell>
                         <StyledTableBodyCell>{row.retencaoFonte.toFixed(2)}</StyledTableBodyCell>
@@ -188,9 +313,9 @@ export default function TaxPage() {
                         <tr>
                             <th className="summary-header"></th>
                             <th className="summary-header"><span className="header-line">Rendimento Bruto</span></th>
-                            <th className="summary-header"><span className="header-line">Imposto Pago no Estrangeiro</span></th>
-                            <th className="summary-header"><span className="header-line">Imposto Retido</span></th>
-                            <th className="summary-header"><span className="header-line">Retenção na Fonte</span></th>
+                            <th className="summary-header"><span className="header-line">Imposto Pago no Estrangeiro</span><span className="header-separator">-</span><span className="header-line">No país da fonte</span></th>
+                            <th className="summary-header"><span className="header-line">Imposto Pago no Estrangeiro</span><span className="header-separator">-</span><span className="header-line">Imposto Retido</span></th>
+                            <th className="summary-header"><span className="header-line">Imposto Retido em Portugal</span><span className="header-separator">-</span><span className="header-line">Retenção na Fonte</span></th>
                         </tr>
                     </thead>
                     <tbody>
@@ -207,23 +332,29 @@ export default function TaxPage() {
           </Box>
 
           <Typography variant="h5" component="h2" gutterBottom sx={{ mt: 3, color: '#0183cb', borderBottom: '1px solid #0183cb', pb: 1, fontSize: '1.1rem' }}>
-            Anexo J - Quadro 9: Rendimentos de Incrementos Patrimoniais (Categoria G)
+            Anexo J - Quadro 9: Rendimentos de Incrementos Patrimoniais (Categoria G) - Obtidos no Estrangeiro
           </Typography>
           <Box sx={{ pl: { xs: 0, sm: 2 } }}>
-            <Box sx={{ mt: 2, display: 'flex', alignItems: 'baseline', mb: 1 }}>
+            <Typography variant="h6" component="h3" gutterBottom sx={{ mt: 2, color: '#58839b', fontSize: '0.9rem' }}>
+              9.2 Incrementos Patrimoniais de Opção de Englobamento
+            </Typography>
+            <Box sx={{ pl: { xs: 0, sm: 2 } }}>
+              <Box sx={{ mt: 2, display: 'flex', alignItems: 'baseline', mb: 1 }}>
                 <Typography variant="subtitle1" component="span" sx={{ border: '0.5px solid grey', padding: '2px 8px', display: 'inline-block', mr: 1, color: '#8d98a8', fontSize: '0.7rem' }}>A</Typography>
                 <Typography variant="subtitle2" component="span" sx={{ color: '#8d98a8', fontSize: '0.7rem' }}>Alienação Onerosa de Partes Sociais e Outros Valores Mobiliários</Typography>
-            </Box>
-            <TableContainer component={Paper} sx={{ mb: 1, overflowX: 'auto' }}>
+              </Box>
+              <TableContainer component={Paper} sx={{ mb: 1, overflowX: 'auto' }}>
                  <Table size="small" aria-label="stock sale details table">
                    <TableHead>
                     <TableRow>
-                      <StyledTableCell rowSpan={2}>Nº Linha</StyledTableCell>
+                      <StyledTableCell rowSpan={2}>Nº Linha<br />(951 a ...)</StyledTableCell>
                       <StyledTableCell rowSpan={2}>País Fonte</StyledTableCell>
                       <StyledTableCell rowSpan={2}>Código</StyledTableCell>
                       <StyledTableCell colSpan={4}>Realização (€)</StyledTableCell>
                       <StyledTableCell colSpan={4}>Aquisição (€)</StyledTableCell>
-                      <StyledTableCell rowSpan={2}>Despesas (€)</StyledTableCell>
+                      <StyledTableCell rowSpan={2}>Despesas e Encargos (€)</StyledTableCell>
+                      <StyledTableCell rowSpan={2}>Imposto pago<br />Estrang. (€)</StyledTableCell>
+                      <StyledTableCell rowSpan={2}>País<br />Contraparte</StyledTableCell>
                     </TableRow>
                     <TableRow>
                       <StyledNestedTableCell>Ano</StyledNestedTableCell>
@@ -252,9 +383,11 @@ export default function TaxPage() {
                             <StyledTableBodyCell>{getDay(row.BuyDate)}</StyledTableBodyCell>
                             <StyledTableBodyCell>{Math.abs(row.BuyAmountEUR || 0).toFixed(2)}</StyledTableBodyCell>
                             <StyledTableBodyCell>{row.Commission?.toFixed(2)}</StyledTableBodyCell>
+                            <StyledTableBodyCell>{/* Imposto Estrang. */}</StyledTableBodyCell>
+                            <StyledTableBodyCell>{/* País Contraparte */}</StyledTableBodyCell>
                         </TableRow>
                       ))
-                    ) : ( <TableRow><StyledTableBodyCell colSpan={12}>{UI_TEXT.noDataAvailable}</StyledTableBodyCell></TableRow> )}
+                    ) : ( <TableRow><StyledTableBodyCell colSpan={14}>{UI_TEXT.noDataAvailable}</StyledTableBodyCell></TableRow> )}
                    </TableBody>
                  </Table>
               </TableContainer>
@@ -316,14 +449,23 @@ export default function TaxPage() {
               <div className="summary-container">
                 <table className="summary-table">
                     <thead>
-                        <tr><th className="summary-header">Rendimento Líquido (Opções)</th></tr>
+                        <tr>
+                            <th className="summary-header"></th>
+                            <th className="summary-header"><span className="header-line">Rendimento Líquido</span></th>
+                            <th className="summary-header"><span className="header-line">Imposto pago no Estrangeiro</span></th>
+                        </tr>
                     </thead>
                     <tbody>
-                        <tr><td className="summary-value">{optionTotals.rendimentoLiquido.toFixed(2)} €</td></tr>
+                        <tr>
+                            <td className="control-sum">Soma de Controlo</td>
+                            <td className="summary-value">{optionTotals.rendimentoLiquido.toFixed(2)} €</td>
+                            <td className="summary-value">{optionTotals.imposto.toFixed(2)} €</td>
+                        </tr>
                     </tbody>
                 </table>
               </div>
             </Box>
+          </Box>
         </>
       )}
     </Box>
