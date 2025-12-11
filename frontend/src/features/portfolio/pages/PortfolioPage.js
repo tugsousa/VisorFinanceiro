@@ -1,10 +1,9 @@
 import React from 'react';
-import { Box, Typography, Grid, Paper, CircularProgress, Alert } from '@mui/material';
+import { Box, Typography, Grid, CircularProgress, Alert, Paper } from '@mui/material';
 import { useAuth } from '../../auth/AuthContext';
 import { usePortfolioData } from '../hooks/usePortfolioData';
 import StockHoldingsSection from '../../analytics/components/StockHoldingsSection';
 import OptionHoldingsSection from '../../analytics/components/OptionHoldingsSection';
-import HoldingsAllocationChart from '../../analytics/components/HoldingsAllocationChart';
 import { formatCurrency } from '../../../lib/utils/formatUtils';
 
 const PortfolioPage = () => {
@@ -23,28 +22,21 @@ const PortfolioPage = () => {
 
     return (
         <Box sx={{ p: { xs: 2, sm: 3 } }}>
-            <Typography variant="h4" component="h1" gutterBottom>
-                A Minha Carteira
-            </Typography>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+                <Typography variant="h4" component="h1" fontWeight="bold">
+                    A Minha Carteira
+                </Typography>
+                
+                {/* Small Summary Card for Portfolio Page */}
+                <Paper elevation={0} sx={{ p: 2, border: '1px solid', borderColor: 'divider', borderRadius: 2, bgcolor: 'background.paper' }}>
+                    <Typography variant="caption" color="text.secondary" display="block">P/L Aberto</Typography>
+                    <Typography variant="h6" sx={{ color: unrealizedStockPL >= 0 ? 'success.main' : 'error.main', fontWeight: 'bold' }}>
+                        {formatCurrency(unrealizedStockPL)}
+                    </Typography>
+                </Paper>
+            </Box>
 
             <Grid container spacing={3}>
-                {/* Metrics Summary */}
-                <Grid item xs={12} md={4}>
-                    <Paper sx={{ p: 3, height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-                        <Typography variant="subtitle2" color="text.secondary">P/L Não Realizado (Aberto)</Typography>
-                        <Typography variant="h4" sx={{ color: unrealizedStockPL >= 0 ? 'success.main' : 'error.main', fontWeight: 'bold' }}>
-                            {formatCurrency(unrealizedStockPL)}
-                        </Typography>
-                    </Paper>
-                </Grid>
-                
-                {/* Allocation Chart */}
-                <Grid item xs={12} md={8}>
-                    <Paper sx={{ p: 2, height: 300 }}>
-                        <HoldingsAllocationChart holdings={holdingsForGroupedView} />
-                    </Paper>
-                </Grid>
-
                 {/* Stock Holdings Table */}
                 <Grid item xs={12}>
                     <StockHoldingsSection 
