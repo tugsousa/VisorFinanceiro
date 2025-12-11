@@ -1,34 +1,20 @@
-// frontend/src/pages/UploadPage.js
-import React, { useState, useCallback, useRef } from 'react';
-import { useAuth } from '../features/auth/AuthContext';
-import { usePortfolio } from '../features/portfolio/PortfolioContext';
-import { apiUploadFile }from 'features/portfolio/api/portfolioApi';
-import { MAX_FILE_SIZE_BYTES, MAX_FILE_SIZE_MB } from '../constants';
+// src/features/upload/pages/UploadPage.js
+import React, { useState, useCallback } from 'react';
+import { useAuth } from '../../auth/AuthContext';
+import { usePortfolio } from '../../portfolio/PortfolioContext';
+// Update API path: go up 3 levels instead of 1
+import { apiUploadFile } from '../../../lib/api'; 
+import { MAX_FILE_SIZE_BYTES, MAX_FILE_SIZE_MB } from '../../../constants';
 import { Typography, Box, Button, LinearProgress, Paper, Alert, Modal, IconButton, Link as MuiLink, CircularProgress } from '@mui/material';
-import { styled } from '@mui/material/styles';
 import { useQueryClient } from '@tanstack/react-query';
-import { UploadFile as UploadFileIcon, CheckCircleOutline as CheckCircleIcon, ErrorOutline as ErrorIcon, Close as CloseIcon } from '@mui/icons-material';
+import { CheckCircleOutline as CheckCircleIcon, ErrorOutline as ErrorIcon, Close as CloseIcon } from '@mui/icons-material';
 import IBKRGuidePage from './IBKRGuidePage';
 import DEGIROGuidePage from './DEGIROGuidePage';
-import logger from '../lib/utils/logger';
-
-const UploadDropzone = styled(Box)(({ theme, isDragActive }) => ({
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: theme.spacing(4),
-    border: `2px dashed ${isDragActive ? theme.palette.primary.main : theme.palette.divider}`,
-    borderRadius: theme.shape.borderRadius,
-    backgroundColor: isDragActive ? theme.palette.action.hover : theme.palette.background.default,
-    color: theme.palette.text.secondary,
-    transition: 'border-color 0.3s, background-color 0.3s',
-    cursor: 'pointer',
-    textAlign: 'center',
-    minHeight: 200,
-}));
+import logger from '../../../lib/utils/logger';
+import UploadDropzone from '../components/UploadDropzone'; // Import the new component
 
 const modalStyle = {
+  // ... (keep modalStyle as is)
   position: 'absolute',
   top: '50%',
   left: '50%',
@@ -44,6 +30,7 @@ const modalStyle = {
 };
 
 const uploadWithRetry = async (formData, onUploadProgress) => {
+    // ... (keep uploadWithRetry logic as is)
     const MAX_ATTEMPTS = 2;
     let lastError = null;
 
@@ -71,15 +58,14 @@ const uploadWithRetry = async (formData, onUploadProgress) => {
 
 const UploadPage = () => {
     const { token, refreshUserDataCheck } = useAuth();
-    const { activePortfolio } = usePortfolio(); // <--- 2. Get activePortfolio from Context
+    const { activePortfolio } = usePortfolio();
     const queryClient = useQueryClient();
 
     const [selectedFile, setSelectedFile] = useState(null);
     const [uploadProgress, setUploadProgress] = useState(0);
     const [uploadStatus, setUploadStatus] = useState('idle');
     const [fileError, setFileError] = useState(null);
-    const [isDragActive, setIsDragActive] = useState(false);
-    const fileInputRef = useRef(null);
+    // REMOVED: isDragActive, setIsDragActive, fileInputRef (handled in Dropzone now)
     
     const [guideModal, setGuideModal] = useState(null);
     const handleOpenGuide = (broker) => setGuideModal(broker);
@@ -90,23 +76,19 @@ const UploadPage = () => {
         setUploadProgress(0);
         setUploadStatus('idle');
         setFileError(null);
-        if(fileInputRef.current) {
-            fileInputRef.current.value = "";
-        }
+        // Note: Resetting file input is handled inside Dropzone or by remounting
     };
     
     const handleFileSelected = useCallback(async (file) => {
         resetState();
         if (!file) return;
 
-        // --- 3. Check for Active Portfolio ---
         if (!activePortfolio) {
             setFileError('Selecione um portfólio ativo antes de carregar ficheiros.');
             setUploadStatus('error');
             return;
         }
 
-        // 1. Client-side validation
         const fileName = file.name.toLowerCase();
         const isCsv = fileName.endsWith('.csv');
         const isXml = fileName.endsWith('.xml');
@@ -126,13 +108,11 @@ const UploadPage = () => {
 
         setSelectedFile(file);
         
-        // 2. Prepare FormData
         const formData = new FormData();
         formData.append('file', file);
         formData.append('source', brokerType);
-        formData.append('portfolio_id', activePortfolio.id); // <--- 4. Append Portfolio ID
+        formData.append('portfolio_id', activePortfolio.id);
 
-        // 3. Attempt upload
         try {
             setUploadStatus('uploading');
             setFileError(null);
@@ -155,34 +135,17 @@ const UploadPage = () => {
             setUploadStatus('error');
             setFileError(err.response?.data?.error || err.message || 'Falha no carregamento. Por favor tente de novo.');
         }
-    }, [token, queryClient, refreshUserDataCheck, activePortfolio]); // Added activePortfolio dependency
+    }, [token, queryClient, refreshUserDataCheck, activePortfolio]);
 
-    const handleDragEnter = (e) => { e.preventDefault(); e.stopPropagation(); setIsDragActive(true); };
-    const handleDragLeave = (e) => { e.preventDefault(); e.stopPropagation(); setIsDragActive(false); };
-    const handleDragOver = (e) => { e.preventDefault(); e.stopPropagation(); };
-    
-    const handleDrop = useCallback((e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        setIsDragActive(false);
-        if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-            handleFileSelected(e.dataTransfer.files[0]);
-        }
-    }, [handleFileSelected]);
-
-    const handleFileInputChange = (e) => {
-        if (e.target.files && e.target.files.length > 0) {
-            handleFileSelected(e.target.files[0]);
-        }
-    };
+    // REMOVED: handleDragEnter, handleDragLeave, handleDragOver, handleDrop, handleFileInputChange
 
     return (
         <Box sx={{ p: { xs: 2, sm: 3 }, maxWidth: '800px', margin: 'auto' }}>
+            {/* ... Keep Title and Description ... */}
             <Typography variant="h4" component="h1" gutterBottom align="center">
                 Carregar Transações
             </Typography>
             
-            {/* Display active portfolio context */}
             {activePortfolio && (
                 <Typography variant="subtitle1" align="center" color="primary" sx={{ mb: 1, fontWeight: 'bold' }}>
                     Portfólio Ativo: {activePortfolio.name}
@@ -206,28 +169,10 @@ const UploadPage = () => {
 
             <Paper elevation={0} sx={{ p: { xs: 2, sm: 3 }, border: '1px solid', borderColor: 'divider' }}>
                 {uploadStatus === 'idle' && (
-                    <UploadDropzone
-                        isDragActive={isDragActive}
-                        onDragEnter={handleDragEnter}
-                        onDragLeave={handleDragLeave}
-                        onDragOver={handleDragOver}
-                        onDrop={handleDrop}
-                        onClick={() => fileInputRef.current?.click()}
-                    >
-                        <input
-                            ref={fileInputRef}
-                            type="file"
-                            hidden
-                            onChange={handleFileInputChange}
-                        />
-                        <UploadFileIcon sx={{ fontSize: 50, mb: 2 }} />
-                        <Typography variant="h6">Arraste e solte o seu ficheiro aqui</Typography>
-                        <Typography>ou clique para selecionar o ficheiro</Typography>
-                        <Typography variant="caption" sx={{ mt: 1 }}>Tipos suportados: CSV (Degiro), XML (IBKR) | Limite: {MAX_FILE_SIZE_MB}MB<br/>
-  Problemas no telemóvel? Se o ficheiro aparecer a cinzento, tente renomeá-lo para garantir que termina em .csv.</Typography>
-                    </UploadDropzone>
+                    <UploadDropzone onFileSelected={handleFileSelected} />
                 )}
                 
+                {/* ... Keep status states (uploading, processing, success, error) same as before ... */}
                 {uploadStatus === 'uploading' && (
                     <Box sx={{ textAlign: 'center' }}>
                         <Typography variant="h6" sx={{ mb: 2 }}>A enviar {selectedFile?.name}...</Typography>

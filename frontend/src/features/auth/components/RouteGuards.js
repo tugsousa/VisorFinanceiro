@@ -2,7 +2,7 @@ import React from 'react';
 import { Navigate } from 'react-router-dom';
 import { Box, CircularProgress } from '@mui/material';
 import { useAuth } from '../AuthContext';
-import LandingPage from '../../../pages/LandingPage';
+import LandingPage from '../../landing/pages/LandingPage';
 
 // Helper for loading state
 const PageLoader = () => (

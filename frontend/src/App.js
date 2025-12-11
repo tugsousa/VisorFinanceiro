@@ -26,17 +26,18 @@ import AdminDashboardPage from './features/admin/pages/AdminDashboardPage';
 import UserDetailPage from './features/admin/pages/UserDetailPage';
 
 // --- Shared / Generic Pages ---
-import UploadPage from './pages/UploadPage';
-import GoogleAuthCallbackPage from './pages/GoogleAuthCallbackPage';
-import NotFoundPage from './pages/NotFoundPage';
-import VerifyEmailPage from './pages/VerifyEmailPage';
-import SettingsPage from './pages/SettingsPage';
-import DashboardPage from './pages/DashboardPage';
+import UploadPage from './features/upload/pages/UploadPage';
+import GoogleAuthCallbackPage from './features/auth/pages/GoogleAuthCallbackPage'; 
+import NotFoundPage from './features/common/pages/NotFoundPage';
+import VerifyEmailPage from './features/auth/pages/VerifyEmailPage'; 
+import SettingsPage from './features/settings/pages/SettingsPage'; 
+import LandingPage from './features/landing/pages/LandingPage'; 
+import DashboardPage from './features/dashboard/pages/DashboardPage';
 
 // --- Policies ---
-import PrivacyPolicyPage from './pages/policies/PrivacyPolicyPage';
-import TermsOfServicePage from './pages/policies/TermsOfServicePage';
-import ContactInformationPage from './pages/policies/ContactInformationPage';
+import PrivacyPolicyPage from './features/legal/pages/PrivacyPolicyPage';
+import TermsOfServicePage from './features/legal/pages/TermsOfServicePage';
+import ContactInformationPage from './features/legal/pages/ContactInformationPage';
 
 function App() {
     return (

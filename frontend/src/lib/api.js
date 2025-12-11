@@ -1,18 +1,19 @@
 // frontend/src/lib/api.js
 import axios from 'axios';
-import { API_ENDPOINTS } from 'constants'; // Absolute import working!
-import logger from 'lib/utils/logger';
-
-// --- Axios Configuration ---
-const API_URL = process.env.REACT_APP_API_BASE_URL;
-const getAuthToken = () => localStorage.getItem('auth_token');
+import { API_ENDPOINTS } from '../constants';
+import logger from './utils/logger';
 
 let authRefresher = null;
-let currentCsrfToken = null;
 
 export const setAuthRefresher = (refresher) => {
   authRefresher = refresher;
 };
+
+const API_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:8080';
+
+const getAuthToken = () => localStorage.getItem('auth_token');
+
+let currentCsrfToken = null;
 
 export const setApiServiceCsrfToken = (token) => {
   currentCsrfToken = token;
@@ -20,7 +21,6 @@ export const setApiServiceCsrfToken = (token) => {
 
 export const getApiServiceCsrfToken = () => currentCsrfToken;
 
-// --- The Core Client ---
 const apiClient = axios.create({
   baseURL: API_URL,
   withCredentials: true,
@@ -29,7 +29,6 @@ const apiClient = axios.create({
   },
 });
 
-// --- CSRF Logic ---
 export const fetchAndSetCsrfToken = async () => {
   try {
     const response = await apiClient.get(API_ENDPOINTS.AUTH_CSRF);
@@ -38,18 +37,13 @@ export const fetchAndSetCsrfToken = async () => {
       setApiServiceCsrfToken(newCsrfToken);
       return newCsrfToken;
     }
-    logger.warn('CSRF token not found in response');
     return null;
   } catch (error) {
     logger.error('Error fetching CSRF token:', error);
-    if (error.response && error.response.status === 401) {
-      window.dispatchEvent(new CustomEvent('auth-error-logout', { detail: 'CSRF fetch unauthorized' }));
-    }
     return null;
   }
 };
 
-// --- Interceptors ---
 apiClient.interceptors.request.use(
   async (config) => {
     const authToken = getAuthToken();
@@ -64,11 +58,7 @@ apiClient.interceptors.request.use(
     const method = config.method?.toLowerCase();
     if (['post', 'put', 'delete', 'patch'].includes(method)) {
       const csrfTokenToUse = getApiServiceCsrfToken() || await fetchAndSetCsrfToken();
-      if (csrfTokenToUse) {
-        config.headers['X-CSRF-Token'] = csrfTokenToUse;
-      } else {
-        return Promise.reject(new axios.Cancel('CSRF token fetch failed.'));
-      }
+      if (csrfTokenToUse) config.headers['X-CSRF-Token'] = csrfTokenToUse;
     }
     return config;
   },
@@ -94,5 +84,76 @@ apiClient.interceptors.response.use(
     return Promise.reject(error);
   }
 );
+
+// --- Auth Exports ---
+export const apiRefreshToken = (refreshToken) => apiClient.post(API_ENDPOINTS.AUTH_REFRESH, { refresh_token: refreshToken });
+export const apiLogin = (email, password) => apiClient.post(API_ENDPOINTS.AUTH_LOGIN, { email, password });
+export const apiRegister = (username, email, password) => apiClient.post(API_ENDPOINTS.AUTH_REGISTER, { username, email, password });
+export const apiLogout = () => apiClient.post(API_ENDPOINTS.AUTH_LOGOUT, {});
+export const apiRequestPasswordReset = (email) => apiClient.post(API_ENDPOINTS.AUTH_REQUEST_PASSWORD_RESET, { email });
+export const apiResetPassword = (token, password, confirm_password) => apiClient.post(API_ENDPOINTS.AUTH_RESET_PASSWORD, { token, password, confirm_password });
+export const apiVerifyEmail = (token) => apiClient.get(`${API_ENDPOINTS.AUTH_VERIFY_EMAIL}?token=${token}`);
+export const apiChangePassword = (currentPassword, newPassword, confirmNewPassword) => apiClient.post(API_ENDPOINTS.USER_CHANGE_PASSWORD, { current_password: currentPassword, new_password: newPassword, confirm_new_password: confirmNewPassword });
+export const apiDeleteAccount = (password) => apiClient.post(API_ENDPOINTS.USER_DELETE_ACCOUNT, { password });
+export const apiCheckUserHasData = () => apiClient.get(API_ENDPOINTS.USER_HAS_DATA);
+
+// --- Portfolio Management ---
+export const apiListPortfolios = () => apiClient.get('/api/portfolios');
+export const apiCreatePortfolio = (name, description) => apiClient.post('/api/portfolios', { name, description });
+export const apiDeletePortfolio = (id) => apiClient.delete(`/api/portfolios/${id}`);
+
+// --- Data Operations (Ensure this section exists!) ---
+export const apiUploadFile = (formData, onUploadProgress) => 
+    apiClient.post(API_ENDPOINTS.UPLOAD, formData, { onUploadProgress });
+
+export const apiDeleteTransactions = (criteria) => 
+    apiClient.delete(API_ENDPOINTS.DELETE_TRANSACTIONS, { data: criteria });
+
+export const apiAddManualTransaction = (transactionData) => 
+    apiClient.post('/api/transactions/manual', transactionData);
+
+export const apiFetchRealizedGainsData = (portfolioId) => 
+    apiClient.get(API_ENDPOINTS.REALIZEDGAINS_DATA, { params: { portfolio_id: portfolioId } });
+
+export const apiFetchProcessedTransactions = (portfolioId) => 
+    apiClient.get(API_ENDPOINTS.PROCESSED_TRANSACTIONS, { params: { portfolio_id: portfolioId } });
+
+export const apiFetchStockHoldings = (portfolioId) => 
+    apiClient.get(API_ENDPOINTS.STOCK_HOLDINGS, { params: { portfolio_id: portfolioId } });
+
+export const apiFetchCurrentHoldingsValue = (portfolioId) => 
+    apiClient.get(API_ENDPOINTS.CURRENT_HOLDINGS_VALUE, { params: { portfolio_id: portfolioId } });
+
+export const apiFetchOptionHoldings = (portfolioId) => 
+    apiClient.get(API_ENDPOINTS.OPTION_HOLDINGS, { params: { portfolio_id: portfolioId } });
+
+export const apiFetchStockSales = (portfolioId) => 
+    apiClient.get(API_ENDPOINTS.STOCK_SALES, { params: { portfolio_id: portfolioId } });
+
+export const apiFetchOptionSales = (portfolioId) => 
+    apiClient.get(API_ENDPOINTS.OPTION_SALES, { params: { portfolio_id: portfolioId } });
+
+export const apiFetchDividendTaxSummary = (portfolioId) => 
+    apiClient.get(API_ENDPOINTS.DIVIDEND_TAX_SUMMARY, { params: { portfolio_id: portfolioId } });
+
+export const apiFetchDividendTransactions = (portfolioId) => 
+    apiClient.get(API_ENDPOINTS.DIVIDEND_TRANSACTIONS, { params: { portfolio_id: portfolioId } });
+
+export const apiFetchFees = (portfolioId) => 
+    apiClient.get(API_ENDPOINTS.FEES_DATA, { params: { portfolio_id: portfolioId } });
+
+export const apiFetchHistoricalChartData = (portfolioId) => 
+    apiClient.get('/api/history/chart', { params: { portfolio_id: portfolioId } });
+
+// --- Admin ---
+export const apiFetchAdminUsers = (params) => apiClient.get('/api/admin/users', { params });
+export const apiRefreshUserMetrics = (userId) => apiClient.post(`/api/admin/users/${userId}/refresh-metrics`);
+export const apiFetchAdminStats = (range = 'all_time') => apiClient.get('/api/admin/stats', { params: { range } });
+export const apiFetchAdminUserDetails = (userId, portfolioId = null) => {
+    const params = portfolioId ? { portfolio_id: portfolioId } : {};
+    return apiClient.get(`/api/admin/users/${userId}`, { params });
+};
+export const apiRefreshMultipleUserMetrics = (userIds) => apiClient.post('/api/admin/users/refresh-metrics-batch', { user_ids: userIds });
+export const apiClearAdminStatsCache = () => apiClient.post('/api/admin/stats/clear-cache');
 
 export default apiClient;
