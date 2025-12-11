@@ -1,7 +1,7 @@
 // frontend/src/context/PortfolioContext.js
 import React, { createContext, useState, useEffect, useContext, useCallback } from 'react';
 // IMPORT ADDED: apiDeletePortfolio
-import { apiListPortfolios, apiCreatePortfolio, apiDeletePortfolio } from '../../lib/api';
+import { apiListPortfolios, apiCreatePortfolio, apiDeletePortfolio } from 'features/portfolio/api/portfolioApi';
 import { useAuth } from '../auth/AuthContext';
 import logger from '../../lib/utils/logger';
 

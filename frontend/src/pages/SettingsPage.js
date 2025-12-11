@@ -6,7 +6,7 @@ import {
   DialogContent, DialogContentText, DialogTitle
 } from '@mui/material';
 import { useMutation } from '@tanstack/react-query';
-import { apiChangePassword, apiDeleteAccount } from '../lib/api';
+import { apiChangePassword, apiDeleteAccount } from 'features/auth/api/authApi';
 import { AuthContext } from '../features/auth/AuthContext';
 import { useNavigate } from 'react-router-dom';
 

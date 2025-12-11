@@ -1,7 +1,7 @@
 // frontend/src/components/AddTransactionModal.js
 import React, { useState, useMemo } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { apiAddManualTransaction } from '../../../lib/api';
+import { apiAddManualTransaction } from 'features/portfolio/api/portfolioApi';
 import {
   Button, Dialog, DialogActions, DialogContent, DialogTitle, TextField,
   Grid, CircularProgress, Alert, FormControl, InputLabel, Select, MenuItem

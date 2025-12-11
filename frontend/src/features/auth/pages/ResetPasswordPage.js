@@ -2,7 +2,7 @@
     import React, { useState, useEffect, useContext } from 'react';
     import { useLocation, useNavigate, Link as RouterLink } from 'react-router-dom';
     import { AuthContext } from '../AuthContext';
-    import { apiResetPassword } from '../../../lib/api';
+    import { apiResetPassword } from 'features/auth/api/authApi';
     import {
       Container, Paper, Box, Typography, TextField, Button, Alert, CircularProgress, Grid, Link
     } from '@mui/material';

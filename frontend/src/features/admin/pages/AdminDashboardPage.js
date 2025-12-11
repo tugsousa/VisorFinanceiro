@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { apiFetchAdminStats, apiFetchAdminUsers, apiRefreshUserMetrics, apiRefreshMultipleUserMetrics, apiClearAdminStatsCache } from '../../../lib/api';
+import { apiFetchAdminStats, apiFetchAdminUsers, apiRefreshUserMetrics, apiRefreshMultipleUserMetrics, apiClearAdminStatsCache } from 'features/admin/api/adminApi';
 import { 
     Box, Typography, Paper, Grid, CircularProgress, Alert, 
     Tooltip, IconButton, FormControl, InputLabel, Select, MenuItem, 

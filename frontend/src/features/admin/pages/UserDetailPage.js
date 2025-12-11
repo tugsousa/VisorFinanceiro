@@ -3,7 +3,7 @@
 import React, { useMemo, useState } from 'react';
 import { useParams, Link as RouterLink } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { apiFetchAdminUserDetails } from '../../../lib/api';
+import { apiFetchAdminUserDetails } from 'features/admin/api/adminApi';
 import { 
     Box, Typography, CircularProgress, Alert, Paper, Grid, Divider, Link, Card, 
     Tabs, Tab, Tooltip, FormControl, Select, MenuItem, InputLabel 
