@@ -2,7 +2,7 @@ import React, { useMemo, useState, useRef, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Line } from 'react-chartjs-2';
 import { 
-    Box, Paper, Typography, CircularProgress, ToggleButton, 
+    Box, Typography, CircularProgress, ToggleButton, 
     ToggleButtonGroup, Switch, FormControlLabel, Tooltip, IconButton
 } from '@mui/material';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
@@ -22,10 +22,9 @@ ChartJS.register(
 export default function HistoricalPerformanceChart() {
   const chartRef = useRef(null);
   const [timeRange, setTimeRange] = useState('ALL');
-  const [viewMode, setViewMode] = useState('VALUE'); // 'VALUE' or 'PERCENT'
+  const [viewMode, setViewMode] = useState('VALUE');
   const [showBenchmark, setShowBenchmark] = useState(false);
   const [chartGradient, setChartGradient] = useState(null);
-
   const { activePortfolio } = usePortfolio();
   const portfolioId = activePortfolio?.id;
 
@@ -39,7 +38,6 @@ export default function HistoricalPerformanceChart() {
     enabled: !!portfolioId, 
   });
 
-  // Generate Gradient
   useEffect(() => {
     const chart = chartRef.current;
     if (!chart) return;
@@ -52,64 +50,40 @@ export default function HistoricalPerformanceChart() {
 
   const processedData = useMemo(() => {
     if (!rawData || rawData.length === 0) return [];
-
-    // 1. Filter Date Range
     const now = new Date();
-    // Set to end of day to ensure we include today's data points if they exist
     now.setHours(23, 59, 59, 999); 
-    
     let startDate = new Date(rawData[0].date); 
-    
+
     if (timeRange !== 'ALL') {
         const tempStart = new Date();
         switch (timeRange) {
-            case '1W': 
-                tempStart.setDate(now.getDate() - 7); 
-                break;
-            case '1M': 
-                tempStart.setMonth(now.getMonth() - 1); 
-                break;
-            case '3M': 
-                tempStart.setMonth(now.getMonth() - 3); 
-                break;
-            case 'YTD': 
-                tempStart.setFullYear(now.getFullYear(), 0, 1); // Jan 1st of current year
-                break;
-            case '1Y': 
-                tempStart.setFullYear(now.getFullYear() - 1); 
-                break;
-            case '5Y': 
-                tempStart.setFullYear(now.getFullYear() - 5); 
-                break;
+            case '1W': tempStart.setDate(now.getDate() - 7); break;
+            case '1M': tempStart.setMonth(now.getMonth() - 1); break;
+            case '3M': tempStart.setMonth(now.getMonth() - 3); break;
+            case 'YTD': tempStart.setFullYear(now.getFullYear(), 0, 1); break;
+            case '1Y': tempStart.setFullYear(now.getFullYear() - 1); break;
+            case '5Y': tempStart.setFullYear(now.getFullYear() - 5); break;
             default: break;
         }
-        // Ensure we don't go before the first available data point
-        // If calculated start date is older than first data point, use first data point
         const firstDataDate = new Date(rawData[0].date);
         startDate = tempStart < firstDataDate ? firstDataDate : tempStart;
     }
 
     const filtered = rawData.filter(p => new Date(p.date) >= startDate);
-    
-    // Safety check: if filter returns empty (e.g., user selected "Today" but no data yet), return empty
     if (filtered.length === 0) return [];
 
-    // 2. Calculate Benchmark & Percentage Logic
-    // We rebase benchmark to the start of the visible period
     let benchmarkUnits = 0;
     const startPoint = filtered[0];
     const initialSpyPrice = startPoint.spy_price || 0;
-    
-    // For Value View: Standard Benchmark Tracking (adjusting for cashflows)
+
     if (initialSpyPrice > 0) {
         benchmarkUnits = startPoint.portfolio_value / initialSpyPrice;
     }
+
     let previousCashFlow = startPoint.cumulative_cash_flow;
 
     return filtered.map((point, index) => {
         const currentSpyPrice = point.spy_price || 0;
-        
-        // --- Benchmark Value Logic ---
         if (index > 0) {
             const netFlow = point.cumulative_cash_flow - previousCashFlow;
             if (netFlow !== 0 && currentSpyPrice > 0) {
@@ -118,19 +92,10 @@ export default function HistoricalPerformanceChart() {
         }
         previousCashFlow = point.cumulative_cash_flow;
         const benchmarkValue = Math.max(0, benchmarkUnits) * currentSpyPrice;
-
-        // --- Percentage Logic ---
-        // Portfolio % Return = (Total Value - Net Invested) / Net Invested
-        // Avoid division by zero
+        
         const invested = point.cumulative_cash_flow;
-        const portfolioReturnPct = invested > 0 
-            ? ((point.portfolio_value - invested) / invested) * 100 
-            : 0;
-
-        // Benchmark % Return 
-        const benchmarkReturnPct = invested > 0
-            ? ((benchmarkValue - invested) / invested) * 100
-            : 0;
+        const portfolioReturnPct = invested > 0 ? ((point.portfolio_value - invested) / invested) * 100 : 0;
+        const benchmarkReturnPct = invested > 0 ? ((benchmarkValue - invested) / invested) * 100 : 0;
 
         return {
             ...point,
@@ -143,11 +108,9 @@ export default function HistoricalPerformanceChart() {
 
   const chartData = useMemo(() => {
     if (!processedData || processedData.length === 0) return null;
-
     const datasets = [];
     const isPercent = viewMode === 'PERCENT';
 
-    // 1. Invested Capital (Only relevant in Value Mode)
     if (!isPercent) {
         datasets.push({
             label: 'Investimento Líquido',
@@ -162,12 +125,11 @@ export default function HistoricalPerformanceChart() {
         });
     }
 
-    // 2. Benchmark (SPY)
     if (showBenchmark) {
         datasets.push({
             label: isPercent ? 'S&P 500 (%)' : 'S&P 500 (Simulado)',
             data: processedData.map(p => isPercent ? p.benchmark_pct_view : p.benchmark_value_view),
-            borderColor: '#FFC107', // Amber/Yellow
+            borderColor: '#FFC107',
             backgroundColor: 'transparent',
             borderWidth: 2,
             pointRadius: 0,
@@ -178,16 +140,15 @@ export default function HistoricalPerformanceChart() {
         });
     }
 
-    // 3. Portfolio Main Line
     datasets.push({
         label: isPercent ? 'Retorno (%)' : 'Valor da Carteira',
         data: processedData.map(p => isPercent ? p.portfolio_pct_view : p.portfolio_value),
-        borderColor: isPercent ? '#9C27B0' : 'rgba(75, 192, 192, 1)', // Purple for %, Teal for Value
+        borderColor: isPercent ? '#9C27B0' : 'rgba(75, 192, 192, 1)',
         backgroundColor: chartGradient || 'rgba(75, 192, 192, 0.2)',
         borderWidth: 2,
         pointRadius: 0,
         pointHoverRadius: 5,
-        fill: !isPercent, // Don't fill percentage chart to keep it clean
+        fill: !isPercent,
         tension: 0.1,
         order: 0
     });
@@ -229,7 +190,10 @@ export default function HistoricalPerformanceChart() {
       }
     },
     scales: {
-      x: { grid: { display: false }, ticks: { maxTicksLimit: 8, maxRotation: 0, autoSkip: true } },
+      x: { 
+          grid: { display: false }, 
+          ticks: { maxTicksLimit: 8, maxRotation: 0, autoSkip: true } 
+      },
       y: {
         beginAtZero: false,
         grid: { color: '#f0f0f0' },
@@ -256,15 +220,21 @@ export default function HistoricalPerformanceChart() {
   );
 
   if (isLoading) return <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}><CircularProgress /></Box>;
-  if (!portfolioId) return null;
-  if (isError || !chartData) return null; 
+  if (!portfolioId || isError || !chartData) return null; 
 
   return (
-    <Paper elevation={0} sx={{ p: 3, mb: 3, border: 'none', height: 500, display: 'flex', flexDirection: 'column' }}>
-      
+    <Box 
+        sx={{ 
+            p: 3, 
+            height: '100%', 
+            display: 'flex', 
+            flexDirection: 'column',
+            bgcolor: '#ffffff', // Force white background
+            borderRadius: 3
+        }}
+    >
       {/* TOOLBAR ROW */}
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2, flexWrap: 'wrap', gap: 2 }}>
-        
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2, flexWrap: 'wrap', gap: 2, flexShrink: 0 }}>
         {/* Left: Title & Info */}
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
             <Typography variant="h6" sx={{ fontWeight: 600 }}>Evolução</Typography>
@@ -277,8 +247,6 @@ export default function HistoricalPerformanceChart() {
 
         {/* Right: Controls */}
         <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', flexWrap: 'wrap' }}>
-            
-            {/* View Mode Toggle: Value vs % */}
             <ToggleButtonGroup
                 value={viewMode}
                 exclusive
@@ -289,10 +257,9 @@ export default function HistoricalPerformanceChart() {
                 <ToggleButton value="VALUE">€</ToggleButton>
                 <ToggleButton value="PERCENT">%</ToggleButton>
             </ToggleButtonGroup>
-
-            <Box sx={{ height: 24, width: 1, bgcolor: 'divider', mx: 1 }} />
-
-            {/* Time Range */}
+            
+            {/* REMOVED THE DIVIDER BOX HERE TO ELIMINATE THE GREY ARTIFACT */}
+            
             <ToggleButtonGroup
                 value={timeRange}
                 exclusive
@@ -309,7 +276,6 @@ export default function HistoricalPerformanceChart() {
                 <ToggleButton value="ALL">Tudo</ToggleButton>
             </ToggleButtonGroup>
 
-            {/* Benchmark Switch */}
             <FormControlLabel 
                 control={<Switch size="small" checked={showBenchmark} onChange={(e) => setShowBenchmark(e.target.checked)} />} 
                 label={<Typography variant="caption" sx={{fontWeight: 600}}>SPY</Typography>} 
@@ -317,10 +283,11 @@ export default function HistoricalPerformanceChart() {
             />
         </Box>
       </Box>
-
-      <Box sx={{ flexGrow: 1, minHeight: 0, position: 'relative' }}>
+      
+      {/* Chart Canvas Container */}
+      <Box sx={{ flexGrow: 1, minHeight: 0, position: 'relative', width: '100%', pb: 1 }}>
         <Line ref={chartRef} data={chartData} options={options} />
       </Box>
-    </Paper>
+    </Box>
   );
 }
