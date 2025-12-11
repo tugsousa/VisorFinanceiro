@@ -10,7 +10,7 @@ import {
   apiFetchStockSales,
   apiFetchOptionSales,
   apiFetchDividendTaxSummary
-} from '../../lib/api';
+} from 'features/analytics/api/analyticsApi';
 import { useAuth } from '../auth/AuthContext';
 import { usePortfolio } from '../portfolio/PortfolioContext';
 import { UI_TEXT, NO_YEAR_SELECTED, ALL_YEARS_OPTION } from '../../constants';

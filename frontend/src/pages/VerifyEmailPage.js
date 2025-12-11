@@ -4,7 +4,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { API_ENDPOINTS } from '../constants';
 
-import { apiVerifyEmail } from '../lib/api';
+import { apiVerifyEmail } from 'features/auth/api/authApi';
 import { Typography, Box, CircularProgress, Alert } from '@mui/material';
 
 

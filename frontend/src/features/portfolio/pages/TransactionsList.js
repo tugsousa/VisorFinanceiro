@@ -6,7 +6,7 @@ import { ptPT } from '@mui/x-data-grid/locales';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import AddCircleOutlineIcon from '@mui/icons-material/AddCircleOutline';
 
-import { apiFetchProcessedTransactions, apiDeleteTransactions } from '../../../lib/api';
+import { apiFetchProcessedTransactions, apiDeleteTransactions } from 'features/portfolio/api/portfolioApi';
 import { useAuth } from '../../auth/AuthContext';
 import { usePortfolio } from '../PortfolioContext';
 import { UI_TEXT } from '../../../constants';

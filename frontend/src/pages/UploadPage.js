@@ -2,7 +2,7 @@
 import React, { useState, useCallback, useRef } from 'react';
 import { useAuth } from '../features/auth/AuthContext';
 import { usePortfolio } from '../features/portfolio/PortfolioContext';
-import { apiUploadFile } from '../lib/api';
+import { apiUploadFile }from 'features/portfolio/api/portfolioApi';
 import { MAX_FILE_SIZE_BYTES, MAX_FILE_SIZE_MB } from '../constants';
 import { Typography, Box, Button, LinearProgress, Paper, Alert, Modal, IconButton, Link as MuiLink, CircularProgress } from '@mui/material';
 import { styled } from '@mui/material/styles';

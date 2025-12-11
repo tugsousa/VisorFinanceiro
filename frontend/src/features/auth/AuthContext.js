@@ -1,14 +1,23 @@
-// frontend/src/context/AuthContext.js
 import React, { createContext, useState, useEffect, useContext, useCallback } from 'react';
-import {
-  apiLogin, apiRegister, apiLogout,
-  fetchAndSetCsrfToken as apiServiceFetchCsrf,
-  apiCheckUserHasData,
-  getApiServiceCsrfToken,
-  apiRefreshToken,
-  setAuthRefresher,
-} from '../../lib/api';
-import logger from '../../lib/utils/logger';
+
+// 1. Core API helpers (Absolute import from src/lib/api.js)
+import { 
+  setAuthRefresher, 
+  fetchAndSetCsrfToken, // <--- We import it with this name now
+  getApiServiceCsrfToken 
+} from 'lib/api';
+
+// 2. Auth Feature API calls
+import { 
+  apiLogin, 
+  apiRegister, 
+  apiLogout, 
+  apiCheckUserHasData, 
+  apiRefreshToken 
+} from 'features/auth/api/authApi';
+
+// 3. Logger
+import logger from 'lib/utils/logger';
 
 export const AuthContext = createContext();
 
@@ -32,9 +41,11 @@ export const AuthProvider = ({ children }) => {
   const [hasInitialData, setHasInitialData] = useState(null);
   const [checkingData, setCheckingData] = useState(false);
 
+  // --- FIXED FUNCTION BELOW ---
   const fetchCsrfTokenAndUpdateService = useCallback(async (isSilent = false) => {
     try {
-      const newCsrfToken = await apiServiceFetchCsrf();
+      // FIX: Changed apiServiceFetchCsrf to fetchAndSetCsrfToken
+      const newCsrfToken = await fetchAndSetCsrfToken(); 
       if (!newCsrfToken && !isSilent) {
         setAuthError(prev => prev ? `${prev}; CSRF fetch failed` : 'CSRF fetch failed');
       }
@@ -211,20 +222,17 @@ export const AuthProvider = ({ children }) => {
     }
   };
   
-  // --- FUNÇÃO CORRIGIDA ---
   const loginWithGoogleToken = useCallback(async (appToken, userDataFromBackend) => {
     setIsAuthActionLoading(true);
     setCheckingData(true);
     setAuthError(null);
 
-    // Usa diretamente o objeto de utilizador que o backend enviou.
-    // Este objeto já contém 'id', 'username', 'email', 'auth_provider', e 'is_admin'.
     setUser(userDataFromBackend);
     setToken(appToken);
-    setRefreshTokenState(null); // O Google Auth não usa o nosso sistema de refresh token
+    setRefreshTokenState(null); 
 
     localStorage.setItem('auth_token', appToken);
-    localStorage.setItem('user', JSON.stringify(userDataFromBackend)); // Guarda o objeto correto
+    localStorage.setItem('user', JSON.stringify(userDataFromBackend)); 
     localStorage.removeItem('refresh_token');
 
     await checkUserData();
@@ -253,7 +261,7 @@ export const AuthProvider = ({ children }) => {
         register,
         login,
         logout,
-        loginWithGoogleToken, // Expor a função
+        loginWithGoogleToken,
         fetchCsrfToken: fetchCsrfTokenAndUpdateService,
         refreshUserDataCheck: checkUserData,
         performLogout,

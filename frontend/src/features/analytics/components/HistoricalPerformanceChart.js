@@ -7,7 +7,7 @@ import {
     ToggleButtonGroup, Switch, FormControlLabel, Tooltip, IconButton
 } from '@mui/material';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
-import { apiFetchHistoricalChartData } from '../../../lib/api';
+import { apiFetchHistoricalChartData } from 'features/analytics/api/analyticsApi';
 import { formatCurrency } from '../../../lib/utils/formatUtils';
 import { usePortfolio } from '../../portfolio/PortfolioContext';
 import {

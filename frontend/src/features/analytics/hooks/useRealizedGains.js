@@ -10,13 +10,14 @@ import {
     apiFetchStockHoldings,
     apiFetchOptionHoldings,
     apiFetchCurrentHoldingsValue,
-    apiFetchFees,
-    apiFetchProcessedTransactions
-} from '../../../lib/api';
+    apiFetchFees
+} from 'features/analytics/api/analyticsApi';
 import { ALL_YEARS_OPTION, NO_YEAR_SELECTED } from '../../../constants';
 import { getYearString, extractYearsFromData } from '../../../lib/utils/dateUtils'; 
 import { calculateCombinedAggregatedMetricsByISIN } from '../../../lib/utils/aggregationUtils';
 import { usePortfolio } from '../../portfolio/PortfolioContext';
+
+import { apiFetchProcessedTransactions } from 'features/portfolio/api/portfolioApi';
 
 export const useRealizedGains = (token, selectedYear) => {
     const { activePortfolio } = usePortfolio();
