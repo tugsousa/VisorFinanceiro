@@ -134,7 +134,7 @@ export default function Layout({ children }) {
                                                 fontWeight: isAnalyticsActive ? 600 : 500
                                             }}
                                         >
-                                            Analytics
+                                            Performance
                                         </Button>
                                         <Menu
                                             anchorEl={anchorElAnalytics}

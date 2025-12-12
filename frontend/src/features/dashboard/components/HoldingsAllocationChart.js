@@ -33,24 +33,35 @@ const centerTextPlugin = {
     ctx.save();
     const centerX = chart.getDatasetMeta(0).data[0]?.x || chart.width / 2;
     const centerY = chart.getDatasetMeta(0).data[0]?.y || chart.height / 2;
+
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    
+
     if (hoveredData) {
-        ctx.font = `bold 14px sans-serif`;
+        // --- TEXTO HOVERED: TAMANHO AUMENTADO (e.g., de 14px/12px para 16px/14px) ---
+        ctx.font = `bold 16px Poppins`; // Aumentado para 16px e adicionado Poppins
         ctx.fillStyle = '#333';
-        ctx.fillText(formatCurrency(hoveredData.value), centerX, centerY - 8);
-        ctx.font = `12px sans-serif`;
+        ctx.fillText(formatCurrency(hoveredData.value), centerX, centerY - 10); // Ajustado Y
+        
+        ctx.font = `14px Poppins`; // Aumentado para 14px e adicionado Poppins
         ctx.fillStyle = '#666';
         ctx.fillText(hoveredData.percentage, centerX, centerY + 10);
-    } else {
-        ctx.font = `11px sans-serif`;
+        // --- ADICIONAR NOME HOVERED (NOVO) ---
+        ctx.font = `italic 11px Poppins`; // Tamanho pequeno e itálico para o nome
         ctx.fillStyle = '#888';
-        ctx.fillText('Total', centerX, centerY - 10);
-        ctx.font = `bold 14px sans-serif`;
+        ctx.fillText(hoveredData.name, centerX, centerY + 25);
+        
+    } else {
+        // --- TEXTO TOTAL: TAMANHO AUMENTADO (e.g., de 11px/14px para 13px/18px) ---
+        ctx.font = `13px Poppins`; // Aumentado para 13px e adicionado Poppins
+        ctx.fillStyle = '#888';
+        ctx.fillText('Total', centerX, centerY - 15); // Ajustado Y
+        
+        ctx.font = `bold 18px Poppins`; // Aumentado para 18px e adicionado Poppins
         ctx.fillStyle = '#333';
-        ctx.fillText(formatCurrency(totalValue), centerX, centerY + 8);
+        ctx.fillText(formatCurrency(totalValue), centerX, centerY + 8); // Ajustado Y
     }
+
     ctx.restore();
   }
 };
@@ -154,7 +165,8 @@ export default function HoldingsAllocationChart({ data, title }) {
                 totalValue, 
                 hoveredData: hoveredIndex !== null ? {
                     value: finalChartData.datasets[0].data[hoveredIndex],
-                    percentage: `${((finalChartData.datasets[0].data[hoveredIndex] / totalValue) * 100).toFixed(1)}%`
+                    percentage: `${((finalChartData.datasets[0].data[hoveredIndex] / totalValue) * 100).toFixed(1)}%`,
+                    name: finalChartData.labels[hoveredIndex]
                 } : null
             }
         }
@@ -187,7 +199,7 @@ export default function HoldingsAllocationChart({ data, title }) {
 
             {/* Chart Area */}
             <Box 
-                sx={{ height: 200, position: 'relative', mb: 2 }}
+                sx={{ height: 280, position: 'relative', mb: 2 }}
                 onMouseLeave={() => setHoveredIndex(null)}
             >
                 <Doughnut data={finalChartData} options={options} plugins={[centerTextPlugin]} />
