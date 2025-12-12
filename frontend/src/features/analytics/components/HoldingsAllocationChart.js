@@ -1,219 +1,141 @@
-// frontend/src/components/realizedgainsSections/HoldingsAllocationChart.js
 import React, { useState, useMemo } from 'react';
 import { Doughnut } from 'react-chartjs-2';
-import { Chart as ChartJS, ArcElement, Tooltip, Legend, Title } from 'chart.js';
-import { Paper, Typography, Box, FormControlLabel, Switch } from '@mui/material';
+import { Chart as ChartJS, ArcElement, Tooltip, Legend } from 'chart.js';
+import { 
+    Box, Typography, Table, TableBody, TableCell, TableContainer, 
+    TableHead, TableRow, LinearProgress, Paper, FormControlLabel, Switch 
+} from '@mui/material';
 import { formatCurrency } from '../../../lib/utils/formatUtils';
+import { generateColorPalette } from '../../../lib/utils/chartUtils';
 
-ChartJS.register(ArcElement, Tooltip, Legend, Title);
+ChartJS.register(ArcElement, Tooltip, Legend);
 
-const generateColorPalette = (count) => {
-  if (count === 0) return [];
-  const palette = [];
-  const baseHue = 145; 
-  const saturation = 60;
-  const startLightness = 25; 
-  const endLightness = 85;   
-  const lightnessStep = (endLightness - startLightness) / (count > 1 ? count - 1 : 1);
-
-  for (let i = 0; i < count; i++) {
-    const lightness = startLightness + (i * lightnessStep);
-    palette.push(`hsl(${baseHue}, ${saturation}%, ${lightness}%)`);
-  }
-  return palette;
-};
-
-const wrapText = (ctx, text, maxWidth) => {
-  if (!text) return [];
-  const words = text.split(' ');
-  const lines = [];
-  let currentLine = words[0] || '';
-
-  for (let i = 1; i < words.length; i++) {
-    const word = words[i];
-    const width = ctx.measureText(currentLine + " " + word).width;
-    if (width < maxWidth) {
-      currentLine += " " + word;
-    } else {
-      lines.push(currentLine);
-      currentLine = word;
+// Helper to fade colors for hover effect (Restored)
+const fadeColor = (colorString, alpha = 0.3) => {
+    if (!colorString) return 'rgba(200, 200, 200, 0.3)';
+    if (colorString.startsWith('hsla')) {
+        return colorString.replace(/[\d.]+\)$/g, `${alpha})`);
     }
-  }
-  lines.push(currentLine);
-  return lines;
+    if (colorString.startsWith('hsl')) {
+        return colorString.replace('hsl', 'hsla').replace(')', `, ${alpha})`);
+    }
+    return colorString;
 };
 
-const fontFamily = 'Poppins, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif';
-
+// Plugin for Center Text
 const centerTextPlugin = {
   id: 'centerTextPlugin',
   beforeDraw(chart, args, options) {
     const { ctx, data } = chart;
     const { totalValue, hoveredData } = options;
-    
-    // --- FIX: Added safety check for 'data' ---
     if (!data || !data.labels || data.labels.length === 0) return;
-    // ----------------------------------------
 
     ctx.save();
     const centerX = chart.getDatasetMeta(0).data[0]?.x || chart.width / 2;
     const centerY = chart.getDatasetMeta(0).data[0]?.y || chart.height / 2;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-
+    
     if (hoveredData) {
-      const chartSize = Math.min(chart.width, chart.height);
-      const cutoutPercentage = parseFloat(chart.options.cutout) / 100;
-      const holeDiameter = chartSize * cutoutPercentage;
-      const maxWidth = holeDiameter * 0.8;
-
-      const labelLineHeight = 18;
-      const valueFontSize = 18;
-      const percentageFontSize = 13;
-      const valueMarginTop = 10;
-      const percentageMarginTop = 8;
-
-      ctx.font = `500 13px ${fontFamily}`;
-      ctx.fillStyle = '#333';
-      
-      const lines = wrapText(ctx, hoveredData.label, maxWidth);
-      const labelBlockHeight = lines.length * labelLineHeight;
-      const totalBlockHeight = labelBlockHeight + valueMarginTop + valueFontSize + percentageMarginTop + percentageFontSize;
-      
-      let currentY = centerY - (totalBlockHeight / 2) + (labelLineHeight / 2);
-
-      lines.forEach(line => {
-        ctx.fillText(line, centerX, currentY);
-        currentY += labelLineHeight;
-      });
-
-      currentY += valueMarginTop;
-      ctx.font = `bold ${valueFontSize}px ${fontFamily}`;
-      ctx.fillStyle = '#111';
-      ctx.fillText(formatCurrency(hoveredData.value), centerX, currentY);
-
-      currentY += (valueFontSize / 2) + percentageMarginTop + (percentageFontSize / 2);
-      ctx.font = `16px ${fontFamily}`;
-      ctx.fillStyle = '#666';
-      ctx.fillText(hoveredData.percentage, centerX, currentY);
-
+        ctx.font = `bold 14px sans-serif`;
+        ctx.fillStyle = '#333';
+        ctx.fillText(formatCurrency(hoveredData.value), centerX, centerY - 8);
+        ctx.font = `12px sans-serif`;
+        ctx.fillStyle = '#666';
+        ctx.fillText(hoveredData.percentage, centerX, centerY + 10);
     } else {
-      ctx.font = `500 13px ${fontFamily}`;
-      ctx.fillStyle = '#666';
-      ctx.fillText('Valor Total', centerX, centerY - 15);
-      
-      ctx.font = `bold 18px ${fontFamily}`;
-      ctx.fillStyle = '#111';
-      ctx.fillText(formatCurrency(totalValue), centerX, centerY + 15);
+        ctx.font = `11px sans-serif`;
+        ctx.fillStyle = '#888';
+        ctx.fillText('Total', centerX, centerY - 10);
+        ctx.font = `bold 14px sans-serif`;
+        ctx.fillStyle = '#333';
+        ctx.fillText(formatCurrency(totalValue), centerX, centerY + 8);
     }
     ctx.restore();
   }
 };
 
-const fadeColor = (colorString, alpha = 0.3) => {
-    if (typeof colorString !== 'string' || !colorString.startsWith('hsl')) return 'rgba(200, 200, 200, 0.3)';
-    return colorString.replace('hsl', 'hsla').replace(')', `, ${alpha})`);
-};
-
-export default function HoldingsAllocationChart({ holdings }) {
+export default function HoldingsAllocationChart({ data, title }) {
     const [hoveredIndex, setHoveredIndex] = useState(null);
     const [showPurchaseValue, setShowPurchaseValue] = useState(false);
 
-    // --- DATA PROCESSING LOGIC MOVED HERE ---
-    const chartData = useMemo(() => {
-        if (!holdings || holdings.length === 0) return { labels: [], datasets: [] };
+    // 1. Process Data based on Toggle
+    const { chartData, totalValue, sortedItems } = useMemo(() => {
+        if (!data || data.length === 0) return { chartData: null, totalValue: 0, sortedItems: [] };
+
+        // Map to active value (Cost vs Market)
+        const processedItems = data.map(item => ({
+            name: item.name,
+            value: showPurchaseValue ? item.costBasis : item.marketValue
+        }));
+
+        const total = processedItems.reduce((sum, item) => sum + item.value, 0);
+
+        // Sort descending
+        const sorted = processedItems.sort((a, b) => b.value - a.value).map(item => ({
+            ...item,
+            percentage: total > 0 ? (item.value / total) * 100 : 0
+        }));
+
+        // Prepare Chart Slices (Top 5 + Others)
+        const top5 = sorted.slice(0, 5);
+        const others = sorted.slice(5);
         
-        const isHistorical = holdings[0]?.isHistorical;
-
-        // Process items based on the selected mode
-        const chartItems = holdings.map(h => {
-            let value;
-            if (showPurchaseValue) {
-                // Mode: Purchase Value (Cost Basis)
-                value = Math.abs(h.total_cost_basis_eur || 0);
-            } else {
-                // Mode: Current Value (Market Value)
-                // Fallback to cost basis if historical and market value is missing/zero (existing logic preserved)
-                value = isHistorical ? Math.abs(h.total_cost_basis_eur || 0) : (h.marketValueEUR || 0);
-            }
-            return {
-                name: h.product_name,
-                value: value
-            };
-        }).sort((a, b) => b.value - a.value); // Sort descending
-
-        const topN = 7;
-        const top = chartItems.slice(0, topN);
-        const other = chartItems.slice(topN);
-
-        const labels = top.map(item => item.name);
-        const data = top.map(item => item.value);
-
-        if (other.length > 0) {
-            labels.push('Outros');
-            data.push(other.reduce((sum, item) => sum + item.value, 0));
+        const chartItems = [...top5];
+        if (others.length > 0) {
+            chartItems.push({
+                name: 'Outros',
+                value: others.reduce((s, i) => s + i.value, 0)
+            });
         }
 
-        return { labels, datasets: [{ data }] };
-    }, [holdings, showPurchaseValue]);
-    // ----------------------------------------
+        return {
+            totalValue: total,
+            sortedItems: sorted, // For the table
+            chartData: {
+                labels: chartItems.map(i => i.name),
+                datasets: [{
+                    data: chartItems.map(i => i.value),
+                    borderWidth: 1, // Restored thin border
+                }]
+            }
+        };
+    }, [data, showPurchaseValue]);
 
-    const totalValue = useMemo(() => {
-        const data = chartData?.datasets?.[0]?.data || [];
-        if (data.length === 0) return 0;
-        return data.reduce((sum, value) => sum + value, 0);
-    }, [chartData]);
-
+    // 2. Colors (Restored Logic)
     const baseColors = useMemo(() => {
-        const dataLength = chartData?.datasets?.[0]?.data?.length ?? 0;
-        return generateColorPalette(dataLength);
+        const len = chartData?.datasets[0]?.data.length || 0;
+        return generateColorPalette(len);
     }, [chartData]);
 
     const dynamicBackgroundColors = useMemo(() => {
         if (hoveredIndex === null) return baseColors;
         return baseColors.map((color, index) =>
-            index === hoveredIndex ? color : fadeColor(color, 0.2)
+            index === hoveredIndex ? color : fadeColor(color, 0.2) // Fade others
         );
     }, [hoveredIndex, baseColors]);
 
     const dynamicBorderColors = useMemo(() => {
-        if (hoveredIndex === null) return baseColors;
+        if (hoveredIndex === null) return baseColors; // Or white if you prefer
         return baseColors.map((color, index) =>
             index === hoveredIndex ? color : fadeColor(color, 0.3)
         );
     }, [hoveredIndex, baseColors]);
 
-    const hoveredData = useMemo(() => {
-        if (hoveredIndex !== null && totalValue > 0 && chartData?.datasets?.[0]?.data[hoveredIndex] !== undefined) {
-            const value = chartData.datasets[0].data[hoveredIndex];
-            const label = chartData.labels[hoveredIndex];
-            return {
-                label,
-                value,
-                percentage: `${((value / totalValue) * 100).toFixed(2)}%`
-            };
-        }
-        return null;
-    }, [hoveredIndex, chartData, totalValue]);
-
-    const noData = !chartData?.datasets?.[0]?.data?.length > 0;
-
-    if (noData) {
+    if (!data || data.length === 0) {
         return (
-            <Paper elevation={0} sx={{ p: 2, display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', border: 'none' }}>
-                <Typography color="text.secondary">Sem dados de posições para o gráfico.</Typography>
+            <Paper elevation={0} variant="outlined" sx={{ p: 3, height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <Typography color="text.secondary">Sem dados.</Typography>
             </Paper>
         );
     }
 
-    const dataWithColors = {
+    const finalChartData = {
         ...chartData,
-        datasets: chartData.datasets.map(dataset => ({
-            ...dataset,
+        datasets: chartData.datasets.map(ds => ({
+            ...ds,
             backgroundColor: dynamicBackgroundColors,
             borderColor: dynamicBorderColors,
-            borderWidth: 1,
-            borderRadius: 2,
         }))
     };
 
@@ -221,53 +143,93 @@ export default function HoldingsAllocationChart({ holdings }) {
         responsive: true,
         maintainAspectRatio: false,
         cutout: '70%',
-        hoverOffset: 12,
-        onHover: (event, activeElements) => {
-            if (activeElements && activeElements.length > 0) {
-                const newIndex = activeElements[0].index;
-                if (newIndex !== hoveredIndex) {
-                    setHoveredIndex(newIndex);
-                }
-            }
+        onHover: (_, elements) => {
+            if (elements && elements.length > 0) setHoveredIndex(elements[0].index);
+            else setHoveredIndex(null);
         },
         plugins: {
             legend: { display: false },
             tooltip: { enabled: false },
-            title: { display: false },
-            centerTextPlugin: { totalValue, hoveredData }
-        },
-        layout: { padding: 8 },
-        animation: { animateRotate: true, animateScale: true },
+            centerTextPlugin: { 
+                totalValue, 
+                hoveredData: hoveredIndex !== null ? {
+                    value: finalChartData.datasets[0].data[hoveredIndex],
+                    percentage: `${((finalChartData.datasets[0].data[hoveredIndex] / totalValue) * 100).toFixed(1)}%`
+                } : null
+            }
+        }
     };
 
-   return (
-      <Box sx={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-        {/* Header with Toggle Only (Title removed) */}
-        <Box sx={{ width: '100%', display: 'flex', justifyContent: 'flex-end', alignItems: 'center', mb: 1, px: 1 }}>
-            <FormControlLabel
-                control={
-                    <Switch
-                        size="small"
-                        checked={showPurchaseValue}
-                        onChange={(e) => setShowPurchaseValue(e.target.checked)}
-                        color="primary"
-                    />
-                }
-                label={
-                    <Typography variant="caption" color="text.secondary">
-                        {showPurchaseValue ? "Valor de Compra" : "Valor Atual"}
-                    </Typography>
-                }
-                labelPlacement="start"
-            />
-        </Box>
-        
-        <div 
-            onMouseLeave={() => setHoveredIndex(null)}
-            style={{ position: 'relative', width: '100%', flexGrow: 1, minHeight: '280px' }}
-        >
-            <Doughnut data={dataWithColors} options={options} plugins={[centerTextPlugin]} />
-        </div>
-      </Box>
+    return (
+        <Paper elevation={0} variant="outlined" sx={{ p: 2, height: '100%', display: 'flex', flexDirection: 'column', borderRadius: 3 }}>
+            
+            {/* Header: Title + Toggle */}
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 1 }}>
+                <Typography variant="subtitle1" fontWeight="bold">
+                    {title}
+                </Typography>
+                <FormControlLabel
+                    control={
+                        <Switch 
+                            size="small" 
+                            checked={showPurchaseValue} 
+                            onChange={e => setShowPurchaseValue(e.target.checked)} 
+                        />
+                    }
+                    label={
+                        <Typography variant="caption" sx={{ fontSize: '0.7rem', color: 'text.secondary' }}>
+                            {showPurchaseValue ? "Compra" : "Atual"}
+                        </Typography>
+                    }
+                    sx={{ mr: 0 }}
+                />
+            </Box>
+
+            {/* Chart Area */}
+            <Box 
+                sx={{ height: 200, position: 'relative', mb: 2 }}
+                onMouseLeave={() => setHoveredIndex(null)}
+            >
+                <Doughnut data={finalChartData} options={options} plugins={[centerTextPlugin]} />
+            </Box>
+
+            {/* List Area */}
+            <TableContainer sx={{ flexGrow: 1, overflowY: 'auto', maxHeight: 200 }}>
+                <Table size="small" stickyHeader>
+                    <TableHead>
+                        <TableRow>
+                            <TableCell sx={{ fontSize: '0.75rem', py: 0.5, bgcolor: '#fff' }}>Nome</TableCell>
+                            <TableCell align="right" sx={{ fontSize: '0.75rem', py: 0.5, bgcolor: '#fff' }}>Valor</TableCell>
+                            <TableCell align="right" sx={{ fontSize: '0.75rem', py: 0.5, bgcolor: '#fff' }}>%</TableCell>
+                        </TableRow>
+                    </TableHead>
+                    <TableBody>
+                        {sortedItems.map((item, idx) => (
+                            <TableRow key={idx} hover>
+                                <TableCell component="th" scope="row" sx={{ fontSize: '0.75rem', py: 0.5, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 100 }}>
+                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                        {idx < 5 && (
+                                            <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: baseColors[idx], flexShrink: 0 }} />
+                                        )}
+                                        {item.name}
+                                    </Box>
+                                </TableCell>
+                                <TableCell align="right" sx={{ fontSize: '0.75rem', py: 0.5 }}>{formatCurrency(item.value)}</TableCell>
+                                <TableCell align="right" sx={{ fontSize: '0.75rem', py: 0.5, width: 60 }}>
+                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                                        <LinearProgress 
+                                            variant="determinate" 
+                                            value={item.percentage} 
+                                            sx={{ width: 24, height: 4, borderRadius: 2, bgcolor: 'grey.100', '& .MuiLinearProgress-bar': { bgcolor: 'primary.main' } }} 
+                                        />
+                                        {item.percentage.toFixed(1)}%
+                                    </Box>
+                                </TableCell>
+                            </TableRow>
+                        ))}
+                    </TableBody>
+                </Table>
+            </TableContainer>
+        </Paper>
     );
 }

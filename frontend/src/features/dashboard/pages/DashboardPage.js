@@ -11,6 +11,7 @@ import DashboardKPISection from '../components/DashboardKPISection';
 import HistoricalPerformanceChart from '../../analytics/components/HistoricalPerformanceChart';
 import HoldingsAllocationChart from '../../analytics/components/HoldingsAllocationChart';
 import ReturnsPeriodSection from '../components/ReturnsPeriodSection'; // New Component
+import AllocationSection from '../components/AllocationSection';
 
 // Utils
 import { parseDateRobust } from '../../../lib/utils/dateUtils';
@@ -195,27 +196,7 @@ const DashboardPage = () => {
             />
 
             {/* SECTION 4: ALLOCATION (Charts Only for now) */}
-            <Box sx={{ mb: 4 }}>
-                <Typography variant="h6" gutterBottom sx={{ fontWeight: 'bold', mb: 2 }}>
-                    Alocação de Ativos
-                </Typography>
-                <Grid container spacing={3}>
-                    <Grid item xs={12} md={6} lg={6}>
-                        <Card elevation={0} sx={{ borderRadius: 3, height: '400px', border: 'none', p: 3, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                            <Typography variant="subtitle1" fontWeight="bold" gutterBottom sx={{ alignSelf: 'flex-start' }}>Por Empresa</Typography>
-                            <Box sx={{ width: '100%', flexGrow: 1, position: 'relative' }}>
-                                <HoldingsAllocationChart holdings={holdingsForGroupedView} />
-                            </Box>
-                        </Card>
-                    </Grid>
-                    {/* Placeholder for future charts (Sector, Country, etc.) */}
-                    <Grid item xs={12} md={6} lg={6} sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                        <Typography color="text.secondary" variant="body2" sx={{ fontStyle: 'italic' }}>
-                            (Gráficos por Setor/País - Brevemente)
-                        </Typography>
-                    </Grid>
-                </Grid>
-            </Box>
+            <AllocationSection holdings={holdingsForGroupedView} />
         </Box>
     );
 };
