@@ -19,16 +19,15 @@ import (
 	"github.com/username/taxfolio/backend/src/models"
 	"github.com/username/taxfolio/backend/src/parsers"
 	"github.com/username/taxfolio/backend/src/processors"
+	"github.com/username/taxfolio/backend/src/utils"
 )
 
 const (
-	// Updated cache keys to include portfolioID
-	ckAllStockSales       = "res_all_stock_sales_user_%d_pf_%d"
-	ckStockHoldingsByYear = "res_stock_holdings_by_year_user_%d_pf_%d"
-	ckAllFeeDetails       = "res_all_fee_details_user_%d_pf_%d"
-	ckLatestUploadResult  = "agg_latest_upload_result_user_%d_pf_%d"
-	ckDividendSummary     = "agg_dividend_summary_user_%d_pf_%d"
-
+	ckAllStockSales        = "res_all_stock_sales_user_%d_pf_%d"
+	ckStockHoldingsByYear  = "res_stock_holdings_by_year_user_%d_pf_%d"
+	ckAllFeeDetails        = "res_all_fee_details_user_%d_pf_%d"
+	ckLatestUploadResult   = "agg_latest_upload_result_user_%d_pf_%d"
+	ckDividendSummary      = "agg_dividend_summary_user_%d_pf_%d"
 	DefaultCacheExpiration = 15 * time.Minute
 	CacheCleanupInterval   = 30 * time.Minute
 )
@@ -77,29 +76,23 @@ func NewUploadService(
 func (s *uploadServiceImpl) ProcessUpload(fileReader io.Reader, userID int64, portfolioID int64, source, filename string, filesize int64) (*UploadResult, error) {
 	overallStartTime := time.Now()
 	logger.L.Info("ProcessUpload START", "userID", userID, "portfolioID", portfolioID, "source", source)
-
 	parser, err := parsers.GetParser(source)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrParsingFailed, err)
 	}
-
 	canonicalTxs, err := parser.Parse(fileReader)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrParsingFailed, err)
 	}
-
 	newlyProcessedTxs := s.transactionProcessor.Process(canonicalTxs)
 	if len(newlyProcessedTxs) == 0 {
 		return s.GetLatestUploadResult(userID, portfolioID)
 	}
-
 	dbTx, err := database.DB.Begin()
 	if err != nil {
 		return nil, fmt.Errorf("error beginning database transaction: %w", err)
 	}
 	defer dbTx.Rollback()
-
-	// Insert Statement includes portfolio_id
 	stmt, err := dbTx.Prepare(`INSERT INTO processed_transactions 
 		(user_id, portfolio_id, date, source, product_name, isin, quantity, original_quantity, price, 
 		transaction_type, transaction_subtype, buy_sell, description, amount, currency, 
@@ -110,7 +103,6 @@ func (s *uploadServiceImpl) ProcessUpload(fileReader io.Reader, userID int64, po
 		return nil, fmt.Errorf("error preparing insert statement: %w", err)
 	}
 	defer stmt.Close()
-
 	insertedCount := 0
 	for _, tx := range newlyProcessedTxs {
 		_, err := stmt.Exec(
@@ -128,9 +120,7 @@ func (s *uploadServiceImpl) ProcessUpload(fileReader io.Reader, userID int64, po
 		}
 		insertedCount++
 	}
-
 	if insertedCount > 0 {
-		// Record upload history linked to portfolio
 		_, err = dbTx.Exec(`
 			INSERT INTO uploads_history (user_id, portfolio_id, source, filename, file_size, transaction_count) 
 			VALUES (?, ?, ?, ?, ?, ?)`,
@@ -139,14 +129,11 @@ func (s *uploadServiceImpl) ProcessUpload(fileReader io.Reader, userID int64, po
 		if err != nil {
 			return nil, fmt.Errorf("failed to record upload in history: %w", err)
 		}
-
 		var newUploadCount int
 		err = dbTx.QueryRow("SELECT COUNT(DISTINCT source) FROM processed_transactions WHERE user_id = ? AND portfolio_id = ?", userID, portfolioID).Scan(&newUploadCount)
 		if err != nil {
 			return nil, fmt.Errorf("failed to recount distinct sources for user: %w", err)
 		}
-
-		// Increment user global stats (could also add portfolio specific stats)
 		_, err = dbTx.Exec(`
 			UPDATE users 
 			SET total_upload_count = total_upload_count + 1, upload_count = ?
@@ -157,11 +144,9 @@ func (s *uploadServiceImpl) ProcessUpload(fileReader io.Reader, userID int64, po
 			return nil, fmt.Errorf("failed to update user upload counts: %w", err)
 		}
 	}
-
 	if err := dbTx.Commit(); err != nil {
 		return nil, fmt.Errorf("error committing transactions: %w", err)
 	}
-
 	if insertedCount > 0 {
 		go func(uid int64) {
 			logger.L.Info("Checking and setting first upload timestamp", "userID", uid)
@@ -180,15 +165,11 @@ func (s *uploadServiceImpl) ProcessUpload(fileReader io.Reader, userID int64, po
 				}
 			}
 		}(userID)
-
 		go func() {
-			// 1. Update Metrics
 			logger.L.Info("Triggering portfolio metrics update (pre-requisite for history)", "userID", userID)
 			if err := s.UpdateUserPortfolioMetrics(userID, portfolioID); err != nil {
 				logger.L.Error("Failed to update user portfolio metrics", "userID", userID, "error", err)
 			}
-
-			// 2. Rebuild History
 			logger.L.Info("Triggering history rebuild", "userID", userID)
 			if err := s.RebuildUserHistory(userID, portfolioID); err != nil {
 				logger.L.Error("Failed to rebuild user history", "userID", userID, "error", err)
@@ -197,18 +178,15 @@ func (s *uploadServiceImpl) ProcessUpload(fileReader io.Reader, userID int64, po
 	} else {
 		s.InvalidateUserCache(userID, portfolioID)
 	}
-
 	logger.L.Info("ProcessUpload END", "userID", userID, "duration", time.Since(overallStartTime))
 	return s.GetLatestUploadResult(userID, portfolioID)
 }
 
 func (s *uploadServiceImpl) RebuildUserHistory(userID int64, portfolioID int64) error {
 	logger.L.Info("Starting history rebuild (True Currency Mode)", "userID", userID, "portfolioID", portfolioID)
-
 	if err := s.priceService.EnsureBenchmarkData(); err != nil {
 		logger.L.Error("Failed to ensure benchmark data", "error", err)
 	}
-
 	txs, err := fetchUserProcessedTransactions(userID, portfolioID)
 	if err != nil {
 		return err
@@ -216,11 +194,9 @@ func (s *uploadServiceImpl) RebuildUserHistory(userID int64, portfolioID int64) 
 	if len(txs) == 0 {
 		return nil
 	}
-
 	uniqueISINs := make(map[string]bool)
 	uniqueCurrencies := make(map[string]bool)
 	var isinList []string
-
 	for _, tx := range txs {
 		if len(tx.ISIN) == 12 {
 			if !uniqueISINs[tx.ISIN] {
@@ -232,16 +208,14 @@ func (s *uploadServiceImpl) RebuildUserHistory(userID int64, portfolioID int64) 
 			uniqueCurrencies[tx.Currency] = true
 		}
 	}
-
 	mappings, _ := model.GetMappingsByISINs(database.DB, isinList)
-
 	var wg sync.WaitGroup
+	// CORRECTED: Remove "services." prefix because we are inside package services
 	tickerPrices := make(map[string]PriceMap)
 	tickerCurrencies := make(map[string]string)
+	// CORRECTED: Remove "services." prefix
 	currencyRates := make(map[string]PriceMap)
 	var dataMu sync.Mutex
-
-	// 1. Fetch Stocks AND their Real Currency
 	for isin := range uniqueISINs {
 		mapEntry, ok := mappings[isin]
 		if !ok || mapEntry.TickerSymbol == "" {
@@ -263,10 +237,7 @@ func (s *uploadServiceImpl) RebuildUserHistory(userID int64, portfolioID int64) 
 			}
 		}(ticker, isin)
 	}
-
 	wg.Wait()
-
-	// 2. Fetch Exchange Rates
 	for curr := range uniqueCurrencies {
 		wg.Add(1)
 		go func(c string) {
@@ -281,10 +252,8 @@ func (s *uploadServiceImpl) RebuildUserHistory(userID int64, portfolioID int64) 
 		}(curr)
 	}
 	wg.Wait()
-
 	startDate, _ := time.Parse("02-01-2006", txs[0].Date)
 	endDate := time.Now()
-
 	type AssetInfo struct {
 		Quantity       float64
 		TotalCostBasis float64
@@ -294,7 +263,6 @@ func (s *uploadServiceImpl) RebuildUserHistory(userID int64, portfolioID int64) 
 	cumulativeNetInvested := 0.0
 	currentCash := 0.0
 	lastKnownPrices := make(map[string]float64)
-
 	type Snapshot struct {
 		Date        string
 		Equity      float64
@@ -302,14 +270,11 @@ func (s *uploadServiceImpl) RebuildUserHistory(userID int64, portfolioID int64) 
 		Cash        float64
 	}
 	var snapshots []Snapshot
-
 	txIndex := 0
 	totalTxs := len(txs)
-
 	for d := startDate; !d.After(endDate); d = d.AddDate(0, 0, 1) {
 		dateStr := d.Format("2006-01-02")
 		txDateStr := d.Format("02-01-2006")
-
 		for txIndex < totalTxs && txs[txIndex].Date == txDateStr {
 			tx := txs[txIndex]
 			if tx.TransactionType == "CASH" {
@@ -335,13 +300,11 @@ func (s *uploadServiceImpl) RebuildUserHistory(userID int64, portfolioID int64) 
 			}
 			txIndex++
 		}
-
 		marketValueAssets := 0.0
 		for isin, info := range holdings {
 			if info.Quantity <= 0.0001 {
 				continue
 			}
-
 			price := 0.0
 			if pMap, ok := tickerPrices[isin]; ok {
 				price = pMap[dateStr]
@@ -351,14 +314,11 @@ func (s *uploadServiceImpl) RebuildUserHistory(userID int64, portfolioID int64) 
 			} else if lastPrice, exists := lastKnownPrices[isin]; exists {
 				price = lastPrice
 			}
-
 			pricingCurrency := "EUR"
 			if realCur, ok := tickerCurrencies[isin]; ok && realCur != "" {
 				pricingCurrency = realCur
 			}
-
 			rate := 1.0
-
 			if pricingCurrency != "EUR" {
 				if rMap, ok := currencyRates[pricingCurrency]; ok {
 					if r, ok := rMap[dateStr]; ok {
@@ -366,7 +326,6 @@ func (s *uploadServiceImpl) RebuildUserHistory(userID int64, portfolioID int64) 
 					}
 				}
 			}
-
 			var assetValue float64
 			if price > 0 {
 				assetValue = (info.Quantity * price) * rate
@@ -375,7 +334,6 @@ func (s *uploadServiceImpl) RebuildUserHistory(userID int64, portfolioID int64) 
 			}
 			marketValueAssets += assetValue
 		}
-
 		snapshots = append(snapshots, Snapshot{
 			Date:        dateStr,
 			Equity:      marketValueAssets + currentCash,
@@ -383,10 +341,8 @@ func (s *uploadServiceImpl) RebuildUserHistory(userID int64, portfolioID int64) 
 			Cash:        currentCash,
 		})
 	}
-
 	if len(snapshots) > 0 {
 		_, _ = database.DB.Exec("DELETE FROM portfolio_snapshots WHERE user_id = ? AND portfolio_id = ?", userID, portfolioID)
-
 		chunkSize := 500
 		for i := 0; i < len(snapshots); i += chunkSize {
 			end := i + chunkSize
@@ -407,7 +363,6 @@ func (s *uploadServiceImpl) RebuildUserHistory(userID int64, portfolioID int64) 
 			}
 		}
 	}
-
 	logger.L.Info("History rebuild complete", "days", len(snapshots))
 	return nil
 }
@@ -453,6 +408,10 @@ func (s *uploadServiceImpl) GetCurrentHoldingsWithValue(userID int64, portfolioI
 	if err != nil {
 		logger.L.Warn("Could not fetch some or all current prices", "error", err)
 	}
+
+	// NEW: Fetch Mappings to populate Sector, Industry, etc.
+	mappings, _ := model.GetMappingsByISINs(database.DB, uniqueISINs)
+
 	response := []models.HoldingWithValue{}
 	for isin, holding := range groupedHoldings {
 		priceInfo, found := prices[isin]
@@ -464,6 +423,16 @@ func (s *uploadServiceImpl) GetCurrentHoldingsWithValue(userID int64, portfolioI
 			currentPrice = priceInfo.Price
 			marketValue = priceInfo.Price * float64(holding.TotalQuantity)
 		}
+
+		// Enrich with Metadata
+		var sector, industry, assetType string
+		if m, ok := mappings[isin]; ok {
+			sector = m.Sector.String
+			industry = m.Industry.String
+			assetType = m.QuoteType.String
+		}
+		countryCode := utils.GetCountryCodeString(isin)
+
 		response = append(response, models.HoldingWithValue{
 			ISIN:              holding.ISIN,
 			ProductName:       holding.ProductName,
@@ -472,25 +441,22 @@ func (s *uploadServiceImpl) GetCurrentHoldingsWithValue(userID int64, portfolioI
 			CurrentPriceEUR:   currentPrice,
 			MarketValueEUR:    marketValue,
 			Status:            status,
+			// New Fields populated
+			Sector:      sector,
+			Industry:    industry,
+			AssetType:   assetType,
+			CountryCode: countryCode,
 		})
 	}
 	return response, nil
 }
 
-// UpdateUserPortfolioMetrics updates the global metrics for a user.
-// FIXED: This function now properly handles DB connections to avoid deadlocks.
 func (s *uploadServiceImpl) UpdateUserPortfolioMetrics(userID int64, portfolioID int64) error {
-	// 1. Invalidate cache for the specific portfolio that changed
 	s.InvalidateUserCache(userID, portfolioID)
-
-	// 2. Fetch ALL portfolio IDs for this user first
-	// We read all IDs into memory and close the rows immediately.
-	// This prevents holding the connection open while we process (which causes deadlock in SQLite).
 	rows, err := database.DB.Query("SELECT id FROM portfolios WHERE user_id = ?", userID)
 	if err != nil {
 		return fmt.Errorf("failed to list portfolios for metrics update: %w", err)
 	}
-
 	var portfolioIDs []int64
 	for rows.Next() {
 		var pid int64
@@ -498,25 +464,17 @@ func (s *uploadServiceImpl) UpdateUserPortfolioMetrics(userID int64, portfolioID
 			portfolioIDs = append(portfolioIDs, pid)
 		}
 	}
-	rows.Close() // <--- CRITICAL: Close rows before starting heavy processing
-
-	// 3. Recalculate Global User Metrics (Sum of ALL portfolios)
+	rows.Close()
 	var totalUserValue float64
 	allHoldings := make(map[string]models.HoldingWithValue)
-
 	for _, pid := range portfolioIDs {
-		// Get value for this portfolio
-		// This triggers new DB queries, which is now safe because 'rows' is closed.
 		holdings, err := s.GetCurrentHoldingsWithValue(userID, pid)
 		if err != nil {
 			logger.L.Warn("Failed to get holdings for metrics aggregation", "userID", userID, "portfolioID", pid, "error", err)
 			continue
 		}
-
 		for _, h := range holdings {
 			totalUserValue += h.MarketValueEUR
-
-			// Aggregate for Top 5 calculation
 			if existing, exists := allHoldings[h.ISIN]; exists {
 				existing.MarketValueEUR += h.MarketValueEUR
 				existing.Quantity += h.Quantity
@@ -526,8 +484,6 @@ func (s *uploadServiceImpl) UpdateUserPortfolioMetrics(userID int64, portfolioID
 			}
 		}
 	}
-
-	// 4. Determine Top 5 Holdings Global
 	type HoldingSort struct {
 		Name  string  `json:"name"`
 		Value float64 `json:"value"`
@@ -536,19 +492,13 @@ func (s *uploadServiceImpl) UpdateUserPortfolioMetrics(userID int64, portfolioID
 	for _, h := range allHoldings {
 		sortedHoldings = append(sortedHoldings, HoldingSort{Name: h.ProductName, Value: h.MarketValueEUR})
 	}
-	// Sort descending by value
 	sort.Slice(sortedHoldings, func(i, j int) bool {
 		return sortedHoldings[i].Value > sortedHoldings[j].Value
 	})
-
-	// Take top 5
 	if len(sortedHoldings) > 5 {
 		sortedHoldings = sortedHoldings[:5]
 	}
-
 	top5JSON, _ := json.Marshal(sortedHoldings)
-
-	// 5. Update the User Table
 	_, err = database.DB.Exec(`
 		UPDATE users 
 		SET portfolio_value_eur = ?, top_5_holdings = ? 
@@ -558,7 +508,6 @@ func (s *uploadServiceImpl) UpdateUserPortfolioMetrics(userID int64, portfolioID
 	if err != nil {
 		return fmt.Errorf("failed to update user global metrics: %w", err)
 	}
-
 	logger.L.Info("Updated user global metrics", "userID", userID, "totalValue", totalUserValue)
 	return nil
 }
