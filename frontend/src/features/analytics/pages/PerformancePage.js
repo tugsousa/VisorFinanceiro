@@ -7,7 +7,6 @@ import PLContributionChart from '../components/PLContributionChart';
 import { ALL_YEARS_OPTION } from '../../../constants';
 import { extractYearsFromData, getYearString } from '../../../lib/utils/dateUtils';
 import { formatCurrency } from '../../../lib/utils/formatUtils';
-
 // Icons
 import ShowChartIcon from '@mui/icons-material/ShowChart';
 import CandlestickChartIcon from '@mui/icons-material/CandlestickChart';
@@ -18,44 +17,81 @@ import PercentIcon from '@mui/icons-material/Percent';
 import ThumbUpAltIcon from '@mui/icons-material/ThumbUpAlt';
 import ThumbDownAltIcon from '@mui/icons-material/ThumbDownAlt';
 
-const KPICard = ({ title, value, icon, isPercentage = false, isTrade = false }) => {
-    // If it's a trade object {name, value}, check the value. Otherwise check the number directly.
+// REVISED: KeyMetricCard: Corrected prop declaration to include secondaryValue.
+const KPICard = ({ title, value, icon, isPercentage = false, isTrade = false, secondaryValue }) => {
     const numericValue = isTrade ? (value?.value || 0) : value;
     const isPositive = numericValue >= 0;
     
-    // Trade cards (Best/Worst) use Blue/Red backgrounds to distinguish them from P/L cards
-    const bgColor = isTrade 
-        ? 'rgba(33, 150, 243, 0.08)' 
-        : (isPositive ? 'rgba(76, 175, 80, 0.1)' : 'rgba(244, 67, 54, 0.1)');
-        
-    const textColor = isTrade 
-        ? 'text.primary'
-        : (isPositive ? 'success.main' : 'error.main');
+    // Conditional color for performance metrics (green/red)
+    const performanceColor = isPositive ? 'success.main' : 'error.main';
+    
+    // Determine primary color: use performance color only if it's performance related
+    const primaryColor = (title.includes('Líquido') || title.includes('Retorno') || title.includes('Negócio')) 
+        ? performanceColor 
+        : 'text.primary'; // Default for non-P/L metrics
 
-    const valueColor = isPositive ? 'success.main' : 'error.main';
+    // Override commission color to error.main regardless of sign
+    const finalColor = title === 'Comissões' ? 'error.main' : primaryColor;
+
+    let formattedValue;
+    if (isTrade) {
+        formattedValue = value ? (
+            <Box>
+                <Typography variant="caption" sx={{ fontWeight: 'bold', lineHeight: 1.2, textAlign: 'left' }}>
+                    {value.name}
+                </Typography>
+                <Typography variant="body2" sx={{ color: performanceColor, textAlign: 'left' }}>
+                    {formatCurrency(value.value)}
+                </Typography>
+            </Box>
+        ) : (
+            <Typography variant="h6" sx={{ color: 'text.secondary', textAlign: 'left' }}>N/A</Typography>
+        );
+    } else {
+        formattedValue = (
+            <Typography variant="h6" sx={{ fontWeight: 'bold', color: finalColor, textAlign: 'left' }}>
+                {isPercentage ? `${value?.toFixed(2)}%` : formatCurrency(value)}
+            </Typography>
+        );
+    }
 
     return (
-        <Card elevation={0} sx={{ p: 2, bgcolor: bgColor, borderRadius: 2, height: '100%', display: 'flex', alignItems: 'center' }}>
-            <Box sx={{ mr: 2, color: isTrade ? 'primary.main' : textColor }}>{icon}</Box>
-            <Box sx={{ overflow: 'hidden' }}>
-                <Typography variant="caption" color="text.secondary" sx={{ textTransform: 'uppercase', fontWeight: 600 }}>{title}</Typography>
-                
-                {isTrade ? (
-                    value ? (
-                        <>
-                            <Typography variant="body2" sx={{ fontWeight: 'bold', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                {value.name}
-                            </Typography>
-                            <Typography variant="h6" sx={{ fontWeight: 'bold', color: valueColor }}>
-                                {formatCurrency(value.value)}
-                            </Typography>
-                        </>
-                    ) : (
-                        <Typography variant="h6" sx={{ color: 'text.secondary' }}>N/A</Typography>
-                    )
-                ) : (
-                    <Typography variant="h6" sx={{ fontWeight: 'bold', color: textColor }}>
-                        {isPercentage ? `${value?.toFixed(2)}%` : formatCurrency(value)}
+        <Card 
+            elevation={0} 
+            sx={{ 
+                // Compact styles
+                p: 1.5, 
+                bgcolor: 'background.paper', 
+                border: theme => `1px solid ${theme.palette.divider}`,
+                borderRadius: 2, 
+                height: '100%', 
+                display: 'flex', 
+                flexDirection: 'column', 
+                justifyContent: 'center', // Centraliza o conteúdo principal verticalmente
+                textAlign: 'left', // Alinha o container principal à esquerda
+            }}
+        >
+            {/* Título - Alinhado à esquerda */}
+            <Typography 
+                variant="caption" 
+                color="text.secondary" 
+                sx={{ 
+                    fontSize: '0.75rem', 
+                    fontWeight: 600, 
+                    textTransform: 'uppercase', 
+                    lineHeight: 1,
+                    mb: 1
+                }}
+            >
+                {title}
+            </Typography>
+            {/* Valor - Alinhado à esquerda */}
+            <Box sx={{ minHeight: 30, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                {formattedValue}
+                {/* Secondary Value (e.g., Percentage) - Only rendered if provided */}
+                {secondaryValue !== null && secondaryValue !== undefined && (
+                    <Typography variant="body2" sx={{ color: performanceColor, fontWeight: 500, mt: 0.5, textAlign: 'left' }}>
+                        {secondaryValue >= 0 ? '+' : ''}{secondaryValue.toFixed(2)}%
                     </Typography>
                 )}
             </Box>
@@ -66,8 +102,9 @@ const KPICard = ({ title, value, icon, isPercentage = false, isTrade = false }) 
 const PerformancePage = () => {
     const { token } = useAuth();
     const [selectedYear, setSelectedYear] = useState(ALL_YEARS_OPTION);
+    const [currentTab, setCurrentTab] = useState('overview');
     const { stockSalesData, optionSalesData, dividendSummaryData, dividendTransactionsData, feesData, isLoading } = useAnalyticsData(token, ['all']);
-
+    
     // 1. Extract Years
     const years = useMemo(() => {
         if (isLoading) return [ALL_YEARS_OPTION];
@@ -77,7 +114,6 @@ const PerformancePage = () => {
             DividendTaxResult: dividendSummaryData,
             fees: feesData
         }, { stockSales: 'SaleDate', optionSales: 'close_date', DividendTaxResult: null, fees: 'date' });
-        
         return [ALL_YEARS_OPTION, ...rawYears.filter(y => y !== 'all').sort((a,b) => b.localeCompare(a))];
     }, [stockSalesData, optionSalesData, dividendSummaryData, feesData, isLoading]);
 
@@ -93,7 +129,6 @@ const PerformancePage = () => {
             bestTrade: null,
             worstTrade: null
         };
-        
         let bestVal = -Infinity;
         let worstVal = Infinity;
 
@@ -102,7 +137,7 @@ const PerformancePage = () => {
             if (val > bestVal) { bestVal = val; res.bestTrade = { name, value: val }; }
             if (val < worstVal) { worstVal = val; res.worstTrade = { name, value: val }; }
         };
-        
+
         const isYearMatch = (dateStr) => selectedYear === ALL_YEARS_OPTION || getYearString(dateStr) === selectedYear;
 
         // Stocks
@@ -127,9 +162,6 @@ const PerformancePage = () => {
         dividendTransactionsData?.forEach(d => {
             if (d.transaction_subtype !== 'TAX' && isYearMatch(d.date)) {
                 res.dividends += (d.amount_eur || 0);
-                // Note: We usually don't count a single dividend payment as a "Best Trade", 
-                // but if you want to include them, uncomment the line below:
-                // checkOutlier(`Div: ${d.product_name}`, d.amount_eur);
             }
         });
 
@@ -163,7 +195,7 @@ const PerformancePage = () => {
                     </Select>
                 </FormControl>
             </Box>
-
+            
             {/* KPI GRID - 4 Columns Layout */}
             <Grid container spacing={2} sx={{ mb: 4 }}>
                 <Grid item xs={12} sm={6} md={3}>
@@ -178,7 +210,6 @@ const PerformancePage = () => {
                 <Grid item xs={12} sm={6} md={3}>
                     <KPICard title="Pior Negócio" value={metrics.worstTrade} isTrade icon={<ThumbDownAltIcon />} />
                 </Grid>
-
                 {/* Secondary Metrics Row */}
                 <Grid item xs={6} sm={3}>
                     <KPICard title="Ações" value={metrics.stocks} icon={<ShowChartIcon />} />
@@ -193,25 +224,27 @@ const PerformancePage = () => {
                     <KPICard title="Comissões" value={metrics.fees} icon={<RequestQuoteIcon />} />
                 </Grid>
             </Grid>
-
+            
             {/* Charts */}
             <Grid container spacing={3}>
+                {/* CHART 1: Overall PL Chart (Removed border) */}
                 <Grid item xs={12} md={6}>
-                    <Paper sx={{ p: 2, height: 400 }}>
+                    <Paper elevation={0} sx={{ p: 2, height: 400, border: 'none' }}>
                         <OverallPLChart 
                             stockSaleDetails={stockSalesData}
-                            optionSaleDetails={optionSalesData}
+                            optionSalesData={optionSalesData}
                             dividendTaxResultForChart={dividendSummaryData}
                             feesData={feesData}
                             selectedYear={selectedYear}
                         />
                     </Paper>
                 </Grid>
+                {/* CHART 2: PL Contribution Chart (Removed border) */}
                 <Grid item xs={12} md={6}>
-                    <Paper sx={{ p: 2, height: 400 }}>
+                    <Paper elevation={0} sx={{ p: 2, height: 400, border: 'none' }}>
                         <PLContributionChart 
                             stockSaleDetails={stockSalesData}
-                            optionSaleDetails={optionSalesData}
+                            optionSalesData={optionSalesData}
                             dividendTaxResultForChart={dividendSummaryData}
                             dividendTransactionsList={dividendTransactionsData}
                             feesData={feesData}
@@ -223,4 +256,5 @@ const PerformancePage = () => {
         </Box>
     );
 };
+
 export default PerformancePage;
