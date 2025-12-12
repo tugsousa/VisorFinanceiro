@@ -10,12 +10,12 @@ import { formatCurrency } from '../../../lib/utils/formatUtils';
 import { usePortfolio } from '../../portfolio/PortfolioContext';
 import {
   Chart as ChartJS, CategoryScale, LinearScale, PointElement, 
-  LineElement, Title, Tooltip as ChartTooltip, Legend, Filler
+  LineElement, Title, Tooltip as ChartTooltip, Legend, Filler, TimeScale
 } from 'chart.js';
 
 ChartJS.register(
   CategoryScale, LinearScale, PointElement, LineElement, 
-  Title, ChartTooltip, Legend, Filler
+  Title, ChartTooltip, Legend, Filler, TimeScale
 );
 
 export default function HistoricalPerformanceChart() {
@@ -203,9 +203,23 @@ export default function HistoricalPerformanceChart() {
       }
     },
     scales: {
-      x: { 
-          grid: { display: false }, 
-          ticks: { maxTicksLimit: 8, maxRotation: 0, autoSkip: true } 
+      x: {
+        type: 'time', // <-- Set the scale type to 'time'
+        time: {
+          unit: 'month', 
+          tooltipFormat: 'dd-MM-yyyy',
+          displayFormats: { 
+            day: 'MMM dd',
+            week: 'MMM dd',
+            month: 'MMM yyyy',
+            year: 'yyyy'
+          },
+        },
+        grid: { display: false }, 
+        ticks: { 
+            maxRotation: 0, 
+            autoSkip: true 
+        }
       },
       y: {
         beginAtZero: false,
@@ -274,7 +288,7 @@ export default function HistoricalPerformanceChart() {
       </Box>
 
       {/* Chart Canvas Container */}
-      <Box sx={{ flexGrow: 1, minHeight: 0, position: 'relative', width: '100%', pb: 1 }}>
+      <Box sx={{ flexGrow: 1, minHeight: 0, position: 'relative', width: '100%', pb: 4 }}>
         <Line ref={chartRef} data={chartData} options={options} />
       </Box>
     </Box>
