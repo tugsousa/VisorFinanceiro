@@ -17,7 +17,7 @@ import PercentIcon from '@mui/icons-material/Percent';
 import ThumbUpAltIcon from '@mui/icons-material/ThumbUpAlt';
 import ThumbDownAltIcon from '@mui/icons-material/ThumbDownAlt';
 
-// REVISED: KeyMetricCard: Corrected prop declaration to include secondaryValue.
+// REVERTIDO: KPICard para p:1.5 e h6, com espaçamento ajustado.
 const KPICard = ({ title, value, icon, isPercentage = false, isTrade = false, secondaryValue }) => {
     const numericValue = isTrade ? (value?.value || 0) : value;
     const isPositive = numericValue >= 0;
@@ -45,10 +45,12 @@ const KPICard = ({ title, value, icon, isPercentage = false, isTrade = false, se
                 </Typography>
             </Box>
         ) : (
+            // REVERTIDO: para h6
             <Typography variant="h6" sx={{ color: 'text.secondary', textAlign: 'left' }}>N/A</Typography>
         );
     } else {
         formattedValue = (
+            // REVERTIDO: para h6
             <Typography variant="h6" sx={{ fontWeight: 'bold', color: finalColor, textAlign: 'left' }}>
                 {isPercentage ? `${value?.toFixed(2)}%` : formatCurrency(value)}
             </Typography>
@@ -59,7 +61,7 @@ const KPICard = ({ title, value, icon, isPercentage = false, isTrade = false, se
         <Card 
             elevation={0} 
             sx={{ 
-                // Compact styles
+                // REVERTIDO: para p: 1.5 (12px padding)
                 p: 1.5, 
                 bgcolor: 'background.paper', 
                 border: theme => `1px solid ${theme.palette.divider}`,
@@ -67,8 +69,8 @@ const KPICard = ({ title, value, icon, isPercentage = false, isTrade = false, se
                 height: '100%', 
                 display: 'flex', 
                 flexDirection: 'column', 
-                justifyContent: 'center', // Centraliza o conteúdo principal verticalmente
-                textAlign: 'left', // Alinha o container principal à esquerda
+                justifyContent: 'center', 
+                textAlign: 'left', 
             }}
         >
             {/* Título - Alinhado à esquerda */}
@@ -76,11 +78,12 @@ const KPICard = ({ title, value, icon, isPercentage = false, isTrade = false, se
                 variant="caption" 
                 color="text.secondary" 
                 sx={{ 
+                    // REVERTIDO: para font original (0.75rem)
                     fontSize: '0.75rem', 
                     fontWeight: 600, 
                     textTransform: 'uppercase', 
                     lineHeight: 1,
-                    mb: 1
+                    mb: 1 // Aumentado para 1 (8px) para afastar ligeiramente do valor
                 }}
             >
                 {title}
@@ -90,7 +93,7 @@ const KPICard = ({ title, value, icon, isPercentage = false, isTrade = false, se
                 {formattedValue}
                 {/* Secondary Value (e.g., Percentage) - Only rendered if provided */}
                 {secondaryValue !== null && secondaryValue !== undefined && (
-                    <Typography variant="body2" sx={{ color: performanceColor, fontWeight: 500, mt: 0.5, textAlign: 'left' }}>
+                    <Typography variant="body2" sx={{ color: performanceColor, fontWeight: 500, mt: 0.25, textAlign: 'left' }}>
                         {secondaryValue >= 0 ? '+' : ''}{secondaryValue.toFixed(2)}%
                     </Typography>
                 )}
@@ -198,30 +201,36 @@ const PerformancePage = () => {
             
             {/* KPI GRID - 4 Columns Layout */}
             <Grid container spacing={2} sx={{ mb: 4 }}>
-                <Grid item xs={12} sm={6} md={3}>
-                    <KPICard title="Total Líquido" value={metrics.total} icon={<AccountBalanceWalletIcon />} />
+                {/* LINHA 1: KPIs Principais. Adicionamos mb:1 à grelha para criar o espaçamento visível entre as linhas */}
+                <Grid container item xs={12} spacing={2} sx={{ mb: 3 }}>
+                    <Grid item xs={12} sm={6} md={3}>
+                        <KPICard title="Total Líquido" value={metrics.total} icon={<AccountBalanceWalletIcon />} />
+                    </Grid>
+                    <Grid item xs={12} sm={6} md={3}>
+                        <KPICard title="Retorno %" value={metrics.roi} isPercentage icon={<PercentIcon />} />
+                    </Grid>
+                    <Grid item xs={12} sm={6} md={3}>
+                        <KPICard title="Melhor Negócio" value={metrics.bestTrade} isTrade icon={<ThumbUpAltIcon />} />
+                    </Grid>
+                    <Grid item xs={12} sm={6} md={3}>
+                        <KPICard title="Pior Negócio" value={metrics.worstTrade} isTrade icon={<ThumbDownAltIcon />} />
+                    </Grid>
                 </Grid>
-                <Grid item xs={12} sm={6} md={3}>
-                    <KPICard title="Retorno %" value={metrics.roi} isPercentage icon={<PercentIcon />} />
-                </Grid>
-                <Grid item xs={12} sm={6} md={3}>
-                    <KPICard title="Melhor Negócio" value={metrics.bestTrade} isTrade icon={<ThumbUpAltIcon />} />
-                </Grid>
-                <Grid item xs={12} sm={6} md={3}>
-                    <KPICard title="Pior Negócio" value={metrics.worstTrade} isTrade icon={<ThumbDownAltIcon />} />
-                </Grid>
-                {/* Secondary Metrics Row */}
-                <Grid item xs={6} sm={3}>
-                    <KPICard title="Ações" value={metrics.stocks} icon={<ShowChartIcon />} />
-                </Grid>
-                <Grid item xs={6} sm={3}>
-                    <KPICard title="Opções" value={metrics.options} icon={<CandlestickChartIcon />} />
-                </Grid>
-                <Grid item xs={6} sm={3}>
-                    <KPICard title="Dividendos" value={metrics.dividends} icon={<AttachMoneyIcon />} />
-                </Grid>
-                <Grid item xs={6} sm={3}>
-                    <KPICard title="Comissões" value={metrics.fees} icon={<RequestQuoteIcon />} />
+                
+                {/* LINHA 2: KPIs de Detalhe. Não precisa de mb adicional, pois o espaçamento é dado pelo 'spacing={2}' da Grid pai */}
+                <Grid container item xs={12} spacing={2}> 
+                    <Grid item xs={6} sm={3}>
+                        <KPICard title="Ações" value={metrics.stocks} icon={<ShowChartIcon />} />
+                    </Grid>
+                    <Grid item xs={6} sm={3}>
+                        <KPICard title="Opções" value={metrics.options} icon={<CandlestickChartIcon />} />
+                    </Grid>
+                    <Grid item xs={6} sm={3}>
+                        <KPICard title="Dividendos" value={metrics.dividends} icon={<AttachMoneyIcon />} />
+                    </Grid>
+                    <Grid item xs={6} sm={3}>
+                        <KPICard title="Comissões" value={metrics.fees} icon={<RequestQuoteIcon />} />
+                    </Grid>
                 </Grid>
             </Grid>
             

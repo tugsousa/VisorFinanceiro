@@ -232,7 +232,7 @@ const DashboardPage = () => {
                     Olá, {user?.username?.split(' ')[0] || 'Investidor'}
                 </Typography>
                 <Typography variant="body1" color="text.secondary">
-                    Resumo do portfólio <strong>{activePortfolio?.name}</strong>
+                    Resumo do <strong>{activePortfolio?.name}</strong>
                 </Typography>
             </Box>
             {/* SECTION 1: HEADER / KPIs */}
