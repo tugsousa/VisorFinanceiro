@@ -96,7 +96,7 @@ export default function HoldingsAllocationChart({ data, title }) {
                 labels: chartItems.map(i => i.name),
                 datasets: [{
                     data: chartItems.map(i => i.value),
-                    borderWidth: 1, // Restored thin border
+                    borderWidth: 1,
                 }]
             }
         };
