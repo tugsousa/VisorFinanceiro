@@ -228,7 +228,7 @@ const DashboardPage = () => {
                 </Typography>
             </Box>
 
-            <DashboardKPISection metrics={metrics} isLoading={isLoading} />
+            <DashboardKPISection metrics={metrics} isLoading={isLoading} sx={{ mb: 2 }} />
 
             <Grid container spacing={3}>
                 <Grid item xs={12} lg={8}>
