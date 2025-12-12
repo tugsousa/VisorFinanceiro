@@ -12,6 +12,7 @@ import HistoricalPerformanceChart from '../../analytics/components/HistoricalPer
 import HoldingsAllocationChart from '../../analytics/components/HoldingsAllocationChart';
 import ReturnsPeriodSection from '../components/ReturnsPeriodSection'; // New Component
 import AllocationSection from '../components/AllocationSection';
+import HeatmapSection from '../components/HeatmapSection';
 
 // Utils
 import { parseDateRobust } from '../../../lib/utils/dateUtils';
@@ -197,6 +198,8 @@ const DashboardPage = () => {
 
             {/* SECTION 4: ALLOCATION (Charts Only for now) */}
             <AllocationSection holdings={holdingsForGroupedView} />
+
+            <HeatmapSection holdings={holdingsForGroupedView} />
         </Box>
     );
 };
