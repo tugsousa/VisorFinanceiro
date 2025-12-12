@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { ALL_YEARS_OPTION } from '../../../constants';
-import { useDashboardData } from './useDashboardData';
+import { useDashboardData } from '../../dashboard/hooks/useDashboardData';
 import { 
     filterPeriodSpecificData, 
     getAvailableYears, 
