@@ -3,13 +3,13 @@ import { Box, Typography, Card, Alert, IconButton, Tooltip } from '@mui/material
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import { useAuth } from '../../auth/AuthContext';
 import { usePortfolio } from '../../portfolio/PortfolioContext';
-import { useDashboardData } from '../../analytics/hooks/useDashboardData';
+import { useDashboardData } from '../hooks/useDashboardData';
 import { useQuery } from '@tanstack/react-query';
 import { apiFetchHistoricalChartData } from '../../analytics/api/analyticsApi';
 
 // Components
 import DashboardKPISection from '../components/DashboardKPISection';
-import HistoricalPerformanceChart from '../../analytics/components/HistoricalPerformanceChart';
+import HistoricalPerformanceChart from '../components/HistoricalPerformanceChart';
 import ReturnsPeriodSection from '../components/ReturnsPeriodSection'; 
 import AllocationSection from '../components/AllocationSection';
 import HeatmapSection from '../components/HeatmapSection';

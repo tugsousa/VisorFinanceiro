@@ -26,10 +26,10 @@ import StockSalesSection from '../components/StockSalesSection';
 import OptionSalesSection from '../components/OptionSalesSection';
 import DividendsSection from '../components/DividendsSection';
 import OverallPLChart from '../components/OverallPLChart';
-import HoldingsAllocationChart from '../components/HoldingsAllocationChart';
+import HoldingsAllocationChart from '../../dashboard/components/HoldingsAllocationChart';
 import PLContributionChart from '../components/PLContributionChart';
 import FeesSection from '../components/FeesSection';
-import HistoricalPerformanceChart from '../components/HistoricalPerformanceChart';
+import HistoricalPerformanceChart from '../../dashboard/components/HistoricalPerformanceChart';
 
 
 const isDataEmpty = (data) => {

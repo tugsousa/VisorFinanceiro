@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import { Grid, Box, Typography } from '@mui/material';
-import HoldingsAllocationChart from '../../analytics/components/HoldingsAllocationChart';
+import HoldingsAllocationChart from './HoldingsAllocationChart';
 
 // --- DATA PROCESSING LOGIC ---
 const processData = (holdings, keySelector, labelFormatter) => {
