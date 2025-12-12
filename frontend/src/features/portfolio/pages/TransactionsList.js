@@ -36,7 +36,7 @@ const columns = [
 ];
 
 const TransactionsList = () => {
-  const { token, refreshUserDataCheck } = useAuth();
+  const { token, refreshUserDataCheck, fetchCsrfToken } = useAuth();
   const { activePortfolio } = usePortfolio(); 
   const queryClient = useQueryClient();
 
@@ -73,7 +73,10 @@ const TransactionsList = () => {
   });
 
   const handleDeleteClick = () => setIsDeleteModalOpen(true);
-  const handleConfirmDelete = (criteria) => deleteTransactionsMutation.mutate(criteria);
+  const handleConfirmDelete = async (criteria) => {
+  await fetchCsrfToken(true);
+  deleteTransactionsMutation.mutate(criteria);
+};
   const handleCloseDeleteModal = () => { if (!deleteTransactionsMutation.isPending) setIsDeleteModalOpen(false); };
 
   const transactionsError = isTransactionsError ? (transactionsErrorObj?.message || UI_TEXT.errorLoadingData) : null;
