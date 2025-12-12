@@ -9,9 +9,8 @@ const KPICard = ({ title, value, subValue, isCurrency = true, isPercentage = fal
     let valueColor = theme.palette.text.primary;
     const numValue = parseFloat(value);
 
-    // Lógica de cores para Performance (Verde/Vermelho)
     const isPerformanceMetric = isPercentage || title.includes('Variação') || title.includes('Lucro');
-    
+
     if (!colorOverride && isPerformanceMetric) {
         if (numValue > 0) valueColor = theme.palette.success.main;
         if (numValue < 0) valueColor = theme.palette.error.main;
@@ -27,28 +26,46 @@ const KPICard = ({ title, value, subValue, isCurrency = true, isPercentage = fal
         <Paper 
             elevation={0} 
             sx={{ 
-                p: 2, // Padding reduzido (era 2.5)
-                // minHeight removido para a caixa ser compacta
+                p: 2,
+                minHeight: 80,
                 display: 'flex',
                 flexDirection: 'column',
                 justifyContent: 'center',
                 border: `1px solid ${theme.palette.divider}`,
-                borderRadius: 2, // Cantos ligeiramente menos arredondados
+                borderRadius: 2,
             }}
         >
-            <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 500, textTransform: 'uppercase', fontSize: '0.7rem', mb: 0.5 }}>
+            <Typography 
+                variant="caption" 
+                color="text.secondary" 
+                sx={{ fontWeight: 500, textTransform: 'uppercase', fontSize: '0.7rem', mb: 0.5 }}
+            >
                 {title}
             </Typography>
-            
-            <Typography variant="h5" sx={{ fontWeight: 700, color: valueColor, fontSize: { xs: '1.25rem', md: '1.4rem' }, letterSpacing: '-0.5px' }}>
+
+            <Typography 
+                variant="h5" 
+                sx={{ 
+                    fontWeight: 700, 
+                    color: valueColor, 
+                    fontSize: { xs: '1.25rem', md: '1.4rem' }, 
+                    letterSpacing: '-0.5px' 
+                }}
+            >
                 {formattedValue}
             </Typography>
-            
-            {/* Sub-valor condicional (sem ocupar espaço se não existir) */}
+
+            {/* Sub-value consistente com Typography */}
             {subValue && (
                 <Box sx={{ mt: 0.5 }}>
-                    {isLoading ? <Skeleton width="40%" /> : (
-                        <Typography variant="caption" component="div" sx={{ display: 'flex', alignItems: 'center', fontWeight: 500, color: 'text.secondary' }}>
+                    {isLoading ? (
+                        <Skeleton width="40%" />
+                    ) : (
+                        <Typography 
+                            variant="caption" 
+                            component="div" 
+                            sx={{ fontWeight: 500, color: 'text.secondary' }}
+                        >
                             {subValue}
                         </Typography>
                     )}
@@ -59,7 +76,6 @@ const KPICard = ({ title, value, subValue, isCurrency = true, isPercentage = fal
 };
 
 const DashboardKPISection = ({ metrics, isLoading }) => {
-    // Configuração dos dados
     const row1 = [
         { title: "Valor Total", value: metrics.totalPortfolioValue, isCurrency: true },
         { title: "Depósitos Líquidos", value: metrics.netDeposits, isCurrency: true },
@@ -72,34 +88,40 @@ const DashboardKPISection = ({ metrics, isLoading }) => {
         { title: "Retorno Total", value: metrics.totalReturnPct, isPercentage: true },
         { 
             title: "Variação Diária", 
-            value: metrics.dailyChangeValue, 
-            isCurrency: true, 
+            value: metrics.dailyChangeValue,
+            isCurrency: true,
             subValue: (
-                <span style={{ 
-                    color: metrics.dailyChangePct >= 0 ? '#1b5e20' : '#b71c1c', 
-                    fontSize: '0.8rem'
-                }}>
-                    {metrics.dailyChangePct >= 0 ? '+' : ''}{Number(metrics.dailyChangePct).toFixed(2)}%
-                </span>
-            )
+                <Typography
+                    variant="caption"
+                    sx={{
+                        color: metrics.dailyChangePct >= 0 ? '#1b5e20' : '#b71c1c',
+                        fontSize: '0.8rem',
+                        fontWeight: 600
+                    }}
+                >
+                    {metrics.dailyChangePct >= 0 ? '+' : ''}
+                    {Number(metrics.dailyChangePct).toFixed(2)}%
+                </Typography>
+            ),
         },
         { 
             title: "Retorno Anual (XIRR)", 
             value: metrics.annualizedReturn, 
-            isPercentage: true
-        }, 
+            isPercentage: true 
+        },
     ];
 
     return (
         <Box sx={{ mb: 4 }}>
-            <Grid container spacing={2} sx={{ mb: 3 }}>
+            <Grid container spacing={2} alignItems="stretch" sx={{ mb: 3 }}>
                 {row1.map((item, idx) => (
                     <Grid item xs={12} sm={6} md={3} key={idx}>
                         <KPICard {...item} isLoading={isLoading} />
                     </Grid>
                 ))}
             </Grid>
-            <Grid container spacing={2}>
+
+            <Grid container spacing={2} alignItems="stretch">
                 {row2.map((item, idx) => (
                     <Grid item xs={12} sm={6} md={3} key={idx}>
                         <KPICard {...item} isLoading={isLoading} />
