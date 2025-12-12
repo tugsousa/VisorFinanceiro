@@ -5,10 +5,8 @@ import { formatCurrency } from '../../../lib/utils/formatUtils';
 const KPICard = ({ title, value, subValue, isCurrency = true, isPercentage = false, isLoading, colorOverride }) => {
     const theme = useTheme();
     
-    // Determinar cor baseada no valor
     let valueColor = theme.palette.text.primary;
     const numValue = parseFloat(value);
-
     const isPerformanceMetric = isPercentage || title.includes('Variação') || title.includes('Lucro');
 
     if (!colorOverride && isPerformanceMetric) {
@@ -26,48 +24,60 @@ const KPICard = ({ title, value, subValue, isCurrency = true, isPercentage = fal
         <Paper 
             elevation={0} 
             sx={{ 
-                p: 2,
-                minHeight: 80,
+                // 1. Reduced padding to '1' (8px) for maximum compactness
+                p: 1,
                 display: 'flex',
                 flexDirection: 'column',
                 justifyContent: 'center',
                 border: `1px solid ${theme.palette.divider}`,
                 borderRadius: 2,
+                height: '100%', 
             }}
         >
             <Typography 
                 variant="caption" 
                 color="text.secondary" 
-                sx={{ fontWeight: 500, textTransform: 'uppercase', fontSize: '0.7rem', mb: 0.5 }}
+                sx={{ 
+                    fontWeight: 600, 
+                    textTransform: 'uppercase', 
+                    fontSize: '0.65rem', 
+                    mb: 0.25,
+                    lineHeight: 1
+                }}
             >
                 {title}
             </Typography>
-
+            
             <Typography 
-                variant="h5" 
+                variant="h6"
                 sx={{ 
                     fontWeight: 700, 
                     color: valueColor, 
-                    fontSize: { xs: '1.25rem', md: '1.4rem' }, 
-                    letterSpacing: '-0.5px' 
+                    // Slightly reduced font size for compact height
+                    fontSize: { xs: '1rem', md: '1.1rem' }, 
+                    lineHeight: 1.2,
+                    letterSpacing: '-0.2px' 
                 }}
             >
                 {formattedValue}
             </Typography>
 
-            {/* Sub-value consistente com Typography */}
             {subValue && (
-                <Box sx={{ mt: 0.5 }}>
+                <Box sx={{ mt: 0.25, lineHeight: 1 }}>
                     {isLoading ? (
-                        <Skeleton width="40%" />
+                        <Skeleton width="40%" height={15} />
                     ) : (
-                        <Typography 
-                            variant="caption" 
-                            component="div" 
-                            sx={{ fontWeight: 500, color: 'text.secondary' }}
-                        >
-                            {subValue}
-                        </Typography>
+                        React.isValidElement(subValue) 
+                            ? React.cloneElement(subValue, { style: { ...subValue.props.style, fontSize: '0.75rem' } })
+                            : (
+                                <Typography 
+                                    variant="caption" 
+                                    component="div" 
+                                    sx={{ fontWeight: 500, color: 'text.secondary', fontSize: '0.75rem' }}
+                                >
+                                    {subValue}
+                                </Typography>
+                            )
                     )}
                 </Box>
             )}
@@ -76,14 +86,12 @@ const KPICard = ({ title, value, subValue, isCurrency = true, isPercentage = fal
 };
 
 const DashboardKPISection = ({ metrics, isLoading }) => {
-    const row1 = [
+    // 2. Merged all items into a single array
+    const allMetrics = [
         { title: "Valor Total", value: metrics.totalPortfolioValue, isCurrency: true },
         { title: "Depósitos Líquidos", value: metrics.netDeposits, isCurrency: true },
         { title: "Capital Investido", value: metrics.investedCapital, isCurrency: true },
         { title: "Cash Disponível", value: metrics.cashBalance, isCurrency: true },
-    ];
-
-    const row2 = [
         { title: "Lucro / Prejuízo", value: metrics.totalPL, isCurrency: true },
         { title: "Retorno Total", value: metrics.totalReturnPct, isPercentage: true },
         { 
@@ -95,7 +103,7 @@ const DashboardKPISection = ({ metrics, isLoading }) => {
                     variant="caption"
                     sx={{
                         color: metrics.dailyChangePct >= 0 ? '#1b5e20' : '#b71c1c',
-                        fontSize: '0.8rem',
+                        fontSize: '0.75rem',
                         fontWeight: 600
                     }}
                 >
@@ -113,21 +121,17 @@ const DashboardKPISection = ({ metrics, isLoading }) => {
 
     return (
         <Box>
-            <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 2 }}>
+            <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 1.5 }}>
                 Resumo Geral
             </Typography>
             
-            <Grid container spacing={2} alignItems="stretch" sx={{ mb: 3 }}>
-                {row1.map((item, idx) => (
-                    <Grid item xs={12} sm={6} md={3} key={idx}>
-                        <KPICard {...item} isLoading={isLoading} />
-                    </Grid>
-                ))}
-            </Grid>
-
+            {/* 3. Single Grid Container: 
+               This ensures the gap between Row 1 and Row 2 is exactly 16px (spacing={2})
+               and prevents borders from overlapping.
+            */}
             <Grid container spacing={2} alignItems="stretch">
-                {row2.map((item, idx) => (
-                    <Grid item xs={12} sm={6} md={3} key={idx}>
+                {allMetrics.map((item, idx) => (
+                    <Grid item xs={6} sm={3} md={3} key={idx}>
                         <KPICard {...item} isLoading={isLoading} />
                     </Grid>
                 ))}
