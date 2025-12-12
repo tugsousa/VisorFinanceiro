@@ -131,7 +131,7 @@ const DashboardKPISection = ({ metrics, isLoading }) => {
             */}
             <Grid container spacing={2} alignItems="stretch">
                 {allMetrics.map((item, idx) => (
-                    <Grid item xs={6} sm={3} md={3} key={idx}>
+                    <Grid item xs={6} sm={3} md={3} key={idx} sx={{ mb: 1.5 }}>
                         <KPICard {...item} isLoading={isLoading} />
                     </Grid>
                 ))}
