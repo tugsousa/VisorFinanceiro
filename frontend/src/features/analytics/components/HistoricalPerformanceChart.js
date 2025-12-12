@@ -2,10 +2,9 @@ import React, { useMemo, useState, useRef, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Line } from 'react-chartjs-2';
 import { 
-    Box, Typography, CircularProgress, ToggleButton, 
-    ToggleButtonGroup, Switch, FormControlLabel, Tooltip, IconButton
+    Box, CircularProgress, ToggleButton, 
+    ToggleButtonGroup, Switch, FormControlLabel, Typography
 } from '@mui/material';
-import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import { apiFetchHistoricalChartData } from 'features/analytics/api/analyticsApi';
 import { formatCurrency } from '../../../lib/utils/formatUtils';
 import { usePortfolio } from '../../portfolio/PortfolioContext';
@@ -50,8 +49,10 @@ export default function HistoricalPerformanceChart() {
 
   const processedData = useMemo(() => {
     if (!rawData || rawData.length === 0) return [];
+    
     const now = new Date();
     now.setHours(23, 59, 59, 999); 
+    
     let startDate = new Date(rawData[0].date); 
 
     if (timeRange !== 'ALL') {
@@ -65,6 +66,7 @@ export default function HistoricalPerformanceChart() {
             case '5Y': tempStart.setFullYear(now.getFullYear() - 5); break;
             default: break;
         }
+        // Ensure start date isn't before the first available data point
         const firstDataDate = new Date(rawData[0].date);
         startDate = tempStart < firstDataDate ? firstDataDate : tempStart;
     }
@@ -72,10 +74,12 @@ export default function HistoricalPerformanceChart() {
     const filtered = rawData.filter(p => new Date(p.date) >= startDate);
     if (filtered.length === 0) return [];
 
+    // --- Benchmark Simulation Logic ---
     let benchmarkUnits = 0;
     const startPoint = filtered[0];
     const initialSpyPrice = startPoint.spy_price || 0;
-
+    
+    // Initial investment buys benchmark units
     if (initialSpyPrice > 0) {
         benchmarkUnits = startPoint.portfolio_value / initialSpyPrice;
     }
@@ -84,16 +88,21 @@ export default function HistoricalPerformanceChart() {
 
     return filtered.map((point, index) => {
         const currentSpyPrice = point.spy_price || 0;
+        
+        // Handle new deposits/withdrawals
         if (index > 0) {
             const netFlow = point.cumulative_cash_flow - previousCashFlow;
             if (netFlow !== 0 && currentSpyPrice > 0) {
+                // Buy/Sell benchmark units with the new cash flow
                 benchmarkUnits += (netFlow / currentSpyPrice);
             }
         }
         previousCashFlow = point.cumulative_cash_flow;
+
         const benchmarkValue = Math.max(0, benchmarkUnits) * currentSpyPrice;
-        
         const invested = point.cumulative_cash_flow;
+
+        // Calculate Percentages
         const portfolioReturnPct = invested > 0 ? ((point.portfolio_value - invested) / invested) * 100 : 0;
         const benchmarkReturnPct = invested > 0 ? ((benchmarkValue - invested) / invested) * 100 : 0;
 
@@ -108,9 +117,11 @@ export default function HistoricalPerformanceChart() {
 
   const chartData = useMemo(() => {
     if (!processedData || processedData.length === 0) return null;
+
     const datasets = [];
     const isPercent = viewMode === 'PERCENT';
 
+    // 1. Net Invested Line (Only for Value Mode)
     if (!isPercent) {
         datasets.push({
             label: 'Investimento Líquido',
@@ -125,6 +136,7 @@ export default function HistoricalPerformanceChart() {
         });
     }
 
+    // 2. Benchmark Line (Optional)
     if (showBenchmark) {
         datasets.push({
             label: isPercent ? 'S&P 500 (%)' : 'S&P 500 (Simulado)',
@@ -140,6 +152,7 @@ export default function HistoricalPerformanceChart() {
         });
     }
 
+    // 3. Main Portfolio Line
     datasets.push({
         label: isPercent ? 'Retorno (%)' : 'Valor da Carteira',
         data: processedData.map(p => isPercent ? p.portfolio_pct_view : p.portfolio_value),
@@ -207,18 +220,6 @@ export default function HistoricalPerformanceChart() {
     }
   };
 
-  const benchmarkInfo = (
-    <Box sx={{ p: 1 }}>
-        <Typography variant="subtitle2" fontWeight="bold">Benchmark S&P 500</Typography>
-        <Typography variant="body2" sx={{ mt: 1 }}>
-            Compara a tua performance com o índice S&P 500.
-        </Typography>
-        <Typography variant="body2" sx={{ mt: 1 }}>
-            O sistema simula que compraste S&P 500 no mesmo momento em que depositaste dinheiro na tua carteira.
-        </Typography>
-    </Box>
-  );
-
   if (isLoading) return <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}><CircularProgress /></Box>;
   if (!portfolioId || isError || !chartData) return null; 
 
@@ -229,22 +230,12 @@ export default function HistoricalPerformanceChart() {
             height: '100%', 
             display: 'flex', 
             flexDirection: 'column',
-            bgcolor: '#ffffff', // Force white background
+            bgcolor: '#ffffff',
             borderRadius: 3
         }}
     >
-      {/* TOOLBAR ROW */}
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2, flexWrap: 'wrap', gap: 2, flexShrink: 0 }}>
-        {/* Left: Title & Info */}
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <Typography variant="h6" sx={{ fontWeight: 600 }}>Evolução</Typography>
-            <Tooltip title={benchmarkInfo} arrow placement="right">
-                <IconButton size="small" sx={{ color: 'text.secondary' }}>
-                    <InfoOutlinedIcon fontSize="small" />
-                </IconButton>
-            </Tooltip>
-        </Box>
-
+      {/* TOOLBAR ROW - Now only contains controls, aligned right */}
+      <Box sx={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', mb: 1, flexWrap: 'wrap', gap: 2, flexShrink: 0 }}>
         {/* Right: Controls */}
         <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', flexWrap: 'wrap' }}>
             <ToggleButtonGroup
@@ -257,8 +248,6 @@ export default function HistoricalPerformanceChart() {
                 <ToggleButton value="VALUE">€</ToggleButton>
                 <ToggleButton value="PERCENT">%</ToggleButton>
             </ToggleButtonGroup>
-            
-            {/* REMOVED THE DIVIDER BOX HERE TO ELIMINATE THE GREY ARTIFACT */}
             
             <ToggleButtonGroup
                 value={timeRange}
@@ -283,7 +272,7 @@ export default function HistoricalPerformanceChart() {
             />
         </Box>
       </Box>
-      
+
       {/* Chart Canvas Container */}
       <Box sx={{ flexGrow: 1, minHeight: 0, position: 'relative', width: '100%', pb: 1 }}>
         <Line ref={chartRef} data={chartData} options={options} />

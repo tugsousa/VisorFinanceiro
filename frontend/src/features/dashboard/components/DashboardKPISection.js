@@ -112,7 +112,11 @@ const DashboardKPISection = ({ metrics, isLoading }) => {
     ];
 
     return (
-        <Box sx={{ mb: 4 }}>
+        <Box>
+            <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 2 }}>
+                Resumo Geral
+            </Typography>
+            
             <Grid container spacing={2} alignItems="stretch" sx={{ mb: 3 }}>
                 {row1.map((item, idx) => (
                     <Grid item xs={12} sm={6} md={3} key={idx}>
