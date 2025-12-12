@@ -5,7 +5,6 @@ import { DataGrid } from '@mui/x-data-grid';
 import { ptPT } from '@mui/x-data-grid/locales';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import AddCircleOutlineIcon from '@mui/icons-material/AddCircleOutline';
-
 import { apiFetchProcessedTransactions, apiDeleteTransactions } from 'features/portfolio/api/portfolioApi';
 import { useAuth } from '../../auth/AuthContext';
 import { usePortfolio } from '../PortfolioContext';
@@ -13,13 +12,11 @@ import { UI_TEXT } from '../../../constants';
 import { parseDateRobust } from '../../../lib/utils/dateUtils';
 import DeleteTransactionsModal from '../components/DeleteTransactionsModal';
 import TransactionAddModal from '../components/TransactionAddModal';
-
 const NoRowsOverlay = () => (
   <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', py: 4, color: 'text.secondary', fontSize: '0.9rem' }}>
     Não existem transações registadas.
   </Box>
 );
-
 const columns = [
     { field: 'date', headerName: 'Data', width: 110, type: 'date', valueGetter: (value) => parseDateRobust(value), valueFormatter: (value) => { if (!value) return ''; const day = String(value.getDate()).padStart(2, '0'); const month = String(value.getMonth() + 1).padStart(2, '0'); const year = value.getFullYear(); return `${day}-${month}-${year}`; } },
     { field: 'source', headerName: 'Origem', width: 90 },
@@ -34,14 +31,11 @@ const columns = [
     { field: 'exchange_rate', headerName: 'Câmbio', type: 'number', width: 100, align: 'right', headerAlign: 'right', valueFormatter: (value) => typeof value === 'number' ? value.toFixed(4) : '' },
     { field: 'amount_eur', headerName: 'Montante (€)', type: 'number', width: 130, align: 'right', headerAlign: 'right', valueFormatter: (value) => typeof value === 'number' ? value.toFixed(2) : '' },
 ];
-
 const TransactionsList = () => {
   const { token, refreshUserDataCheck, fetchCsrfToken } = useAuth();
   const { activePortfolio } = usePortfolio(); 
   const queryClient = useQueryClient();
-
   const portfolioId = activePortfolio?.id;
-
   const { 
     data: processedTransactions = [],
     isLoading: transactionsLoading, 
@@ -56,10 +50,8 @@ const TransactionsList = () => {
     },
     enabled: !!token && !!portfolioId, 
   });
-
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
-
   const deleteTransactionsMutation = useMutation({
     mutationFn: (criteria) => apiDeleteTransactions({ ...criteria, portfolio_id: portfolioId }), 
     onSuccess: () => {
@@ -71,21 +63,17 @@ const TransactionsList = () => {
       console.error("Error deleting transactions:", error);
     },
   });
-
   const handleDeleteClick = () => setIsDeleteModalOpen(true);
   const handleConfirmDelete = async (criteria) => {
   await fetchCsrfToken(true);
   deleteTransactionsMutation.mutate(criteria);
 };
   const handleCloseDeleteModal = () => { if (!deleteTransactionsMutation.isPending) setIsDeleteModalOpen(false); };
-
   const transactionsError = isTransactionsError ? (transactionsErrorObj?.message || UI_TEXT.errorLoadingData) : null;
   const deleteError = deleteTransactionsMutation.isError ? (deleteTransactionsMutation.error.response?.data?.error || deleteTransactionsMutation.error.message || "Falha a excluir as transações.") : null;
-
   if (transactionsError) {
     return <Alert severity="error" sx={{ my: 2, mx: { xs: 2, sm: 3 } }}>{transactionsError}</Alert>;
   }
-  
   if (!activePortfolio) {
       return (
         <Box sx={{ p: 4, textAlign: 'center' }}>
@@ -93,17 +81,18 @@ const TransactionsList = () => {
         </Box>
       );
   }
-
   return (
     <Box sx={{ p: { xs: 2, sm: 3 } }}>
         <Typography variant="h4" component="h1" gutterBottom>
           Transações: {activePortfolio.name}
         </Typography>
         <Box sx={{ mb: 2, display: 'flex', justifyContent: 'flex-end', gap: 2 }}>
-          <Button variant="contained" color="primary" startIcon={<AddCircleOutlineIcon />} onClick={() => setIsAddModalOpen(true)}>
+          {/* ADICIONADO: disableElevation para remover a sombra padrão */}
+          <Button variant="contained" color="primary" startIcon={<AddCircleOutlineIcon />} onClick={() => setIsAddModalOpen(true)} disableElevation>
             Adicionar Transação
           </Button>
-          <Button variant="contained" color="error" onClick={handleDeleteClick} disabled={deleteTransactionsMutation.isPending || transactionsLoading}>
+          {/* ADICIONADO: disableElevation para remover a sombra padrão */}
+          <Button variant="contained" color="error" onClick={handleDeleteClick} disabled={deleteTransactionsMutation.isPending || transactionsLoading} disableElevation>
             {deleteTransactionsMutation.isPending ? <CircularProgress size={24} color="inherit" /> : "Eliminar Transações"}
           </Button>
         </Box>
@@ -121,7 +110,6 @@ const TransactionsList = () => {
             slots={{ noRowsOverlay: NoRowsOverlay }}
           />
         </Paper>
-
       <DeleteTransactionsModal
         open={isDeleteModalOpen}
         onClose={handleCloseDeleteModal}
@@ -130,7 +118,6 @@ const TransactionsList = () => {
         isDeleting={deleteTransactionsMutation.isPending}
         deleteError={deleteError}
       />
-      
       {/* FIX: Use the imported variable name here */}
       <TransactionAddModal
         open={isAddModalOpen}
@@ -139,5 +126,4 @@ const TransactionsList = () => {
     </Box>
   );
 };
-
 export default TransactionsList;
