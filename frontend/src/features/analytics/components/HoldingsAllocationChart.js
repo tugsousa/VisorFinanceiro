@@ -9,20 +9,17 @@ ChartJS.register(ArcElement, Tooltip, Legend, Title);
 
 const generateColorPalette = (count) => {
   if (count === 0) return [];
-
   const palette = [];
   const baseHue = 145; 
   const saturation = 60;
   const startLightness = 25; 
   const endLightness = 85;   
-  
   const lightnessStep = (endLightness - startLightness) / (count > 1 ? count - 1 : 1);
 
   for (let i = 0; i < count; i++) {
     const lightness = startLightness + (i * lightnessStep);
     palette.push(`hsl(${baseHue}, ${saturation}%, ${lightness}%)`);
   }
-
   return palette;
 };
 
@@ -31,6 +28,7 @@ const wrapText = (ctx, text, maxWidth) => {
   const words = text.split(' ');
   const lines = [];
   let currentLine = words[0] || '';
+
   for (let i = 1; i < words.length; i++) {
     const word = words[i];
     const width = ctx.measureText(currentLine + " " + word).width;
@@ -52,7 +50,7 @@ const centerTextPlugin = {
   beforeDraw(chart, args, options) {
     const { ctx, data } = chart;
     const { totalValue, hoveredData } = options;
-
+    
     // --- FIX: Added safety check for 'data' ---
     if (!data || !data.labels || data.labels.length === 0) return;
     // ----------------------------------------
@@ -68,7 +66,7 @@ const centerTextPlugin = {
       const cutoutPercentage = parseFloat(chart.options.cutout) / 100;
       const holeDiameter = chartSize * cutoutPercentage;
       const maxWidth = holeDiameter * 0.8;
-      
+
       const labelLineHeight = 18;
       const valueFontSize = 18;
       const percentageFontSize = 13;
@@ -77,9 +75,11 @@ const centerTextPlugin = {
 
       ctx.font = `500 13px ${fontFamily}`;
       ctx.fillStyle = '#333';
+      
       const lines = wrapText(ctx, hoveredData.label, maxWidth);
       const labelBlockHeight = lines.length * labelLineHeight;
       const totalBlockHeight = labelBlockHeight + valueMarginTop + valueFontSize + percentageMarginTop + percentageFontSize;
+      
       let currentY = centerY - (totalBlockHeight / 2) + (labelLineHeight / 2);
 
       lines.forEach(line => {
@@ -96,6 +96,7 @@ const centerTextPlugin = {
       ctx.font = `16px ${fontFamily}`;
       ctx.fillStyle = '#666';
       ctx.fillText(hoveredData.percentage, centerX, currentY);
+
     } else {
       ctx.font = `500 13px ${fontFamily}`;
       ctx.fillStyle = '#666';
@@ -121,7 +122,7 @@ export default function HoldingsAllocationChart({ holdings }) {
     // --- DATA PROCESSING LOGIC MOVED HERE ---
     const chartData = useMemo(() => {
         if (!holdings || holdings.length === 0) return { labels: [], datasets: [] };
-
+        
         const isHistorical = holdings[0]?.isHistorical;
 
         // Process items based on the selected mode
@@ -144,7 +145,7 @@ export default function HoldingsAllocationChart({ holdings }) {
         const topN = 7;
         const top = chartItems.slice(0, topN);
         const other = chartItems.slice(topN);
-        
+
         const labels = top.map(item => item.name);
         const data = top.map(item => item.value);
 
@@ -241,9 +242,8 @@ export default function HoldingsAllocationChart({ holdings }) {
 
    return (
       <Box sx={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-        {/* Header with Title and Toggle */}
-        <Box sx={{ width: '100%', display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1, px: 1 }}>
-            <Typography variant="subtitle1" fontWeight="600" color="text.secondary">Alocação</Typography>
+        {/* Header with Toggle Only (Title removed) */}
+        <Box sx={{ width: '100%', display: 'flex', justifyContent: 'flex-end', alignItems: 'center', mb: 1, px: 1 }}>
             <FormControlLabel
                 control={
                     <Switch
@@ -261,7 +261,7 @@ export default function HoldingsAllocationChart({ holdings }) {
                 labelPlacement="start"
             />
         </Box>
-
+        
         <div 
             onMouseLeave={() => setHoveredIndex(null)}
             style={{ position: 'relative', width: '100%', flexGrow: 1, minHeight: '280px' }}
