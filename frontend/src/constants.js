@@ -36,9 +36,9 @@
     export const MONTH_NAMES_CHART = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
     export const UI_TEXT = {
-      errorLoadingData: "Error loading data. Please try again.",
-      userNotAuthenticated: "User not authenticated. Please sign in.",
-      noDataAvailable: "No data available.",
+      errorLoadingData: "Erro ao carregar os dados. Por favor, tente novamente.",
+      userNotAuthenticated: "Utilizador não autenticado. Por favor, inicie sessão.",
+      noDataAvailable: "Sem dados disponíveis.",
     };
 
     export const ALLOWED_FILE_TYPES = ['text/csv', 'application/vnd.ms-excel'];

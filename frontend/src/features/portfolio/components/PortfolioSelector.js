@@ -42,9 +42,15 @@ export default function PortfolioSelector() {
             await createPortfolio(newName, newDesc);
             setNewName('');
             setNewDesc('');
-            setView('list'); // Go back to list after create
+            setView('list');
         } catch (err) {
-            setError(err.response?.data?.error || "Erro ao criar.");
+            const backendError = err.response?.data?.error; 
+
+            if (backendError && backendError.includes("Atingiu o limite máximo")) {
+                setError(backendError); // Exibir a mensagem específica do limite
+            } else {
+                setError(backendError || "Erro ao criar. O nome deve ser único.");
+            }
         } finally {
             setIsProcessing(false);
         }
