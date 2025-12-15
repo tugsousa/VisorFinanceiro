@@ -98,6 +98,7 @@ func (s *uploadServiceImpl) GetDividendMetrics(userID int64, portfolioID int64) 
 
 	// --- LÓGICA DE PROJEÇÃO FUTURA (HOLDINGS BASED) ---
 	monthlyProjection := make([]float64, 12) // [0=Janeiro, 1=Fevereiro...]
+	breakdownMap := make(map[int][]models.DividendContributor)
 	var projectedAnnualTotal float64 = 0
 
 	// Obter tickers mapeados para chamar a API
@@ -158,6 +159,15 @@ func (s *uploadServiceImpl) GetDividendMetrics(userID int64, portfolioID int64) 
 				if monthIndex >= 0 && monthIndex < 12 {
 					monthlyProjection[monthIndex] += totalDivEUR
 					projectedAnnualTotal += totalDivEUR
+					displayName := holding.ProductName
+					if displayName == "" {
+						displayName = ticker
+					}
+
+					breakdownMap[monthIndex] = append(breakdownMap[monthIndex], models.DividendContributor{
+						Ticker: displayName,
+						Amount: totalDivEUR,
+					})
 				}
 			}
 			mu.Unlock()
@@ -224,20 +234,19 @@ func (s *uploadServiceImpl) GetDividendMetrics(userID int64, portfolioID int64) 
 	}
 
 	result := &models.DividendMetricsResult{
-		TotalDividendsTTM: utils.RoundFloat(totalDividendsTTM, 2),
-		PortfolioYield:    utils.RoundFloat(portfolioYield, 2), // Forward
-		YieldOnCost:       utils.RoundFloat(yieldOnCost, 2),    // Forward
-		ProjectionByMonth: monthlyProjection,
-		LastUpdated:       now.Format(time.RFC3339),
-		HasData:           len(holdings) > 0,
-		YearlyYields:      yearlyYields,
+		TotalDividendsTTM:   utils.RoundFloat(totalDividendsTTM, 2),
+		PortfolioYield:      utils.RoundFloat(portfolioYield, 2),
+		YieldOnCost:         utils.RoundFloat(yieldOnCost, 2),
+		ProjectionByMonth:   monthlyProjection,
+		ProjectionBreakdown: breakdownMap,
+		LastUpdated:         now.Format(time.RFC3339),
+		HasData:             len(holdings) > 0,
+		YearlyYields:        yearlyYields,
 	}
 
 	s.reportCache.Set(cacheKey, result, DefaultCacheExpiration)
 	return result, nil
 }
-
-// ... (Rest of existing methods: ProcessUpload, RebuildUserHistory, etc.) ...
 
 func (s *uploadServiceImpl) ProcessUpload(fileReader io.Reader, userID int64, portfolioID int64, source, filename string, filesize int64) (*UploadResult, error) {
 	overallStartTime := time.Now()

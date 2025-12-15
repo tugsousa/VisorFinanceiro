@@ -6,35 +6,45 @@ import { formatCurrency } from '../../../lib/utils/formatUtils';
 
 const FutureProjectionChart = ({ metricsData, isLoading }) => {
     
-    // O backend envia em snake_case (has_data, projection_by_month)
     const hasData = metricsData?.has_data === true;
-    // O backend envia sempre [Jan, Fev, ... Dez] (índices 0 a 11)
     const rawProjection = metricsData?.projection_by_month || [];
+    // Receber o breakdown
+    const rawBreakdown = metricsData?.projection_breakdown || {};
 
     const chartData = useMemo(() => {
-        // Obter o índice do mês atual (0 = Janeiro, 11 = Dezembro)
         const currentMonthIndex = new Date().getMonth();
 
-        // 1. Rodar as Labels (Nomes dos Meses)
-        // Ex: Se estamos em Dezembro, queremos [Dez, Jan, Fev...]
+        // 1. Rodar Labels
         const rotatedLabels = [
             ...MONTH_NAMES_CHART.slice(currentMonthIndex), 
             ...MONTH_NAMES_CHART.slice(0, currentMonthIndex)
         ];
         
-        // 2. Rodar os Dados (Valores)
-        // O rawProjection vem fixo [Jan, Fev...]. Temos de o rodar para alinhar com as labels.
+        // 2. Rodar Dados (Totais)
         const rotatedData = [
             ...rawProjection.slice(currentMonthIndex),
             ...rawProjection.slice(0, currentMonthIndex)
         ];
 
-        // Garantir que mostramos apenas os próximos 12 meses
+        // 3. Rodar Breakdown (Detalhes) - É um mapa/objeto, precisamos converter para array ordenado
+        // Criar array [0..11] com os dados do mapa
+        const breakdownArray = new Array(12).fill([]).map((_, i) => rawBreakdown[i] || []);
+        
+        const rotatedBreakdown = [
+            ...breakdownArray.slice(currentMonthIndex),
+            ...breakdownArray.slice(0, currentMonthIndex)
+        ];
+
+        // Cortar para 12 meses
         const finalLabels = rotatedLabels.slice(0, 12);
         const finalData = rotatedData.slice(0, 12);
+        const finalBreakdown = rotatedBreakdown.slice(0, 12);
 
         return {
             labels: finalLabels,
+            // Passamos o breakdown aqui dentro, o chartjs ignora propriedades extra no dataset,
+            // mas podemos aceder a elas na tooltip via 'chart.data.datasets[0].breakdown'
+            breakdown: finalBreakdown, 
             datasets: [{
                 label: 'Dividendo Esperado (€)',
                 data: finalData,
@@ -45,7 +55,7 @@ const FutureProjectionChart = ({ metricsData, isLoading }) => {
                 hoverBorderWidth: 2,
             }]
         };
-    }, [rawProjection]);
+    }, [rawProjection, rawBreakdown]);
 
     const chartOptions = {
         responsive: true, 
@@ -60,8 +70,28 @@ const FutureProjectionChart = ({ metricsData, isLoading }) => {
             },
             tooltip: {
                 callbacks: {
-                    label: (ctx) => `${ctx.dataset.label}: ${formatCurrency(ctx.raw || 0)}`
-                }
+                    label: (ctx) => `Total: ${formatCurrency(ctx.raw || 0)}`,
+                    // AfterBody para mostrar a lista
+                    afterBody: (tooltipItems) => {
+                        const index = tooltipItems[0].dataIndex;
+                        // Aceder aos dados de breakdown que guardámos no useMemo
+                        const breakdownData = chartData.breakdown[index];
+                        
+                        if (!breakdownData || breakdownData.length === 0) return [];
+
+                        // Ordenar por valor decrescente para mostrar os maiores pagadores primeiro
+                        const sorted = [...breakdownData].sort((a, b) => b.amount - a.amount);
+
+                        // Formatar linhas
+                        return sorted.map(item => 
+                            `• ${item.ticker}: ${formatCurrency(item.amount)}`
+                        );
+                    }
+                },
+                // Ajustar estilo da tooltip para acomodar várias linhas
+                bodyFont: { size: 12 },
+                padding: 10,
+                displayColors: false, 
             }
         },
         scales: {
