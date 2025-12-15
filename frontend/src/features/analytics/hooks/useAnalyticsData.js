@@ -6,6 +6,7 @@ import {
     apiFetchDividendTaxSummary,
     apiFetchDividendTransactions,
     apiFetchFees,
+    apiFetchDividendMetrics, 
 } from 'features/analytics/api/analyticsApi';
 import { usePortfolio } from '../../portfolio/PortfolioContext';
 
@@ -51,11 +52,18 @@ export const useAnalyticsData = (token, types = ['all']) => {
                 enabled: !!token && !!portfolioId && shouldFetch('fees'),
                 staleTime: 1000 * 60 * 5,
                 select: (res) => res.data || []
+            },
+            {
+                queryKey: ['dividendMetrics', token, portfolioId],
+                queryFn: () => apiFetchDividendMetrics(portfolioId),
+                enabled: !!token && !!portfolioId && shouldFetch('metrics'),
+                staleTime: 1000 * 60 * 5,
+                select: (res) => res.data || {}
             }
         ]
     });
 
-    const [stockSalesQ, optionSalesQ, dividendSummaryQ, dividendTxsQ, feesQ] = results;
+    const [stockSalesQ, optionSalesQ, dividendSummaryQ, dividendTxsQ, feesQ, dividendMetricsQ] = results;
 
     return {
         stockSalesData: stockSalesQ.data,
@@ -63,6 +71,9 @@ export const useAnalyticsData = (token, types = ['all']) => {
         dividendSummaryData: dividendSummaryQ.data,
         dividendTransactionsData: dividendTxsQ.data,
         feesData: feesQ.data,
+
+        dividendMetricsData: dividendMetricsQ.data,
+        
         isLoading: results.some(q => q.isLoading && q.fetchStatus !== 'idle'),
         isError: results.some(q => q.isError)
     };

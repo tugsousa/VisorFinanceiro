@@ -27,3 +27,6 @@ export const apiFetchFees = (portfolioId) =>
 
 export const apiFetchHistoricalChartData = (portfolioId) => 
     apiClient.get('/api/history/chart', { params: { portfolio_id: portfolioId } });
+
+export const apiFetchDividendMetrics = (portfolioId) => 
+    apiClient.get('/api/dividend-metrics', { params: { portfolio_id: portfolioId } });
