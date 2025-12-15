@@ -22,7 +22,7 @@ ChartJS.register(
 export default function HistoricalPerformanceChart() {
   const chartRef = useRef(null);
   const [timeRange, setTimeRange] = useState('ALL');
-  const [viewMode, setViewMode] = useState('VALUE');
+  const [viewMode, setViewMode] = useState('VALUE'); // 'VALUE' ou 'PERCENT'
   const [showBenchmark, setShowBenchmark] = useState(false);
   const [chartGradient, setChartGradient] = useState(null);
   const { activePortfolio } = usePortfolio();
@@ -38,6 +38,7 @@ export default function HistoricalPerformanceChart() {
     enabled: !!portfolioId, 
   });
 
+  // Configurar o gradiente do gráfico
   useEffect(() => {
     const chart = chartRef.current;
     if (!chart) return;
@@ -48,9 +49,11 @@ export default function HistoricalPerformanceChart() {
     setChartGradient(gradient);
   }, [rawData, viewMode]);
 
+  // Processamento dos dados
   const processedData = useMemo(() => {
     if (!rawData || rawData.length === 0) return [];
     
+    // 1. Determinar a data de início baseada no filtro
     const now = new Date();
     now.setHours(23, 59, 59, 999); 
     
@@ -67,36 +70,105 @@ export default function HistoricalPerformanceChart() {
             case '5Y': tempStart.setFullYear(now.getFullYear() - 5); break;
             default: break;
         }
-        // Ensure start date isn't before the first available data point
+        // Garantir que a data não é anterior ao primeiro dado disponível
         const firstDataDate = new Date(rawData[0].date);
         startDate = tempStart < firstDataDate ? firstDataDate : tempStart;
     }
 
-    // Filtrar dados pela data
+    // Filtrar array
     const filtered = rawData.filter(p => new Date(p.date) >= startDate);
     if (filtered.length === 0) return [];
 
-    return filtered.map((point) => {
-        // --- CORREÇÃO: USAR DADOS DO BACKEND ---
-        // Em vez de recalcular o benchmark aqui, usamos o valor que vem da API (point.benchmark_value)
-        // O backend agora tem a lógica robusta de "dinheiro pendente".
-        
-        const invested = point.cumulative_cash_flow;
-        const benchmarkValue = point.benchmark_value || 0; // Valor direto do backend
-        const portfolioValue = point.portfolio_value || 0;
+    // --- LÓGICA CONDICIONAL ---
 
-        // Calcular as percentagens para o modo '%'
-        // Nota: Se invested for 0 ou muito baixo, evita divisão por zero
-        const portfolioReturnPct = invested > 1 ? ((portfolioValue - invested) / invested) * 100 : 0;
-        const benchmarkReturnPct = invested > 1 ? ((benchmarkValue - invested) / invested) * 100 : 0;
+    // CASO 1: "ALL" -> Usa os dados originais do Backend (Acumulados desde o início)
+    if (timeRange === 'ALL') {
+        return filtered.map(point => {
+            const invested = point.cumulative_cash_flow;
+            const portfolioValue = point.portfolio_value || 0;
+            const benchmarkValue = point.benchmark_value || 0;
+
+            // Cálculo de percentagem baseado no Total Investido (ROI total)
+            const portfolioReturnPct = invested > 1 ? ((portfolioValue - invested) / invested) * 100 : 0;
+            const benchmarkReturnPct = invested > 1 ? ((benchmarkValue - invested) / invested) * 100 : 0;
+
+            return {
+                ...point,
+                benchmark_value_view: benchmarkValue, // Valor direto do backend
+                portfolio_pct_view: portfolioReturnPct,
+                benchmark_pct_view: benchmarkReturnPct
+            };
+        });
+    }
+
+    // CASO 2: FILTROS DE TEMPO -> Simulação Dinâmica com Fluxos de Caixa
+    
+    // Inicialização no dia 0 do período selecionado
+    const startPoint = filtered[0];
+    const startPortfolioValue = startPoint.portfolio_value || 0;
+    const startSpyPrice = startPoint.spy_price || 0;
+    
+    // Variáveis de estado para a simulação
+    let currentSimulatedUnits = 0;
+    let lastCashFlow = startPoint.cumulative_cash_flow || 0;
+
+    // Compra inicial: "Vendemos" o portfólio atual e "compramos" SPY
+    if (startSpyPrice > 0) {
+        currentSimulatedUnits = startPortfolioValue / startSpyPrice;
+    }
+
+    return filtered.map((point, index) => {
+        const currentPortfolioValue = point.portfolio_value || 0;
+        const currentSpyPrice = point.spy_price || 0;
+        const currentCashFlow = point.cumulative_cash_flow || 0;
+
+        // Se não for o primeiro ponto, verificar se houve depósitos/levantamentos
+        if (index > 0 && currentSpyPrice > 0) {
+            const cashFlowDelta = currentCashFlow - lastCashFlow;
+            
+            // Se houve fluxo de caixa, ajustamos a posição simulada no SPY
+            if (cashFlowDelta !== 0) {
+                // Se cashFlowDelta > 0 (Depósito), compramos mais unidades
+                // Se cashFlowDelta < 0 (Levantamento), vendemos unidades
+                const unitsToTrade = cashFlowDelta / currentSpyPrice;
+                currentSimulatedUnits += unitsToTrade;
+            }
+        }
+
+        // Atualizar referência de cashflow para o próximo loop
+        lastCashFlow = currentCashFlow;
+
+        // 1. Calcular o Valor Simulado do Benchmark
+        let benchmarkValueRebased = 0;
+        if (currentSpyPrice > 0) {
+            benchmarkValueRebased = currentSimulatedUnits * currentSpyPrice;
+        }
+
+        // 2. Calcular Percentagens Relativas (Normalizadas a 0% no início)
+        // Nota: Esta é uma simplificação visual (Simple Return). 
+        // Para rigor absoluto com fluxos de caixa, seria necessário TWR, mas para o gráfico 
+        // interativo, mostrar a evolução do valor relativo ao ponto de partida é o padrão esperado.
+        
+        let portfolioReturnPct = 0;
+        if (startPortfolioValue > 0) {
+            // Ajuste simples para não quebrar o gráfico com spikes de depósitos no modo %
+            // O ideal para modo % com depósitos é TWR, mas manteremos consistência visual com o modo Value
+            portfolioReturnPct = ((currentPortfolioValue - startPortfolioValue) / startPortfolioValue) * 100;
+        }
+
+        let benchmarkReturnPct = 0;
+        if (startPortfolioValue > 0) {
+            benchmarkReturnPct = ((benchmarkValueRebased - startPortfolioValue) / startPortfolioValue) * 100;
+        }
 
         return {
             ...point,
-            benchmark_value_view: benchmarkValue,
+            benchmark_value_view: benchmarkValueRebased,
             portfolio_pct_view: portfolioReturnPct,
             benchmark_pct_view: benchmarkReturnPct
         };
     });
+
   }, [rawData, timeRange]);
 
   const chartData = useMemo(() => {
@@ -105,7 +177,7 @@ export default function HistoricalPerformanceChart() {
     const datasets = [];
     const isPercent = viewMode === 'PERCENT';
 
-    // 1. Net Invested Line (Only for Value Mode)
+    // 1. Net Invested Line (Apenas para modo Valor e se for ALL)
     if (!isPercent) {
         datasets.push({
             label: 'Investimento Líquido',
@@ -116,11 +188,14 @@ export default function HistoricalPerformanceChart() {
             pointRadius: 0,
             pointHoverRadius: 0,
             fill: false,
-            order: 2
+            order: 2,
+            // Esconder se não for 'ALL' para não confundir a escala, 
+            // pois o Net Invested é cumulativo desde sempre
+            hidden: timeRange !== 'ALL' 
         });
     }
 
-    // 2. Benchmark Line (Optional)
+    // 2. Benchmark Line (S&P 500)
     if (showBenchmark) {
         datasets.push({
             label: isPercent ? 'S&P 500 (%)' : 'S&P 500 (Simulado)',
@@ -154,7 +229,7 @@ export default function HistoricalPerformanceChart() {
         labels: processedData.map(p => p.date),
         datasets: datasets
     };
-  }, [processedData, chartGradient, showBenchmark, viewMode]);
+  }, [processedData, chartGradient, showBenchmark, viewMode, timeRange]);
 
   const options = {
     responsive: true,
@@ -206,7 +281,7 @@ export default function HistoricalPerformanceChart() {
         }
       },
       y: {
-        beginAtZero: false,
+        beginAtZero: false, 
         grid: { color: '#f0f0f0' },
         ticks: { 
             callback: (value) => {
