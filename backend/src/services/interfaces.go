@@ -4,6 +4,7 @@ package services
 import (
 	"errors"
 	"io"
+	"time" // Adicionado para time.Month
 
 	"github.com/username/taxfolio/backend/src/models"
 )
@@ -25,7 +26,6 @@ var (
 )
 
 // UploadService defines the interface for the core upload processing logic.
-// UPDATED: All methods now require portfolioID.
 type UploadService interface {
 	ProcessUpload(fileReader io.Reader, userID int64, portfolioID int64, source string, filename string, filesize int64) (*UploadResult, error)
 	GetLatestUploadResult(userID int64, portfolioID int64) (*UploadResult, error)
@@ -53,8 +53,11 @@ type PriceInfo struct {
 
 type PriceMap map[string]float64
 
+// PriceService interface atualizada
 type PriceService interface {
 	GetCurrentPrices(isins []string) (map[string]PriceInfo, error)
 	GetHistoricalPrices(ticker string) (PriceMap, string, error)
 	EnsureBenchmarkData() error
+	// NOVO MÉTODO ADICIONADO AQUI
+	GetLastYearDividends(ticker string) (map[time.Month]float64, string, error)
 }

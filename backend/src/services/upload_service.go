@@ -23,17 +23,17 @@ import (
 )
 
 const (
-	ckAllStockSales        = "res_all_stock_sales_user_%d_pf_%d"
-	ckStockHoldingsByYear  = "res_stock_holdings_by_year_user_%d_pf_%d"
-	ckAllFeeDetails        = "res_all_fee_details_user_%d_pf_%d"
-	ckLatestUploadResult   = "agg_latest_upload_result_user_%d_pf_%d"
-	ckDividendSummary      = "agg_dividend_summary_user_%d_pf_%d"
-	ckDividendMetrics      = "agg_dividend_metrics_user_%d_pf_%d"
+	ckAllStockSales       = "res_all_stock_sales_user_%d_pf_%d"
+	ckStockHoldingsByYear = "res_stock_holdings_by_year_user_%d_pf_%d"
+	ckAllFeeDetails       = "res_all_fee_details_user_%d_pf_%d"
+	ckLatestUploadResult  = "agg_latest_upload_result_user_%d_pf_%d"
+	ckDividendSummary     = "agg_dividend_summary_user_%d_pf_%d"
+	// ckDividendMetrics      = "agg_dividend_metrics_user_%d_pf_%d" // Deprecated key
 	DefaultCacheExpiration = 15 * time.Minute
 	CacheCleanupInterval   = 30 * time.Minute
 )
 
-// Helper struct for aggregating purchase lots by ISIN, internal to the service.
+// Helper struct for aggregating purchase lots by ISIN
 type aggregatedHolding struct {
 	ISIN              string
 	ProductName       string
@@ -74,95 +74,170 @@ func NewUploadService(
 	}
 }
 
+// GetDividendMetrics calcula métricas baseadas na carteira ATUAL e histórico real.
 func (s *uploadServiceImpl) GetDividendMetrics(userID int64, portfolioID int64) (*models.DividendMetricsResult, error) {
-	cacheKey := fmt.Sprintf(ckDividendMetrics, userID, portfolioID)
+	// Nova chave de cache para garantir que os dados antigos são invalidados
+	cacheKey := fmt.Sprintf("agg_dividend_metrics_v3_holdings_based_user_%d_pf_%d", userID, portfolioID)
 	if cached, found := s.reportCache.Get(cacheKey); found {
 		return cached.(*models.DividendMetricsResult), nil
 	}
 
-	// 1. Fetch necessary data (Holdings and Transactions)
+	// 1. Obter Holdings Atuais (Quantidade de ações HOJE)
 	holdings, err := s.GetCurrentHoldingsWithValue(userID, portfolioID)
 	if err != nil {
 		return nil, err
 	}
-	allTxs, err := s.GetDividendTransactions(userID, portfolioID) // Reuses DividendTransactions fetcher
+
+	// 2. Obter Transações (apenas para histórico de TTM e Yield anual)
+	allTxs, err := s.GetDividendTransactions(userID, portfolioID)
 	if err != nil {
 		return nil, err
 	}
 
-	// Filter dividend transactions for the last 12 months (TTM)
-	// We use the date from the holdings fetch for "current" time.
 	now := time.Now()
-	twelveMonthsAgo := now.AddDate(-1, 0, 0)
 
-	ttmDividendsByISIN := make(map[string]float64)
-	var totalCostBasis float64
-	var totalMarketValue float64
+	// --- LÓGICA DE PROJEÇÃO FUTURA (HOLDINGS BASED) ---
+	monthlyProjection := make([]float64, 12) // [0=Janeiro, 1=Fevereiro...]
+	var projectedAnnualTotal float64 = 0
 
-	// 2. Aggregate TTM dividends, total cost, and market value
+	// Obter tickers mapeados para chamar a API
+	isinList := make([]string, len(holdings))
+	for i, h := range holdings {
+		isinList[i] = h.ISIN
+	}
+	mappings, _ := model.GetMappingsByISINs(database.DB, isinList)
+
+	// Mutex para proteger a escrita no monthlyProjection durante a concorrência
+	var mu sync.Mutex
+	var wg sync.WaitGroup
+
+	// Usar semáforo para limitar a concorrência e não "bombardear" a Yahoo
+	sem := make(chan struct{}, 5) // Max 5 pedidos simultâneos
+
 	for _, h := range holdings {
-		totalCostBasis += h.TotalCostBasisEUR // Total Cost Basis of current holdings
-		totalMarketValue += h.MarketValueEUR  // Total Market Value of current holdings
+		if h.Quantity <= 0 {
+			continue
+		}
 
-		// Find TTM dividend for this ISIN
-		var ttmDiv float64
-		for _, tx := range allTxs {
-			// Date is DD-MM-YYYY format
-			txTime, e := time.Parse("02-01-2006", tx.Date)
-			if e != nil || txTime.Before(twelveMonthsAgo) || strings.ToUpper(tx.ISIN) != strings.ToUpper(h.ISIN) {
-				continue
+		mapEntry, ok := mappings[h.ISIN]
+		if !ok || mapEntry.TickerSymbol == "" {
+			continue
+		}
+
+		wg.Add(1)
+		go func(holding models.HoldingWithValue, ticker string) {
+			defer wg.Done()
+			sem <- struct{}{}        // Adquire
+			defer func() { <-sem }() // Liberta
+
+			pastDividends, currency, err := s.priceService.GetLastYearDividends(ticker)
+			if err != nil {
+				logger.L.Warn("Failed to get dividend history", "ticker", ticker, "error", err)
+				return
 			}
-			// Only count Gross Dividends (excluding TAX)
+
+			// Taxa de câmbio
+			exchangeRate := 1.0
+			if currency != "EUR" && currency != "" {
+				rate, err := processors.GetExchangeRate(currency, now)
+				if err == nil && rate > 0 {
+					exchangeRate = rate
+				}
+			}
+
+			mu.Lock()
+			for month, amountPerShare := range pastDividends {
+				monthIndex := int(month) - 1 // 0-11
+
+				totalDivNative := amountPerShare * float64(holding.Quantity)
+				totalDivEUR := totalDivNative
+				if exchangeRate != 1.0 && exchangeRate > 0 {
+					totalDivEUR = totalDivNative / exchangeRate
+				}
+
+				if monthIndex >= 0 && monthIndex < 12 {
+					monthlyProjection[monthIndex] += totalDivEUR
+					projectedAnnualTotal += totalDivEUR
+				}
+			}
+			mu.Unlock()
+		}(h, mapEntry.TickerSymbol)
+	}
+
+	wg.Wait()
+
+	// --- CÁLCULOS HISTÓRICOS (TTM Real) ---
+	twelveMonthsAgo := now.AddDate(-1, 0, 0)
+	var totalDividendsTTM float64
+	var totalCostBasis float64 = 0
+	var totalMarketValue float64 = 0
+
+	for _, h := range holdings {
+		totalCostBasis += h.TotalCostBasisEUR
+		totalMarketValue += h.MarketValueEUR
+	}
+
+	for _, tx := range allTxs {
+		txTime, e := time.Parse("02-01-2006", tx.Date)
+		if e == nil && !txTime.Before(twelveMonthsAgo) {
 			if tx.TransactionType == "DIVIDEND" && tx.TransactionSubType != "TAX" {
-				ttmDiv += tx.AmountEUR
+				totalDividendsTTM += tx.AmountEUR
 			}
 		}
-		ttmDividendsByISIN[h.ISIN] = ttmDiv
 	}
 
-	// 3. Calculate Global Metrics
-	var totalDividendsTTM float64 // Sum TTM dividends for all holdings
-	for _, div := range ttmDividendsByISIN {
-		totalDividendsTTM += div
-	}
-
+	// Yields Baseados na PROJEÇÃO (Forward Yield)
 	portfolioYield := 0.0
 	if totalMarketValue > 0 {
-		portfolioYield = (totalDividendsTTM / totalMarketValue) * 100
+		portfolioYield = (projectedAnnualTotal / totalMarketValue) * 100
 	}
 
 	yieldOnCost := 0.0
 	if totalCostBasis > 0 {
-		yieldOnCost = (totalDividendsTTM / totalCostBasis) * 100
+		yieldOnCost = (projectedAnnualTotal / totalCostBasis) * 100
 	}
 
-	// 4. Projection (Mocked as we lack future data, but logic is sound)
-	// Simple mock: Distribute total TTM dividends evenly over the next 12 months
-	projectionByMonth := make([]float64, 12)
-	monthlyDiv := totalDividendsTTM / 12
-	for i := 0; i < 12; i++ {
-		// Mock a quarterly spike on months 3, 6, 9, 12 for visual interest, while keeping the total correct
-		if (i+1)%3 == 0 {
-			projectionByMonth[i] = monthlyDiv * 3
-		} else {
-			// Distribute remaining amount evenly if TTM is not perfectly divisible
-			projectionByMonth[i] = 0.001 // Ensure it's not exactly zero for the chart
+	// Yields Históricos por Ano
+	dividendsByYear := make(map[string]float64)
+	for _, tx := range allTxs {
+		if tx.TransactionType == "DIVIDEND" && tx.TransactionSubType != "TAX" {
+			if len(tx.Date) >= 10 {
+				year := tx.Date[6:10]
+				dividendsByYear[year] += tx.AmountEUR
+			}
 		}
 	}
 
-	// Final Result Construction
+	yearlyYields := make(map[string]float64)
+	rows, err := database.DB.Query(`SELECT SUBSTR(date, 1, 4) as year, AVG(total_equity) FROM portfolio_snapshots WHERE user_id = ? AND portfolio_id = ? GROUP BY year`, userID, portfolioID)
+	if err == nil {
+		defer rows.Close()
+		for rows.Next() {
+			var year string
+			var avgEquity float64
+			if err := rows.Scan(&year, &avgEquity); err == nil {
+				if totalDiv, ok := dividendsByYear[year]; ok && avgEquity > 0 {
+					yearlyYields[year] = (totalDiv / avgEquity) * 100
+				}
+			}
+		}
+	}
+
 	result := &models.DividendMetricsResult{
 		TotalDividendsTTM: utils.RoundFloat(totalDividendsTTM, 2),
-		PortfolioYield:    utils.RoundFloat(portfolioYield, 2),
-		YieldOnCost:       utils.RoundFloat(yieldOnCost, 2),
-		ProjectionByMonth: projectionByMonth,
+		PortfolioYield:    utils.RoundFloat(portfolioYield, 2), // Forward
+		YieldOnCost:       utils.RoundFloat(yieldOnCost, 2),    // Forward
+		ProjectionByMonth: monthlyProjection,
 		LastUpdated:       now.Format(time.RFC3339),
-		HasData:           len(holdings) > 0 || len(allTxs) > 0,
+		HasData:           len(holdings) > 0,
+		YearlyYields:      yearlyYields,
 	}
 
 	s.reportCache.Set(cacheKey, result, DefaultCacheExpiration)
 	return result, nil
 }
+
+// ... (Rest of existing methods: ProcessUpload, RebuildUserHistory, etc.) ...
 
 func (s *uploadServiceImpl) ProcessUpload(fileReader io.Reader, userID int64, portfolioID int64, source, filename string, filesize int64) (*UploadResult, error) {
 	overallStartTime := time.Now()
@@ -301,10 +376,8 @@ func (s *uploadServiceImpl) RebuildUserHistory(userID int64, portfolioID int64) 
 	}
 	mappings, _ := model.GetMappingsByISINs(database.DB, isinList)
 	var wg sync.WaitGroup
-	// CORRECTED: Remove "services." prefix because we are inside package services
 	tickerPrices := make(map[string]PriceMap)
 	tickerCurrencies := make(map[string]string)
-	// CORRECTED: Remove "services." prefix
 	currencyRates := make(map[string]PriceMap)
 	var dataMu sync.Mutex
 	for isin := range uniqueISINs {
@@ -500,7 +573,6 @@ func (s *uploadServiceImpl) GetCurrentHoldingsWithValue(userID int64, portfolioI
 		logger.L.Warn("Could not fetch some or all current prices", "error", err)
 	}
 
-	// NEW: Fetch Mappings to populate Sector, Industry, etc.
 	mappings, _ := model.GetMappingsByISINs(database.DB, uniqueISINs)
 
 	response := []models.HoldingWithValue{}
@@ -515,7 +587,6 @@ func (s *uploadServiceImpl) GetCurrentHoldingsWithValue(userID int64, portfolioI
 			marketValue = priceInfo.Price * float64(holding.TotalQuantity)
 		}
 
-		// Enrich with Metadata
 		var sector, industry, assetType string
 		if m, ok := mappings[isin]; ok {
 			sector = m.Sector.String
@@ -532,11 +603,10 @@ func (s *uploadServiceImpl) GetCurrentHoldingsWithValue(userID int64, portfolioI
 			CurrentPriceEUR:   currentPrice,
 			MarketValueEUR:    marketValue,
 			Status:            status,
-			// New Fields populated
-			Sector:      sector,
-			Industry:    industry,
-			AssetType:   assetType,
-			CountryCode: countryCode,
+			Sector:            sector,
+			Industry:          industry,
+			AssetType:         assetType,
+			CountryCode:       countryCode,
 		})
 	}
 	return response, nil
@@ -610,6 +680,8 @@ func (s *uploadServiceImpl) InvalidateUserCache(userID int64, portfolioID int64)
 		fmt.Sprintf(ckLatestUploadResult, userID, portfolioID),
 		fmt.Sprintf(ckDividendSummary, userID, portfolioID),
 		fmt.Sprintf(ckAllFeeDetails, userID, portfolioID),
+		// Também invalidar a métrica de dividendos
+		fmt.Sprintf("agg_dividend_metrics_v3_holdings_based_user_%d_pf_%d", userID, portfolioID),
 	}
 	for _, key := range keysToDelete {
 		s.reportCache.Delete(key)
