@@ -359,9 +359,11 @@ func (s *uploadServiceImpl) ProcessUpload(fileReader io.Reader, userID int64, po
 
 func (s *uploadServiceImpl) RebuildUserHistory(userID int64, portfolioID int64) error {
 	logger.L.Info("Starting history rebuild (True Currency Mode)", "userID", userID, "portfolioID", portfolioID)
+
 	if err := s.priceService.EnsureBenchmarkData(); err != nil {
 		logger.L.Error("Failed to ensure benchmark data", "error", err)
 	}
+
 	txs, err := fetchUserProcessedTransactions(userID, portfolioID)
 	if err != nil {
 		return err
@@ -369,9 +371,11 @@ func (s *uploadServiceImpl) RebuildUserHistory(userID int64, portfolioID int64) 
 	if len(txs) == 0 {
 		return nil
 	}
+
 	uniqueISINs := make(map[string]bool)
 	uniqueCurrencies := make(map[string]bool)
 	var isinList []string
+
 	for _, tx := range txs {
 		if len(tx.ISIN) == 12 {
 			if !uniqueISINs[tx.ISIN] {
@@ -383,18 +387,34 @@ func (s *uploadServiceImpl) RebuildUserHistory(userID int64, portfolioID int64) 
 			uniqueCurrencies[tx.Currency] = true
 		}
 	}
+
+	// --- CORREÇÃO: Forçar a resolução de Tickers (incluindo Overrides) antes de ler a BD ---
+	// Isto garante que o JEPQ.L (IE000U9J8HX9) é gravado na tabela isin_ticker_map
+	logger.L.Info("Pre-resolving ISINs to Tickers...", "count", len(isinList))
+	_, err = s.priceService.GetCurrentPrices(isinList)
+	if err != nil {
+		logger.L.Warn("Error resolving current prices during history rebuild", "error", err)
+		// Não retornamos erro aqui para tentar continuar com o que já estiver na BD
+	}
+
 	mappings, _ := model.GetMappingsByISINs(database.DB, isinList)
+
 	var wg sync.WaitGroup
 	tickerPrices := make(map[string]PriceMap)
 	tickerCurrencies := make(map[string]string)
 	currencyRates := make(map[string]PriceMap)
 	var dataMu sync.Mutex
+
+	// 1. Fetch Asset Prices
 	for isin := range uniqueISINs {
 		mapEntry, ok := mappings[isin]
 		if !ok || mapEntry.TickerSymbol == "" {
+			// Agora isto só deve acontecer se o ativo for realmente inválido/desconhecido
+			logger.L.Warn("No ticker mapping found for ISIN", "isin", isin)
 			continue
 		}
 		ticker := mapEntry.TickerSymbol
+
 		wg.Add(1)
 		go func(t, i string) {
 			defer wg.Done()
@@ -403,14 +423,26 @@ func (s *uploadServiceImpl) RebuildUserHistory(userID int64, portfolioID int64) 
 				dataMu.Lock()
 				tickerPrices[i] = prices
 				tickerCurrencies[i] = realCurrency
+
+				// Log de debug para confirmar sucesso
+				if len(prices) > 0 {
+					logger.L.Info("Fetched historical prices", "ticker", t, "points", len(prices))
+				} else {
+					logger.L.Warn("Fetched historical prices but got 0 points", "ticker", t)
+				}
+
 				if realCurrency != "EUR" && realCurrency != "" {
 					uniqueCurrencies[realCurrency] = true
 				}
 				dataMu.Unlock()
+			} else {
+				logger.L.Error("Failed to fetch historical prices", "ticker", t, "error", err)
 			}
 		}(ticker, isin)
 	}
 	wg.Wait()
+
+	// 2. Fetch Currency Rates
 	for curr := range uniqueCurrencies {
 		wg.Add(1)
 		go func(c string) {
@@ -421,21 +453,28 @@ func (s *uploadServiceImpl) RebuildUserHistory(userID int64, portfolioID int64) 
 				dataMu.Lock()
 				currencyRates[c] = rates
 				dataMu.Unlock()
+			} else {
+				logger.L.Warn("Failed to fetch currency history", "currency", c, "error", err)
 			}
 		}(curr)
 	}
 	wg.Wait()
+
+	// 3. Rebuild Daily Snapshots
 	startDate, _ := time.Parse("02-01-2006", txs[0].Date)
 	endDate := time.Now()
+
 	type AssetInfo struct {
 		Quantity       float64
 		TotalCostBasis float64
 		Name           string
 	}
+
 	holdings := make(map[string]AssetInfo)
 	cumulativeNetInvested := 0.0
 	currentCash := 0.0
 	lastKnownPrices := make(map[string]float64)
+
 	type Snapshot struct {
 		Date        string
 		Equity      float64
@@ -443,16 +482,22 @@ func (s *uploadServiceImpl) RebuildUserHistory(userID int64, portfolioID int64) 
 		Cash        float64
 	}
 	var snapshots []Snapshot
+
 	txIndex := 0
 	totalTxs := len(txs)
+
 	for d := startDate; !d.After(endDate); d = d.AddDate(0, 0, 1) {
 		dateStr := d.Format("2006-01-02")
 		txDateStr := d.Format("02-01-2006")
+
+		// Process transactions for this day
 		for txIndex < totalTxs && txs[txIndex].Date == txDateStr {
 			tx := txs[txIndex]
+
 			if tx.TransactionType == "CASH" {
 				cumulativeNetInvested += tx.AmountEUR
 			}
+
 			if tx.TransactionType == "STOCK" || tx.TransactionType == "ETF" {
 				info := holdings[tx.ISIN]
 				info.Name = tx.ProductName
@@ -468,29 +513,44 @@ func (s *uploadServiceImpl) RebuildUserHistory(userID int64, portfolioID int64) 
 				}
 				holdings[tx.ISIN] = info
 			}
+
 			if tx.BalanceCurrency == "EUR" {
 				currentCash = tx.CashBalance
 			}
 			txIndex++
 		}
+
+		// Calculate Equity for this day
 		marketValueAssets := 0.0
 		for isin, info := range holdings {
 			if info.Quantity <= 0.0001 {
 				continue
 			}
+
 			price := 0.0
 			if pMap, ok := tickerPrices[isin]; ok {
 				price = pMap[dateStr]
 			}
+
+			if price == 0 && d.Weekday() != time.Saturday && d.Weekday() != time.Sunday {
+				// Log reduzido para não fazer spam, apenas para o ISIN problemático se persistir
+				if isin == "IE000U9J8HX9" {
+					logger.L.Debug("Still missing price for JEPQ", "date", dateStr)
+				}
+			}
+
 			if price > 0 {
 				lastKnownPrices[isin] = price
 			} else if lastPrice, exists := lastKnownPrices[isin]; exists {
 				price = lastPrice
 			}
+
+			// Currency Conversion
 			pricingCurrency := "EUR"
 			if realCur, ok := tickerCurrencies[isin]; ok && realCur != "" {
 				pricingCurrency = realCur
 			}
+
 			rate := 1.0
 			if pricingCurrency != "EUR" {
 				if rMap, ok := currencyRates[pricingCurrency]; ok {
@@ -499,6 +559,7 @@ func (s *uploadServiceImpl) RebuildUserHistory(userID int64, portfolioID int64) 
 					}
 				}
 			}
+
 			var assetValue float64
 			if price > 0 {
 				assetValue = (info.Quantity * price) * rate
@@ -507,6 +568,7 @@ func (s *uploadServiceImpl) RebuildUserHistory(userID int64, portfolioID int64) 
 			}
 			marketValueAssets += assetValue
 		}
+
 		snapshots = append(snapshots, Snapshot{
 			Date:        dateStr,
 			Equity:      marketValueAssets + currentCash,
@@ -514,8 +576,11 @@ func (s *uploadServiceImpl) RebuildUserHistory(userID int64, portfolioID int64) 
 			Cash:        currentCash,
 		})
 	}
+
+	// Batch Insert Snapshots
 	if len(snapshots) > 0 {
 		_, _ = database.DB.Exec("DELETE FROM portfolio_snapshots WHERE user_id = ? AND portfolio_id = ?", userID, portfolioID)
+
 		chunkSize := 500
 		for i := 0; i < len(snapshots); i += chunkSize {
 			end := i + chunkSize
@@ -523,6 +588,7 @@ func (s *uploadServiceImpl) RebuildUserHistory(userID int64, portfolioID int64) 
 				end = len(snapshots)
 			}
 			batch := snapshots[i:end]
+
 			query := "INSERT INTO portfolio_snapshots (user_id, portfolio_id, date, total_equity, cumulative_net_cashflow, cash_balance) VALUES "
 			vals := []interface{}{}
 			for _, s := range batch {
@@ -530,12 +596,14 @@ func (s *uploadServiceImpl) RebuildUserHistory(userID int64, portfolioID int64) 
 				vals = append(vals, userID, portfolioID, s.Date, s.Equity, s.NetInvested, s.Cash)
 			}
 			query = query[:len(query)-1]
+
 			if _, err := database.DB.Exec(query, vals...); err != nil {
 				logger.L.Error("Batch insert failed", "error", err)
 				return err
 			}
 		}
 	}
+
 	logger.L.Info("History rebuild complete", "days", len(snapshots))
 	return nil
 }
