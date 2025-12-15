@@ -1,3 +1,4 @@
+// frontend/src/features/dashboard/components/HistoricalPerformanceChart.js
 import React, { useMemo, useState, useRef, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Line } from 'react-chartjs-2';
@@ -71,40 +72,23 @@ export default function HistoricalPerformanceChart() {
         startDate = tempStart < firstDataDate ? firstDataDate : tempStart;
     }
 
+    // Filtrar dados pela data
     const filtered = rawData.filter(p => new Date(p.date) >= startDate);
     if (filtered.length === 0) return [];
 
-    // --- Benchmark Simulation Logic ---
-    let benchmarkUnits = 0;
-    const startPoint = filtered[0];
-    const initialSpyPrice = startPoint.spy_price || 0;
-    
-    // Initial investment buys benchmark units
-    if (initialSpyPrice > 0) {
-        benchmarkUnits = startPoint.portfolio_value / initialSpyPrice;
-    }
-
-    let previousCashFlow = startPoint.cumulative_cash_flow;
-
-    return filtered.map((point, index) => {
-        const currentSpyPrice = point.spy_price || 0;
+    return filtered.map((point) => {
+        // --- CORREÇÃO: USAR DADOS DO BACKEND ---
+        // Em vez de recalcular o benchmark aqui, usamos o valor que vem da API (point.benchmark_value)
+        // O backend agora tem a lógica robusta de "dinheiro pendente".
         
-        // Handle new deposits/withdrawals
-        if (index > 0) {
-            const netFlow = point.cumulative_cash_flow - previousCashFlow;
-            if (netFlow !== 0 && currentSpyPrice > 0) {
-                // Buy/Sell benchmark units with the new cash flow
-                benchmarkUnits += (netFlow / currentSpyPrice);
-            }
-        }
-        previousCashFlow = point.cumulative_cash_flow;
-
-        const benchmarkValue = Math.max(0, benchmarkUnits) * currentSpyPrice;
         const invested = point.cumulative_cash_flow;
+        const benchmarkValue = point.benchmark_value || 0; // Valor direto do backend
+        const portfolioValue = point.portfolio_value || 0;
 
-        // Calculate Percentages
-        const portfolioReturnPct = invested > 0 ? ((point.portfolio_value - invested) / invested) * 100 : 0;
-        const benchmarkReturnPct = invested > 0 ? ((benchmarkValue - invested) / invested) * 100 : 0;
+        // Calcular as percentagens para o modo '%'
+        // Nota: Se invested for 0 ou muito baixo, evita divisão por zero
+        const portfolioReturnPct = invested > 1 ? ((portfolioValue - invested) / invested) * 100 : 0;
+        const benchmarkReturnPct = invested > 1 ? ((benchmarkValue - invested) / invested) * 100 : 0;
 
         return {
             ...point,
@@ -204,7 +188,7 @@ export default function HistoricalPerformanceChart() {
     },
     scales: {
       x: {
-        type: 'time', // <-- Set the scale type to 'time'
+        type: 'time', 
         time: {
           unit: 'month', 
           tooltipFormat: 'dd-MM-yyyy',
@@ -248,9 +232,7 @@ export default function HistoricalPerformanceChart() {
             borderRadius: 3
         }}
     >
-      {/* TOOLBAR ROW - Now only contains controls, aligned right */}
       <Box sx={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', mb: 1, flexWrap: 'wrap', gap: 2, flexShrink: 0 }}>
-        {/* Right: Controls */}
         <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', flexWrap: 'wrap' }}>
             <ToggleButtonGroup
                 value={viewMode}
@@ -287,7 +269,6 @@ export default function HistoricalPerformanceChart() {
         </Box>
       </Box>
 
-      {/* Chart Canvas Container */}
       <Box sx={{ flexGrow: 1, minHeight: 0, position: 'relative', width: '100%', pb: 4 }}>
         <Line ref={chartRef} data={chartData} options={options} />
       </Box>

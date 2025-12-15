@@ -839,33 +839,77 @@ func (s *uploadServiceImpl) GetHistoricalChartData(userID int64, portfolioID int
 	if len(snapshots) == 0 {
 		return snapshots, nil
 	}
+
 	bmPrices, _, err := s.priceService.GetHistoricalPrices("SPY")
 	if err != nil {
+		// Se falhar o preço do SPY, retorna os dados sem benchmark
 		return snapshots, nil
 	}
+
+	logger.L.Info("Benchmark Debug: Starting calculation", "snapshot_count", len(snapshots))
+
 	currentBenchmarkUnits := 0.0
 	previousCashFlow := 0.0
 	lastKnownPrice := 0.0
+	pendingCashToInvest := 0.0 // Acumula fluxos que ocorreram em dias sem preço (fds/feriados)
+
 	for i := range snapshots {
 		date := snapshots[i].Date
 		price := bmPrices[date]
+
+		// 1. Tentar obter o preço mais recente para evitar zeros no gráfico
 		if price > 0 {
 			lastKnownPrice = price
 		} else if lastKnownPrice > 0 {
 			price = lastKnownPrice
-		} else {
-			previousCashFlow = snapshots[i].CumulativeCashFlow
-			continue
 		}
+
+		// 2. Calcular o fluxo de caixa novo neste dia (Depósitos ou Levantamentos)
+		// Se snapshots[i] > previous => Depósito (dailyNetFlow > 0)
+		// Se snapshots[i] < previous => Levantamento (dailyNetFlow < 0)
 		dailyNetFlow := snapshots[i].CumulativeCashFlow - previousCashFlow
+
+		// Adiciona ao "balde" pendente. Se for levantamento, reduz o pendente.
+		pendingCashToInvest += dailyNetFlow
+
+		// 3. LOGICA CRÍTICA: Se temos um preço real (do dia ou arrastado), executamos a simulação
+		// Usamos price > 0 para garantir que não dividimos por zero
 		if price > 0 {
-			unitsBought := dailyNetFlow / price
-			currentBenchmarkUnits += unitsBought
+			// Compra (ou vende se negativo) unidades com o dinheiro pendente
+			unitsTrade := pendingCashToInvest / price
+			currentBenchmarkUnits += unitsTrade
+
+			// Logs para debug em datas específicas (abril/maio 2025)
+			if strings.Contains(date, "2025-04") || strings.Contains(date, "2025-05") {
+				if dailyNetFlow != 0 || pendingCashToInvest != 0 {
+					logger.L.Info("Benchmark Loop Debug",
+						"date", date,
+						"dailyNetFlow", dailyNetFlow,
+						"pendingCash", pendingCashToInvest,
+						"price", price,
+						"unitsTrade", unitsTrade,
+						"totalUnits", currentBenchmarkUnits)
+				}
+			}
+
+			// O dinheiro foi "usado", limpamos o pendente
+			pendingCashToInvest = 0
 		}
-		snapshots[i].BenchmarkValue = currentBenchmarkUnits * price
-		snapshots[i].SPYPrice = price
+
+		// 4. Calcular valor do benchmark
+		// Se não houver preço hoje nem histórico (ex: antes do SPY existir), vale 0
+		if price > 0 {
+			snapshots[i].BenchmarkValue = currentBenchmarkUnits * price
+			snapshots[i].SPYPrice = price
+		} else {
+			snapshots[i].BenchmarkValue = 0
+			snapshots[i].SPYPrice = 0
+		}
+
+		// Atualizar referência para o próximo loop
 		previousCashFlow = snapshots[i].CumulativeCashFlow
 	}
+
 	return snapshots, nil
 }
 
