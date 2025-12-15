@@ -183,8 +183,18 @@ export default function ReturnsPeriodSection({ historicalData, currentMetrics, i
 
     // Info Tooltip
     const MethodTooltip = (
-        <Box sx={{ p: 1.5, maxWidth: 320 }}>
-            <Typography variant="subtitle2" fontWeight="bold" gutterBottom sx={{ borderBottom: '1px solid rgba(255,255,255,0.2)', pb: 0.5 }}>
+        <Box sx={{ 
+            p: 1.5, 
+            maxWidth: 320, 
+            // --- ALTERAÇÕES APLICADAS AQUI ---
+            bgcolor: 'background.paper', 
+            color: 'text.primary',
+            border: theme => `1px solid ${theme.palette.divider}`, // Borda mais subtil
+            borderRadius: 1, // Borda levemente arredondada
+            // ---------------------------------
+            }}
+        >
+            <Typography variant="subtitle2" fontWeight="bold" gutterBottom sx={{ borderBottom: '1px solid', borderColor: 'divider', pb: 0.5 }}>
                 Metodologia de Retorno
             </Typography>
 
@@ -195,7 +205,18 @@ export default function ReturnsPeriodSection({ historicalData, currentMetrics, i
                 <Typography variant="caption" sx={{ display: 'block', mb: 0.5, color: 'text.secondary' }}>
                     <strong>Modified Dietz:</strong> Aproximação rápida que pondera os fluxos de caixa (depósitos/levantamentos).
                 </Typography>
-                <Box sx={{ bgcolor: 'rgba(0,0,0,0.2)', p: 0.5, borderRadius: 1, fontFamily: 'monospace', fontSize: '0.7rem', textAlign: 'center', color: '#fff' }}>
+                <Box sx={{ 
+                    // --- ALTERAÇÕES APLICADAS AQUI (Fundo cinza claro para o código) ---
+                    bgcolor: 'grey.100', 
+                    p: 0.5, 
+                    borderRadius: 1, 
+                    fontFamily: 'monospace', 
+                    fontSize: '0.7rem', 
+                    textAlign: 'center', 
+                    color: 'text.primary'
+                    // ---------------------------------
+                    }}
+                >
                     Retorno = Ganho / (Valor Inicial + 0.5 × Fluxos)
                 </Box>
             </Box>
@@ -207,7 +228,18 @@ export default function ReturnsPeriodSection({ historicalData, currentMetrics, i
                 <Typography variant="caption" sx={{ display: 'block', mb: 0.5, color: 'text.secondary' }}>
                     <strong>Time-Weighted Return (TWR):</strong> Remove o efeito de depósitos/levantamentos para mostrar a real performance da estratégia.
                 </Typography>
-                <Box sx={{ bgcolor: 'rgba(0,0,0,0.2)', p: 0.5, borderRadius: 1, fontFamily: 'monospace', fontSize: '0.7rem', textAlign: 'center', color: '#fff' }}>
+                <Box sx={{ 
+                     // --- ALTERAÇÕES APLICADAS AQUI (Fundo cinza claro para o código) ---
+                    bgcolor: 'grey.100', 
+                    p: 0.5, 
+                    borderRadius: 1, 
+                    fontFamily: 'monospace', 
+                    fontSize: '0.7rem', 
+                    textAlign: 'center', 
+                    color: 'text.primary'
+                    // ---------------------------------
+                    }}
+                >
                     TWR = (1 + r₁) × (1 + r₂) × ... - 1
                 </Box>
                 <Typography variant="caption" sx={{ display: 'block', mt: 0.5, color: 'text.disabled', fontStyle: 'italic' }}>

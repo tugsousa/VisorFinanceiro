@@ -87,16 +87,14 @@ const TransactionsList = () => {
           Transações: {activePortfolio.name}
         </Typography>
         <Box sx={{ mb: 2, display: 'flex', justifyContent: 'flex-end', gap: 2 }}>
-          {/* ADICIONADO: disableElevation para remover a sombra padrão */}
           <Button variant="contained" color="primary" startIcon={<AddCircleOutlineIcon />} onClick={() => setIsAddModalOpen(true)} disableElevation>
             Adicionar Transação
           </Button>
-          {/* ADICIONADO: disableElevation para remover a sombra padrão */}
           <Button variant="contained" color="error" onClick={handleDeleteClick} disabled={deleteTransactionsMutation.isPending || transactionsLoading} disableElevation>
             {deleteTransactionsMutation.isPending ? <CircularProgress size={24} color="inherit" /> : "Eliminar Transações"}
           </Button>
         </Box>
-        <Paper sx={{ width: '100%' }}>
+        <Paper elevation={0} sx={{ width: '100%' }}>
           <DataGrid
             rows={processedTransactions}
             columns={columns}
