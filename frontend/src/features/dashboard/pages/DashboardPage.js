@@ -213,7 +213,14 @@ const DashboardPage = () => {
 
     // Tooltip Content for "Evolução"
     const benchmarkInfo = (
-        <Box sx={{ p: 1 }}>
+        <Box sx={{ 
+            p: 1,
+            bgcolor: 'background.paper', 
+            color: 'text.primary', 
+            border: theme => `1px solid ${theme.palette.divider}`,
+            borderRadius: 1, 
+            // ---------------------------------
+        }}>
             <Typography variant="subtitle2" fontWeight="bold">Benchmark S&P 500</Typography>
             <Typography variant="body2" sx={{ mt: 1 }}>
                 Compara a tua performance com o índice S&P 500.
