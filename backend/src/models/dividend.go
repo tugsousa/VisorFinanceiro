@@ -9,13 +9,20 @@ type DividendCountrySummary struct {
 // DividendTaxResult represents the final structure for the dividend tax summary endpoint.
 type DividendTaxResult map[string]map[string]DividendCountrySummary
 
+// Contribution Detail
+type DividendContributor struct {
+	Ticker string  `json:"ticker"`
+	Amount float64 `json:"amount"`
+}
+
 // DividendMetricsResult holds global and forward-looking dividend metrics.
 type DividendMetricsResult struct {
-	TotalDividendsTTM float64            `json:"total_dividends_ttm"`
-	PortfolioYield    float64            `json:"portfolio_yield"`
-	YieldOnCost       float64            `json:"yield_on_cost"`
-	ProjectionByMonth []float64          `json:"projection_by_month"`
-	LastUpdated       string             `json:"last_updated"`
-	HasData           bool               `json:"has_data"`
-	YearlyYields      map[string]float64 `json:"yearly_yields"`
+	TotalDividendsTTM   float64                       `json:"total_dividends_ttm"`
+	PortfolioYield      float64                       `json:"portfolio_yield"`
+	YieldOnCost         float64                       `json:"yield_on_cost"`
+	ProjectionByMonth   []float64                     `json:"projection_by_month"`
+	ProjectionBreakdown map[int][]DividendContributor `json:"projection_breakdown"`
+	LastUpdated         string                        `json:"last_updated"`
+	HasData             bool                          `json:"has_data"`
+	YearlyYields        map[string]float64            `json:"yearly_yields"`
 }
