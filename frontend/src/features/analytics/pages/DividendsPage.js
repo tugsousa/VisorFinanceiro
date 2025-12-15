@@ -1,19 +1,23 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { 
     Box, Typography, FormControl, InputLabel, Select, MenuItem, 
-    Grid, Card, CardContent, Divider, Skeleton, Tooltip, IconButton
+    Grid, Paper, Skeleton, Tooltip, IconButton, useTheme
 } from '@mui/material'; 
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined'; 
+import TrendingUpIcon from '@mui/icons-material/TrendingUp';
+import TrendingDownIcon from '@mui/icons-material/TrendingDown';
 import { useAuth } from '../../auth/AuthContext';
 import { useAnalyticsData } from '../hooks/useAnalyticsData';
 import DividendsSection from '../components/DividendsSection';
-import FutureProjectionChart from '../components/FutureProjectionChart'; // NOVO COMPONENTE
+import FutureProjectionChart from '../components/FutureProjectionChart';
 import { ALL_YEARS_OPTION } from '../../../constants';
-import { extractYearsFromData, getYearString } from '../../../lib/utils/dateUtils';
+import { extractYearsFromData, getYearString, getMonthIndex } from '../../../lib/utils/dateUtils';
 import { formatCurrency } from '../../../lib/utils/formatUtils';
 
-// Componente auxiliar para as métricas
-const MetricCard = ({ title, value, unit, isPercentage = false, isLoading, tooltipText }) => {
+// Componente MetricCard atualizado para ser compacto e semelhante ao Dashboard
+const MetricCard = ({ title, value, unit, isPercentage = false, isLoading, tooltipText, colorOverride, subValue }) => {
+    const theme = useTheme();
+
     let displayValue;
     if (isLoading) {
         displayValue = <Skeleton width="60%" />;
@@ -21,52 +25,97 @@ const MetricCard = ({ title, value, unit, isPercentage = false, isLoading, toolt
         displayValue = "N/A";
     } else {
         displayValue = isPercentage 
-            ? `${value > 0 ? '+' : ''}${value.toFixed(2)}%`
+            ? `${value.toFixed(2)}%`
             : formatCurrency(value);
         if (!isPercentage && unit) {
              displayValue = `${value.toFixed(0)} ${unit}`;
         }
     }
 
-    const valueColor = value > 0 ? 'success.main' : (value < 0 ? 'error.main' : 'text.primary');
+    // Lógica de Cores
+    let valueColor = 'text.primary'; // Preto por defeito (para Yields)
+
+    if (colorOverride) {
+        valueColor = colorOverride;
+    } else if (!isPercentage) {
+        // Para valores monetários (Total, Médias), usamos verde para indicar lucro
+        valueColor = value >= 0 ? 'success.main' : 'error.main';
+    } 
 
     return (
-        <Card elevation={1} sx={{ height: '100%', display: 'flex', flexDirection: 'column', borderRadius: 2 }}>
-            <CardContent sx={{ flexGrow: 1, p: 2 }}>
-                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <Typography 
-                        variant="caption" 
-                        color="text.secondary" 
-                        sx={{ fontWeight: 600, textTransform: 'uppercase', lineHeight: 1 }}
-                    >
-                        {title}
-                    </Typography>
-                    {tooltipText && (
-                        <Tooltip title={<Typography variant="body2">{tooltipText}</Typography>} placement="top" arrow>
-                            <IconButton size="small" sx={{ p: 0, color: 'text.secondary' }}>
-                                <InfoOutlinedIcon fontSize="inherit" />
-                            </IconButton>
-                        </Tooltip>
-                    )}
-                </Box>
-                <Divider sx={{ my: 0.5 }} />
+        <Paper
+            elevation={0}
+            sx={{
+                p: 1.5, // Padding reduzido (compacto)
+                display: 'flex',
+                flexDirection: 'column',
+                justifyContent: 'center',
+                border: `1px solid ${theme.palette.divider}`,
+                borderRadius: 2,
+                height: '100%',
+                maxHeight: 70, // Altura máxima forçada
+                minHeight: 30, // Altura mínima para consistência
+                position: 'relative'
+            }}
+        >
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 0.5 }}>
                 <Typography 
-                    variant="h6" 
-                    sx={{ fontWeight: 'bold', color: valueColor, lineHeight: 1.2 }}
+                    variant="caption" 
+                    color="text.secondary" 
+                    sx={{ 
+                        fontWeight: 600, 
+                        textTransform: 'uppercase', 
+                        fontSize: '0.65rem', // Letra do título mais pequena
+                        lineHeight: 1
+                    }}
                 >
-                    {displayValue}
+                    {title}
                 </Typography>
-            </CardContent>
-        </Card>
+                
+                {tooltipText && (
+                    <Tooltip title={<Typography variant="body2">{tooltipText}</Typography>} placement="top" arrow>
+                        <IconButton size="small" sx={{ p: 0, ml: 1, mt: -0.5, color: 'text.disabled', '&:hover': { color: 'primary.main' } }}>
+                            <InfoOutlinedIcon sx={{ fontSize: 16 }} />
+                        </IconButton>
+                    </Tooltip>
+                )}
+            </Box>
+
+            <Typography 
+                variant="h6" // Reduzido de h5 para h6
+                sx={{ 
+                    fontWeight: 700, 
+                    color: valueColor, 
+                    fontSize: { xs: '1.1rem', md: '1.25rem' }, // Tamanho de letra ajustado
+                    lineHeight: 1.2,
+                    mt: 0.5,
+                    letterSpacing: '-0.5px'
+                }}
+            >
+                {displayValue}
+            </Typography>
+            
+            {subValue && (
+                <Box sx={{ mt: 0.5 }}>
+                    {subValue}
+                </Box>
+            )}
+        </Paper>
     );
 };
-
 
 const DividendsPage = () => {
     const { token } = useAuth();
     const [selectedYear, setSelectedYear] = useState(ALL_YEARS_OPTION);
-    // ADICIONADO 'metrics' ao useAnalyticsData
     const { dividendTransactionsData, dividendMetricsData, isLoading } = useAnalyticsData(token, ['dividends', 'metrics']); 
+
+    // --- DEBUG PARA VERIFICAR DADOS ---
+    useEffect(() => {
+        if (!isLoading && dividendMetricsData) {
+            // Logs mantidos para debug se necessário
+            // console.log("Métricas Recebidas:", dividendMetricsData);
+        }
+    }, [dividendMetricsData, isLoading]);
 
     const years = useMemo(() => {
         if (!dividendTransactionsData || dividendTransactionsData.length === 0) return [ALL_YEARS_OPTION];
@@ -80,29 +129,49 @@ const DividendsPage = () => {
         return dividendTransactionsData.filter(d => getYearString(d.date) === selectedYear);
     }, [dividendTransactionsData, selectedYear]);
 
-    // Métrica: Dividendos Acumulados no Período
-    const periodAccumulatedDividends = useMemo(() => {
-        return filteredData.reduce((sum, tx) => {
-            if (tx.transaction_subtype !== 'TAX') {
-                return sum + (tx.amount_eur || 0);
-            }
-            return sum;
-        }, 0);
-    }, [filteredData]);
+    const periodMetrics = useMemo(() => {
+        const dividendTxs = filteredData.filter(tx => tx.transaction_subtype !== 'TAX');
+        const total = dividendTxs.reduce((sum, tx) => sum + (tx.amount_eur || 0), 0);
+        
+        let monthlyAvg = 0;
+        let bestMonthVal = 0;
+        let growthPct = null;
+        let historicalYield = null;
 
-    // Métrica: Imposto Retido no Período
-    const periodTaxesWithheld = useMemo(() => {
-        return filteredData.reduce((sum, tx) => {
-            if (tx.transaction_subtype === 'TAX') {
-                return sum + (tx.amount_eur || 0);
+        if (selectedYear !== ALL_YEARS_OPTION) {
+            monthlyAvg = total / 12;
+
+            const monthMap = new Array(12).fill(0);
+            dividendTxs.forEach(tx => {
+                const mIdx = getMonthIndex(tx.date);
+                if (mIdx !== null) monthMap[mIdx] += (tx.amount_eur || 0);
+            });
+            bestMonthVal = Math.max(...monthMap);
+
+            // Crescimento vs Ano Anterior
+            const prevYear = (parseInt(selectedYear) - 1).toString();
+            const allTxs = dividendTransactionsData || [];
+            const prevYearTotal = allTxs
+                .filter(d => getYearString(d.date) === prevYear && d.transaction_subtype !== 'TAX')
+                .reduce((sum, tx) => sum + (tx.amount_eur || 0), 0);
+
+            if (prevYearTotal > 0) {
+                growthPct = ((total - prevYearTotal) / prevYearTotal) * 100;
             }
-            return sum;
-        }, 0);
-    }, [filteredData]);
-    
-    // Flag para mostrar se o portfólio tem dados
-    const hasAnyData = dividendMetricsData?.hasData === true;
-    
+
+            // Yield Histórico (Vem do backend)
+            if (dividendMetricsData?.yearly_yields && dividendMetricsData.yearly_yields[selectedYear]) {
+                historicalYield = dividendMetricsData.yearly_yields[selectedYear];
+            }
+        }
+
+        return { total, monthlyAvg, bestMonthVal, growthPct, historicalYield };
+    }, [filteredData, selectedYear, dividendTransactionsData, dividendMetricsData]);
+
+    // Atenção: Use snake_case porque é o que vem do backend (has_data)
+    const hasAnyData = dividendMetricsData?.has_data === true;
+    const isGlobalView = selectedYear === ALL_YEARS_OPTION;
+
     return (
         <Box sx={{ p: 3 }}>
             <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 3 }}>
@@ -115,72 +184,107 @@ const DividendsPage = () => {
                 </FormControl>
             </Box>
 
-            {/* NEW: METRICS GRID & PROJECTION CHART */}
-            <Grid container spacing={3} sx={{ mb: 4 }}>
-                {/* Linha 1: Métricas globais/TTM */}
-                <Grid item xs={12} container spacing={2}>
-                    <Grid item xs={6} sm={3}>
-                        <MetricCard 
-                            title="Yield Atual" 
-                            value={dividendMetricsData?.portfolio_yield} 
-                            isPercentage 
-                            isLoading={isLoading} 
-                            tooltipText="Total de dividendos dos últimos 12 meses (TTM) dividido pelo valor de mercado atual do portfólio."
-                        />
-                    </Grid>
-                    <Grid item xs={6} sm={3}>
-                        <MetricCard 
-                            title="Yield on Cost (YOC)" 
-                            value={dividendMetricsData?.yield_on_cost} 
-                            isPercentage 
-                            isLoading={isLoading} 
-                            tooltipText="Total de dividendos TTM dividido pelo custo de aquisição (custo total) das posições atuais."
-                        />
-                    </Grid>
-                    <Grid item xs={6} sm={3}>
-                        <MetricCard 
-                            title="Dividendo Anual (TTM)" 
-                            value={dividendMetricsData?.total_dividends_ttm} 
-                            isLoading={isLoading} 
-                            tooltipText="Total de dividendos brutos recebidos nos últimos 12 meses."
-                        />
-                    </Grid>
-                    <Grid item xs={6} sm={3}>
-                        <MetricCard 
-                            title={`Acumulado (${selectedYear === ALL_YEARS_OPTION ? 'Total' : selectedYear})`} 
-                            value={selectedYear === ALL_YEARS_OPTION ? periodAccumulatedDividends : periodAccumulatedDividends} 
-                            isLoading={isLoading} 
-                            tooltipText="Dividendos brutos acumulados no período selecionado."
-                        />
-                    </Grid>
-                </Grid>
+            <Grid container spacing={2} sx={{ mb: 4 }}>
+                
+                {isGlobalView ? (
+                    // === VISTA GERAL (TUDO) ===
+                    <>
+                        <Grid item xs={12} sm={6} md={3}>
+                            <MetricCard 
+                                title="Yield Atual (Fwd)" 
+                                value={dividendMetricsData?.portfolio_yield} 
+                                isPercentage 
+                                isLoading={isLoading} 
+                                tooltipText="Yield estimado para os próximos 12 meses com base nas posições atuais."
+                            />
+                        </Grid>
+                        <Grid item xs={12} sm={6} md={3}>
+                            <MetricCard 
+                                title="Yield on Cost (YOC)" 
+                                value={dividendMetricsData?.yield_on_cost} 
+                                isPercentage 
+                                isLoading={isLoading} 
+                                tooltipText="Total de dividendos (TTM) a dividir pelo custo total de aquisição das ações."
+                            />
+                        </Grid>
+                        <Grid item xs={12} sm={6} md={3}>
+                            <MetricCard 
+                                title="Dividendo Anual (TTM)" 
+                                value={dividendMetricsData?.total_dividends_ttm} 
+                                isLoading={isLoading} 
+                                tooltipText="Total de dividendos brutos recebidos nos últimos 12 meses."
+                            />
+                        </Grid>
+                        <Grid item xs={12} sm={6} md={3}>
+                            <MetricCard 
+                                title="Total Histórico" 
+                                value={periodMetrics.total} 
+                                isLoading={isLoading} 
+                                colorOverride="success.main"
+                                tooltipText="Soma de todos os dividendos recebidos desde o início."
+                            />
+                        </Grid>
+                    </>
+                ) : (
+                    // === VISTA ANUAL (ANO ESPECÍFICO) ===
+                    <>
+                        <Grid item xs={12} sm={6} md={3}>
+                            <MetricCard 
+                                title={`Total em ${selectedYear}`} 
+                                value={periodMetrics.total} 
+                                isLoading={isLoading} 
+                                colorOverride="success.main"
+                                tooltipText={`Total bruto recebido durante o ano de ${selectedYear}.`}
+                                subValue={
+                                    periodMetrics.growthPct !== null ? (
+                                        <Box sx={{ display: 'flex', alignItems: 'center', color: periodMetrics.growthPct >= 0 ? 'success.main' : 'error.main' }}>
+                                            {periodMetrics.growthPct >= 0 ? <TrendingUpIcon fontSize="small" /> : <TrendingDownIcon fontSize="small" />}
+                                            <Typography variant="caption" sx={{ ml: 0.5, fontWeight: 'bold' }}>
+                                                {periodMetrics.growthPct > 0 ? '+' : ''}{periodMetrics.growthPct.toFixed(1)}% vs {parseInt(selectedYear)-1}
+                                            </Typography>
+                                        </Box>
+                                    ) : null
+                                }
+                            />
+                        </Grid>
+                        <Grid item xs={12} sm={6} md={3}>
+                            <MetricCard 
+                                title={`Yield Real (${selectedYear})`} 
+                                value={periodMetrics.historicalYield} 
+                                isPercentage
+                                isLoading={isLoading} 
+                                tooltipText="Yield calculado dividindo os dividendos do ano pelo valor médio do portfólio nesse mesmo ano."
+                            />
+                        </Grid>
+                        <Grid item xs={12} sm={6} md={3}>
+                            <MetricCard 
+                                title="Média Mensal" 
+                                value={periodMetrics.monthlyAvg} 
+                                isLoading={isLoading} 
+                                tooltipText="Valor total do ano a dividir por 12 meses."
+                            />
+                        </Grid>
+                        <Grid item xs={12} sm={6} md={3}>
+                            <MetricCard 
+                                title="Melhor Mês" 
+                                value={periodMetrics.bestMonthVal} 
+                                isLoading={isLoading} 
+                                tooltipText="O valor do mês em que recebeu mais dividendos neste ano."
+                            />
+                        </Grid>
+                    </>
+                )}
 
-                {/* Linha 2: Gráfico de Projeção */}
-                {hasAnyData && (
-                    <Grid item xs={12} lg={6}>
+                {/* Gráfico de Projeção (SÓ aparece na vista GERAL) */}
+                {isGlobalView && hasAnyData && (
+                    <Grid item xs={12} sx={{ mt: 3 }}>
                         <FutureProjectionChart metricsData={dividendMetricsData} isLoading={isLoading} />
                     </Grid>
                 )}
-
-                {/* Linha 2: Impostos Retidos no Período */}
-                <Grid item xs={12} lg={hasAnyData ? 6 : 12}>
-                    <Card elevation={0} sx={{ p: 2, height: 350, borderRadius: 3, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-                         <Typography variant="h6" component="h3" gutterBottom>Imposto Retido no Período</Typography>
-                         <Typography variant="h4" sx={{ color: periodTaxesWithheld < 0 ? 'error.main' : 'text.primary', fontWeight: 'bold' }}>
-                            {isLoading ? <Skeleton width="50%" /> : formatCurrency(periodTaxesWithheld)}
-                         </Typography>
-                         <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-                            Este é o valor total de imposto retido na fonte para as transações de dividendos no período selecionado.
-                         </Typography>
-                         <Typography variant="body2" color="text.secondary" sx={{ mt: 2, fontStyle: 'italic', fontSize: '0.7rem' }}>
-                            *O valor é negativo se o seu broker reportar o imposto como um custo.
-                         </Typography>
-                    </Card>
-                </Grid>
-
             </Grid>
 
-            <Typography variant="h5" sx={{ mb: 2, mt: 4 }}>Transações de Dividendos</Typography>
+            {/* Espaçamento aumentado para mt: 8 */}
+            <Typography variant="h5" sx={{ mb: 2, mt: 8 }}>Histórico de Transações</Typography>
             <DividendsSection 
                 dividendTransactionsData={filteredData} 
                 selectedYear={selectedYear} 

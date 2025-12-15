@@ -69,27 +69,19 @@ type yahooHistoryResponse struct {
 	} `json:"chart"`
 }
 
-// UPDATED: Comprehensive struct to catch data from multiple modules
 type yahooQuoteSummaryResponse struct {
 	QuoteSummary struct {
 		Result []struct {
-			// Module 1: Asset Profile (Standard Stocks)
 			AssetProfile struct {
 				Sector   string `json:"sector"`
 				Industry string `json:"industry"`
 			} `json:"assetProfile"`
-
-			// Module 2: Quote Type (Asset Class)
 			QuoteType struct {
 				QuoteType string `json:"quoteType"`
 			} `json:"quoteType"`
-
-			// Module 3: Fund Profile (ETFs)
 			FundProfile struct {
 				CategoryName string `json:"categoryName"`
 			} `json:"fundProfile"`
-
-			// Module 4: Summary Profile (Alternative location for some stocks)
 			SummaryProfile struct {
 				Sector   string `json:"sector"`
 				Industry string `json:"industry"`
@@ -97,6 +89,24 @@ type yahooQuoteSummaryResponse struct {
 		} `json:"result"`
 		Error interface{} `json:"error"`
 	} `json:"quoteSummary"`
+}
+
+// Estrutura para eventos (dividendos)
+type yahooEventsResponse struct {
+	Chart struct {
+		Result []struct {
+			Events struct {
+				Dividends map[string]struct {
+					Amount float64 `json:"amount"`
+					Date   int64   `json:"date"`
+				} `json:"dividends"`
+			} `json:"events"`
+			Meta struct {
+				Currency string `json:"currency"`
+			} `json:"meta"`
+		} `json:"result"`
+		Error interface{} `json:"error"`
+	} `json:"chart"`
 }
 
 // --- Service Implementation ---
@@ -107,6 +117,8 @@ type priceServiceImpl struct {
 	crumb         string
 	mu            sync.Mutex
 }
+
+// REMOVIDO: type PriceService interface { ... } (Já está no interfaces.go)
 
 func NewPriceService() PriceService {
 	jar, err := cookiejar.New(&cookiejar.Options{PublicSuffixList: publicsuffix.List})
@@ -140,7 +152,6 @@ func (s *priceServiceImpl) initializeYahooSession() {
 	logger.L.Info("Initializing Yahoo Finance session and fetching Crumb...")
 	const userAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
 
-	// Step 1: Prime cookies
 	req1, _ := http.NewRequest("GET", "https://fc.yahoo.com", nil)
 	req1.Header.Set("User-Agent", userAgent)
 	resp1, err := s.httpClient.Do(req1)
@@ -149,7 +160,6 @@ func (s *priceServiceImpl) initializeYahooSession() {
 		resp1.Body.Close()
 	}
 
-	// Step 2: Ensure session cookies
 	req2, _ := http.NewRequest("GET", "https://finance.yahoo.com", nil)
 	req2.Header.Set("User-Agent", userAgent)
 	resp2, err := s.httpClient.Do(req2)
@@ -158,7 +168,6 @@ func (s *priceServiceImpl) initializeYahooSession() {
 		resp2.Body.Close()
 	}
 
-	// Step 3: Fetch Crumb
 	req3, _ := http.NewRequest("GET", "https://query1.finance.yahoo.com/v1/test/getcrumb", nil)
 	req3.Header.Set("User-Agent", userAgent)
 	resp3, err := s.httpClient.Do(req3)
@@ -188,14 +197,14 @@ func (s *priceServiceImpl) ensureSession() {
 	}
 }
 
+// --- Implementation of Existing Methods ---
+
 func (s *priceServiceImpl) GetCurrentPrices(isins []string) (map[string]PriceInfo, error) {
 	s.ensureSession()
-
 	results := make(map[string]PriceInfo)
 	for _, isin := range isins {
 		results[isin] = PriceInfo{Status: "UNAVAILABLE"}
 	}
-
 	if len(isins) == 0 {
 		return results, nil
 	}
@@ -215,7 +224,6 @@ func (s *priceServiceImpl) GetCurrentPrices(isins []string) (map[string]PriceInf
 		if !ok {
 			continue
 		}
-
 		priceInfo, ok := tickerToPriceMap[ticker]
 		if !ok {
 			continue
@@ -237,7 +245,6 @@ func (s *priceServiceImpl) GetCurrentPrices(isins []string) (map[string]PriceInf
 			Currency: "EUR",
 		}
 	}
-
 	return results, nil
 }
 
@@ -254,7 +261,6 @@ func (s *priceServiceImpl) getIsinToTickerMap(isins []string) (map[string]string
 	for _, isin := range isins {
 		if mapping, ok := dbMappings[isin]; ok {
 			isinToTickerMap[isin] = mapping.TickerSymbol
-			// Check if metadata is missing (Sector is a good proxy for missing metadata)
 			if !mapping.Sector.Valid || mapping.Sector.String == "" {
 				metadataToUpdate[isin] = mapping.TickerSymbol
 			}
@@ -271,7 +277,6 @@ func (s *priceServiceImpl) getIsinToTickerMap(isins []string) (map[string]string
 				logger.L.Warn("Could not get ticker for ISIN from API", "isin", isin, "error", err)
 				continue
 			}
-
 			isinToTickerMap[isin] = ticker
 			newMapping := model.ISINTickerMap{
 				ISIN:         isin,
@@ -284,32 +289,26 @@ func (s *priceServiceImpl) getIsinToTickerMap(isins []string) (map[string]string
 		}
 	}
 
-	// Fetch Metadata for ISINs that need it (Background)
 	if len(metadataToUpdate) > 0 {
 		go func() {
 			for isin, ticker := range metadataToUpdate {
-				time.Sleep(500 * time.Millisecond) // Rate limit
+				time.Sleep(500 * time.Millisecond)
 				sector, industry, qType, err := s.fetchMetadata(ticker)
 				if err == nil {
 					model.UpdateMappingMetadata(database.DB, isin, sector, industry, qType)
-				} else {
-					logger.L.Warn("Failed to fetch metadata", "ticker", ticker, "error", err)
 				}
 			}
 		}()
 	}
-
 	return isinToTickerMap, nil
 }
 
 func (s *priceServiceImpl) getTickerToPriceMap(isinToTickerMap map[string]string) (map[string]model.DailyPrice, error) {
 	tickerToPriceMap := make(map[string]model.DailyPrice)
 	uniqueTickers := make(map[string]bool)
-
 	for _, ticker := range isinToTickerMap {
 		uniqueTickers[ticker] = true
 	}
-
 	var tickerList []string
 	for ticker := range uniqueTickers {
 		tickerList = append(tickerList, ticker)
@@ -338,7 +337,6 @@ func (s *priceServiceImpl) getTickerToPriceMap(isinToTickerMap map[string]string
 				logger.L.Warn("Could not get price for ticker from API", "ticker", ticker, "error", err)
 				continue
 			}
-
 			dailyPrice := model.DailyPrice{
 				TickerSymbol: ticker,
 				Date:         todayStr,
@@ -349,7 +347,6 @@ func (s *priceServiceImpl) getTickerToPriceMap(isinToTickerMap map[string]string
 			model.InsertOrUpdatePrice(database.DB, dailyPrice)
 		}
 	}
-
 	return tickerToPriceMap, nil
 }
 
@@ -357,137 +354,102 @@ func (s *priceServiceImpl) fetchTickerForISIN(isin string) (string, string, stri
 	if len(isin) != 12 {
 		return "", "", "", fmt.Errorf("invalid ISIN length: %s", isin)
 	}
-
 	if ticker, ok := manualTickerOverrides[isin]; ok {
 		return ticker, "Override", "", nil
 	}
-
 	searchURL := fmt.Sprintf("https://query1.finance.yahoo.com/v1/finance/search?q=%s&quotesCount=1&lang=en-US", isin)
-
 	req, err := http.NewRequest("GET", searchURL, nil)
 	if err != nil {
 		return "", "", "", err
 	}
 	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
-
 	resp, err := s.httpClient.Do(req)
 	if err != nil {
 		return "", "", "", fmt.Errorf("failed to call Yahoo search API: %w", err)
 	}
 	defer resp.Body.Close()
-
 	bodyBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return "", "", "", fmt.Errorf("failed to read response body: %w", err)
 	}
-
 	if resp.StatusCode != http.StatusOK {
 		return "", "", "", fmt.Errorf("yahoo search API returned non-OK status %d", resp.StatusCode)
 	}
-
 	var searchData yahooSearchResponse
 	if err := json.Unmarshal(bodyBytes, &searchData); err != nil {
 		return "", "", "", fmt.Errorf("failed to decode Yahoo search response: %w", err)
 	}
-
 	if len(searchData.Quotes) == 0 || searchData.Quotes[0].Symbol == "" {
 		return "", "", "", fmt.Errorf("no ticker symbol found for ISIN %s", isin)
 	}
-
 	quote := searchData.Quotes[0]
 	return quote.Symbol, quote.Exchange, quote.Currency, nil
 }
 
 func (s *priceServiceImpl) getPriceForTicker(ticker string) (float64, string, error) {
 	quoteURL := fmt.Sprintf("https://query1.finance.yahoo.com/v8/finance/chart/%s?crumb=%s", ticker, s.crumb)
-
 	req, err := http.NewRequest("GET", quoteURL, nil)
 	if err != nil {
 		return 0, "", err
 	}
 	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
-
 	resp, err := s.httpClient.Do(req)
 	if err != nil {
 		return 0, "", fmt.Errorf("failed to call Yahoo chart API: %w", err)
 	}
 	defer resp.Body.Close()
-
 	if resp.StatusCode == 401 {
 		s.mu.Lock()
 		s.isInitialized = false
 		s.mu.Unlock()
 		return 0, "", fmt.Errorf("status 401 (Unauthorized) - Crumb invalid")
 	}
-
-	bodyBytes, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return 0, "", fmt.Errorf("failed to read response body: %w", err)
-	}
-
 	if resp.StatusCode != http.StatusOK {
 		return 0, "", fmt.Errorf("yahoo chart API returned non-OK status %d", resp.StatusCode)
 	}
-
 	var chartData yahooChartResponse
-	if err := json.Unmarshal(bodyBytes, &chartData); err != nil {
+	if err := json.NewDecoder(resp.Body).Decode(&chartData); err != nil {
 		return 0, "", fmt.Errorf("failed to decode Yahoo chart response: %w", err)
 	}
-
 	if chartData.Chart.Error != nil {
 		return 0, "", fmt.Errorf("yahoo chart API returned an error: %v", chartData.Chart.Error)
 	}
-
 	if len(chartData.Chart.Result) == 0 || chartData.Chart.Result[0].Meta.RegularMarketPrice == 0 {
 		return 0, "", fmt.Errorf("no price data found")
 	}
-
 	meta := chartData.Chart.Result[0].Meta
 	return meta.RegularMarketPrice, meta.Currency, nil
 }
 
 func (s *priceServiceImpl) GetHistoricalPrices(ticker string) (PriceMap, string, error) {
 	s.ensureSession()
-
 	url := fmt.Sprintf("https://query1.finance.yahoo.com/v8/finance/chart/%s?interval=1d&range=10y&crumb=%s", ticker, s.crumb)
-
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return nil, "", err
 	}
 	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36")
-
 	resp, err := s.httpClient.Do(req)
 	if err != nil {
 		return nil, "", fmt.Errorf("failed to fetch history: %w", err)
 	}
 	defer resp.Body.Close()
-
 	if resp.StatusCode == 401 {
 		s.mu.Lock()
 		s.isInitialized = false
 		s.mu.Unlock()
 		return nil, "", fmt.Errorf("status 401 (Unauthorized)")
 	}
-
-	bodyBytes, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, "", fmt.Errorf("failed to read response body: %w", err)
-	}
-
 	if resp.StatusCode != http.StatusOK {
 		return nil, "", fmt.Errorf("yahoo history api returned %d", resp.StatusCode)
 	}
-
 	var data yahooHistoryResponse
-	if err := json.Unmarshal(bodyBytes, &data); err != nil {
+	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
 		return nil, "", fmt.Errorf("failed to decode history json: %w", err)
 	}
-
 	if len(data.Chart.Result) == 0 {
 		return nil, "", fmt.Errorf("no history result found")
 	}
-
 	result := data.Chart.Result[0]
 	detectedCurrency := result.Meta.Currency
 	timestamps := result.Timestamp
@@ -495,14 +457,11 @@ func (s *priceServiceImpl) GetHistoricalPrices(ticker string) (PriceMap, string,
 		return nil, "", fmt.Errorf("no quote data found")
 	}
 	quotes := result.Indicators.Quote[0].Close
-
 	if len(timestamps) != len(quotes) {
-		return nil, "", fmt.Errorf("data mismatch: %d timestamps vs %d quotes", len(timestamps), len(quotes))
+		return nil, "", fmt.Errorf("data mismatch")
 	}
-
 	priceMap := make(PriceMap)
 	var sortedDates []string
-
 	for i, ts := range timestamps {
 		price := quotes[i]
 		if price == 0 {
@@ -512,12 +471,10 @@ func (s *priceServiceImpl) GetHistoricalPrices(ticker string) (PriceMap, string,
 		priceMap[dateStr] = price
 		sortedDates = append(sortedDates, dateStr)
 	}
-
 	if len(sortedDates) > 0 {
 		sort.Strings(sortedDates)
 		startDate, _ := time.Parse("2006-01-02", sortedDates[0])
 		endDate := time.Now()
-
 		lastPrice := priceMap[sortedDates[0]]
 		for d := startDate; !d.After(endDate); d = d.AddDate(0, 0, 1) {
 			dateKey := d.Format("2006-01-02")
@@ -528,8 +485,61 @@ func (s *priceServiceImpl) GetHistoricalPrices(ticker string) (PriceMap, string,
 			}
 		}
 	}
-
 	return priceMap, detectedCurrency, nil
+}
+
+// Implementação do novo método GetLastYearDividends
+func (s *priceServiceImpl) GetLastYearDividends(ticker string) (map[time.Month]float64, string, error) {
+	s.ensureSession()
+
+	now := time.Now()
+	oneYearAgo := now.AddDate(-1, 0, 0)
+	period1 := oneYearAgo.Unix()
+	period2 := now.Unix()
+
+	// Use 'events=div' to fetch dividends
+	url := fmt.Sprintf("https://query1.finance.yahoo.com/v8/finance/chart/%s?symbol=%s&period1=%d&period2=%d&interval=1d&events=div&crumb=%s", ticker, ticker, period1, period2, s.crumb)
+
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, "", err
+	}
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)")
+
+	resp, err := s.httpClient.Do(req)
+	if err != nil {
+		return nil, "", fmt.Errorf("failed to call Yahoo events API: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, "", fmt.Errorf("yahoo API error: status %d", resp.StatusCode)
+	}
+
+	var data yahooEventsResponse
+	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
+		return nil, "", err
+	}
+
+	if len(data.Chart.Result) == 0 {
+		return make(map[time.Month]float64), "", nil
+	}
+
+	result := data.Chart.Result[0]
+	currency := result.Meta.Currency
+	dividendsMap := result.Events.Dividends
+
+	// Map: Month (1-12) -> Total Dividend Amount per share for that month
+	monthlyDividends := make(map[time.Month]float64)
+
+	for _, div := range dividendsMap {
+		if div.Amount > 0 {
+			divDate := time.Unix(div.Date, 0)
+			monthlyDividends[divDate.Month()] += div.Amount
+		}
+	}
+
+	return monthlyDividends, currency, nil
 }
 
 func (s *priceServiceImpl) EnsureBenchmarkData() error {
@@ -540,23 +550,18 @@ func (s *priceServiceImpl) EnsureBenchmarkData() error {
 	if err == nil && count > 0 {
 		return nil
 	}
-
-	logger.L.Info("Fetching Benchmark Data (SPY) from Yahoo", "ticker", benchmarkTicker)
 	prices, _, err := s.GetHistoricalPrices(benchmarkTicker)
 	if err != nil {
 		return fmt.Errorf("failed to fetch benchmark history: %w", err)
 	}
-
 	if len(prices) == 0 {
 		return fmt.Errorf("no benchmark prices returned")
 	}
-
 	tx, err := database.DB.Begin()
 	if err != nil {
 		return fmt.Errorf("failed to begin transaction: %w", err)
 	}
 	defer tx.Rollback()
-
 	stmt, err := tx.Prepare(`
 		INSERT INTO daily_prices (ticker_symbol, date, price, currency, updated_at)
 		VALUES (?, ?, ?, ?, ?)
@@ -568,7 +573,6 @@ func (s *priceServiceImpl) EnsureBenchmarkData() error {
 		return fmt.Errorf("failed to prepare insert: %w", err)
 	}
 	defer stmt.Close()
-
 	for date, price := range prices {
 		_, err := stmt.Exec(benchmarkTicker, date, price, "USD", time.Now())
 		if err != nil {
@@ -576,74 +580,52 @@ func (s *priceServiceImpl) EnsureBenchmarkData() error {
 			continue
 		}
 	}
-
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("failed to commit benchmark transaction: %w", err)
 	}
-
 	return nil
 }
 
-// fetchMetadata retrieves sector, industry, and quoteType from Yahoo Finance.
-// UPDATED: Now checks assetProfile, fundProfile, and summaryProfile
 func (s *priceServiceImpl) fetchMetadata(ticker string) (string, string, string, error) {
-	// Added 'summaryProfile' module to the URL
 	url := fmt.Sprintf("https://query1.finance.yahoo.com/v10/finance/quoteSummary/%s?modules=assetProfile,quoteType,fundProfile,summaryProfile&crumb=%s", ticker, s.crumb)
-
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return "", "", "", err
 	}
 	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
-
 	resp, err := s.httpClient.Do(req)
 	if err != nil {
 		return "", "", "", err
 	}
 	defer resp.Body.Close()
-
 	if resp.StatusCode == 401 {
 		s.mu.Lock()
 		s.isInitialized = false
 		s.mu.Unlock()
 		return "", "", "", fmt.Errorf("status 401 (Unauthorized) - Crumb invalid")
 	}
-
 	if resp.StatusCode != http.StatusOK {
 		return "", "", "", fmt.Errorf("status %d", resp.StatusCode)
 	}
-
 	var data yahooQuoteSummaryResponse
 	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
 		return "", "", "", err
 	}
-
 	if len(data.QuoteSummary.Result) == 0 {
 		return "", "", "", fmt.Errorf("no result")
 	}
-
 	res := data.QuoteSummary.Result[0]
-
-	// 1. Get Quote Type (Ensure Uppercase)
 	qType := strings.ToUpper(res.QuoteType.QuoteType)
-
-	// 2. Determine Sector and Industry
 	sector := res.AssetProfile.Sector
 	industry := res.AssetProfile.Industry
-
-	// Fallback 1: If AssetProfile is empty, try FundProfile (for ETFs)
 	if sector == "" && res.FundProfile.CategoryName != "" {
 		sector = res.FundProfile.CategoryName
 		industry = "ETF"
 	}
-
-	// Fallback 2: If still empty, try SummaryProfile (sometimes used for stocks)
 	if sector == "" && res.SummaryProfile.Sector != "" {
 		sector = res.SummaryProfile.Sector
 		industry = res.SummaryProfile.Industry
 	}
-
 	logger.L.Info("Metadata fetched", "ticker", ticker, "sector", sector, "type", qType)
-
 	return sector, industry, qType, nil
 }
