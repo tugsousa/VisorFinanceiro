@@ -41,7 +41,7 @@ type UploadService interface {
 	GetCurrentHoldingsWithValue(userID int64, portfolioID int64) ([]models.HoldingWithValue, error)
 	GetHistoricalChartData(userID int64, portfolioID int64) ([]models.HistoricalDataPoint, error)
 
-	// RebuildUserHistory recalculates daily portfolio snapshots for the entire history.
+	GetDividendMetrics(userID int64, portfolioID int64) (*models.DividendMetricsResult, error)
 	RebuildUserHistory(userID int64, portfolioID int64) error
 }
 
