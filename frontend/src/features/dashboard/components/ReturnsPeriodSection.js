@@ -2,15 +2,14 @@ import React, { useMemo } from 'react';
 import { Box, Paper, Typography, Grid, Skeleton, Tooltip, IconButton, Divider } from '@mui/material';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 
-const PeriodCard = ({ label, value, isLoading, isTwr }) => {
+const PeriodCard = ({ label, value, isLoading, type }) => {
     let color = 'text.secondary';
     let displayValue = '-';
 
     if (value !== null && value !== undefined && !isNaN(value)) {
         if (value > 0) color = 'success.main';
         if (value < 0) color = 'error.main';
-        // Handle massive outlier numbers (e.g. data errors) visually
-        if (value > 100000) displayValue = '>9999%';
+        if (Math.abs(value) > 100000) displayValue = '>999%';
         else displayValue = `${value > 0 ? '+' : ''}${value.toFixed(2)}%`;
     }
 
@@ -46,9 +45,11 @@ const PeriodCard = ({ label, value, isLoading, isTwr }) => {
             <Typography variant="h6" sx={{ color: color, fontWeight: 'bold' }}>
                 {displayValue}
             </Typography>
-            {value !== null && (
+            
+            {/* Pequena etiqueta discreta para identificar o método usado */}
+             {value !== null && (
                 <Typography variant="caption" sx={{ fontSize: '0.6rem', color: 'text.disabled', position: 'absolute', bottom: 2, right: 6 }}>
-                    {isTwr ? 'TWR' : 'Dietz'}
+                    {type}
                 </Typography>
             )}
         </Paper>
@@ -57,95 +58,69 @@ const PeriodCard = ({ label, value, isLoading, isTwr }) => {
 
 export default function ReturnsPeriodSection({ historicalData, currentMetrics, isLoading }) {
     const returns = useMemo(() => {
-        if (!historicalData || historicalData.length === 0 || !currentMetrics) return {};
+        if (!historicalData || historicalData.length === 0) return {};
+
+        const sortedData = [...historicalData].sort((a, b) => a.date.localeCompare(b.date));
+
+        // --- CÁLCULO 1: TWR (Para períodos parciais como 1A, 5A) ---
+        // Replica a lógica do gráfico de evolução (Performance da Estratégia)
+        const twrSeries = [];
+        let currentIndex = 1.0;
+        const MIN_BALANCE = 50; 
+        
+        let startIndex = sortedData.findIndex(d => d.portfolio_value > MIN_BALANCE);
+        if (startIndex === -1) startIndex = 0;
+
+        for (let i = 0; i < sortedData.length; i++) {
+            const curr = sortedData[i];
+            
+            if (i <= startIndex) {
+                twrSeries.push({ date: curr.date, index: 1.0 });
+                continue;
+            }
+
+            const prev = sortedData[i-1];
+            
+            if (prev.portfolio_value < MIN_BALANCE) {
+                 twrSeries.push({ date: curr.date, index: currentIndex });
+                 continue;
+            }
+
+            const dailyFlow = curr.cumulative_cash_flow - prev.cumulative_cash_flow;
+            let dailyReturn = (curr.portfolio_value - dailyFlow) / prev.portfolio_value - 1;
+            
+            if (dailyReturn > 5 || dailyReturn < -0.9) dailyReturn = 0;
+
+            currentIndex *= (1 + dailyReturn);
+            twrSeries.push({ date: curr.date, index: currentIndex });
+        }
+
+        const calculateTWR = (startDate) => {
+            if (twrSeries.length === 0) return 0;
+            const endPoint = twrSeries[twrSeries.length - 1]; 
+            
+            if (!startDate) return 0; 
+
+            const startIso = startDate.toISOString().split('T')[0];
+            const startPoint = twrSeries.find(p => p.date >= startIso) || twrSeries[0];
+
+            if (!startPoint || startPoint.index === 0) return 0;
+            return ((endPoint.index / startPoint.index) - 1) * 100;
+        };
+
+        // --- CÁLCULO 2: ROI Simples (Exclusivo para All Time) ---
+        // Performance do Dinheiro Real
+        const calculateTotalROI = () => {
+             if (!currentMetrics) return 0;
+             const invested = currentMetrics.netDeposits || 1;
+             const gain = currentMetrics.totalPL; 
+             
+             if (invested === 0) return 0;
+             return (gain / invested) * 100;
+        };
 
         const now = new Date();
         const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-
-        // --- 1. Modified Dietz (Short Term: < 1 Year) ---
-        // Good for short periods where compounding isn't critical.
-        const calculateDietz = (startDate) => {
-            const startIso = startDate.toISOString().split('T')[0];
-            const sorted = [...historicalData].sort((a, b) => b.date.localeCompare(a.date));
-            const startPoint = sorted.find(p => p.date <= startIso);
-
-            if (!startPoint) return null;
-
-            const startVal = startPoint.portfolio_value;
-            const startFlow = startPoint.cumulative_cash_flow;
-            const endVal = currentMetrics.totalPortfolioValue;
-            const endFlow = currentMetrics.netDeposits;
-
-            // If account was empty at start of period, Dietz is unstable. Fallback to TWR logic or 0.
-            if (startVal < 1) return null; 
-
-            const netFlowsInPeriod = endFlow - startFlow;
-            const gain = (endVal - startVal) - netFlowsInPeriod;
-            const adjustedStartCapital = startVal + (netFlowsInPeriod * 0.5);
-
-            if (adjustedStartCapital < 1) return 0;
-            return (gain / adjustedStartCapital) * 100;
-        };
-
-        // --- 2. Robust Time-Weighted Return (Long Term) ---
-        // Handles gaps (Value=0) by "pausing" performance for those days.
-        const calculateTWR = (startDate) => {
-            const startIso = startDate.toISOString().split('T')[0];
-            
-            const periodData = historicalData
-                .filter(p => p.date >= startIso)
-                .sort((a, b) => a.date.localeCompare(b.date)); // Sort Oldest -> Newest
-
-            if (periodData.length < 2) return null;
-
-            let cumulativeReturn = 1.0;
-            let hasStarted = false;
-
-            for (let i = 1; i < periodData.length; i++) {
-                const prev = periodData[i - 1];
-                const curr = periodData[i];
-
-                // Daily Flow
-                const dailyFlow = curr.cumulative_cash_flow - prev.cumulative_cash_flow;
-                
-                // Denominator: Value at start of day (Before gains, but AFTER deposits)
-                // Logic: If I have 0, deposit 1000 -> Denom is 1000.
-                // If I have 1000, withdraw 1000 -> Denom is 0.
-                const denominator = prev.portfolio_value + dailyFlow;
-
-                // GAP PROTECTION:
-                // If denominator is near zero (empty account), we skip this day.
-                // This correctly "bridges" the gap without adding return.
-                if (denominator > 1) {
-                    hasStarted = true;
-                    // Daily Return = (EndValue - Denom) / Denom
-                    // Simplifies to: (EndValue / Denom) - 1
-                    const dailyReturn = (curr.portfolio_value / denominator) - 1;
-                    
-                    // Sanity check: cap extreme daily returns (e.g. data glitch) to 1000%
-                    if (dailyReturn > 10) continue; 
-
-                    cumulativeReturn *= (1 + dailyReturn);
-                } else if (!hasStarted && curr.portfolio_value > 1) {
-                    // This handles the very first deposit day if denominator logic missed it
-                    hasStarted = true;
-                }
-            }
-
-            // Final Step: Last Snapshot -> Live Dashboard Values
-            const lastSnap = periodData[periodData.length - 1];
-            const finalFlow = currentMetrics.netDeposits - lastSnap.cumulative_cash_flow;
-            const finalDenom = lastSnap.portfolio_value + finalFlow;
-            
-            if (finalDenom > 1) {
-                const finalReturn = (currentMetrics.totalPortfolioValue / finalDenom) - 1;
-                cumulativeReturn *= (1 + finalReturn);
-            }
-
-            return (cumulativeReturn - 1) * 100;
-        };
-
-        // Dates
         const oneWeekAgo = new Date(today); oneWeekAgo.setDate(today.getDate() - 7);
         const oneMonthAgo = new Date(today); oneMonthAgo.setMonth(today.getMonth() - 1);
         const threeMonthsAgo = new Date(today); threeMonthsAgo.setMonth(today.getMonth() - 3);
@@ -153,97 +128,57 @@ export default function ReturnsPeriodSection({ historicalData, currentMetrics, i
         const startOfYear = new Date(today.getFullYear(), 0, 1);
         const oneYearAgo = new Date(today); oneYearAgo.setFullYear(today.getFullYear() - 1);
         const fiveYearsAgo = new Date(today); fiveYearsAgo.setFullYear(today.getFullYear() - 5);
-        const inceptionDate = new Date(2000, 0, 1); 
 
         return {
-            today: currentMetrics.dailyChangePct,
-            w1: calculateDietz(oneWeekAgo),
-            m1: calculateDietz(oneMonthAgo),
-            m3: calculateDietz(threeMonthsAgo),
-            m6: calculateDietz(sixMonthsAgo),
-            ytd: calculateTWR(startOfYear),
-            y1: calculateTWR(oneYearAgo),
-            y5: calculateTWR(fiveYearsAgo),
-            all: calculateTWR(inceptionDate) // Now using TWR as requested
+            today: currentMetrics?.dailyChangePct,
+            w1: { val: calculateTWR(oneWeekAgo), type: 'TWR' },
+            m1: { val: calculateTWR(oneMonthAgo), type: 'TWR' },
+            m3: { val: calculateTWR(threeMonthsAgo), type: 'TWR' },
+            m6: { val: calculateTWR(sixMonthsAgo), type: 'TWR' },
+            ytd: { val: calculateTWR(startOfYear), type: 'TWR' },
+            y1: { val: calculateTWR(oneYearAgo), type: 'TWR' },
+            y5: { val: calculateTWR(fiveYearsAgo), type: 'TWR' },
+            all: { val: calculateTotalROI(), type: 'ROI' } 
         };
-
     }, [historicalData, currentMetrics]);
 
     const periods = [
-        { key: 'today', label: 'Hoje', method: 'Simple' },
-        { key: 'w1', label: '1W', method: 'Dietz' },
-        { key: 'm1', label: '1M', method: 'Dietz' },
-        { key: 'm3', label: '3M', method: 'Dietz' },
-        { key: 'm6', label: '6M', method: 'Dietz' },
-        { key: 'ytd', label: 'YTD', method: 'TWR' },
-        { key: 'y1', label: '1Y', method: 'TWR' },
-        { key: 'y5', label: '5Y', method: 'TWR' },
-        { key: 'all', label: 'Início', method: 'TWR' },
+        { key: 'today', label: 'Hoje' },
+        { key: 'w1', label: '1W' },
+        { key: 'm1', label: '1M' },
+        { key: 'm3', label: '3M' },
+        { key: 'm6', label: '6M' },
+        { key: 'ytd', label: 'YTD' },
+        { key: 'y1', label: '1Y' },
+        { key: 'y5', label: '5Y' },
+        { key: 'all', label: 'Início' },
     ];
 
-    // Info Tooltip
-    const MethodTooltip = (
-        <Box sx={{ 
-            p: 1.5, 
-            maxWidth: 320, 
-            // --- ALTERAÇÕES APLICADAS AQUI ---
-            bgcolor: 'background.paper', 
-            color: 'text.primary',
-            border: theme => `1px solid ${theme.palette.divider}`, // Borda mais subtil
-            borderRadius: 1, // Borda levemente arredondada
-            // ---------------------------------
-            }}
-        >
-            <Typography variant="subtitle2" fontWeight="bold" gutterBottom sx={{ borderBottom: '1px solid', borderColor: 'divider', pb: 0.5 }}>
-                Metodologia de Retorno
+    // --- DESCRIÇÃO DO CÁLCULO (TOOLTIP/MODAL) ---
+    const CalculationInfo = (
+        <Box sx={{ p: 2, maxWidth: 350 }}>
+            <Typography variant="subtitle2" sx={{ fontWeight: 'bold', mb: 1 }}>
+                Como são calculados os retornos?
             </Typography>
-
-            <Box sx={{ mt: 1.5 }}>
-                <Typography variant="body2" gutterBottom>
-                    Curto Prazo (1 Ano)
+            
+            <Box sx={{ mb: 2 }}>
+                <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                    Períodos (1S a 5A): TWR
                 </Typography>
-                <Typography variant="caption" sx={{ display: 'block', mb: 0.5, color: 'text.secondary' }}>
-                    <strong>Modified Dietz:</strong> Aproximação rápida que pondera os fluxos de caixa (depósitos/levantamentos).
+                <Typography variant="caption" sx={{ color: 'text.secondary', lineHeight: 1.4, display: 'block' }}>
+                    Utiliza o <em>Time-Weighted Return</em>. Mede a performance da sua estratégia dia a dia, ignorando o impacto de depositar ou levantar dinheiro. É ideal para comparar a evolução do portfólio com o mercado.
                 </Typography>
-                <Box sx={{ 
-                    // --- ALTERAÇÕES APLICADAS AQUI (Fundo cinza claro para o código) ---
-                    bgcolor: 'grey.100', 
-                    p: 0.5, 
-                    borderRadius: 1, 
-                    fontFamily: 'monospace', 
-                    fontSize: '0.7rem', 
-                    textAlign: 'center', 
-                    color: 'text.primary'
-                    // ---------------------------------
-                    }}
-                >
-                    Retorno = Ganho / (Valor Inicial + 0.5 × Fluxos)
-                </Box>
             </Box>
 
-            <Box sx={{ mt: 2 }}>
-                <Typography variant="body2" gutterBottom>
-                    Longo Prazo (YTD, 1Y+)
+            <Divider sx={{ my: 1, borderColor: 'rgba(255,255,255,0.1)' }} />
+
+            <Box>
+                <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                    Desde o Início: ROI
                 </Typography>
-                <Typography variant="caption" sx={{ display: 'block', mb: 0.5, color: 'text.secondary' }}>
-                    <strong>Time-Weighted Return (TWR):</strong> Remove o efeito de depósitos/levantamentos para mostrar a real performance da estratégia.
-                </Typography>
-                <Box sx={{ 
-                     // --- ALTERAÇÕES APLICADAS AQUI (Fundo cinza claro para o código) ---
-                    bgcolor: 'grey.100', 
-                    p: 0.5, 
-                    borderRadius: 1, 
-                    fontFamily: 'monospace', 
-                    fontSize: '0.7rem', 
-                    textAlign: 'center', 
-                    color: 'text.primary'
-                    // ---------------------------------
-                    }}
-                >
-                    TWR = (1 + r₁) × (1 + r₂) × ... - 1
-                </Box>
-                <Typography variant="caption" sx={{ display: 'block', mt: 0.5, color: 'text.disabled', fontStyle: 'italic' }}>
-                    *Gere intervalos vazios (saldo 0) ignorando-os no cálculo.
+                <Typography variant="caption" sx={{ color: 'text.secondary', lineHeight: 1.4, display: 'block' }}>
+                    Utiliza o <em>Retorno sobre Investimento</em>. Mostra o crescimento efetivo do seu património real. <br/>
+                    Fórmula: <code>(Lucro Total / Capital Investido)</code>.
                 </Typography>
             </Box>
         </Box>
@@ -255,24 +190,47 @@ export default function ReturnsPeriodSection({ historicalData, currentMetrics, i
                 <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
                     Retornos por Período
                 </Typography>
-                <Tooltip title={MethodTooltip} arrow placement="right">
-                    <IconButton size="small" sx={{ color: 'text.secondary' }}>
+                
+                {/* Ícone de Informação com Tooltip */}
+                <Tooltip 
+                    title={CalculationInfo} 
+                    arrow 
+                    placement="right"
+                    componentsProps={{
+                        tooltip: {
+                            sx: {
+                                bgcolor: 'background.paper',
+                                border: '1px solid',
+                                borderColor: 'divider',
+                                color: 'text.primary',
+                                boxShadow: 3
+                            }
+                        }
+                    }}
+                >
+                    <IconButton size="small" sx={{ color: 'text.secondary', '&:hover': { color: 'primary.main' } }}>
                         <InfoOutlinedIcon fontSize="small" />
                     </IconButton>
                 </Tooltip>
             </Box>
             
             <Grid container spacing={2}>
-                {periods.map((p) => (
-                    <Grid item xs={6} sm={4} md={3} lg={1.33} key={p.key}>
-                        <PeriodCard 
-                            label={p.label} 
-                            value={returns[p.key]} 
-                            isTwr={p.method === 'TWR'}
-                            isLoading={isLoading} 
-                        />
-                    </Grid>
-                ))}
+                {periods.map((p) => {
+                    const data = returns[p.key];
+                    const value = data?.val !== undefined ? data.val : data;
+                    const type = data?.type || '';
+
+                    return (
+                        <Grid item xs={6} sm={4} md={3} lg={1.33} key={p.key}>
+                            <PeriodCard 
+                                label={p.label} 
+                                value={value} 
+                                type={type}
+                                isLoading={isLoading} 
+                            />
+                        </Grid>
+                    );
+                })}
             </Grid>
         </Box>
     );
