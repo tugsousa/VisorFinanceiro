@@ -26,11 +26,11 @@ const FaqSection = () => {
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
         <FaqItem
           question="O VisorFinanceiro tem algum custo?"
-          answer="De momento, o VisorFinanceiro é totalmente gratuito. Estamos focados em construir a melhor ferramenta possível para a comunidade de investidores em Portugal."
+          answer="Não, é totalmente gratuito. Esta ferramenta foi criada para resolver a complexidade do IRS e da gestão de portfólios em Portugal."
         />
         <FaqItem
           question="Que corretoras são suportadas?"
-          answer="De momento, suportamos a DEGIRO e a Interactive Brokers, mas pretendemos adicionar mais correctoras."
+          answer="Suportamos a DEGIRO e a Interactive Brokers (IBKR). Se utilizas outra corretora e gostarias de vê-la integrada, envia-nos a tua sugestão através do nosso contacto."
         />
         <FaqItem
           question="A taxa de câmbio usada é a oficial da Autoridade Tributária?"
