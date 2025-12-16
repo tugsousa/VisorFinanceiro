@@ -50,124 +50,135 @@ export default function HistoricalPerformanceChart() {
   }, [rawData, viewMode]);
 
   // Processamento dos dados
-  const processedData = useMemo(() => {
+const processedData = useMemo(() => {
     if (!rawData || rawData.length === 0) return [];
-    
+
     // 1. Determinar a data de início baseada no filtro
     const now = new Date();
-    now.setHours(23, 59, 59, 999); 
-    
-    let startDate = new Date(rawData[0].date); 
+    now.setHours(23, 59, 59, 999);
+    let startDate = new Date(rawData[0].date);
 
     if (timeRange !== 'ALL') {
-        const tempStart = new Date();
-        switch (timeRange) {
-            case '1W': tempStart.setDate(now.getDate() - 7); break;
-            case '1M': tempStart.setMonth(now.getMonth() - 1); break;
-            case '3M': tempStart.setMonth(now.getMonth() - 3); break;
-            case 'YTD': tempStart.setFullYear(now.getFullYear(), 0, 1); break;
-            case '1Y': tempStart.setFullYear(now.getFullYear() - 1); break;
-            case '5Y': tempStart.setFullYear(now.getFullYear() - 5); break;
-            default: break;
-        }
-        // Garantir que a data não é anterior ao primeiro dado disponível
-        const firstDataDate = new Date(rawData[0].date);
-        startDate = tempStart < firstDataDate ? firstDataDate : tempStart;
+      const tempStart = new Date();
+      switch (timeRange) {
+        case '1W': tempStart.setDate(now.getDate() - 7); break;
+        case '1M': tempStart.setMonth(now.getMonth() - 1); break;
+        case '3M': tempStart.setMonth(now.getMonth() - 3); break;
+        case 'YTD': tempStart.setFullYear(now.getFullYear(), 0, 1); break;
+        case '1Y': tempStart.setFullYear(now.getFullYear() - 1); break;
+        case '5Y': tempStart.setFullYear(now.getFullYear() - 5); break;
+        default: break;
+      }
+      // Garantir que a data não é anterior ao primeiro dado disponível
+      const firstDataDate = new Date(rawData[0].date);
+      startDate = tempStart < firstDataDate ? firstDataDate : tempStart;
     }
 
     // Filtrar array
     const filtered = rawData.filter(p => new Date(p.date) >= startDate);
     if (filtered.length === 0) return [];
 
-    // --- LÓGICA CONDICIONAL ---
-
-    // CASO 1: "ALL" -> Usa os dados originais do Backend (Acumulados desde o início)
+    // CASO 1: "ALL" -> Mantém a lógica original (Acumulado desde o início)
     if (timeRange === 'ALL') {
-        return filtered.map(point => {
-            const invested = point.cumulative_cash_flow;
-            const portfolioValue = point.portfolio_value || 0;
-            const benchmarkValue = point.benchmark_value || 0;
-
-            // Cálculo de percentagem baseado no Total Investido (ROI total)
-            const portfolioReturnPct = invested > 1 ? ((portfolioValue - invested) / invested) * 100 : 0;
-            const benchmarkReturnPct = invested > 1 ? ((benchmarkValue - invested) / invested) * 100 : 0;
-
-            return {
-                ...point,
-                benchmark_value_view: benchmarkValue, // Valor direto do backend
-                portfolio_pct_view: portfolioReturnPct,
-                benchmark_pct_view: benchmarkReturnPct
-            };
-        });
-    }
-
-    // CASO 2: FILTROS DE TEMPO -> Simulação Dinâmica com Fluxos de Caixa
-    
-    // Inicialização no dia 0 do período selecionado
-    const startPoint = filtered[0];
-    const startPortfolioValue = startPoint.portfolio_value || 0;
-    const startSpyPrice = startPoint.spy_price || 0;
-    
-    // Variáveis de estado para a simulação
-    let currentSimulatedUnits = 0;
-    let lastCashFlow = startPoint.cumulative_cash_flow || 0;
-
-    // Compra inicial: "Vendemos" o portfólio atual e "compramos" SPY
-    if (startSpyPrice > 0) {
-        currentSimulatedUnits = startPortfolioValue / startSpyPrice;
-    }
-
-    return filtered.map((point, index) => {
-        const currentPortfolioValue = point.portfolio_value || 0;
-        const currentSpyPrice = point.spy_price || 0;
-        const currentCashFlow = point.cumulative_cash_flow || 0;
-
-        // Se não for o primeiro ponto, verificar se houve depósitos/levantamentos
-        if (index > 0 && currentSpyPrice > 0) {
-            const cashFlowDelta = currentCashFlow - lastCashFlow;
-            
-            // Se houve fluxo de caixa, ajustamos a posição simulada no SPY
-            if (cashFlowDelta !== 0) {
-                // Se cashFlowDelta > 0 (Depósito), compramos mais unidades
-                // Se cashFlowDelta < 0 (Levantamento), vendemos unidades
-                const unitsToTrade = cashFlowDelta / currentSpyPrice;
-                currentSimulatedUnits += unitsToTrade;
-            }
-        }
-
-        // Atualizar referência de cashflow para o próximo loop
-        lastCashFlow = currentCashFlow;
-
-        // 1. Calcular o Valor Simulado do Benchmark
-        let benchmarkValueRebased = 0;
-        if (currentSpyPrice > 0) {
-            benchmarkValueRebased = currentSimulatedUnits * currentSpyPrice;
-        }
-
-        // 2. Calcular Percentagens Relativas (Normalizadas a 0% no início)
-        // Nota: Esta é uma simplificação visual (Simple Return). 
-        // Para rigor absoluto com fluxos de caixa, seria necessário TWR, mas para o gráfico 
-        // interativo, mostrar a evolução do valor relativo ao ponto de partida é o padrão esperado.
+      return filtered.map(point => {
+        const invested = point.cumulative_cash_flow; 
+        const value = point.portfolio_value;
+        const benchValue = point.benchmark_value;
         
-        let portfolioReturnPct = 0;
-        if (startPortfolioValue > 0) {
-            // Ajuste simples para não quebrar o gráfico com spikes de depósitos no modo %
-            // O ideal para modo % com depósitos é TWR, mas manteremos consistência visual com o modo Value
-            portfolioReturnPct = ((currentPortfolioValue - startPortfolioValue) / startPortfolioValue) * 100;
-        }
-
-        let benchmarkReturnPct = 0;
-        if (startPortfolioValue > 0) {
-            benchmarkReturnPct = ((benchmarkValueRebased - startPortfolioValue) / startPortfolioValue) * 100;
+        let pct = 0;
+        let benchPct = 0;
+        if (invested > 0) {
+          pct = ((value - invested) / invested) * 100;
+          benchPct = ((benchValue - invested) / invested) * 100;
         }
 
         return {
-            ...point,
-            benchmark_value_view: benchmarkValueRebased,
-            portfolio_pct_view: portfolioReturnPct,
-            benchmark_pct_view: benchmarkReturnPct
+          date: point.date,
+          cumulative_cash_flow: invested, // Importante: Passar o valor para o gráfico
+          portfolio_value: value,
+          portfolio_pct_view: pct,
+          benchmark_value_view: benchValue,
+          benchmark_pct_view: benchPct
         };
-    });
+      });
+    }
+
+    // CASO 2: PERÍODOS ESPECÍFICOS -> Time-Weighted Return (TWR) + Benchmark Simulado
+    // Recalcula o benchmark para começar no mesmo valor da carteira no dia 0 do período.
+    
+    let cumulativeMult = 1.0;
+    let cumulativeBenchMult = 1.0;
+    
+    // Estado inicial para a simulação do Benchmark
+    const startPortValue = filtered[0].portfolio_value || 0;
+    const startSpyPrice = filtered[0].spy_price || 0;
+    let simulatedBenchUnits = startSpyPrice > 0 ? (startPortValue / startSpyPrice) : 0;
+
+    const result = [];
+
+    for (let i = 0; i < filtered.length; i++) {
+        const curr = filtered[i];
+        
+        // Ponto Inicial (Base 0%)
+        if (i === 0) {
+            result.push({
+                date: curr.date,
+                cumulative_cash_flow: curr.cumulative_cash_flow,
+                portfolio_value: curr.portfolio_value,
+                portfolio_pct_view: 0,
+                // O Benchmark começa igual à carteira para comparação justa no gráfico de valor
+                benchmark_value_view: curr.portfolio_value, 
+                benchmark_pct_view: 0
+            });
+            continue;
+        }
+
+        const prev = filtered[i-1];
+
+        // 1. Fluxo de Caixa do Dia
+        const dailyFlow = curr.cumulative_cash_flow - prev.cumulative_cash_flow;
+
+        // 2. TWR Portfolio
+        const prevVal = prev.portfolio_value;
+        let dailyReturn = 0;
+        if (prevVal > 0) { 
+            dailyReturn = ((curr.portfolio_value - dailyFlow) / prevVal) - 1;
+        }
+        cumulativeMult *= (1 + dailyReturn);
+
+        // 3. Benchmark Simulado (Rebase)
+        // Ajusta as unidades simuladas com o fluxo de caixa (compra/venda de SPY fictício)
+        const currentSpyPrice = curr.spy_price || 0;
+        if (currentSpyPrice > 0 && dailyFlow !== 0) {
+            const unitsBought = dailyFlow / currentSpyPrice;
+            simulatedBenchUnits += unitsBought;
+        }
+        
+        // Valor atual do Benchmark Simulado
+        const currentBenchValue = simulatedBenchUnits * currentSpyPrice;
+        
+        // TWR Benchmark (calculado sobre o valor simulado para alinhar percentagens)
+        // prevSimBenchValue é o valor do benchmark do passo anterior (recalculado abaixo ou guardado)
+        // Simplificação: TWR do Benchmark é apenas a variação do preço do SPY, pois os fluxos são neutralizados
+        // Mas para consistência matemática, usamos a fórmula padrão sobre o valor simulado
+        const prevBenchVal = result[i-1].benchmark_value_view;
+        let dailyBenchReturn = 0;
+        if (prevBenchVal > 0) {
+             dailyBenchReturn = ((currentBenchValue - dailyFlow) / prevBenchVal) - 1;
+        }
+        cumulativeBenchMult *= (1 + dailyBenchReturn);
+
+        result.push({
+            date: curr.date,
+            cumulative_cash_flow: curr.cumulative_cash_flow, // ADICIONADO: Corrige o bug da linha desaparecida
+            portfolio_value: curr.portfolio_value,
+            portfolio_pct_view: (cumulativeMult - 1) * 100,
+            benchmark_value_view: currentBenchValue, // Valor Simulado e Rebaseado
+            benchmark_pct_view: (cumulativeBenchMult - 1) * 100
+        });
+    }
+
+    return result;
 
   }, [rawData, timeRange]);
 
