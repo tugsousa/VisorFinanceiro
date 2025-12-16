@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Box, Typography, Grid, Paper, FormControl, InputLabel, Select, MenuItem, Card } from '@mui/material';
+import { Box, Typography, Grid, Paper, FormControl, InputLabel, Select, MenuItem, Card, Tooltip, IconButton } from '@mui/material';
 import { useAuth } from '../../auth/AuthContext';
 import { useAnalyticsData } from '../hooks/useAnalyticsData';
 import OverallPLChart from '../components/OverallPLChart';
@@ -16,9 +16,39 @@ import AccountBalanceWalletIcon from '@mui/icons-material/AccountBalanceWallet';
 import PercentIcon from '@mui/icons-material/Percent';
 import ThumbUpAltIcon from '@mui/icons-material/ThumbUpAlt';
 import ThumbDownAltIcon from '@mui/icons-material/ThumbDownAlt';
+import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined'; // Novo Icone para Tooltip
+
+// --- ESTILOS TOOLTIP ---
+const tooltipComponentsProps = {
+    tooltip: {
+        sx: {
+            bgcolor: 'background.paper',
+            color: 'text.primary',
+            boxShadow: '0px 4px 20px rgba(0,0,0,0.15)',
+            borderRadius: 3,
+            maxWidth: 300,
+            p: 1.5
+        }
+    },
+    arrow: {
+        sx: { color: 'background.paper' }
+    }
+};
+
+const RichTooltipContent = ({ title, description }) => (
+    <Box>
+        <Typography variant="subtitle2" fontWeight="bold" gutterBottom sx={{ color: 'text.primary', mb: 0.5 }}>
+            {title}
+        </Typography>
+        <Typography variant="body2" sx={{ lineHeight: 1.4, color: 'text.secondary', fontSize: '0.8rem' }}>
+            {description}
+        </Typography>
+    </Box>
+);
 
 // REVERTIDO: KPICard para p:1.5 e h6, com espaçamento ajustado.
-const KPICard = ({ title, value, icon, isPercentage = false, isTrade = false, secondaryValue }) => {
+// ADICIONADO: Propriedade 'tooltip'
+const KPICard = ({ title, value, icon, isPercentage = false, isTrade = false, secondaryValue, tooltip }) => {
     const numericValue = isTrade ? (value?.value || 0) : value;
     const isPositive = numericValue >= 0;
     
@@ -73,21 +103,32 @@ const KPICard = ({ title, value, icon, isPercentage = false, isTrade = false, se
                 textAlign: 'left', 
             }}
         >
-            {/* Título - Alinhado à esquerda */}
-            <Typography 
-                variant="caption" 
-                color="text.secondary" 
-                sx={{ 
-                    // REVERTIDO: para font original (0.75rem)
-                    fontSize: '0.75rem', 
-                    fontWeight: 600, 
-                    textTransform: 'uppercase', 
-                    lineHeight: 1,
-                    mb: 1 // Aumentado para 1 (8px) para afastar ligeiramente do valor
-                }}
-            >
-                {title}
-            </Typography>
+            {/* Título e Tooltip - Alinhado à esquerda */}
+            <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+                <Typography 
+                    variant="caption" 
+                    color="text.secondary" 
+                    sx={{ 
+                        // REVERTIDO: para font original (0.75rem)
+                        fontSize: '0.75rem', 
+                        fontWeight: 600, 
+                        textTransform: 'uppercase', 
+                        lineHeight: 1,
+                    }}
+                >
+                    {title}
+                </Typography>
+                
+                {/* Lógica do Tooltip */}
+                {tooltip && (
+                    <Tooltip title={tooltip} placement="top" arrow componentsProps={tooltipComponentsProps}>
+                        <IconButton size="small" sx={{ p: 0, ml: 0.5, color: 'text.disabled', '&:hover': { color: 'primary.main' } }}>
+                            <InfoOutlinedIcon sx={{ fontSize: 14 }} />
+                        </IconButton>
+                    </Tooltip>
+                )}
+            </Box>
+
             {/* Valor - Alinhado à esquerda */}
             <Box sx={{ minHeight: 30, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
                 {formattedValue}
@@ -187,6 +228,18 @@ const PerformancePage = () => {
         return res;
     }, [stockSalesData, optionSalesData, dividendTransactionsData, feesData, selectedYear]);
 
+    // --- Definição dos conteúdos Tooltip ---
+    const tooltips = {
+        total: <RichTooltipContent title="Total Líquido" description="Resultado final somando Ações, Opções e Dividendos, subtraindo as Comissões." />,
+        roi: <RichTooltipContent title="Retorno % (ROI)" description="Percentagem de retorno sobre o capital investido nas posições fechadas." />,
+        best: <RichTooltipContent title="Melhor Negócio" description="O trade individual que gerou o maior lucro absoluto no período." />,
+        worst: <RichTooltipContent title="Pior Negócio" description="O trade individual que gerou o maior prejuízo absoluto no período." />,
+        stocks: <RichTooltipContent title="Ações" description="Lucro ou prejuízo realizado exclusivamente com a compra e venda de Ações/ETFs." />,
+        options: <RichTooltipContent title="Opções" description="Resultado financeiro obtido com o fecho de contratos de Opções." />,
+        dividends: <RichTooltipContent title="Dividendos" description="Total de dividendos recebidos (brutos) durante o período." />,
+        fees: <RichTooltipContent title="Comissões" description="Total gasto em taxas de transação e custos de corretagem." />,
+    };
+
     return (
         <Box sx={{ p: 3 }}>
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
@@ -201,35 +254,35 @@ const PerformancePage = () => {
             
             {/* KPI GRID - 4 Columns Layout */}
             <Grid container spacing={2} sx={{ mb: 4 }}>
-                {/* LINHA 1: KPIs Principais. Adicionamos mb:1 à grelha para criar o espaçamento visível entre as linhas */}
+                {/* LINHA 1: KPIs Principais. */}
                 <Grid container item xs={12} spacing={2} sx={{ mb: 3 }}>
                     <Grid item xs={12} sm={6} md={3}>
-                        <KPICard title="Total Líquido" value={metrics.total} icon={<AccountBalanceWalletIcon />} />
+                        <KPICard title="Total Líquido" value={metrics.total} icon={<AccountBalanceWalletIcon />} tooltip={tooltips.total} />
                     </Grid>
                     <Grid item xs={12} sm={6} md={3}>
-                        <KPICard title="Retorno %" value={metrics.roi} isPercentage icon={<PercentIcon />} />
+                        <KPICard title="Retorno %" value={metrics.roi} isPercentage icon={<PercentIcon />} tooltip={tooltips.roi} />
                     </Grid>
                     <Grid item xs={12} sm={6} md={3}>
-                        <KPICard title="Melhor Negócio" value={metrics.bestTrade} isTrade icon={<ThumbUpAltIcon />} />
+                        <KPICard title="Melhor Negócio" value={metrics.bestTrade} isTrade icon={<ThumbUpAltIcon />} tooltip={tooltips.best} />
                     </Grid>
                     <Grid item xs={12} sm={6} md={3}>
-                        <KPICard title="Pior Negócio" value={metrics.worstTrade} isTrade icon={<ThumbDownAltIcon />} />
+                        <KPICard title="Pior Negócio" value={metrics.worstTrade} isTrade icon={<ThumbDownAltIcon />} tooltip={tooltips.worst} />
                     </Grid>
                 </Grid>
                 
-                {/* LINHA 2: KPIs de Detalhe. Não precisa de mb adicional, pois o espaçamento é dado pelo 'spacing={2}' da Grid pai */}
+                {/* LINHA 2: KPIs de Detalhe. */}
                 <Grid container item xs={12} spacing={2}> 
                     <Grid item xs={6} sm={3}>
-                        <KPICard title="Ações" value={metrics.stocks} icon={<ShowChartIcon />} />
+                        <KPICard title="Ações" value={metrics.stocks} icon={<ShowChartIcon />} tooltip={tooltips.stocks} />
                     </Grid>
                     <Grid item xs={6} sm={3}>
-                        <KPICard title="Opções" value={metrics.options} icon={<CandlestickChartIcon />} />
+                        <KPICard title="Opções" value={metrics.options} icon={<CandlestickChartIcon />} tooltip={tooltips.options} />
                     </Grid>
                     <Grid item xs={6} sm={3}>
-                        <KPICard title="Dividendos" value={metrics.dividends} icon={<AttachMoneyIcon />} />
+                        <KPICard title="Dividendos" value={metrics.dividends} icon={<AttachMoneyIcon />} tooltip={tooltips.dividends} />
                     </Grid>
                     <Grid item xs={6} sm={3}>
-                        <KPICard title="Comissões" value={metrics.fees} icon={<RequestQuoteIcon />} />
+                        <KPICard title="Comissões" value={metrics.fees} icon={<RequestQuoteIcon />} tooltip={tooltips.fees} />
                     </Grid>
                 </Grid>
             </Grid>
