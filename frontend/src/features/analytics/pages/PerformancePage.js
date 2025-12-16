@@ -56,8 +56,15 @@ const KPICard = ({ title, value, icon, isPercentage = false, isTrade = false, se
     const performanceColor = isPositive ? 'success.main' : 'error.main';
     
     // Determine primary color: use performance color only if it's performance related
-    const primaryColor = (title.includes('Líquido') || title.includes('Retorno') || title.includes('Negócio')) 
-        ? performanceColor 
+    const primaryColor = (
+        title.includes('Líquido') || 
+        title.includes('Retorno') || 
+        title.includes('Negócio') || 
+        title === 'Ações' || 
+        title === 'Opções' || 
+        title === 'Dividendos'
+    )
+        ? performanceColor
         : 'text.primary'; // Default for non-P/L metrics
 
     // Override commission color to error.main regardless of sign
