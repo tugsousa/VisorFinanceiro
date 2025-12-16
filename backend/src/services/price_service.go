@@ -21,7 +21,6 @@ import (
 )
 
 // --- Manual Overrides Configuration ---
-// Adiciona aqui quaisquer ISINs que a pesquisa automática não encontre
 var manualTickerOverrides = map[string]string{
 	"PLLVTSF00010": "TXT.WA", // Text S.A.
 	"IE000U9J8HX9": "JEPQ.L", // JPMorgan Nasdaq Equity Premium Income Active UCITS ETF
@@ -70,6 +69,23 @@ type yahooHistoryResponse struct {
 	} `json:"chart"`
 }
 
+// --- NOVO: Struct para resposta de Splits (API v8 Chart retorna events) ---
+type yahooSplitsResponse struct {
+	Chart struct {
+		Result []struct {
+			Events struct {
+				Splits map[string]struct {
+					Date        int64   `json:"date"`
+					Numerator   float64 `json:"numerator"`
+					Denominator float64 `json:"denominator"`
+					SplitRatio  string  `json:"splitRatio"`
+				} `json:"splits"`
+			} `json:"events"`
+		} `json:"result"`
+		Error interface{} `json:"error"`
+	} `json:"chart"`
+}
+
 type yahooQuoteSummaryResponse struct {
 	QuoteSummary struct {
 		Result []struct {
@@ -111,6 +127,12 @@ type yahooEventsResponse struct {
 
 // --- Service Implementation ---
 
+// --- NOVO: Struct auxiliar interna ---
+type StockSplit struct {
+	Date  time.Time
+	Ratio float64
+}
+
 type priceServiceImpl struct {
 	httpClient    http.Client
 	isInitialized bool
@@ -126,7 +148,7 @@ func NewPriceService() PriceService {
 
 	client := http.Client{
 		Jar:     jar,
-		Timeout: 20 * time.Second,
+		Timeout: 30 * time.Second, // Aumentei ligeiramente o timeout
 	}
 
 	s := &priceServiceImpl{
@@ -193,6 +215,59 @@ func (s *priceServiceImpl) ensureSession() {
 	if needsInit {
 		s.initializeYahooSession()
 	}
+}
+
+// --- NOVO: Função para buscar Splits via API Chart (events=split) ---
+func (s *priceServiceImpl) fetchSplits(ticker string) ([]StockSplit, error) {
+	// Period1: Ano 2000 até agora
+	now := time.Now().Unix()
+	period1 := int64(946684800) // 2000-01-01
+
+	url := fmt.Sprintf("https://query1.finance.yahoo.com/v8/finance/chart/%s?symbol=%s&period1=%d&period2=%d&interval=1d&events=split&crumb=%s", ticker, ticker, period1, now, s.crumb)
+
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
+
+	resp, err := s.httpClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		// Se falhar (ex: 404), assumimos sem splits
+		return []StockSplit{}, nil
+	}
+
+	var data yahooSplitsResponse
+	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
+		return nil, err
+	}
+
+	if len(data.Chart.Result) == 0 {
+		return []StockSplit{}, nil
+	}
+
+	var splits []StockSplit
+	events := data.Chart.Result[0].Events.Splits
+
+	for _, splitEvent := range events {
+		if splitEvent.Denominator == 0 {
+			continue
+		}
+		// Yahoo Ratio: Numerator / Denominator
+		// Ex: Reverse Split 1:20 -> Num 1, Denom 20 -> Ratio 0.05
+		ratio := splitEvent.Numerator / splitEvent.Denominator
+
+		splits = append(splits, StockSplit{
+			Date:  time.Unix(splitEvent.Date, 0),
+			Ratio: ratio,
+		})
+	}
+	return splits, nil
 }
 
 // --- Implementation of Methods ---
@@ -353,13 +428,7 @@ func (s *priceServiceImpl) fetchTickerForISIN(isin string) (string, string, stri
 		return "", "", "", fmt.Errorf("invalid ISIN length: %s", isin)
 	}
 
-	// Check overrides first
 	if ticker, ok := manualTickerOverrides[isin]; ok {
-		// Retornamos "Override" como exchange para sinalizar que foi manual,
-		// mas o getIsinToTickerMap vai lidar bem com isso.
-		// Precisamos de uma moeda por defeito ou tentar descobrir?
-		// Por simplicidade, assumimos que o override funciona,
-		// a moeda será corrigida no primeiro fetch de preço.
 		return ticker, "Override", "", nil
 	}
 
@@ -430,9 +499,16 @@ func (s *priceServiceImpl) getPriceForTicker(ticker string) (float64, string, er
 func (s *priceServiceImpl) GetHistoricalPrices(ticker string) (PriceMap, string, error) {
 	s.ensureSession()
 
-	// FIX: Definir janela fixa de 10 anos (Timestamp) para forçar resolução diária (1d)
-	// Isto resolve o problema de downsampling (flatlines) para o SPY e funciona
-	// para ativos novos como o JEPQ.L (Yahoo retorna o que tem).
+	// --- NOVO: Buscar Splits ---
+	// Fazemos isto primeiro. Se falhar, apenas avisamos e continuamos sem correção.
+	splits, errSplits := s.fetchSplits(ticker)
+	if errSplits != nil {
+		logger.L.Warn("Failed to fetch splits (continuing without adjustment)", "ticker", ticker, "error", errSplits)
+	} else if len(splits) > 0 {
+		logger.L.Info("Splits found", "ticker", ticker, "count", len(splits))
+	}
+	// ---------------------------
+
 	now := time.Now().Unix()
 	tenYearsAgo := time.Now().AddDate(-10, 0, 0).Unix()
 
@@ -451,7 +527,6 @@ func (s *priceServiceImpl) GetHistoricalPrices(ticker string) (PriceMap, string,
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		// Log para ajudar a perceber erros 404 (ticker errado)
 		logger.L.Warn("Yahoo history API returned non-OK status", "ticker", ticker, "status", resp.StatusCode)
 		return nil, "", fmt.Errorf("yahoo history api returned %d", resp.StatusCode)
 	}
@@ -499,7 +574,22 @@ func (s *priceServiceImpl) GetHistoricalPrices(ticker string) (PriceMap, string,
 			continue
 		}
 
-		dateStr := time.Unix(ts, 0).Format("2006-01-02")
+		currentDate := time.Unix(ts, 0)
+		dateStr := currentDate.Format("2006-01-02")
+
+		// --- NOVO: Lógica de Correção de Splits (Un-adjustment) ---
+		// Se a data deste preço for ANTERIOR a um split, multiplicamos pelo ratio.
+		// Ex: Preço Yahoo (ajustado) = 90. Split futuro foi 1:20 (0.05).
+		// Preço Real = 90 * 0.05 = 4.5
+		if len(splits) > 0 {
+			for _, split := range splits {
+				if currentDate.Before(split.Date) {
+					price = price * split.Ratio
+				}
+			}
+		}
+		// -----------------------------------------------------------
+
 		priceMap[dateStr] = price
 		sortedDates = append(sortedDates, dateStr)
 		validCount++
@@ -510,8 +600,7 @@ func (s *priceServiceImpl) GetHistoricalPrices(ticker string) (PriceMap, string,
 		return nil, "", fmt.Errorf("no valid prices found in history")
 	}
 
-	// Forward Fill: Preencher dias sem dados (fins de semana, feriados) com o preço anterior.
-	// Isto garante que o RebuildUserHistory encontra sempre um preço.
+	// Forward Fill
 	if len(sortedDates) > 0 {
 		sort.Strings(sortedDates)
 		startDate, _ := time.Parse("2006-01-02", sortedDates[0])
