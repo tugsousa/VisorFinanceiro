@@ -649,3 +649,46 @@ func (h *UserHandler) HandleAdminClearStatsCache(w http.ResponseWriter, r *http.
 	h.cache.Flush()
 	w.WriteHeader(http.StatusNoContent)
 }
+
+func (h *UserHandler) HandleImpersonateUser(w http.ResponseWriter, r *http.Request) {
+	// 1. Obter o ID do utilizador alvo a partir do URL (ex: /admin/users/{userID}/impersonate)
+	targetUserIDStr := chi.URLParam(r, "userID")
+	targetUserID, err := strconv.ParseInt(targetUserIDStr, 10, 64)
+	if err != nil {
+		sendJSONError(w, "ID de utilizador inválido", http.StatusBadRequest)
+		return
+	}
+
+	// 2. Buscar o utilizador para garantir que existe e obter dados (username, email)
+	user, err := model.GetUserByID(database.DB, targetUserID)
+	if err != nil {
+		sendJSONError(w, "Utilizador não encontrado", http.StatusNotFound)
+		return
+	}
+
+	// 3. Gerar o token de acesso como se fosse este utilizador
+	// Nota: A tua função GenerateToken espera uma string
+	accessToken, err := h.authService.GenerateToken(fmt.Sprintf("%d", user.ID))
+	if err != nil {
+		logger.L.Error("Falha ao gerar token de impersonation", "error", err)
+		sendJSONError(w, "Erro ao gerar acesso", http.StatusInternalServerError)
+		return
+	}
+
+	// Opcional: Gerar refresh token se necessário, ou usar apenas o access token para uma sessão curta
+
+	// 4. Retornar o token e os dados do utilizador
+	response := map[string]interface{}{
+		"access_token": accessToken,
+		"user": map[string]interface{}{
+			"id":            user.ID,
+			"username":      user.Username,
+			"email":         user.Email,
+			"auth_provider": user.AuthProvider,
+			"is_admin":      isAdmin(user.Email), // Reutiliza a tua função auxiliar isAdmin
+		},
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
+}
