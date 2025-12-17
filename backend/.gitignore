@@ -2,3 +2,5 @@
 .gitignore
 *.db
 .env
+*.db-shm
+*.db-wal

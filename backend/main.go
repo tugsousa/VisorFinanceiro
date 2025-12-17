@@ -1,4 +1,3 @@
-// backend/main.go
 package main
 
 import (
@@ -25,7 +24,6 @@ import (
 	"golang.org/x/time/rate"
 )
 
-// --- Middleware functions (proxyHeadersMiddleware, rateLimitMiddleware, enableCORS) remain the same ---
 func proxyHeadersMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("X-Forwarded-Proto") == "https" {
@@ -71,6 +69,7 @@ func enableCORS(next http.Handler) http.Handler {
 			w.WriteHeader(http.StatusOK)
 			return
 		}
+
 		next.ServeHTTP(w, r)
 	})
 }
@@ -78,6 +77,7 @@ func enableCORS(next http.Handler) http.Handler {
 func main() {
 	config.LoadConfig()
 	logger.InitLogger(config.Cfg.LogLevel)
+
 	logger.L.Info("VisorFinanceiro backend server starting...")
 
 	if config.Cfg.JWTSecret == "" || len(config.Cfg.JWTSecret) < 32 {
@@ -97,6 +97,7 @@ func main() {
 	reportCache := cache.New(services.DefaultCacheExpiration, services.CacheCleanupInterval)
 
 	handlers.InitializeGoogleOAuthConfig()
+
 	authService := security.NewAuthService(config.Cfg.JWTSecret)
 	emailService := services.NewEmailService()
 	priceService := services.NewPriceService()
@@ -109,8 +110,12 @@ func main() {
 	feeProcessor := processors.NewFeeProcessor()
 
 	uploadService := services.NewUploadService(
-		transactionProcessor, dividendProcessor, stockProcessor,
-		optionProcessor, cashMovementProcessor, feeProcessor,
+		transactionProcessor,
+		dividendProcessor,
+		stockProcessor,
+		optionProcessor,
+		cashMovementProcessor,
+		feeProcessor,
 		priceService,
 		reportCache,
 	)
@@ -121,7 +126,6 @@ func main() {
 	dividendHandler := handlers.NewDividendHandler(uploadService)
 	txHandler := handlers.NewTransactionHandler(uploadService)
 	feeHandler := handlers.NewFeeHandler(uploadService)
-	// NEW HANDLER
 	pfManagerHandler := handlers.NewPortfolioManagerHandler()
 
 	r := chi.NewRouter()
@@ -138,6 +142,7 @@ func main() {
 	})
 
 	r.Route("/api", func(r chi.Router) {
+		// Rotas Públicas
 		r.Group(func(r chi.Router) {
 			r.Get("/auth/csrf", handlers.GetCSRFToken)
 			r.Get("/auth/verify-email", userHandler.VerifyEmailHandler)
@@ -145,6 +150,7 @@ func main() {
 			r.Get("/auth/google/callback", userHandler.HandleGoogleCallback)
 		})
 
+		// Rotas de Autenticação (Protegidas por CSRF)
 		r.Group(func(r chi.Router) {
 			r.Use(handlers.CSRFMiddleware(config.Cfg.CSRFAuthKey))
 			r.Post("/auth/login", userHandler.LoginUserHandler)
@@ -155,15 +161,14 @@ func main() {
 			r.Post("/auth/reset-password", userHandler.ResetPasswordHandler)
 		})
 
+		// Rotas Protegidas (Requerem Autenticação e CSRF)
 		r.Group(func(r chi.Router) {
 			r.Use(handlers.CSRFMiddleware(config.Cfg.CSRFAuthKey))
 			r.Use(userHandler.AuthMiddleware)
 
-			// --- PORTFOLIO MANAGEMENT ROUTES (NEW) ---
 			r.Get("/portfolios", pfManagerHandler.ListPortfolios)
 			r.Post("/portfolios", pfManagerHandler.CreatePortfolio)
 			r.Delete("/portfolios/{id}", pfManagerHandler.DeletePortfolio)
-			// -----------------------------------------
 
 			r.Post("/upload", uploadHandler.HandleUpload)
 			r.Get("/realizedgains-data", uploadHandler.HandleGetRealizedGainsData)
@@ -176,6 +181,7 @@ func main() {
 			r.Get("/option-sales", portfolioHandler.HandleGetOptionSales)
 			r.Get("/dividend-tax-summary", dividendHandler.HandleGetDividendTaxSummary)
 			r.Get("/dividend-transactions", dividendHandler.HandleGetDividendTransactions)
+			r.Get("/dividend-metrics", dividendHandler.HandleGetDividendMetrics)
 			r.Get("/fees", feeHandler.HandleGetFeeDetails)
 			r.Delete("/transactions/all", txHandler.HandleDeleteAllProcessedTransactions)
 			r.Get("/user/has-data", userHandler.HandleCheckUserData)
@@ -183,6 +189,7 @@ func main() {
 			r.Post("/user/delete-account", userHandler.DeleteAccountHandler)
 			r.Get("/history/chart", portfolioHandler.HandleGetHistoricalChartData)
 
+			// Rotas de Administração
 			r.Group(func(r chi.Router) {
 				r.Use(userHandler.AdminMiddleware)
 				r.Get("/admin/stats", userHandler.HandleGetAdminStats)
@@ -191,6 +198,9 @@ func main() {
 				r.Get("/admin/users/{userID}", userHandler.HandleGetAdminUserDetails)
 				r.Post("/admin/users/refresh-metrics-batch", userHandler.HandleAdminRefreshMultipleUserMetrics)
 				r.Post("/admin/stats/clear-cache", userHandler.HandleAdminClearStatsCache)
+
+				// Rota de Impersonation (NOVA)
+				r.Post("/admin/users/{userID}/impersonate", userHandler.HandleImpersonateUser)
 			})
 		})
 	})

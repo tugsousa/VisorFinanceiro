@@ -11,6 +11,10 @@ type HoldingWithValue struct {
 	CurrentPriceEUR   float64 `json:"current_price_eur"`
 	MarketValueEUR    float64 `json:"market_value_eur"`
 	Status            string  `json:"status"`
+	Sector            string  `json:"sector"`
+	Industry          string  `json:"industry"`
+	AssetType         string  `json:"asset_type"`
+	CountryCode       string  `json:"country_code"`
 }
 
 // SaleDetail represents the details of a completed stock sale, matching a purchase.

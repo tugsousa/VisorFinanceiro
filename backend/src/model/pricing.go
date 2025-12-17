@@ -15,6 +15,9 @@ type ISINTickerMap struct {
 	TickerSymbol  string
 	Exchange      sql.NullString // Use sql.NullString for nullable TEXT fields
 	Currency      string
+	Sector        sql.NullString // New field
+	Industry      sql.NullString // New field
+	QuoteType     sql.NullString // New field
 	CreatedAt     time.Time
 	LastCheckedAt sql.NullTime // Use sql.NullTime for nullable TIMESTAMP fields
 }
@@ -35,23 +38,19 @@ func GetMappingsByISINs(db *sql.DB, isins []string) (map[string]ISINTickerMap, e
 	if len(isins) == 0 {
 		return mappings, nil
 	}
-
 	// Using `IN` clause is efficient for batch lookups.
-	// We construct the query with the correct number of placeholders.
-	query := `SELECT isin, ticker_symbol, exchange, currency, created_at, last_checked_at FROM isin_ticker_map WHERE isin IN (?` + strings.Repeat(",?", len(isins)-1) + `)`
-
+	// Updated query to select new metadata columns
+	query := `SELECT isin, ticker_symbol, exchange, currency, sector, industry, quote_type, created_at, last_checked_at FROM isin_ticker_map WHERE isin IN (?` + strings.Repeat(",?", len(isins)-1) + `)`
 	// Convert the slice of strings to a slice of interfaces for the query arguments.
 	args := make([]interface{}, len(isins))
 	for i, isin := range isins {
 		args[i] = isin
 	}
-
 	rows, err := db.Query(query, args...)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-
 	for rows.Next() {
 		var mapping ISINTickerMap
 		if err := rows.Scan(
@@ -59,6 +58,9 @@ func GetMappingsByISINs(db *sql.DB, isins []string) (map[string]ISINTickerMap, e
 			&mapping.TickerSymbol,
 			&mapping.Exchange,
 			&mapping.Currency,
+			&mapping.Sector,
+			&mapping.Industry,
+			&mapping.QuoteType,
 			&mapping.CreatedAt,
 			&mapping.LastCheckedAt,
 		); err != nil {
@@ -66,7 +68,6 @@ func GetMappingsByISINs(db *sql.DB, isins []string) (map[string]ISINTickerMap, e
 		}
 		mappings[mapping.ISIN] = mapping
 	}
-
 	return mappings, rows.Err()
 }
 
@@ -75,24 +76,27 @@ func InsertMapping(db *sql.DB, mapping ISINTickerMap) error {
 	query := `
 		INSERT INTO isin_ticker_map (isin, ticker_symbol, exchange, currency, last_checked_at)
 		VALUES (?, ?, ?, ?, ?)`
-
 	_, err := db.Exec(query, mapping.ISIN, mapping.TickerSymbol, mapping.Exchange, mapping.Currency, time.Now())
+	return err
+}
+
+// UpdateMappingMetadata updates the sector, industry, and quote_type for a mapping.
+func UpdateMappingMetadata(db *sql.DB, isin, sector, industry, quoteType string) error {
+	query := `UPDATE isin_ticker_map SET sector=?, industry=?, quote_type=? WHERE isin=?`
+	_, err := db.Exec(query, sector, industry, quoteType, isin)
 	return err
 }
 
 // Returns a map of Date (YYYY-MM-DD) -> Price.
 func GetPricesByTicker(db *sql.DB, ticker string) (map[string]float64, error) {
 	prices := make(map[string]float64)
-
 	// Query to get all recorded dates and prices for this ticker
 	query := `SELECT date, price FROM daily_prices WHERE ticker_symbol = ? ORDER BY date ASC`
-
 	rows, err := db.Query(query, ticker)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-
 	for rows.Next() {
 		var date string
 		var price float64
@@ -102,7 +106,6 @@ func GetPricesByTicker(db *sql.DB, ticker string) (map[string]float64, error) {
 		}
 		prices[date] = price
 	}
-
 	return prices, rows.Err()
 }
 
@@ -112,20 +115,17 @@ func GetPricesByTickersAndDate(db *sql.DB, tickers []string, date string) (map[s
 	if len(tickers) == 0 {
 		return prices, nil
 	}
-
 	query := `SELECT ticker_symbol, date, price, currency, updated_at FROM daily_prices WHERE date = ? AND ticker_symbol IN (?` + strings.Repeat(",?", len(tickers)-1) + `)`
 	args := make([]interface{}, len(tickers)+1)
 	args[0] = date
 	for i, ticker := range tickers {
 		args[i+1] = ticker
 	}
-
 	rows, err := db.Query(query, args...)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-
 	for rows.Next() {
 		var p DailyPrice
 		if err := rows.Scan(&p.TickerSymbol, &p.Date, &p.Price, &p.Currency, &p.UpdatedAt); err != nil {

@@ -19,21 +19,21 @@ import (
 	"github.com/username/taxfolio/backend/src/models"
 	"github.com/username/taxfolio/backend/src/parsers"
 	"github.com/username/taxfolio/backend/src/processors"
+	"github.com/username/taxfolio/backend/src/utils"
 )
 
 const (
-	// Updated cache keys to include portfolioID
 	ckAllStockSales       = "res_all_stock_sales_user_%d_pf_%d"
 	ckStockHoldingsByYear = "res_stock_holdings_by_year_user_%d_pf_%d"
 	ckAllFeeDetails       = "res_all_fee_details_user_%d_pf_%d"
 	ckLatestUploadResult  = "agg_latest_upload_result_user_%d_pf_%d"
 	ckDividendSummary     = "agg_dividend_summary_user_%d_pf_%d"
-
+	// ckDividendMetrics      = "agg_dividend_metrics_user_%d_pf_%d" // Deprecated key
 	DefaultCacheExpiration = 15 * time.Minute
 	CacheCleanupInterval   = 30 * time.Minute
 )
 
-// Helper struct for aggregating purchase lots by ISIN, internal to the service.
+// Helper struct for aggregating purchase lots by ISIN
 type aggregatedHolding struct {
 	ISIN              string
 	ProductName       string
@@ -74,32 +74,200 @@ func NewUploadService(
 	}
 }
 
+// GetDividendMetrics calcula métricas baseadas na carteira ATUAL e histórico real.
+func (s *uploadServiceImpl) GetDividendMetrics(userID int64, portfolioID int64) (*models.DividendMetricsResult, error) {
+	// Nova chave de cache para garantir que os dados antigos são invalidados
+	cacheKey := fmt.Sprintf("agg_dividend_metrics_v3_holdings_based_user_%d_pf_%d", userID, portfolioID)
+	if cached, found := s.reportCache.Get(cacheKey); found {
+		return cached.(*models.DividendMetricsResult), nil
+	}
+
+	// 1. Obter Holdings Atuais (Quantidade de ações HOJE)
+	holdings, err := s.GetCurrentHoldingsWithValue(userID, portfolioID)
+	if err != nil {
+		return nil, err
+	}
+
+	// 2. Obter Transações (apenas para histórico de TTM e Yield anual)
+	allTxs, err := s.GetDividendTransactions(userID, portfolioID)
+	if err != nil {
+		return nil, err
+	}
+
+	now := time.Now()
+
+	// --- LÓGICA DE PROJEÇÃO FUTURA (HOLDINGS BASED) ---
+	monthlyProjection := make([]float64, 12) // [0=Janeiro, 1=Fevereiro...]
+	breakdownMap := make(map[int][]models.DividendContributor)
+	var projectedAnnualTotal float64 = 0
+
+	// Obter tickers mapeados para chamar a API
+	isinList := make([]string, len(holdings))
+	for i, h := range holdings {
+		isinList[i] = h.ISIN
+	}
+	mappings, _ := model.GetMappingsByISINs(database.DB, isinList)
+
+	// Mutex para proteger a escrita no monthlyProjection durante a concorrência
+	var mu sync.Mutex
+	var wg sync.WaitGroup
+
+	// Usar semáforo para limitar a concorrência e não "bombardear" a Yahoo
+	sem := make(chan struct{}, 5) // Max 5 pedidos simultâneos
+
+	for _, h := range holdings {
+		if h.Quantity <= 0 {
+			continue
+		}
+
+		mapEntry, ok := mappings[h.ISIN]
+		if !ok || mapEntry.TickerSymbol == "" {
+			continue
+		}
+
+		wg.Add(1)
+		go func(holding models.HoldingWithValue, ticker string) {
+			defer wg.Done()
+			sem <- struct{}{}        // Adquire
+			defer func() { <-sem }() // Liberta
+
+			pastDividends, currency, err := s.priceService.GetLastYearDividends(ticker)
+			if err != nil {
+				logger.L.Warn("Failed to get dividend history", "ticker", ticker, "error", err)
+				return
+			}
+
+			// Taxa de câmbio
+			exchangeRate := 1.0
+			if currency != "EUR" && currency != "" {
+				rate, err := processors.GetExchangeRate(currency, now)
+				if err == nil && rate > 0 {
+					exchangeRate = rate
+				}
+			}
+
+			mu.Lock()
+			for month, amountPerShare := range pastDividends {
+				monthIndex := int(month) - 1 // 0-11
+
+				totalDivNative := amountPerShare * float64(holding.Quantity)
+				totalDivEUR := totalDivNative
+				if exchangeRate != 1.0 && exchangeRate > 0 {
+					totalDivEUR = totalDivNative / exchangeRate
+				}
+
+				if monthIndex >= 0 && monthIndex < 12 {
+					monthlyProjection[monthIndex] += totalDivEUR
+					projectedAnnualTotal += totalDivEUR
+					displayName := holding.ProductName
+					if displayName == "" {
+						displayName = ticker
+					}
+
+					breakdownMap[monthIndex] = append(breakdownMap[monthIndex], models.DividendContributor{
+						Ticker: displayName,
+						Amount: totalDivEUR,
+					})
+				}
+			}
+			mu.Unlock()
+		}(h, mapEntry.TickerSymbol)
+	}
+
+	wg.Wait()
+
+	// --- CÁLCULOS HISTÓRICOS (TTM Real) ---
+	twelveMonthsAgo := now.AddDate(-1, 0, 0)
+	var totalDividendsTTM float64
+	var totalCostBasis float64 = 0
+	var totalMarketValue float64 = 0
+
+	for _, h := range holdings {
+		totalCostBasis += h.TotalCostBasisEUR
+		totalMarketValue += h.MarketValueEUR
+	}
+
+	for _, tx := range allTxs {
+		txTime, e := time.Parse("02-01-2006", tx.Date)
+		if e == nil && !txTime.Before(twelveMonthsAgo) {
+			if tx.TransactionType == "DIVIDEND" && tx.TransactionSubType != "TAX" {
+				totalDividendsTTM += tx.AmountEUR
+			}
+		}
+	}
+
+	// Yields Baseados na PROJEÇÃO (Forward Yield)
+	portfolioYield := 0.0
+	if totalMarketValue > 0 {
+		portfolioYield = (projectedAnnualTotal / totalMarketValue) * 100
+	}
+
+	yieldOnCost := 0.0
+	if totalCostBasis > 0 {
+		yieldOnCost = (projectedAnnualTotal / totalCostBasis) * 100
+	}
+
+	// Yields Históricos por Ano
+	dividendsByYear := make(map[string]float64)
+	for _, tx := range allTxs {
+		if tx.TransactionType == "DIVIDEND" && tx.TransactionSubType != "TAX" {
+			if len(tx.Date) >= 10 {
+				year := tx.Date[6:10]
+				dividendsByYear[year] += tx.AmountEUR
+			}
+		}
+	}
+
+	yearlyYields := make(map[string]float64)
+	rows, err := database.DB.Query(`SELECT SUBSTR(date, 1, 4) as year, AVG(total_equity) FROM portfolio_snapshots WHERE user_id = ? AND portfolio_id = ? GROUP BY year`, userID, portfolioID)
+	if err == nil {
+		defer rows.Close()
+		for rows.Next() {
+			var year string
+			var avgEquity float64
+			if err := rows.Scan(&year, &avgEquity); err == nil {
+				if totalDiv, ok := dividendsByYear[year]; ok && avgEquity > 0 {
+					yearlyYields[year] = (totalDiv / avgEquity) * 100
+				}
+			}
+		}
+	}
+
+	result := &models.DividendMetricsResult{
+		TotalDividendsTTM:   utils.RoundFloat(totalDividendsTTM, 2),
+		PortfolioYield:      utils.RoundFloat(portfolioYield, 2),
+		YieldOnCost:         utils.RoundFloat(yieldOnCost, 2),
+		ProjectionByMonth:   monthlyProjection,
+		ProjectionBreakdown: breakdownMap,
+		LastUpdated:         now.Format(time.RFC3339),
+		HasData:             len(holdings) > 0,
+		YearlyYields:        yearlyYields,
+	}
+
+	s.reportCache.Set(cacheKey, result, DefaultCacheExpiration)
+	return result, nil
+}
+
 func (s *uploadServiceImpl) ProcessUpload(fileReader io.Reader, userID int64, portfolioID int64, source, filename string, filesize int64) (*UploadResult, error) {
 	overallStartTime := time.Now()
 	logger.L.Info("ProcessUpload START", "userID", userID, "portfolioID", portfolioID, "source", source)
-
 	parser, err := parsers.GetParser(source)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrParsingFailed, err)
 	}
-
 	canonicalTxs, err := parser.Parse(fileReader)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrParsingFailed, err)
 	}
-
 	newlyProcessedTxs := s.transactionProcessor.Process(canonicalTxs)
 	if len(newlyProcessedTxs) == 0 {
 		return s.GetLatestUploadResult(userID, portfolioID)
 	}
-
 	dbTx, err := database.DB.Begin()
 	if err != nil {
 		return nil, fmt.Errorf("error beginning database transaction: %w", err)
 	}
 	defer dbTx.Rollback()
-
-	// Insert Statement includes portfolio_id
 	stmt, err := dbTx.Prepare(`INSERT INTO processed_transactions 
 		(user_id, portfolio_id, date, source, product_name, isin, quantity, original_quantity, price, 
 		transaction_type, transaction_subtype, buy_sell, description, amount, currency, 
@@ -110,7 +278,6 @@ func (s *uploadServiceImpl) ProcessUpload(fileReader io.Reader, userID int64, po
 		return nil, fmt.Errorf("error preparing insert statement: %w", err)
 	}
 	defer stmt.Close()
-
 	insertedCount := 0
 	for _, tx := range newlyProcessedTxs {
 		_, err := stmt.Exec(
@@ -128,9 +295,7 @@ func (s *uploadServiceImpl) ProcessUpload(fileReader io.Reader, userID int64, po
 		}
 		insertedCount++
 	}
-
 	if insertedCount > 0 {
-		// Record upload history linked to portfolio
 		_, err = dbTx.Exec(`
 			INSERT INTO uploads_history (user_id, portfolio_id, source, filename, file_size, transaction_count) 
 			VALUES (?, ?, ?, ?, ?, ?)`,
@@ -139,14 +304,11 @@ func (s *uploadServiceImpl) ProcessUpload(fileReader io.Reader, userID int64, po
 		if err != nil {
 			return nil, fmt.Errorf("failed to record upload in history: %w", err)
 		}
-
 		var newUploadCount int
 		err = dbTx.QueryRow("SELECT COUNT(DISTINCT source) FROM processed_transactions WHERE user_id = ? AND portfolio_id = ?", userID, portfolioID).Scan(&newUploadCount)
 		if err != nil {
 			return nil, fmt.Errorf("failed to recount distinct sources for user: %w", err)
 		}
-
-		// Increment user global stats (could also add portfolio specific stats)
 		_, err = dbTx.Exec(`
 			UPDATE users 
 			SET total_upload_count = total_upload_count + 1, upload_count = ?
@@ -157,11 +319,9 @@ func (s *uploadServiceImpl) ProcessUpload(fileReader io.Reader, userID int64, po
 			return nil, fmt.Errorf("failed to update user upload counts: %w", err)
 		}
 	}
-
 	if err := dbTx.Commit(); err != nil {
 		return nil, fmt.Errorf("error committing transactions: %w", err)
 	}
-
 	if insertedCount > 0 {
 		go func(uid int64) {
 			logger.L.Info("Checking and setting first upload timestamp", "userID", uid)
@@ -180,15 +340,11 @@ func (s *uploadServiceImpl) ProcessUpload(fileReader io.Reader, userID int64, po
 				}
 			}
 		}(userID)
-
 		go func() {
-			// 1. Update Metrics
 			logger.L.Info("Triggering portfolio metrics update (pre-requisite for history)", "userID", userID)
 			if err := s.UpdateUserPortfolioMetrics(userID, portfolioID); err != nil {
 				logger.L.Error("Failed to update user portfolio metrics", "userID", userID, "error", err)
 			}
-
-			// 2. Rebuild History
 			logger.L.Info("Triggering history rebuild", "userID", userID)
 			if err := s.RebuildUserHistory(userID, portfolioID); err != nil {
 				logger.L.Error("Failed to rebuild user history", "userID", userID, "error", err)
@@ -197,7 +353,6 @@ func (s *uploadServiceImpl) ProcessUpload(fileReader io.Reader, userID int64, po
 	} else {
 		s.InvalidateUserCache(userID, portfolioID)
 	}
-
 	logger.L.Info("ProcessUpload END", "userID", userID, "duration", time.Since(overallStartTime))
 	return s.GetLatestUploadResult(userID, portfolioID)
 }
@@ -233,6 +388,15 @@ func (s *uploadServiceImpl) RebuildUserHistory(userID int64, portfolioID int64) 
 		}
 	}
 
+	// --- CORREÇÃO: Forçar a resolução de Tickers (incluindo Overrides) antes de ler a BD ---
+	// Isto garante que o JEPQ.L (IE000U9J8HX9) é gravado na tabela isin_ticker_map
+	logger.L.Info("Pre-resolving ISINs to Tickers...", "count", len(isinList))
+	_, err = s.priceService.GetCurrentPrices(isinList)
+	if err != nil {
+		logger.L.Warn("Error resolving current prices during history rebuild", "error", err)
+		// Não retornamos erro aqui para tentar continuar com o que já estiver na BD
+	}
+
 	mappings, _ := model.GetMappingsByISINs(database.DB, isinList)
 
 	var wg sync.WaitGroup
@@ -241,13 +405,16 @@ func (s *uploadServiceImpl) RebuildUserHistory(userID int64, portfolioID int64) 
 	currencyRates := make(map[string]PriceMap)
 	var dataMu sync.Mutex
 
-	// 1. Fetch Stocks AND their Real Currency
+	// 1. Fetch Asset Prices
 	for isin := range uniqueISINs {
 		mapEntry, ok := mappings[isin]
 		if !ok || mapEntry.TickerSymbol == "" {
+			// Agora isto só deve acontecer se o ativo for realmente inválido/desconhecido
+			logger.L.Warn("No ticker mapping found for ISIN", "isin", isin)
 			continue
 		}
 		ticker := mapEntry.TickerSymbol
+
 		wg.Add(1)
 		go func(t, i string) {
 			defer wg.Done()
@@ -256,17 +423,26 @@ func (s *uploadServiceImpl) RebuildUserHistory(userID int64, portfolioID int64) 
 				dataMu.Lock()
 				tickerPrices[i] = prices
 				tickerCurrencies[i] = realCurrency
+
+				// Log de debug para confirmar sucesso
+				if len(prices) > 0 {
+					logger.L.Info("Fetched historical prices", "ticker", t, "points", len(prices))
+				} else {
+					logger.L.Warn("Fetched historical prices but got 0 points", "ticker", t)
+				}
+
 				if realCurrency != "EUR" && realCurrency != "" {
 					uniqueCurrencies[realCurrency] = true
 				}
 				dataMu.Unlock()
+			} else {
+				logger.L.Error("Failed to fetch historical prices", "ticker", t, "error", err)
 			}
 		}(ticker, isin)
 	}
-
 	wg.Wait()
 
-	// 2. Fetch Exchange Rates
+	// 2. Fetch Currency Rates
 	for curr := range uniqueCurrencies {
 		wg.Add(1)
 		go func(c string) {
@@ -277,11 +453,14 @@ func (s *uploadServiceImpl) RebuildUserHistory(userID int64, portfolioID int64) 
 				dataMu.Lock()
 				currencyRates[c] = rates
 				dataMu.Unlock()
+			} else {
+				logger.L.Warn("Failed to fetch currency history", "currency", c, "error", err)
 			}
 		}(curr)
 	}
 	wg.Wait()
 
+	// 3. Rebuild Daily Snapshots
 	startDate, _ := time.Parse("02-01-2006", txs[0].Date)
 	endDate := time.Now()
 
@@ -290,6 +469,7 @@ func (s *uploadServiceImpl) RebuildUserHistory(userID int64, portfolioID int64) 
 		TotalCostBasis float64
 		Name           string
 	}
+
 	holdings := make(map[string]AssetInfo)
 	cumulativeNetInvested := 0.0
 	currentCash := 0.0
@@ -310,11 +490,14 @@ func (s *uploadServiceImpl) RebuildUserHistory(userID int64, portfolioID int64) 
 		dateStr := d.Format("2006-01-02")
 		txDateStr := d.Format("02-01-2006")
 
+		// Process transactions for this day
 		for txIndex < totalTxs && txs[txIndex].Date == txDateStr {
 			tx := txs[txIndex]
+
 			if tx.TransactionType == "CASH" {
 				cumulativeNetInvested += tx.AmountEUR
 			}
+
 			if tx.TransactionType == "STOCK" || tx.TransactionType == "ETF" {
 				info := holdings[tx.ISIN]
 				info.Name = tx.ProductName
@@ -330,12 +513,14 @@ func (s *uploadServiceImpl) RebuildUserHistory(userID int64, portfolioID int64) 
 				}
 				holdings[tx.ISIN] = info
 			}
+
 			if tx.BalanceCurrency == "EUR" {
 				currentCash = tx.CashBalance
 			}
 			txIndex++
 		}
 
+		// Calculate Equity for this day
 		marketValueAssets := 0.0
 		for isin, info := range holdings {
 			if info.Quantity <= 0.0001 {
@@ -346,19 +531,27 @@ func (s *uploadServiceImpl) RebuildUserHistory(userID int64, portfolioID int64) 
 			if pMap, ok := tickerPrices[isin]; ok {
 				price = pMap[dateStr]
 			}
+
+			if price == 0 && d.Weekday() != time.Saturday && d.Weekday() != time.Sunday {
+				// Log reduzido para não fazer spam, apenas para o ISIN problemático se persistir
+				if isin == "IE000U9J8HX9" {
+					logger.L.Debug("Still missing price for JEPQ", "date", dateStr)
+				}
+			}
+
 			if price > 0 {
 				lastKnownPrices[isin] = price
 			} else if lastPrice, exists := lastKnownPrices[isin]; exists {
 				price = lastPrice
 			}
 
+			// Currency Conversion
 			pricingCurrency := "EUR"
 			if realCur, ok := tickerCurrencies[isin]; ok && realCur != "" {
 				pricingCurrency = realCur
 			}
 
 			rate := 1.0
-
 			if pricingCurrency != "EUR" {
 				if rMap, ok := currencyRates[pricingCurrency]; ok {
 					if r, ok := rMap[dateStr]; ok {
@@ -384,6 +577,7 @@ func (s *uploadServiceImpl) RebuildUserHistory(userID int64, portfolioID int64) 
 		})
 	}
 
+	// Batch Insert Snapshots
 	if len(snapshots) > 0 {
 		_, _ = database.DB.Exec("DELETE FROM portfolio_snapshots WHERE user_id = ? AND portfolio_id = ?", userID, portfolioID)
 
@@ -394,6 +588,7 @@ func (s *uploadServiceImpl) RebuildUserHistory(userID int64, portfolioID int64) 
 				end = len(snapshots)
 			}
 			batch := snapshots[i:end]
+
 			query := "INSERT INTO portfolio_snapshots (user_id, portfolio_id, date, total_equity, cumulative_net_cashflow, cash_balance) VALUES "
 			vals := []interface{}{}
 			for _, s := range batch {
@@ -401,6 +596,7 @@ func (s *uploadServiceImpl) RebuildUserHistory(userID int64, portfolioID int64) 
 				vals = append(vals, userID, portfolioID, s.Date, s.Equity, s.NetInvested, s.Cash)
 			}
 			query = query[:len(query)-1]
+
 			if _, err := database.DB.Exec(query, vals...); err != nil {
 				logger.L.Error("Batch insert failed", "error", err)
 				return err
@@ -453,6 +649,9 @@ func (s *uploadServiceImpl) GetCurrentHoldingsWithValue(userID int64, portfolioI
 	if err != nil {
 		logger.L.Warn("Could not fetch some or all current prices", "error", err)
 	}
+
+	mappings, _ := model.GetMappingsByISINs(database.DB, uniqueISINs)
+
 	response := []models.HoldingWithValue{}
 	for isin, holding := range groupedHoldings {
 		priceInfo, found := prices[isin]
@@ -464,6 +663,15 @@ func (s *uploadServiceImpl) GetCurrentHoldingsWithValue(userID int64, portfolioI
 			currentPrice = priceInfo.Price
 			marketValue = priceInfo.Price * float64(holding.TotalQuantity)
 		}
+
+		var sector, industry, assetType string
+		if m, ok := mappings[isin]; ok {
+			sector = m.Sector.String
+			industry = m.Industry.String
+			assetType = m.QuoteType.String
+		}
+		countryCode := utils.GetCountryCodeString(isin)
+
 		response = append(response, models.HoldingWithValue{
 			ISIN:              holding.ISIN,
 			ProductName:       holding.ProductName,
@@ -472,25 +680,21 @@ func (s *uploadServiceImpl) GetCurrentHoldingsWithValue(userID int64, portfolioI
 			CurrentPriceEUR:   currentPrice,
 			MarketValueEUR:    marketValue,
 			Status:            status,
+			Sector:            sector,
+			Industry:          industry,
+			AssetType:         assetType,
+			CountryCode:       countryCode,
 		})
 	}
 	return response, nil
 }
 
-// UpdateUserPortfolioMetrics updates the global metrics for a user.
-// FIXED: This function now properly handles DB connections to avoid deadlocks.
 func (s *uploadServiceImpl) UpdateUserPortfolioMetrics(userID int64, portfolioID int64) error {
-	// 1. Invalidate cache for the specific portfolio that changed
 	s.InvalidateUserCache(userID, portfolioID)
-
-	// 2. Fetch ALL portfolio IDs for this user first
-	// We read all IDs into memory and close the rows immediately.
-	// This prevents holding the connection open while we process (which causes deadlock in SQLite).
 	rows, err := database.DB.Query("SELECT id FROM portfolios WHERE user_id = ?", userID)
 	if err != nil {
 		return fmt.Errorf("failed to list portfolios for metrics update: %w", err)
 	}
-
 	var portfolioIDs []int64
 	for rows.Next() {
 		var pid int64
@@ -498,25 +702,17 @@ func (s *uploadServiceImpl) UpdateUserPortfolioMetrics(userID int64, portfolioID
 			portfolioIDs = append(portfolioIDs, pid)
 		}
 	}
-	rows.Close() // <--- CRITICAL: Close rows before starting heavy processing
-
-	// 3. Recalculate Global User Metrics (Sum of ALL portfolios)
+	rows.Close()
 	var totalUserValue float64
 	allHoldings := make(map[string]models.HoldingWithValue)
-
 	for _, pid := range portfolioIDs {
-		// Get value for this portfolio
-		// This triggers new DB queries, which is now safe because 'rows' is closed.
 		holdings, err := s.GetCurrentHoldingsWithValue(userID, pid)
 		if err != nil {
 			logger.L.Warn("Failed to get holdings for metrics aggregation", "userID", userID, "portfolioID", pid, "error", err)
 			continue
 		}
-
 		for _, h := range holdings {
 			totalUserValue += h.MarketValueEUR
-
-			// Aggregate for Top 5 calculation
 			if existing, exists := allHoldings[h.ISIN]; exists {
 				existing.MarketValueEUR += h.MarketValueEUR
 				existing.Quantity += h.Quantity
@@ -526,8 +722,6 @@ func (s *uploadServiceImpl) UpdateUserPortfolioMetrics(userID int64, portfolioID
 			}
 		}
 	}
-
-	// 4. Determine Top 5 Holdings Global
 	type HoldingSort struct {
 		Name  string  `json:"name"`
 		Value float64 `json:"value"`
@@ -536,19 +730,13 @@ func (s *uploadServiceImpl) UpdateUserPortfolioMetrics(userID int64, portfolioID
 	for _, h := range allHoldings {
 		sortedHoldings = append(sortedHoldings, HoldingSort{Name: h.ProductName, Value: h.MarketValueEUR})
 	}
-	// Sort descending by value
 	sort.Slice(sortedHoldings, func(i, j int) bool {
 		return sortedHoldings[i].Value > sortedHoldings[j].Value
 	})
-
-	// Take top 5
 	if len(sortedHoldings) > 5 {
 		sortedHoldings = sortedHoldings[:5]
 	}
-
 	top5JSON, _ := json.Marshal(sortedHoldings)
-
-	// 5. Update the User Table
 	_, err = database.DB.Exec(`
 		UPDATE users 
 		SET portfolio_value_eur = ?, top_5_holdings = ? 
@@ -558,7 +746,6 @@ func (s *uploadServiceImpl) UpdateUserPortfolioMetrics(userID int64, portfolioID
 	if err != nil {
 		return fmt.Errorf("failed to update user global metrics: %w", err)
 	}
-
 	logger.L.Info("Updated user global metrics", "userID", userID, "totalValue", totalUserValue)
 	return nil
 }
@@ -570,6 +757,8 @@ func (s *uploadServiceImpl) InvalidateUserCache(userID int64, portfolioID int64)
 		fmt.Sprintf(ckLatestUploadResult, userID, portfolioID),
 		fmt.Sprintf(ckDividendSummary, userID, portfolioID),
 		fmt.Sprintf(ckAllFeeDetails, userID, portfolioID),
+		// Também invalidar a métrica de dividendos
+		fmt.Sprintf("agg_dividend_metrics_v3_holdings_based_user_%d_pf_%d", userID, portfolioID),
 	}
 	for _, key := range keysToDelete {
 		s.reportCache.Delete(key)
@@ -718,33 +907,77 @@ func (s *uploadServiceImpl) GetHistoricalChartData(userID int64, portfolioID int
 	if len(snapshots) == 0 {
 		return snapshots, nil
 	}
+
 	bmPrices, _, err := s.priceService.GetHistoricalPrices("SPY")
 	if err != nil {
+		// Se falhar o preço do SPY, retorna os dados sem benchmark
 		return snapshots, nil
 	}
+
+	logger.L.Info("Benchmark Debug: Starting calculation", "snapshot_count", len(snapshots))
+
 	currentBenchmarkUnits := 0.0
 	previousCashFlow := 0.0
 	lastKnownPrice := 0.0
+	pendingCashToInvest := 0.0 // Acumula fluxos que ocorreram em dias sem preço (fds/feriados)
+
 	for i := range snapshots {
 		date := snapshots[i].Date
 		price := bmPrices[date]
+
+		// 1. Tentar obter o preço mais recente para evitar zeros no gráfico
 		if price > 0 {
 			lastKnownPrice = price
 		} else if lastKnownPrice > 0 {
 			price = lastKnownPrice
-		} else {
-			previousCashFlow = snapshots[i].CumulativeCashFlow
-			continue
 		}
+
+		// 2. Calcular o fluxo de caixa novo neste dia (Depósitos ou Levantamentos)
+		// Se snapshots[i] > previous => Depósito (dailyNetFlow > 0)
+		// Se snapshots[i] < previous => Levantamento (dailyNetFlow < 0)
 		dailyNetFlow := snapshots[i].CumulativeCashFlow - previousCashFlow
+
+		// Adiciona ao "balde" pendente. Se for levantamento, reduz o pendente.
+		pendingCashToInvest += dailyNetFlow
+
+		// 3. LOGICA CRÍTICA: Se temos um preço real (do dia ou arrastado), executamos a simulação
+		// Usamos price > 0 para garantir que não dividimos por zero
 		if price > 0 {
-			unitsBought := dailyNetFlow / price
-			currentBenchmarkUnits += unitsBought
+			// Compra (ou vende se negativo) unidades com o dinheiro pendente
+			unitsTrade := pendingCashToInvest / price
+			currentBenchmarkUnits += unitsTrade
+
+			// Logs para debug em datas específicas (abril/maio 2025)
+			if strings.Contains(date, "2025-04") || strings.Contains(date, "2025-05") {
+				if dailyNetFlow != 0 || pendingCashToInvest != 0 {
+					logger.L.Info("Benchmark Loop Debug",
+						"date", date,
+						"dailyNetFlow", dailyNetFlow,
+						"pendingCash", pendingCashToInvest,
+						"price", price,
+						"unitsTrade", unitsTrade,
+						"totalUnits", currentBenchmarkUnits)
+				}
+			}
+
+			// O dinheiro foi "usado", limpamos o pendente
+			pendingCashToInvest = 0
 		}
-		snapshots[i].BenchmarkValue = currentBenchmarkUnits * price
-		snapshots[i].SPYPrice = price
+
+		// 4. Calcular valor do benchmark
+		// Se não houver preço hoje nem histórico (ex: antes do SPY existir), vale 0
+		if price > 0 {
+			snapshots[i].BenchmarkValue = currentBenchmarkUnits * price
+			snapshots[i].SPYPrice = price
+		} else {
+			snapshots[i].BenchmarkValue = 0
+			snapshots[i].SPYPrice = 0
+		}
+
+		// Atualizar referência para o próximo loop
 		previousCashFlow = snapshots[i].CumulativeCashFlow
 	}
+
 	return snapshots, nil
 }
 

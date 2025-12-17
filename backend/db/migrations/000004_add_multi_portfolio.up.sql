@@ -13,7 +13,7 @@ CREATE TABLE IF NOT EXISTS portfolios (
 
 -- 2. Create a 'Default Portfolio' for every existing user
 INSERT INTO portfolios (user_id, name, description, is_default)
-SELECT id, 'Main Portfolio', 'Automatically created from existing data', TRUE FROM users;
+SELECT id, 'Portfolio Principal', 'Automatically created from existing data', TRUE FROM users;
 
 -- 3. Recreate processed_transactions to include portfolio_id
 -- We rename the old table, create a new one with the portfolio_id column, copy data, and drop the old one.
