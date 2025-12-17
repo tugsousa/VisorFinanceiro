@@ -651,7 +651,6 @@ func (h *UserHandler) HandleAdminClearStatsCache(w http.ResponseWriter, r *http.
 }
 
 func (h *UserHandler) HandleImpersonateUser(w http.ResponseWriter, r *http.Request) {
-	// 1. Obter o ID do utilizador alvo a partir do URL (ex: /admin/users/{userID}/impersonate)
 	targetUserIDStr := chi.URLParam(r, "userID")
 	targetUserID, err := strconv.ParseInt(targetUserIDStr, 10, 64)
 	if err != nil {
@@ -659,15 +658,13 @@ func (h *UserHandler) HandleImpersonateUser(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	// 2. Buscar o utilizador para garantir que existe e obter dados (username, email)
 	user, err := model.GetUserByID(database.DB, targetUserID)
 	if err != nil {
 		sendJSONError(w, "Utilizador não encontrado", http.StatusNotFound)
 		return
 	}
 
-	// 3. Gerar o token de acesso como se fosse este utilizador
-	// Nota: A tua função GenerateToken espera uma string
+	// 1. Gerar Access Token
 	accessToken, err := h.authService.GenerateToken(fmt.Sprintf("%d", user.ID))
 	if err != nil {
 		logger.L.Error("Falha ao gerar token de impersonation", "error", err)
@@ -675,17 +672,43 @@ func (h *UserHandler) HandleImpersonateUser(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	// Opcional: Gerar refresh token se necessário, ou usar apenas o access token para uma sessão curta
+	// 2. Gerar Refresh Token (Necessário para criar a sessão válida)
+	refreshToken, err := h.authService.GenerateRefreshToken()
+	if err != nil {
+		logger.L.Error("Falha ao gerar refresh token de impersonation", "error", err)
+		sendJSONError(w, "Erro ao gerar credenciais", http.StatusInternalServerError)
+		return
+	}
 
-	// 4. Retornar o token e os dados do utilizador
+	// 3. CRIAR A SESSÃO NA BASE DE DADOS (A correção crítica)
+	// O middleware verifica se esta sessão existe. Se não existir, dá 401.
+	session := &model.Session{
+		UserID:       user.ID,
+		Token:        accessToken,
+		RefreshToken: refreshToken,
+		UserAgent:    "Admin-Impersonation (" + r.UserAgent() + ")",
+		ClientIP:     r.RemoteAddr,
+		IsBlocked:    false,
+		// Usamos a duração do Refresh Token para a sessão não expirar logo
+		ExpiresAt: time.Now().Add(config.Cfg.RefreshTokenExpiry),
+	}
+
+	if err := model.CreateSession(database.DB, session); err != nil {
+		logger.L.Error("Falha ao registar sessão de impersonation na BD", "userID", user.ID, "error", err)
+		sendJSONError(w, "Falha ao iniciar sessão simulada", http.StatusInternalServerError)
+		return
+	}
+
+	// 4. Retornar resposta
 	response := map[string]interface{}{
-		"access_token": accessToken,
+		"access_token":  accessToken,
+		"refresh_token": refreshToken, // Opcional, mas útil se quiseres manter a sessão viva
 		"user": map[string]interface{}{
 			"id":            user.ID,
 			"username":      user.Username,
 			"email":         user.Email,
 			"auth_provider": user.AuthProvider,
-			"is_admin":      isAdmin(user.Email), // Reutiliza a tua função auxiliar isAdmin
+			"is_admin":      isAdmin(user.Email),
 		},
 	}
 

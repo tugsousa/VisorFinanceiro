@@ -11,3 +11,5 @@ export const apiFetchAdminUserDetails = (userId, portfolioId = null) => {
 
 export const apiRefreshMultipleUserMetrics = (userIds) => apiClient.post('/api/admin/users/refresh-metrics-batch', { user_ids: userIds });
 export const apiClearAdminStatsCache = () => apiClient.post('/api/admin/stats/clear-cache');
+
+export const apiImpersonateUser = (userId) => apiClient.post(`/api/admin/users/${userId}/impersonate`);
