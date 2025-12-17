@@ -162,6 +162,8 @@ type AdminStats struct {
 	NewUsersToday            int     `json:"newUsersToday"`
 	NewUsersThisWeek         int     `json:"newUsersThisWeek"`
 	NewUsersThisMonth        int     `json:"newUsersThisMonth"`
+	ActivationRate           float64 `json:"activation_rate"`
+	TotalTransactions        int     `json:"total_transactions"`
 
 	// Period Specific Metrics
 	NewUsersInPeriod                  int     `json:"newUsersInPeriod"`
@@ -234,6 +236,19 @@ func (h *UserHandler) HandleGetAdminStats(w http.ResponseWriter, r *http.Request
 		loginFilter = "1=1"
 		uploadFilter = "1=1"
 	}
+
+	var usersWithUploads int
+	database.DB.QueryRow("SELECT COUNT(*) FROM users WHERE total_upload_count > 0").Scan(&usersWithUploads)
+
+	if stats.TotalUsers > 0 {
+		stats.ActivationRate = (float64(usersWithUploads) / float64(stats.TotalUsers)) * 100
+	} else {
+		stats.ActivationRate = 0
+	}
+
+	// 2. Contar Total de Transações (Volume real de dados)
+	// Nota: Como é um COUNT total numa tabela que pode ser grande, é uma métrica geral importante
+	database.DB.QueryRow("SELECT COUNT(*) FROM processed_transactions").Scan(&stats.TotalTransactions)
 
 	// 1. Métricas Gerais
 	database.DB.QueryRow("SELECT COUNT(*) FROM users").Scan(&stats.TotalUsers)
