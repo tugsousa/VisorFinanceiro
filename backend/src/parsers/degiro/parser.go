@@ -97,10 +97,10 @@ func (p *DeGiroParser) Parse(file io.Reader) ([]models.CanonicalTransaction, err
 
 		txType, subType, buySell, productName, quantity, price := classifyDeGiroTransaction(raw)
 
-		if txType == "COMMISSION_IGNORE" {
-			continue
-		}
-
+		/*	if txType == "COMMISSION_IGNORE" {
+				continue
+			}
+		*/
 		if txType == "UNKNOWN" {
 			log.Printf("DeGiro Parser: Skipping unknown transaction type for description: '%s'", raw.Description)
 			continue
@@ -164,8 +164,13 @@ func classifyDeGiroTransaction(raw RawTransaction) (txType, subType, buySell, pr
 	}
 
 	if strings.Contains(lowerDesc, "comissões de transação") {
-		return "COMMISSION_IGNORE", "", "", "", 0, 0
+		return "COMMISSION_DETAIL", "", "", desc, 0, 0
 	}
+
+	if strings.Contains(lowerDesc, "crédito de divisa") || strings.Contains(lowerDesc, "levantamento de divisa") || strings.Contains(lowerDesc, "mudança de divisa") {
+		return "FX", "", "", desc, 0, 0
+	}
+
 	if strings.Contains(lowerDesc, "custo de conectividade") {
 		return "FEE", "", "", desc, 0, 0
 	}

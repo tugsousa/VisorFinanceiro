@@ -87,3 +87,39 @@ func (h *DividendHandler) HandleGetDividendTransactions(w http.ResponseWriter, r
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(dividendTransactions)
 }
+
+func (h *DividendHandler) HandleGetDividendMetrics(w http.ResponseWriter, r *http.Request) {
+	userID, ok := GetUserIDFromContext(r.Context())
+	if !ok {
+		utils.SendJSONError(w, "authentication required", http.StatusUnauthorized)
+		return
+	}
+
+	// Extract Portfolio ID
+	portfolioIDStr := r.URL.Query().Get("portfolio_id")
+	if portfolioIDStr == "" {
+		utils.SendJSONError(w, "portfolio_id required", http.StatusBadRequest)
+		return
+	}
+	portfolioID, err := strconv.ParseInt(portfolioIDStr, 10, 64)
+	if err != nil {
+		utils.SendJSONError(w, "Invalid portfolio_id", http.StatusBadRequest)
+		return
+	}
+
+	logger.L.Info("Handling GetDividendMetrics", "userID", userID, "portfolioID", portfolioID)
+
+	metrics, err := h.uploadService.GetDividendMetrics(userID, portfolioID)
+	if err != nil {
+		logger.L.Error("Error retrieving dividend metrics", "error", err)
+		utils.SendJSONError(w, "Error retrieving metrics", http.StatusInternalServerError)
+		return
+	}
+
+	if metrics == nil {
+		metrics = &models.DividendMetricsResult{}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(metrics)
+}

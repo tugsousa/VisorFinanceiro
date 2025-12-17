@@ -171,7 +171,7 @@ func (h *UserHandler) RegisterUserHandler(w http.ResponseWriter, r *http.Request
 
 	// --- MULTI-PORTFOLIO CHANGE START ---
 	// Create a default portfolio for the new user
-	_, err = database.DB.Exec("INSERT INTO portfolios (user_id, name, description, is_default) VALUES (?, ?, ?, ?)", user.ID, "Main Portfolio", "Default Portfolio", true)
+	_, err = database.DB.Exec("INSERT INTO portfolios (user_id, name, description, is_default) VALUES (?, ?, ?, ?)", user.ID, "Portfolio Principal", "Default Portfolio", true)
 	if err != nil {
 		// Log error but don't fail the request (email still needs sending).
 		// User might see an empty dashboard and can create one manually later.

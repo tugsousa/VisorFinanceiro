@@ -162,6 +162,8 @@ type AdminStats struct {
 	NewUsersToday            int     `json:"newUsersToday"`
 	NewUsersThisWeek         int     `json:"newUsersThisWeek"`
 	NewUsersThisMonth        int     `json:"newUsersThisMonth"`
+	ActivationRate           float64 `json:"activation_rate"`
+	TotalTransactions        int     `json:"total_transactions"`
 
 	// Period Specific Metrics
 	NewUsersInPeriod                  int     `json:"newUsersInPeriod"`
@@ -215,7 +217,7 @@ func (h *UserHandler) HandleGetAdminStats(w http.ResponseWriter, r *http.Request
 	var loginFilter string
 	var uploadFilter string
 
-	// Determine SQL filter based on range parameter
+	// Filtros de tempo para os contadores simples
 	switch rangeParam {
 	case "last_7_days":
 		timeFilter = "created_at >= date('now', '-7 days')"
@@ -229,32 +231,42 @@ func (h *UserHandler) HandleGetAdminStats(w http.ResponseWriter, r *http.Request
 		timeFilter = "created_at >= date('now', '-365 days')"
 		loginFilter = "login_at >= date('now', '-365 days')"
 		uploadFilter = "uploaded_at >= date('now', '-365 days')"
-	default: // "all_time"
+	default:
 		timeFilter = "1=1"
 		loginFilter = "1=1"
 		uploadFilter = "1=1"
 	}
 
-	// 1. Basic Counts (Always Global)
+	var usersWithUploads int
+	database.DB.QueryRow("SELECT COUNT(*) FROM users WHERE total_upload_count > 0").Scan(&usersWithUploads)
+
+	if stats.TotalUsers > 0 {
+		stats.ActivationRate = (float64(usersWithUploads) / float64(stats.TotalUsers)) * 100
+	} else {
+		stats.ActivationRate = 0
+	}
+
+	// 2. Contar Total de Transações (Volume real de dados)
+	// Nota: Como é um COUNT total numa tabela que pode ser grande, é uma métrica geral importante
+	database.DB.QueryRow("SELECT COUNT(*) FROM processed_transactions").Scan(&stats.TotalTransactions)
+
+	// 1. Métricas Gerais
 	database.DB.QueryRow("SELECT COUNT(*) FROM users").Scan(&stats.TotalUsers)
 	database.DB.QueryRow("SELECT COALESCE(SUM(portfolio_value_eur), 0) FROM users").Scan(&stats.TotalPortfolioValue)
 	database.DB.QueryRow("SELECT metric_value FROM system_metrics WHERE metric_name = 'deleted_user_count'").Scan(&stats.DeletedUserCount)
 	database.DB.QueryRow("SELECT COUNT(*) FROM uploads_history").Scan(&stats.TotalUploads)
-
-	// 2. Active Users (Global Snapshot)
 	database.DB.QueryRow("SELECT COUNT(DISTINCT user_id) FROM login_history WHERE login_at > date('now', '-1 day')").Scan(&stats.DailyActiveUsers)
 	database.DB.QueryRow("SELECT COUNT(DISTINCT user_id) FROM login_history WHERE login_at > date('now', '-30 days')").Scan(&stats.MonthlyActiveUsers)
 
-	// 3. New Users (Global Snapshot)
+	// 2. Novos Utilizadores (Hoje, Semana, Mês)
 	database.DB.QueryRow("SELECT COUNT(*) FROM users WHERE created_at > date('now', 'start of day')").Scan(&stats.NewUsersToday)
 	database.DB.QueryRow("SELECT COUNT(*) FROM users WHERE created_at > date('now', '-7 days')").Scan(&stats.NewUsersThisWeek)
 	database.DB.QueryRow("SELECT COUNT(*) FROM users WHERE created_at > date('now', 'start of month')").Scan(&stats.NewUsersThisMonth)
 
-	// 4. Period Specific Metrics (Dynamic based on 'range')
+	// 3. Métricas no Período Selecionado
 	database.DB.QueryRow("SELECT COUNT(*) FROM users WHERE " + timeFilter).Scan(&stats.NewUsersInPeriod)
 	database.DB.QueryRow("SELECT COUNT(DISTINCT user_id) FROM login_history WHERE " + loginFilter).Scan(&stats.ActiveUsersInPeriod)
 
-	// Uploads & Failures
 	var successfulUploads int
 	database.DB.QueryRow("SELECT COUNT(*) FROM uploads_history WHERE " + uploadFilter).Scan(&successfulUploads)
 	stats.UploadsInPeriod = successfulUploads
@@ -270,49 +282,44 @@ func (h *UserHandler) HandleGetAdminStats(w http.ResponseWriter, r *http.Request
 		stats.UploadFailureRate = 0
 	}
 
-	// 5. Financials in Period
+	// 4. Métricas Financeiras Globais (Cash e Dividendos)
 	if rangeParam == "all_time" || rangeParam == "" {
 		database.DB.QueryRow(`
-			SELECT COALESCE(SUM(amount_eur), 0) 
+			SELECT COALESCE(SUM(amount_eur), 0)
 			FROM processed_transactions 
 			WHERE transaction_type = 'CASH' AND transaction_subtype = 'DEPOSIT'`).Scan(&stats.TotalCashDepositedEURInPeriod)
-
 		database.DB.QueryRow(`
 			SELECT COUNT(*) 
 			FROM processed_transactions 
 			WHERE transaction_type = 'CASH' AND transaction_subtype = 'DEPOSIT'`).Scan(&stats.CashDepositsInPeriod)
-
 		database.DB.QueryRow(`
-			SELECT COALESCE(SUM(amount_eur), 0) 
+			SELECT COALESCE(SUM(amount_eur), 0)
 			FROM processed_transactions 
 			WHERE transaction_type = 'DIVIDEND' AND transaction_subtype != 'TAX'`).Scan(&stats.TotalDividendsReceivedEURInPeriod)
-
 		database.DB.QueryRow(`
-			SELECT COALESCE(AVG(amount_eur), 0) 
+			SELECT COALESCE(AVG(amount_eur), 0)
 			FROM processed_transactions 
 			WHERE transaction_type = 'DIVIDEND' AND transaction_subtype != 'TAX'`).Scan(&stats.AvgDividendReceivedEURInPeriod)
 	} else {
-		// Placeholder for time-filtered queries to prevent breaking.
-		// Future improvement: implement proper date filtering on processed_transactions.
 		stats.TotalCashDepositedEURInPeriod = 0
 		stats.CashDepositsInPeriod = 0
 		stats.TotalDividendsReceivedEURInPeriod = 0
 		stats.AvgDividendReceivedEURInPeriod = 0
 	}
 
-	// 6. Avg Time to First Upload (Global)
+	// KPI Removido: AvgTimeToFirstUploadDays (Deixamos a query mas podes ignorar no frontend se quiseres)
 	database.DB.QueryRow(`
-		SELECT COALESCE(AVG(JULIANDAY(first_upload_at) - JULIANDAY(created_at)), 0) 
+		SELECT COALESCE(AVG(JULIANDAY(first_upload_at) - JULIANDAY(created_at)), 0)
 		FROM users WHERE first_upload_at IS NOT NULL
 	`).Scan(&stats.AvgTimeToFirstUploadDays)
 
-	// 7. Verification Stats
+	// 5. Estatísticas de Verificação de Email
 	var verified, unverified int
 	database.DB.QueryRow("SELECT COUNT(*) FROM users WHERE is_email_verified = 1").Scan(&verified)
 	database.DB.QueryRow("SELECT COUNT(*) FROM users WHERE is_email_verified = 0").Scan(&unverified)
 	stats.VerificationStats = map[string]int{"verified": verified, "unverified": unverified}
 
-	// 8. Top Users (Logins & Uploads)
+	// 6. Top Utilizadores
 	fetchUsers := func(query string) []AdminUserView {
 		rows, _ := database.DB.Query(query)
 		if rows == nil {
@@ -334,13 +341,14 @@ func (h *UserHandler) HandleGetAdminStats(w http.ResponseWriter, r *http.Request
 	}
 
 	stats.TopUsersByLogins = fetchUsers(`
-		SELECT id, email, login_count, total_upload_count, portfolio_value_eur, last_login_at, last_login_ip, top_5_holdings 
+		SELECT id, email, login_count, total_upload_count, portfolio_value_eur, last_login_at, last_login_ip, top_5_holdings
 		FROM users ORDER BY login_count DESC LIMIT 5`)
+
 	stats.TopUsersByUploads = fetchUsers(`
-		SELECT id, email, login_count, total_upload_count, portfolio_value_eur, last_login_at, last_login_ip, top_5_holdings 
+		SELECT id, email, login_count, total_upload_count, portfolio_value_eur, last_login_at, last_login_ip, top_5_holdings
 		FROM users ORDER BY total_upload_count DESC LIMIT 5`)
 
-	// 9. Broker Distribution
+	// 7. Gráficos: Valor por Corretora
 	brokerRows, _ := database.DB.Query("SELECT source, COUNT(*) FROM processed_transactions GROUP BY source")
 	if brokerRows != nil {
 		defer brokerRows.Close()
@@ -352,7 +360,7 @@ func (h *UserHandler) HandleGetAdminStats(w http.ResponseWriter, r *http.Request
 		}
 	}
 
-	// 10. Auth Provider Stats
+	// 8. Gráficos: Auth Providers
 	authRows, _ := database.DB.Query("SELECT auth_provider, COUNT(*) FROM users GROUP BY auth_provider")
 	if authRows != nil {
 		defer authRows.Close()
@@ -361,6 +369,40 @@ func (h *UserHandler) HandleGetAdminStats(w http.ResponseWriter, r *http.Request
 			var val float64
 			authRows.Scan(&name, &val)
 			stats.AuthProviderStats = append(stats.AuthProviderStats, ChartData{Name: name, Value: val})
+		}
+	}
+
+	// --- CORREÇÃO: Preencher os dados dos gráficos de linha (Timeline) ---
+
+	// 9. Novos Utilizadores por Dia (últimos 30 dias)
+	rowsUsers, _ := database.DB.Query(`
+		SELECT strftime('%Y-%m-%d', created_at) as day, COUNT(*) 
+		FROM users 
+		WHERE created_at >= date('now', '-30 days') 
+		GROUP BY day ORDER BY day ASC
+	`)
+	if rowsUsers != nil {
+		defer rowsUsers.Close()
+		for rowsUsers.Next() {
+			var d TimeSeriesData
+			rowsUsers.Scan(&d.Date, &d.Count)
+			stats.UsersPerDay = append(stats.UsersPerDay, d)
+		}
+	}
+
+	// 10. Utilizadores Ativos por Dia (últimos 30 dias)
+	rowsActive, _ := database.DB.Query(`
+		SELECT strftime('%Y-%m-%d', login_at) as day, COUNT(DISTINCT user_id) 
+		FROM login_history 
+		WHERE login_at >= date('now', '-30 days') 
+		GROUP BY day ORDER BY day ASC
+	`)
+	if rowsActive != nil {
+		defer rowsActive.Close()
+		for rowsActive.Next() {
+			var d TimeSeriesData
+			rowsActive.Scan(&d.Date, &d.Count)
+			stats.ActiveUsersPerDay = append(stats.ActiveUsersPerDay, d)
 		}
 	}
 
@@ -648,4 +690,70 @@ func (h *UserHandler) HandleAdminRefreshMultipleUserMetrics(w http.ResponseWrite
 func (h *UserHandler) HandleAdminClearStatsCache(w http.ResponseWriter, r *http.Request) {
 	h.cache.Flush()
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *UserHandler) HandleImpersonateUser(w http.ResponseWriter, r *http.Request) {
+	targetUserIDStr := chi.URLParam(r, "userID")
+	targetUserID, err := strconv.ParseInt(targetUserIDStr, 10, 64)
+	if err != nil {
+		sendJSONError(w, "ID de utilizador inválido", http.StatusBadRequest)
+		return
+	}
+
+	user, err := model.GetUserByID(database.DB, targetUserID)
+	if err != nil {
+		sendJSONError(w, "Utilizador não encontrado", http.StatusNotFound)
+		return
+	}
+
+	// 1. Gerar Access Token
+	accessToken, err := h.authService.GenerateToken(fmt.Sprintf("%d", user.ID))
+	if err != nil {
+		logger.L.Error("Falha ao gerar token de impersonation", "error", err)
+		sendJSONError(w, "Erro ao gerar acesso", http.StatusInternalServerError)
+		return
+	}
+
+	// 2. Gerar Refresh Token (Necessário para criar a sessão válida)
+	refreshToken, err := h.authService.GenerateRefreshToken()
+	if err != nil {
+		logger.L.Error("Falha ao gerar refresh token de impersonation", "error", err)
+		sendJSONError(w, "Erro ao gerar credenciais", http.StatusInternalServerError)
+		return
+	}
+
+	// 3. CRIAR A SESSÃO NA BASE DE DADOS (A correção crítica)
+	// O middleware verifica se esta sessão existe. Se não existir, dá 401.
+	session := &model.Session{
+		UserID:       user.ID,
+		Token:        accessToken,
+		RefreshToken: refreshToken,
+		UserAgent:    "Admin-Impersonation (" + r.UserAgent() + ")",
+		ClientIP:     r.RemoteAddr,
+		IsBlocked:    false,
+		// Usamos a duração do Refresh Token para a sessão não expirar logo
+		ExpiresAt: time.Now().Add(config.Cfg.RefreshTokenExpiry),
+	}
+
+	if err := model.CreateSession(database.DB, session); err != nil {
+		logger.L.Error("Falha ao registar sessão de impersonation na BD", "userID", user.ID, "error", err)
+		sendJSONError(w, "Falha ao iniciar sessão simulada", http.StatusInternalServerError)
+		return
+	}
+
+	// 4. Retornar resposta
+	response := map[string]interface{}{
+		"access_token":  accessToken,
+		"refresh_token": refreshToken, // Opcional, mas útil se quiseres manter a sessão viva
+		"user": map[string]interface{}{
+			"id":            user.ID,
+			"username":      user.Username,
+			"email":         user.Email,
+			"auth_provider": user.AuthProvider,
+			"is_admin":      isAdmin(user.Email),
+		},
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
 }
