@@ -35,10 +35,6 @@ const AdminMetricsSection = ({ statsData, statsLoading }) => {
                     <StatCard title="Ativos (30d)" value={statsData?.monthlyActiveUsers} loading={statsLoading} />
                 </Grid>
                 <Grid item xs={6} sm={4} md={2}>
-                    {/* CORREÇÃO AQUI: Verificação de segurança antes do .toFixed() */}
-                    <StatCard title="Tempo p/ 1º Upload" value={formatDays(statsData?.avgTimeToFirstUploadDays)} loading={statsLoading} />
-                </Grid>
-                <Grid item xs={6} sm={4} md={2}>
                     <StatCard title="Novos Hoje" value={statsData?.newUsersToday} loading={statsLoading} />
                 </Grid>
                 <Grid item xs={6} sm={4} md={2}>
