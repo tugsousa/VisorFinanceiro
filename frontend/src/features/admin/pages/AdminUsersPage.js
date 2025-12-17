@@ -1,68 +1,67 @@
 import React, { useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Box, Typography, Button } from '@mui/material';
+import { Box, Typography, Paper, Alert } from '@mui/material';
 import { DataGrid, GridToolbar } from '@mui/x-data-grid';
 import { useNavigate } from 'react-router-dom';
-import RefreshIcon from '@mui/icons-material/Refresh';
-import { apiFetchAdminUsers, apiRefreshMultipleUserMetrics } from '../api/adminApi';
+import { useAuth } from '../../auth/AuthContext';
+import { useAdminUsers } from '../hooks/useAdminData'; // O hook que sugerimos antes
 import { getUserColumns } from '../config/adminGridConfig';
 
 const AdminUsersPage = () => {
-    const navigate = useNavigate();
-    const queryClient = useQueryClient();
-    const [paginationModel, setPaginationModel] = useState({ page: 0, pageSize: 25 });
-    const [selectedUserIds, setSelectedUserIds] = useState([]);
+  const { token } = useAuth();
+  const navigate = useNavigate();
+  
+  // 1. Estados essenciais para o DataGrid funcionar em modo servidor
+  const [paginationModel, setPaginationModel] = useState({ page: 0, pageSize: 25 });
+  const [sortModel, setSortModel] = useState([{ field: 'created_at', sort: 'desc' }]);
 
-    const { data: usersData, isLoading } = useQuery({
-        queryKey: ['adminUsers', paginationModel.page, paginationModel.pageSize],
-        queryFn: () => apiFetchAdminUsers({ 
-            page: paginationModel.page + 1, 
-            limit: paginationModel.pageSize 
-        }),
-        keepPreviousData: true,
-    });
+  // 2. Fetch dos dados usando o Hook
+  const { data, isLoading, isError, error } = useAdminUsers(token, paginationModel, sortModel);
 
-    const refreshMetricsMutation = useMutation({
-        mutationFn: apiRefreshMultipleUserMetrics,
-        onSuccess: () => {
-            queryClient.invalidateQueries(['adminUsers']);
-            setSelectedUserIds([]);
-        }
-    });
+  // Colunas da tabela
+  // Nota: Passamos null/funções vazias se não precisares da funcionalidade de refresh imediata aqui
+  const columns = getUserColumns(null, { mutate: () => {} });
 
-    const columns = getUserColumns(navigate, (id) => console.log("Refresh single", id)); // Ajuste conforme a sua config
+  if (isError) return <Alert severity="error">Erro ao carregar utilizadores: {error.message}</Alert>;
 
-    return (
-        <Box sx={{ height: 600, width: '100%' }}>
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 2 }}>
-                <Typography variant="h4">Gestão de Utilizadores</Typography>
-                {selectedUserIds.length > 0 && (
-                    <Button 
-                        variant="contained" 
-                        startIcon={<RefreshIcon />}
-                        onClick={() => refreshMetricsMutation.mutate(selectedUserIds)}
-                    >
-                        Atualizar {selectedUserIds.length} Utilizadores
-                    </Button>
-                )}
-            </Box>
+  return (
+    <Box sx={{ p: 3 }}>
+      <Typography variant="h4" component="h1" gutterBottom>
+        Utilizadores
+      </Typography>
 
-            <DataGrid
-                rows={usersData?.users || []}
-                rowCount={usersData?.total || 0}
-                columns={columns}
-                loading={isLoading}
-                paginationModel={paginationModel}
-                onPaginationModelChange={setPaginationModel}
-                pageSizeOptions={[25, 50, 100]}
-                paginationMode="server"
-                checkboxSelection
-                onRowSelectionModelChange={(ids) => setSelectedUserIds(ids)}
-                slots={{ toolbar: GridToolbar }}
-                getRowId={(row) => row.id}
-            />
+      <Paper variant="outlined" sx={{ p: 2 }}>
+        {/* 3. AQUI ESTÁ O TRUQUE: Definir uma altura explícita */}
+        <Box sx={{ height: 650, width: '100%' }}>
+          <DataGrid
+            // Garantir que acedes a data?.users e dás fallback para array vazio
+            rows={data?.users || []}
+            columns={columns}
+            
+            // Gestão do Estado de Carregamento e Total
+            loading={isLoading}
+            rowCount={data?.totalRows || 0}
+            
+            // Configuração para Server-Side Pagination/Sorting
+            paginationMode="server"
+            sortingMode="server"
+            
+            // Ligação aos estados locais
+            paginationModel={paginationModel}
+            onPaginationModelChange={setPaginationModel}
+            sortModel={sortModel}
+            onSortModelChange={setSortModel}
+            pageSizeOptions={[10, 25, 50, 100]}
+            
+            // Extras
+            slots={{ toolbar: GridToolbar }}
+            density="compact"
+            disableRowSelectionOnClick
+            onRowClick={(params) => navigate(`/admin/users/${params.id}`)}
+          />
         </Box>
-    );
+      </Paper>
+    </Box>
+  );
 };
 
 export default AdminUsersPage;
