@@ -3,20 +3,15 @@
 package handlers
 
 import (
-	"bytes"
 	"context"
 	"database/sql"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"image/png"
 	"net/http"
 	"regexp"
 	"strconv"
 	"strings"
 	"time"
-
-	"github.com/pquerna/otp/totp"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/patrickmn/go-cache"
@@ -697,95 +692,7 @@ func (h *UserHandler) HandleAdminClearStatsCache(w http.ResponseWriter, r *http.
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (h *UserHandler) HandleGenerateMfaSecret(w http.ResponseWriter, r *http.Request) {
-	userID, _ := GetUserIDFromContext(r.Context())
-	user, err := model.GetUserByID(database.DB, userID)
-	if err != nil {
-		sendJSONError(w, "Utilizador não encontrado", http.StatusNotFound)
-		return
-	}
-
-	key, err := totp.Generate(totp.GenerateOpts{
-		Issuer:      "VisorFinanceiro",
-		AccountName: user.Email,
-	})
-	if err != nil {
-		sendJSONError(w, "Erro ao gerar segredo MFA", http.StatusInternalServerError)
-		return
-	}
-
-	// Gerar QR Code em Base64 para o frontend
-	var buf bytes.Buffer
-	img, _ := key.Image(200, 200)
-	png.Encode(&buf, img)
-	qrCodeBase64 := base64.StdEncoding.EncodeToString(buf.Bytes())
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{
-		"secret":      key.Secret(),
-		"qr_code_url": "data:image/png;base64," + qrCodeBase64,
-	})
-}
-
-func (h *UserHandler) HandleEnableMfa(w http.ResponseWriter, r *http.Request) {
-	userID, _ := GetUserIDFromContext(r.Context())
-	var req struct {
-		Secret string `json:"secret"`
-		Code   string `json:"code"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		sendJSONError(w, "Pedido inválido", http.StatusBadRequest)
-		return
-	}
-
-	// Verificar se o código é válido para o segredo fornecido
-	valid := totp.Validate(req.Code, req.Secret)
-	if !valid {
-		sendJSONError(w, "Código MFA inválido", http.StatusUnauthorized)
-		return
-	}
-
-	// Guardar na BD e ativar
-	_, err := database.DB.Exec("UPDATE users SET totp_secret = ?, is_mfa_enabled = 1 WHERE id = ?", req.Secret, userID)
-	if err != nil {
-		sendJSONError(w, "Erro ao guardar MFA", http.StatusInternalServerError)
-		return
-	}
-
-	w.WriteHeader(http.StatusNoContent)
-}
-
 func (h *UserHandler) HandleImpersonateUser(w http.ResponseWriter, r *http.Request) {
-	adminID, _ := GetUserIDFromContext(r.Context())
-	adminUser, err := model.GetUserByID(database.DB, adminID)
-	if err != nil {
-		sendJSONError(w, "Erro ao validar administrador", http.StatusUnauthorized)
-		return
-	}
-
-	// 1. Exigir que o Admin tenha MFA configurado
-	if !adminUser.IsMfaEnabled || adminUser.TotpSecret == "" {
-		sendJSONError(w, "Configuração de MFA obrigatória para esta ação. Ative o MFA nas definições.", http.StatusPreconditionFailed)
-		return
-	}
-
-	// 2. Ler código MFA do corpo do pedido
-	var req struct {
-		MfaCode string `json:"mfa_code"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		sendJSONError(w, "Código MFA em falta", http.StatusBadRequest)
-		return
-	}
-
-	// 3. Validar o código MFA do Admin
-	if !totp.Validate(req.MfaCode, adminUser.TotpSecret) {
-		logger.L.Warn("Tentativa de impersonation com MFA inválido", "adminID", adminID)
-		sendJSONError(w, "Código MFA incorreto", http.StatusUnauthorized)
-		return
-	}
-
-	// --- Lógica Original de Impersonation ---
 	targetUserIDStr := chi.URLParam(r, "userID")
 	targetUserID, err := strconv.ParseInt(targetUserIDStr, 10, 64)
 	if err != nil {
@@ -793,52 +700,60 @@ func (h *UserHandler) HandleImpersonateUser(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	targetUser, err := model.GetUserByID(database.DB, targetUserID)
+	user, err := model.GetUserByID(database.DB, targetUserID)
 	if err != nil {
-		sendJSONError(w, "Utilizador destino não encontrado", http.StatusNotFound)
+		sendJSONError(w, "Utilizador não encontrado", http.StatusNotFound)
 		return
 	}
 
-	// Registar logs rigorosos (recomendado)
-	logger.L.Info("ADMIN IMPERSONATION LOG",
-		"adminID", adminID,
-		"adminEmail", adminUser.Email,
-		"targetUserID", targetUser.ID,
-		"targetEmail", targetUser.Email,
-	)
-
-	accessToken, err := h.authService.GenerateToken(fmt.Sprintf("%d", targetUser.ID))
+	// 1. Gerar Access Token
+	accessToken, err := h.authService.GenerateToken(fmt.Sprintf("%d", user.ID))
 	if err != nil {
+		logger.L.Error("Falha ao gerar token de impersonation", "error", err)
 		sendJSONError(w, "Erro ao gerar acesso", http.StatusInternalServerError)
 		return
 	}
 
-	refreshToken, _ := h.authService.GenerateRefreshToken()
+	// 2. Gerar Refresh Token (Necessário para criar a sessão válida)
+	refreshToken, err := h.authService.GenerateRefreshToken()
+	if err != nil {
+		logger.L.Error("Falha ao gerar refresh token de impersonation", "error", err)
+		sendJSONError(w, "Erro ao gerar credenciais", http.StatusInternalServerError)
+		return
+	}
+
+	// 3. CRIAR A SESSÃO NA BASE DE DADOS (A correção crítica)
+	// O middleware verifica se esta sessão existe. Se não existir, dá 401.
 	session := &model.Session{
-		UserID:       targetUser.ID,
+		UserID:       user.ID,
 		Token:        accessToken,
 		RefreshToken: refreshToken,
-		UserAgent:    "Admin-Impersonation (by " + adminUser.Email + ")",
+		UserAgent:    "Admin-Impersonation (" + r.UserAgent() + ")",
 		ClientIP:     r.RemoteAddr,
-		ExpiresAt:    time.Now().Add(config.Cfg.RefreshTokenExpiry),
+		IsBlocked:    false,
+		// Usamos a duração do Refresh Token para a sessão não expirar logo
+		ExpiresAt: time.Now().Add(config.Cfg.RefreshTokenExpiry),
 	}
 
 	if err := model.CreateSession(database.DB, session); err != nil {
+		logger.L.Error("Falha ao registar sessão de impersonation na BD", "userID", user.ID, "error", err)
 		sendJSONError(w, "Falha ao iniciar sessão simulada", http.StatusInternalServerError)
 		return
 	}
 
+	// 4. Retornar resposta
 	response := map[string]interface{}{
 		"access_token":  accessToken,
-		"refresh_token": refreshToken,
+		"refresh_token": refreshToken, // Opcional, mas útil se quiseres manter a sessão viva
 		"user": map[string]interface{}{
-			"id":            targetUser.ID,
-			"username":      targetUser.Username,
-			"email":         targetUser.Email,
-			"auth_provider": targetUser.AuthProvider,
-			"is_admin":      isAdmin(targetUser.Email),
+			"id":            user.ID,
+			"username":      user.Username,
+			"email":         user.Email,
+			"auth_provider": user.AuthProvider,
+			"is_admin":      isAdmin(user.Email),
 		},
 	}
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(response)
 }
