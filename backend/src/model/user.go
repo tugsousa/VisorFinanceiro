@@ -30,6 +30,8 @@ type User struct {
 	PasswordResetToken              string    `json:"-"`
 	PasswordResetTokenExpiresAt     time.Time `json:"-"`
 	IsAdmin                         bool      `json:"is_admin"`
+	TotpSecret                      string    `json:"-"`
+	IsMfaEnabled                    bool      `json:"is_mfa_enabled"`
 }
 
 // NullTime is an alias for sql.NullTime for better JSON handling if needed.
@@ -108,12 +110,12 @@ func GetUserByID(db *sql.DB, id int64) (*User, error) {
 	       login_count, last_login_at, last_login_ip, portfolio_value_eur, top_5_holdings,
 	       is_email_verified, email_verification_token, email_verification_token_expires_at,
 	       password_reset_token, password_reset_token_expires_at,
-	       created_at, updated_at
+	       created_at, updated_at, totp_secret, is_mfa_enabled
 	FROM users
 	WHERE id = ?`
 	row := db.QueryRow(query, id)
 	var user User
-	var authProvider, lastLoginIP, topHoldings, emailVerificationToken, passwordResetToken sql.NullString
+	var authProvider, lastLoginIP, topHoldings, emailVerificationToken, passwordResetToken, totpSecret sql.NullString
 	var lastLoginAt, emailVerificationTokenExpiresAt, passwordResetTokenExpiresAt sql.NullTime
 
 	err := row.Scan(
@@ -122,7 +124,7 @@ func GetUserByID(db *sql.DB, id int64) (*User, error) {
 		&lastLoginIP, &user.PortfolioValueEUR, &topHoldings, &user.IsEmailVerified,
 		&emailVerificationToken, &emailVerificationTokenExpiresAt,
 		&passwordResetToken, &passwordResetTokenExpiresAt,
-		&user.CreatedAt, &user.UpdatedAt,
+		&user.CreatedAt, &user.UpdatedAt, &totpSecret, &user.IsMfaEnabled,
 	)
 
 	if err != nil {
@@ -140,11 +142,11 @@ func GetUserByID(db *sql.DB, id int64) (*User, error) {
 	user.EmailVerificationTokenExpiresAt = emailVerificationTokenExpiresAt.Time
 	user.PasswordResetToken = passwordResetToken.String
 	user.PasswordResetTokenExpiresAt = passwordResetTokenExpiresAt.Time
+	user.TotpSecret = totpSecret.String
 
 	return &user, nil
 }
 
-// ... other GetUserBy... functions would need similar updates to scan all new fields ...
 type Session struct {
 	ID           int       `json:"id"`
 	UserID       int64     `json:"user_id"`
@@ -159,99 +161,81 @@ type Session struct {
 
 func GetUserByUsername(db *sql.DB, username string) (*User, error) {
 	query := `
-	SELECT id, username, email, password, auth_provider, upload_count, is_email_verified, 
-	       email_verification_token, email_verification_token_expires_at,
+	SELECT id, username, email, password, auth_provider, upload_count, total_upload_count,
+	       login_count, last_login_at, last_login_ip, portfolio_value_eur, top_5_holdings,
+	       is_email_verified, email_verification_token, email_verification_token_expires_at,
 	       password_reset_token, password_reset_token_expires_at,
-	       created_at, updated_at
-	FROM users 
+	       created_at, updated_at, totp_secret, is_mfa_enabled
+	FROM users
 	WHERE username = ?`
 	row := db.QueryRow(query, username)
 	var user User
-	var authProvider sql.NullString
-	var emailVerificationToken sql.NullString
-	var emailVerificationTokenExpiresAt sql.NullTime
-	var passwordResetToken sql.NullString
-	var passwordResetTokenExpiresAt sql.NullTime
+	var authProvider, lastLoginIP, topHoldings, emailVerificationToken, passwordResetToken, totpSecret sql.NullString
+	var lastLoginAt, emailVerificationTokenExpiresAt, passwordResetTokenExpiresAt sql.NullTime
 
 	err := row.Scan(
-		&user.ID, &user.Username, &user.Email, &user.Password,
-		&authProvider,
-		&user.UploadCount,
-		&user.IsEmailVerified,
+		&user.ID, &user.Username, &user.Email, &user.Password, &authProvider,
+		&user.UploadCount, &user.TotalUploadCount, &user.LoginCount, &lastLoginAt,
+		&lastLoginIP, &user.PortfolioValueEUR, &topHoldings, &user.IsEmailVerified,
 		&emailVerificationToken, &emailVerificationTokenExpiresAt,
 		&passwordResetToken, &passwordResetTokenExpiresAt,
-		&user.CreatedAt, &user.UpdatedAt,
+		&user.CreatedAt, &user.UpdatedAt, &totpSecret, &user.IsMfaEnabled,
 	)
+
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return nil, sql.ErrNoRows
-		}
 		return nil, err
 	}
-	if authProvider.Valid {
-		user.AuthProvider = authProvider.String
-	}
-	if emailVerificationToken.Valid {
-		user.EmailVerificationToken = emailVerificationToken.String
-	}
-	if emailVerificationTokenExpiresAt.Valid {
-		user.EmailVerificationTokenExpiresAt = emailVerificationTokenExpiresAt.Time
-	}
-	if passwordResetToken.Valid {
-		user.PasswordResetToken = passwordResetToken.String
-	}
-	if passwordResetTokenExpiresAt.Valid {
-		user.PasswordResetTokenExpiresAt = passwordResetTokenExpiresAt.Time
-	}
+
+	user.AuthProvider = authProvider.String
+	user.LastLoginAt = NullTime(lastLoginAt)
+	user.LastLoginIP = lastLoginIP.String
+	user.Top5Holdings = topHoldings.String
+	user.EmailVerificationToken = emailVerificationToken.String
+	user.EmailVerificationTokenExpiresAt = emailVerificationTokenExpiresAt.Time
+	user.PasswordResetToken = passwordResetToken.String
+	user.PasswordResetTokenExpiresAt = passwordResetTokenExpiresAt.Time
+	user.TotpSecret = totpSecret.String
+
 	return &user, nil
 }
 
 func GetUserByEmail(db *sql.DB, email string) (*User, error) {
 	query := `
-	SELECT id, username, email, password, auth_provider, upload_count, is_email_verified, 
-	       email_verification_token, email_verification_token_expires_at,
+	SELECT id, username, email, password, auth_provider, upload_count, total_upload_count,
+	       login_count, last_login_at, last_login_ip, portfolio_value_eur, top_5_holdings,
+	       is_email_verified, email_verification_token, email_verification_token_expires_at,
 	       password_reset_token, password_reset_token_expires_at,
-	       created_at, updated_at
+	       created_at, updated_at, totp_secret, is_mfa_enabled
 	FROM users
 	WHERE email = ?`
 	row := db.QueryRow(query, email)
 	var user User
-	var authProvider sql.NullString
-	var emailVerificationToken sql.NullString
-	var emailVerificationTokenExpiresAt sql.NullTime
-	var passwordResetToken sql.NullString
-	var passwordResetTokenExpiresAt sql.NullTime
+	var authProvider, lastLoginIP, topHoldings, emailVerificationToken, passwordResetToken, totpSecret sql.NullString
+	var lastLoginAt, emailVerificationTokenExpiresAt, passwordResetTokenExpiresAt sql.NullTime
 
 	err := row.Scan(
-		&user.ID, &user.Username, &user.Email, &user.Password,
-		&authProvider,
-		&user.UploadCount,
-		&user.IsEmailVerified,
+		&user.ID, &user.Username, &user.Email, &user.Password, &authProvider,
+		&user.UploadCount, &user.TotalUploadCount, &user.LoginCount, &lastLoginAt,
+		&lastLoginIP, &user.PortfolioValueEUR, &topHoldings, &user.IsEmailVerified,
 		&emailVerificationToken, &emailVerificationTokenExpiresAt,
 		&passwordResetToken, &passwordResetTokenExpiresAt,
-		&user.CreatedAt, &user.UpdatedAt,
+		&user.CreatedAt, &user.UpdatedAt, &totpSecret, &user.IsMfaEnabled,
 	)
+
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return nil, sql.ErrNoRows
-		}
 		return nil, err
 	}
-	if authProvider.Valid {
-		user.AuthProvider = authProvider.String
-	}
-	if emailVerificationToken.Valid {
-		user.EmailVerificationToken = emailVerificationToken.String
-	}
-	if emailVerificationTokenExpiresAt.Valid {
-		user.EmailVerificationTokenExpiresAt = emailVerificationTokenExpiresAt.Time
-	}
-	if passwordResetToken.Valid {
-		user.PasswordResetToken = passwordResetToken.String
-	}
-	if passwordResetTokenExpiresAt.Valid {
-		user.PasswordResetTokenExpiresAt = passwordResetTokenExpiresAt.Time
-	}
+
+	user.AuthProvider = authProvider.String
+	user.LastLoginAt = NullTime(lastLoginAt)
+	user.LastLoginIP = lastLoginIP.String
+	user.Top5Holdings = topHoldings.String
+	user.EmailVerificationToken = emailVerificationToken.String
+	user.EmailVerificationTokenExpiresAt = emailVerificationTokenExpiresAt.Time
+	user.PasswordResetToken = passwordResetToken.String
+	user.PasswordResetTokenExpiresAt = passwordResetTokenExpiresAt.Time
+	user.TotpSecret = totpSecret.String
+
 	return &user, nil
 }
 

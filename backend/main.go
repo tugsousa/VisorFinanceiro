@@ -199,7 +199,11 @@ func main() {
 				r.Post("/admin/users/refresh-metrics-batch", userHandler.HandleAdminRefreshMultipleUserMetrics)
 				r.Post("/admin/stats/clear-cache", userHandler.HandleAdminClearStatsCache)
 
-				// Rota de Impersonation (NOVA)
+				// Novas rotas MFA (Apenas para o Admin configurar o seu próprio TOTP)
+				r.Get("/admin/mfa/setup", userHandler.HandleGenerateMfaSecret)
+				r.Post("/admin/mfa/enable", userHandler.HandleEnableMfa)
+
+				// Rota de Impersonation (Já existente, mas agora o frontend tem de enviar JSON no POST)
 				r.Post("/admin/users/{userID}/impersonate", userHandler.HandleImpersonateUser)
 			})
 		})
