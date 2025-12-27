@@ -703,7 +703,11 @@ func (h *UserHandler) HandleImpersonateUser(w http.ResponseWriter, r *http.Reque
 
 	// 2. Parse do targetUserID da URL
 	targetUserIDStr := chi.URLParam(r, "userID")
-	targetUserID, _ := strconv.ParseInt(targetUserIDStr, 10, 64)
+	targetUserID, err := strconv.ParseInt(targetUserIDStr, 10, 64)
+	if err != nil {
+		sendJSONError(w, "ID de utilizador inválido", http.StatusBadRequest)
+		return
+	}
 
 	// 3. Ler o código MFA do body
 	var req ImpersonateRequest
@@ -730,11 +734,6 @@ func (h *UserHandler) HandleImpersonateUser(w http.ResponseWriter, r *http.Reque
 		// Regista tentativa falhada (audit log seria bom aqui)
 		logger.L.Warn("Failed MFA attempt for impersonation", "adminID", adminID)
 		sendJSONError(w, "Código MFA inválido", http.StatusUnauthorized)
-		return
-	}
-
-	if err != nil {
-		sendJSONError(w, "ID de utilizador inválido", http.StatusBadRequest)
 		return
 	}
 
@@ -782,13 +781,14 @@ func (h *UserHandler) HandleImpersonateUser(w http.ResponseWriter, r *http.Reque
 	// 4. Retornar resposta
 	response := map[string]interface{}{
 		"access_token":  accessToken,
-		"refresh_token": refreshToken, // Opcional, mas útil se quiseres manter a sessão viva
+		"refresh_token": refreshToken,
 		"user": map[string]interface{}{
 			"id":            user.ID,
 			"username":      user.Username,
 			"email":         user.Email,
 			"auth_provider": user.AuthProvider,
 			"is_admin":      isAdmin(user.Email),
+			"mfa_enabled":   user.MfaEnabled,
 		},
 	}
 

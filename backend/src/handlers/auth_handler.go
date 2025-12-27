@@ -313,6 +313,7 @@ func (h *UserHandler) LoginUserHandler(w http.ResponseWriter, r *http.Request) {
 		"email":         user.Email,
 		"auth_provider": user.AuthProvider,
 		"is_admin":      user.IsAdmin,
+		"mfa_enabled":   user.MfaEnabled,
 	}
 
 	w.Header().Set("Content-Type", "application/json")
