@@ -246,30 +246,22 @@ func (h *UserHandler) HandleGetAdminStats(w http.ResponseWriter, r *http.Request
 	}
 
 	rangeParam := r.URL.Query().Get("range")
-	var timeFilter string
-	var loginFilter string
-	var uploadFilter string
 
-	// Filtros de tempo para os contadores simples
+	// Default to a wide interval (effectively "All Time") to keep queries parameterized safely
+	interval := "-100 years"
+
+	// Select the SQLite interval modifier based on the requested range
 	switch rangeParam {
 	case "last_7_days":
-		timeFilter = "created_at >= date('now', '-7 days')"
-		loginFilter = "login_at >= date('now', '-7 days')"
-		uploadFilter = "uploaded_at >= date('now', '-7 days')"
+		interval = "-7 days"
 	case "last_30_days":
-		timeFilter = "created_at >= date('now', '-30 days')"
-		loginFilter = "login_at >= date('now', '-30 days')"
-		uploadFilter = "uploaded_at >= date('now', '-30 days')"
+		interval = "-30 days"
 	case "last_365_days":
-		timeFilter = "created_at >= date('now', '-365 days')"
-		loginFilter = "login_at >= date('now', '-365 days')"
-		uploadFilter = "uploaded_at >= date('now', '-365 days')"
-	default:
-		timeFilter = "1=1"
-		loginFilter = "1=1"
-		uploadFilter = "1=1"
+		interval = "-365 days"
 	}
 
+	// Helper to handle queries safely without repeating code
+	// We pass the 'interval' as a parameter (?) to the query
 	var usersWithUploads int
 	database.DB.QueryRow("SELECT COUNT(*) FROM users WHERE total_upload_count > 0").Scan(&usersWithUploads)
 
@@ -279,34 +271,35 @@ func (h *UserHandler) HandleGetAdminStats(w http.ResponseWriter, r *http.Request
 		stats.ActivationRate = 0
 	}
 
-	// 2. Contar Total de Transações (Volume real de dados)
-	// Nota: Como é um COUNT total numa tabela que pode ser grande, é uma métrica geral importante
+	// 2. Total Transactions
 	database.DB.QueryRow("SELECT COUNT(*) FROM processed_transactions").Scan(&stats.TotalTransactions)
 
-	// 1. Métricas Gerais
+	// 1. General Metrics
 	database.DB.QueryRow("SELECT COUNT(*) FROM users").Scan(&stats.TotalUsers)
 	database.DB.QueryRow("SELECT COALESCE(SUM(portfolio_value_eur), 0) FROM users").Scan(&stats.TotalPortfolioValue)
 	database.DB.QueryRow("SELECT metric_value FROM system_metrics WHERE metric_name = 'deleted_user_count'").Scan(&stats.DeletedUserCount)
 	database.DB.QueryRow("SELECT COUNT(*) FROM uploads_history").Scan(&stats.TotalUploads)
+
+	// Active Users (Using fixed intervals for DAU/MAU standards)
 	database.DB.QueryRow("SELECT COUNT(DISTINCT user_id) FROM login_history WHERE login_at > date('now', '-1 day')").Scan(&stats.DailyActiveUsers)
 	database.DB.QueryRow("SELECT COUNT(DISTINCT user_id) FROM login_history WHERE login_at > date('now', '-30 days')").Scan(&stats.MonthlyActiveUsers)
 
-	// 2. Novos Utilizadores (Hoje, Semana, Mês)
+	// 2. New Users (Fixed periods)
 	database.DB.QueryRow("SELECT COUNT(*) FROM users WHERE created_at > date('now', 'start of day')").Scan(&stats.NewUsersToday)
 	database.DB.QueryRow("SELECT COUNT(*) FROM users WHERE created_at > date('now', '-7 days')").Scan(&stats.NewUsersThisWeek)
 	database.DB.QueryRow("SELECT COUNT(*) FROM users WHERE created_at > date('now', 'start of month')").Scan(&stats.NewUsersThisMonth)
 
-	// 3. Métricas no Período Selecionado
-	database.DB.QueryRow("SELECT COUNT(*) FROM users WHERE " + timeFilter).Scan(&stats.NewUsersInPeriod)
-	database.DB.QueryRow("SELECT COUNT(DISTINCT user_id) FROM login_history WHERE " + loginFilter).Scan(&stats.ActiveUsersInPeriod)
+	// 3. Metrics in Selected Period (Parameterized)
+	// Notice we use the '?' placeholder and pass 'interval' as an argument
+	database.DB.QueryRow("SELECT COUNT(*) FROM users WHERE created_at >= date('now', ?)", interval).Scan(&stats.NewUsersInPeriod)
+	database.DB.QueryRow("SELECT COUNT(DISTINCT user_id) FROM login_history WHERE login_at >= date('now', ?)", interval).Scan(&stats.ActiveUsersInPeriod)
 
 	var successfulUploads int
-	database.DB.QueryRow("SELECT COUNT(*) FROM uploads_history WHERE " + uploadFilter).Scan(&successfulUploads)
+	database.DB.QueryRow("SELECT COUNT(*) FROM uploads_history WHERE uploaded_at >= date('now', ?)", interval).Scan(&successfulUploads)
 	stats.UploadsInPeriod = successfulUploads
 
 	var failedUploads int
-	failureTimeFilter := strings.Replace(uploadFilter, "uploaded_at", "failed_at", 1)
-	database.DB.QueryRow("SELECT COUNT(*) FROM upload_failures WHERE " + failureTimeFilter).Scan(&failedUploads)
+	database.DB.QueryRow("SELECT COUNT(*) FROM upload_failures WHERE failed_at >= date('now', ?)", interval).Scan(&failedUploads)
 
 	totalAttempts := successfulUploads + failedUploads
 	if totalAttempts > 0 {
@@ -315,7 +308,8 @@ func (h *UserHandler) HandleGetAdminStats(w http.ResponseWriter, r *http.Request
 		stats.UploadFailureRate = 0
 	}
 
-	// 4. Métricas Financeiras Globais (Cash e Dividendos)
+	// 4. Financial Metrics (Global)
+	// These were previously filtered by strict string checks; we can keep logic simple for now
 	if rangeParam == "all_time" || rangeParam == "" {
 		database.DB.QueryRow(`
 			SELECT COALESCE(SUM(amount_eur), 0)
@@ -334,25 +328,26 @@ func (h *UserHandler) HandleGetAdminStats(w http.ResponseWriter, r *http.Request
 			FROM processed_transactions 
 			WHERE transaction_type = 'DIVIDEND' AND transaction_subtype != 'TAX'`).Scan(&stats.AvgDividendReceivedEURInPeriod)
 	} else {
+		// If you want to support filtering these by date later, add a JOIN with the date column and use 'interval'
 		stats.TotalCashDepositedEURInPeriod = 0
 		stats.CashDepositsInPeriod = 0
 		stats.TotalDividendsReceivedEURInPeriod = 0
 		stats.AvgDividendReceivedEURInPeriod = 0
 	}
 
-	// KPI Removido: AvgTimeToFirstUploadDays (Deixamos a query mas podes ignorar no frontend se quiseres)
+	// KPI: Avg Time to First Upload
 	database.DB.QueryRow(`
 		SELECT COALESCE(AVG(JULIANDAY(first_upload_at) - JULIANDAY(created_at)), 0)
 		FROM users WHERE first_upload_at IS NOT NULL
 	`).Scan(&stats.AvgTimeToFirstUploadDays)
 
-	// 5. Estatísticas de Verificação de Email
+	// 5. Verification Stats
 	var verified, unverified int
 	database.DB.QueryRow("SELECT COUNT(*) FROM users WHERE is_email_verified = 1").Scan(&verified)
 	database.DB.QueryRow("SELECT COUNT(*) FROM users WHERE is_email_verified = 0").Scan(&unverified)
 	stats.VerificationStats = map[string]int{"verified": verified, "unverified": unverified}
 
-	// 6. Top Utilizadores
+	// 6. Top Users Helper
 	fetchUsers := func(query string) []AdminUserView {
 		rows, _ := database.DB.Query(query)
 		if rows == nil {
@@ -381,7 +376,7 @@ func (h *UserHandler) HandleGetAdminStats(w http.ResponseWriter, r *http.Request
 		SELECT id, email, login_count, total_upload_count, portfolio_value_eur, last_login_at, last_login_ip, top_5_holdings
 		FROM users ORDER BY total_upload_count DESC LIMIT 5`)
 
-	// 7. Gráficos: Valor por Corretora
+	// 7. Broker Charts
 	brokerRows, _ := database.DB.Query("SELECT source, COUNT(*) FROM processed_transactions GROUP BY source")
 	if brokerRows != nil {
 		defer brokerRows.Close()
@@ -393,7 +388,7 @@ func (h *UserHandler) HandleGetAdminStats(w http.ResponseWriter, r *http.Request
 		}
 	}
 
-	// 8. Gráficos: Auth Providers
+	// 8. Auth Provider Charts
 	authRows, _ := database.DB.Query("SELECT auth_provider, COUNT(*) FROM users GROUP BY auth_provider")
 	if authRows != nil {
 		defer authRows.Close()
@@ -405,15 +400,19 @@ func (h *UserHandler) HandleGetAdminStats(w http.ResponseWriter, r *http.Request
 		}
 	}
 
-	// --- CORREÇÃO: Preencher os dados dos gráficos de linha (Timeline) ---
-
-	// 9. Novos Utilizadores por Dia (últimos 30 dias)
+	// 9. Timeline Data (Users per day)
+	// Parameterized using the same interval logic if you wish, or fixed 30 days as before.
+	// We will use strict parameters here as well for consistency.
 	rowsUsers, _ := database.DB.Query(`
 		SELECT strftime('%Y-%m-%d', created_at) as day, COUNT(*) 
 		FROM users 
-		WHERE created_at >= date('now', '-30 days') 
+		WHERE created_at >= date('now', ?) 
 		GROUP BY day ORDER BY day ASC
-	`)
+	`, interval) // Changed from hardcoded '-30 days' to follow the filter, or keep '-30 days' if that's the desired UI behavior.
+
+	// If you prefer the chart to ALWAYS be 30 days regardless of filter:
+	// replace `interval` with `"-30 days"` in the line above.
+
 	if rowsUsers != nil {
 		defer rowsUsers.Close()
 		for rowsUsers.Next() {
@@ -423,13 +422,14 @@ func (h *UserHandler) HandleGetAdminStats(w http.ResponseWriter, r *http.Request
 		}
 	}
 
-	// 10. Utilizadores Ativos por Dia (últimos 30 dias)
+	// 10. Timeline Data (Active Users)
 	rowsActive, _ := database.DB.Query(`
 		SELECT strftime('%Y-%m-%d', login_at) as day, COUNT(DISTINCT user_id) 
 		FROM login_history 
-		WHERE login_at >= date('now', '-30 days') 
+		WHERE login_at >= date('now', ?) 
 		GROUP BY day ORDER BY day ASC
-	`)
+	`, interval) // Same note as above
+
 	if rowsActive != nil {
 		defer rowsActive.Close()
 		for rowsActive.Next() {
@@ -455,16 +455,28 @@ func (h *UserHandler) HandleGetAdminUsers(w http.ResponseWriter, r *http.Request
 	offset := (page - 1) * pageSize
 
 	sortBy := r.URL.Query().Get("sortBy")
-	order := r.URL.Query().Get("order")
+	order := strings.ToUpper(r.URL.Query().Get("order")) // Normalize to uppercase
 
-	validSorts := map[string]bool{"created_at": true, "login_count": true, "portfolio_value_eur": true, "total_upload_count": true, "email": true}
+	// 1. White-list allowed columns for sorting
+	validSorts := map[string]bool{
+		"created_at":          true,
+		"login_count":         true,
+		"portfolio_value_eur": true,
+		"total_upload_count":  true,
+		"email":               true,
+	}
 	if !validSorts[sortBy] {
 		sortBy = "created_at"
 	}
-	if order != "asc" {
-		order = "desc"
+
+	// 2. White-list sort direction
+	if order != "ASC" && order != "DESC" {
+		order = "DESC"
 	}
 
+	// 3. Safe Construction
+	// Because 'sortBy' and 'order' are strictly checked against our hardcoded values above,
+	// using Sprintf here is safe from injection.
 	query := fmt.Sprintf(`
 		SELECT id, username, email, auth_provider, created_at, total_upload_count, upload_count,
 		(SELECT COUNT(DISTINCT source) FROM processed_transactions WHERE user_id = u.id) as distinct_broker_count,
