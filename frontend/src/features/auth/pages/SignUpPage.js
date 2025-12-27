@@ -1,4 +1,4 @@
-// frontend/src/pages/SignUpPage.js
+// frontend/src/features/auth/pages/SignUpPage.js
 import React, { useState, useContext, useRef } from 'react';
 import { Link as RouterLink } from 'react-router-dom';
 import { AuthContext } from '../AuthContext';
@@ -18,6 +18,9 @@ function SignUpPage() {
   const { register, isAuthActionLoading } = useContext(AuthContext);
   const successShownRef = useRef(false);
 
+  // Regex for strong password: 8+ chars, 1 uppercase, 1 lowercase, 1 digit, 1 special char
+  const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[\W_]).{8,}$/;
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setPageSuccessMessage('');
@@ -29,7 +32,10 @@ function SignUpPage() {
     if (!email.trim()) clientValidationError = 'Email é obrigatório.';
     else if (!/\S+@\S+\.\S+/.test(email)) clientValidationError = 'Email inválido.';
     else if (!password) clientValidationError = 'Senha é obrigatória.';
-    else if (password.length < 6) clientValidationError = 'A senha deve ter pelo menos 6 caracteres.';
+    // UPDATED VALIDATION LOGIC
+    else if (!passwordRegex.test(password)) {
+        clientValidationError = 'A senha deve ter no mínimo 8 caracteres, incluindo maiúscula, minúscula, número e símbolo.';
+    }
     else if (password !== confirmPassword) clientValidationError = 'As senhas não coincidem.';
 
     if (clientValidationError) {
@@ -98,6 +104,7 @@ function SignUpPage() {
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             disabled={formDisabled}
+            helperText="Min. 8 chars, 1 maiúscula, 1 minúscula, 1 número, 1 símbolo"
           />
 
           <Typography variant="subtitle2" sx={{ fontWeight: 500, mt: 2 }}>Confirmar Senha</Typography>

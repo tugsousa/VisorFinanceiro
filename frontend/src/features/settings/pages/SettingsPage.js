@@ -32,6 +32,9 @@ function SettingsPage() {
   const [mfaCode, setMfaCode] = useState('');
   const [mfaError, setMfaError] = useState('');
   const [isMfaLoading, setIsMfaLoading] = useState(false);
+  
+  // Regex for strong password
+  const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[\W_]).{8,}$/;
 
   // --- Mutations ---
   const changePasswordMutation = useMutation({
@@ -109,7 +112,12 @@ function SettingsPage() {
     setChangePasswordSuccess('');
 
     if (newPassword !== confirmNewPassword) return setChangePasswordError("Passwords não coincidem.");
-    if (newPassword.length < 6) return setChangePasswordError("Mínimo 6 caracteres.");
+    
+    // UPDATED VALIDATION LOGIC
+    if (!passwordRegex.test(newPassword)) {
+        return setChangePasswordError("A senha deve ter no mínimo 8 caracteres, 1 maiúscula, 1 minúscula, 1 número e 1 símbolo.");
+    }
+    
     if (!currentPassword) return setChangePasswordError("Password atual obrigatória.");
     
     await fetchCsrfToken(true);
@@ -161,7 +169,7 @@ function SettingsPage() {
             
             <Box component="form" onSubmit={handleSubmitChangePassword}>
                 <TextField label="Senha atual" type="password" fullWidth margin="dense" value={currentPassword} onChange={e => setCurrentPassword(e.target.value)} />
-                <TextField label="Nova Senha" type="password" fullWidth margin="dense" value={newPassword} onChange={e => setNewPassword(e.target.value)} />
+                <TextField label="Nova Senha" type="password" fullWidth margin="dense" value={newPassword} onChange={e => setNewPassword(e.target.value)} helperText="Min. 8 chars, 1 maiúscula, 1 minúscula, 1 número e 1 símbolo" />
                 <TextField label="Confirmar Nova Senha" type="password" fullWidth margin="dense" value={confirmNewPassword} onChange={e => setConfirmNewPassword(e.target.value)} />
                 <Button type="submit" variant="contained" sx={{ mt: 2 }} disabled={changePasswordMutation.isPending}>
                     Alterar Senha

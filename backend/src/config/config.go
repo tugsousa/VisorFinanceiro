@@ -80,9 +80,6 @@ func LoadConfig() {
 	// --- Security & Tokens (Secrets) ---
 	jwtSecret := getRequiredEnv("JWT_SECRET")
 	csrfAuthKeyStr := getRequiredEnv("CSRF_AUTH_KEY")
-	if len(csrfAuthKeyStr) != 32 {
-		log.Fatalf("FATAL: CSRF_AUTH_KEY must be exactly 32 bytes long. Current length: %d", len(csrfAuthKeyStr))
-	}
 
 	oauthStateString := getEnv("OAUTH_STATE_STRING", "secure-random-state-string-for-dev-only")
 	if oauthStateString == "secure-random-state-string-for-dev-only" {

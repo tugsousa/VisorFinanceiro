@@ -1,4 +1,4 @@
- // frontend/src/pages/ResetPasswordPage.js
+// frontend/src/features/auth/pages/ResetPasswordPage.js
     import React, { useState, useEffect, useContext } from 'react';
     import { useLocation, useNavigate, Link as RouterLink } from 'react-router-dom';
     import { AuthContext } from '../AuthContext';
@@ -18,6 +18,8 @@
       const [isLoading, setIsLoading] = useState(false);
       const { fetchCsrfToken } = useContext(AuthContext);
 
+      // Regex for strong password
+      const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[\W_]).{8,}$/;
 
       useEffect(() => {
         const queryParams = new URLSearchParams(location.search);
@@ -45,8 +47,10 @@
           setIsLoading(false);
           return;
         }
-        if (password.length < 6) {
-          setError('Password must be at least 6 characters long.');
+        
+        // UPDATED VALIDATION LOGIC
+        if (!passwordRegex.test(password)) {
+          setError('Password must be at least 8 characters, include uppercase, lowercase, number and special char.');
           setIsLoading(false);
           return;
         }
@@ -73,13 +77,13 @@
             {error && <Alert severity="error" sx={{ width: '100%', mt: 2 }}>{error}</Alert>}
             {message && <Alert severity="success" sx={{ width: '100%', mt: 2 }}>{message}</Alert>}
             
-            {!token && !error && ( // Show only if token is missing and no other error displayed yet
+            {!token && !error && (
                  <Alert severity="warning" sx={{ width: '100%', mt: 2 }}>
                     Waiting for password reset token from URL... If you clicked a link from your email, it should appear.
                  </Alert>
             )}
 
-            {token && !message && ( // Only show form if token exists and no success message yet
+            {token && !message && (
               <Box component="form" onSubmit={handleSubmit} noValidate sx={{ mt: 1, width: '100%' }}>
                 <TextField
                   margin="normal"
@@ -93,6 +97,7 @@
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   disabled={isLoading}
+                  helperText="Min. 8 chars, 1 Upper, 1 Lower, 1 Number, 1 Special"
                 />
                 <TextField
                   margin="normal"
@@ -121,7 +126,7 @@
              <Grid container justifyContent="flex-end" sx={{ mt: message || error ? 2 : 0 }}>
                 <Grid item>
                   <Link component={RouterLink} to="/signin" variant="body2">
-                    Back to Sign In
+                    Voltar a iniciar sessão
                   </Link>
                 </Grid>
               </Grid>
