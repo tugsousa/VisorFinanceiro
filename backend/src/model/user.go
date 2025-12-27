@@ -30,6 +30,8 @@ type User struct {
 	PasswordResetToken              string    `json:"-"`
 	PasswordResetTokenExpiresAt     time.Time `json:"-"`
 	IsAdmin                         bool      `json:"is_admin"`
+	MfaSecret                       string    `json:"-"`
+	MfaEnabled                      bool      `json:"mfa_enabled"`
 }
 
 // NullTime is an alias for sql.NullTime for better JSON handling if needed.
@@ -108,12 +110,12 @@ func GetUserByID(db *sql.DB, id int64) (*User, error) {
 	       login_count, last_login_at, last_login_ip, portfolio_value_eur, top_5_holdings,
 	       is_email_verified, email_verification_token, email_verification_token_expires_at,
 	       password_reset_token, password_reset_token_expires_at,
-	       created_at, updated_at
+	       created_at, updated_at, mfa_secret, mfa_enabled
 	FROM users
 	WHERE id = ?`
 	row := db.QueryRow(query, id)
 	var user User
-	var authProvider, lastLoginIP, topHoldings, emailVerificationToken, passwordResetToken sql.NullString
+	var authProvider, lastLoginIP, topHoldings, emailVerificationToken, passwordResetToken, mfaSecret sql.NullString
 	var lastLoginAt, emailVerificationTokenExpiresAt, passwordResetTokenExpiresAt sql.NullTime
 
 	err := row.Scan(
@@ -123,6 +125,7 @@ func GetUserByID(db *sql.DB, id int64) (*User, error) {
 		&emailVerificationToken, &emailVerificationTokenExpiresAt,
 		&passwordResetToken, &passwordResetTokenExpiresAt,
 		&user.CreatedAt, &user.UpdatedAt,
+		&mfaSecret, &user.MfaEnabled,
 	)
 
 	if err != nil {
@@ -140,11 +143,11 @@ func GetUserByID(db *sql.DB, id int64) (*User, error) {
 	user.EmailVerificationTokenExpiresAt = emailVerificationTokenExpiresAt.Time
 	user.PasswordResetToken = passwordResetToken.String
 	user.PasswordResetTokenExpiresAt = passwordResetTokenExpiresAt.Time
+	user.MfaSecret = mfaSecret.String
 
 	return &user, nil
 }
 
-// ... other GetUserBy... functions would need similar updates to scan all new fields ...
 type Session struct {
 	ID           int       `json:"id"`
 	UserID       int64     `json:"user_id"`
@@ -551,4 +554,44 @@ func DeleteSessionByRefreshToken(db *sql.DB, refreshToken string) error {
 		// Not necessarily an error
 	}
 	return nil
+}
+
+// UpdateMfaSecret guarda o segredo TOTP temporariamente (ou permanentemente)
+func (u *User) UpdateMfaSecret(db *sql.DB, secret string) error {
+	u.MfaSecret = secret
+	u.UpdatedAt = time.Now()
+
+	query := `
+	UPDATE users
+	SET mfa_secret = ?, updated_at = ?
+	WHERE id = ?`
+
+	stmt, err := db.Prepare(query)
+	if err != nil {
+		return err
+	}
+	defer stmt.Close()
+
+	_, err = stmt.Exec(u.MfaSecret, u.UpdatedAt, u.ID)
+	return err
+}
+
+// UpdateMfaEnabled ativa ou desativa o MFA
+func (u *User) UpdateMfaEnabled(db *sql.DB, enabled bool) error {
+	u.MfaEnabled = enabled
+	u.UpdatedAt = time.Now()
+
+	query := `
+	UPDATE users
+	SET mfa_enabled = ?, updated_at = ?
+	WHERE id = ?`
+
+	stmt, err := db.Prepare(query)
+	if err != nil {
+		return err
+	}
+	defer stmt.Close()
+
+	_, err = stmt.Exec(u.MfaEnabled, u.UpdatedAt, u.ID)
+	return err
 }
