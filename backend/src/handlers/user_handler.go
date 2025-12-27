@@ -34,7 +34,6 @@ var passwordRegex = regexp.MustCompile(`^.{6,}$`)
 
 var (
 	googleOauthConfig *oauth2.Config
-	oauthStateString  = "random-string-for-security"
 )
 
 type UserHandler struct {
