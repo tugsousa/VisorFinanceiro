@@ -85,6 +85,7 @@ func (h *UserHandler) RegisterUserHandler(w http.ResponseWriter, r *http.Request
 	credentials.Email = strings.ToLower(validation.SanitizeText(strings.TrimSpace(credentials.Email)))
 	credentials.Password = strings.TrimSpace(credentials.Password)
 
+	// If username is empty but email exists, try to derive username from email
 	if credentials.Username == "" && strings.Contains(credentials.Email, "@") {
 		credentials.Username = strings.Split(credentials.Email, "@")[0]
 	}
@@ -102,6 +103,7 @@ func (h *UserHandler) RegisterUserHandler(w http.ResponseWriter, r *http.Request
 		sendJSONError(w, err.Error(), http.StatusBadRequest)
 		return
 	}
+	// Note: emailRegex is defined in user_handler.go (same package)
 	if !emailRegex.MatchString(credentials.Email) {
 		sendJSONError(w, "Invalid email format", http.StatusBadRequest)
 		return
@@ -110,8 +112,10 @@ func (h *UserHandler) RegisterUserHandler(w http.ResponseWriter, r *http.Request
 		sendJSONError(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	if !passwordRegex.MatchString(credentials.Password) {
-		sendJSONError(w, "Password must be at least 6 characters long", http.StatusBadRequest)
+
+	// --- NEW SECURITY CHECK ---
+	if err := validatePasswordComplexity(credentials.Password); err != nil {
+		sendJSONError(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
@@ -169,7 +173,7 @@ func (h *UserHandler) RegisterUserHandler(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	// --- MULTI-PORTFOLIO CHANGE START ---
+	// --- MULTI-PORTFOLIO LOGIC ---
 	// Create a default portfolio for the new user
 	_, err = database.DB.Exec("INSERT INTO portfolios (user_id, name, description, is_default) VALUES (?, ?, ?, ?)", user.ID, "Portfolio Principal", "Default Portfolio", true)
 	if err != nil {
@@ -177,7 +181,7 @@ func (h *UserHandler) RegisterUserHandler(w http.ResponseWriter, r *http.Request
 		// User might see an empty dashboard and can create one manually later.
 		logger.L.Error("Failed to create default portfolio for new user", "userID", user.ID, "error", err)
 	}
-	// --- MULTI-PORTFOLIO CHANGE END ---
+	// ---------------------------------------
 
 	logger.L.Info("User registered, verification email to be sent", "userID", user.ID)
 
