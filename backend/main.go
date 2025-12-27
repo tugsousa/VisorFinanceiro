@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -34,15 +35,79 @@ func proxyHeadersMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-var limiter = rate.NewLimiter(rate.Every(100*time.Millisecond), 30)
+// IPRateLimiter manages a separate rate limiter for each IP address.
+type IPRateLimiter struct {
+	ips map[string]*rate.Limiter
+	mu  sync.RWMutex
+	r   rate.Limit
+	b   int
+}
+
+// NewIPRateLimiter creates a custom rate limiter instance.
+func NewIPRateLimiter(r rate.Limit, b int) *IPRateLimiter {
+	i := &IPRateLimiter{
+		ips: make(map[string]*rate.Limiter),
+		r:   r,
+		b:   b,
+	}
+
+	// Launch a background goroutine to clean up old entries every 10 minutes
+	// to prevent memory leaks from one-off visitors.
+	go i.cleanupLoop()
+
+	return i
+}
+
+// GetLimiter returns the rate limiter for the provided IP address.
+func (i *IPRateLimiter) GetLimiter(ip string) *rate.Limiter {
+	i.mu.Lock()
+	defer i.mu.Unlock()
+
+	limiter, exists := i.ips[ip]
+	if !exists {
+		limiter = rate.NewLimiter(i.r, i.b)
+		i.ips[ip] = limiter
+	}
+
+	return limiter
+}
+
+// cleanupLoop periodically clears the map to remove stale IPs.
+// In a more complex app, you might check 'last seen' timestamps, but a full reset is safe here
+// as active users will simply get a fresh bucket.
+func (i *IPRateLimiter) cleanupLoop() {
+	for {
+		time.Sleep(10 * time.Minute)
+		i.mu.Lock()
+		i.ips = make(map[string]*rate.Limiter)
+		i.mu.Unlock()
+	}
+}
+
+// Global instance: 5 requests per second (r), burst of 10 (b) per IP.
+// Adjust these values based on your frontend's needs.
+var ipLimiter = NewIPRateLimiter(rate.Every(200*time.Millisecond), 10)
 
 func rateLimitMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Determine the client IP.
+		// Since you have Caddy as a proxy, r.RemoteAddr might be the container IP.
+		// Ideally, Caddy sends X-Forwarded-For.
+		ip := r.RemoteAddr
+		if forwarded := r.Header.Get("X-Forwarded-For"); forwarded != "" {
+			// X-Forwarded-For can be a comma-separated list; the first one is the original client IP.
+			parts := strings.Split(forwarded, ",")
+			ip = strings.TrimSpace(parts[0])
+		}
+
+		limiter := ipLimiter.GetLimiter(ip)
 		if !limiter.Allow() {
 			http.Error(w, http.StatusText(http.StatusTooManyRequests), http.StatusTooManyRequests)
-			logger.L.Warn("Rate limit exceeded", "path", r.URL.Path)
+			// Log the IP that exceeded the limit
+			logger.L.Warn("Rate limit exceeded", "ip", ip, "path", r.URL.Path)
 			return
 		}
+
 		next.ServeHTTP(w, r)
 	})
 }
@@ -50,21 +115,24 @@ func rateLimitMiddleware(next http.Handler) http.Handler {
 func enableCORS(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		origin := r.Header.Get("Origin")
+
+		// Define your allowlist explicitly.
 		allowedOrigins := map[string]bool{
-			"http://localhost:3000":      true,
-			"https://visorfinanceiro.pt": true,
+			"http://localhost:3000":          true,
+			"https://visorfinanceiro.pt":     true,
+			"https://www.visorfinanceiro.pt": true,
 		}
 
+		// Only set CORS headers if the origin is explicitly allowed.
 		if allowedOrigins[origin] {
 			w.Header().Set("Access-Control-Allow-Origin", origin)
 			w.Header().Set("Access-Control-Allow-Credentials", "true")
 			w.Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS, PUT, DELETE, PATCH")
 			w.Header().Set("Access-Control-Allow-Headers", "Accept, Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization, X-Requested-With, Cookie, If-None-Match")
 			w.Header().Set("Access-Control-Expose-Headers", "X-CSRF-Token, ETag")
-		} else if origin == "" {
-			w.Header().Set("Access-Control-Allow-Origin", "*")
 		}
 
+		// Handle preflight requests
 		if r.Method == "OPTIONS" {
 			w.WriteHeader(http.StatusOK)
 			return
