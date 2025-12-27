@@ -1,10 +1,12 @@
 package validation
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"net/http"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/username/taxfolio/backend/src/logger"
 )
@@ -16,8 +18,7 @@ var AllowedClientContentTypes = map[string]bool{
 	"application/csv":          true,
 	"application/vnd.ms-excel": true, // Often used for CSV by older Excel
 	"text/plain":               true, // CSVs are often plain text
-	"application/octet-stream": true, // Fallback, but be more cautious
-	"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": false, // .xlsx, explicitly disallow for CSV endpoint
+	"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": false, // .xlsx explicitly disallow
 }
 
 // ValidateClientContentType checks the Content-Type header provided by the client.
@@ -29,14 +30,31 @@ func ValidateClientContentType(contentType string) error {
 	return nil
 }
 
-// ValidateFileContentByMagicBytes checks the actual file content signature (magic bytes).
-// It returns the detected content type and an error if validation fails.
+// isBinaryContent checks if a buffer contains binary control characters (like null bytes)
+// which indicate the file is likely not a valid text-based CSV/XML.
+func isBinaryContent(buf []byte) bool {
+	// 1. Check for null bytes. Text files (CSV/XML) should not have these.
+	if bytes.IndexByte(buf, 0) != -1 {
+		return true
+	}
+
+	// 2. Validate UTF-8. If it's invalid UTF-8, it might be binary garbage.
+	if !utf8.Valid(buf) {
+		return true
+	}
+
+	return false
+}
+
+// ValidateFileContentByMagicBytes checks the actual file content signature (magic bytes)
+// and inspects the content to ensure it is text-based.
 func ValidateFileContentByMagicBytes(file io.ReadSeeker) (string, error) {
 	if file == nil {
 		return "", fmt.Errorf("file is nil")
 	}
 
-	buffer := make([]byte, 512) // Read first 512 bytes for MIME detection
+	// Read first 1024 bytes (1KB) for detection
+	buffer := make([]byte, 1024)
 	n, err := file.Read(buffer)
 	if err != nil && err != io.EOF {
 		return "", fmt.Errorf("failed to read file for content type checking: %w", err)
@@ -48,26 +66,43 @@ func ValidateFileContentByMagicBytes(file io.ReadSeeker) (string, error) {
 		return "", fmt.Errorf("failed to reset file read pointer: %w", seekErr)
 	}
 
-	detectedContentType := http.DetectContentType(buffer[:n])
-	detectedContentType = strings.ToLower(strings.Split(detectedContentType, ";")[0]) // Normalize (e.g. "text/plain; charset=utf-8")
+	// If file is empty, fail early
+	if n == 0 {
+		return "", fmt.Errorf("file is empty")
+	}
 
-	// For CSV, we are primarily concerned it's text-based and not something malicious like an executable.
-	// "text/plain" is a very common and acceptable detected type for CSV.
-	// "application/csv" might be detected by some systems.
-	// "application/octet-stream" is a generic fallback, can be risky if not followed by strict parsing.
-	// We allow octet-stream here but rely on later parsing to fail if it's not actually CSV.
+	// 1. Strict Content Inspection: Check for binary characters
+	if isBinaryContent(buffer[:n]) {
+		logger.L.Warn("File rejected: Binary content detected in text upload")
+		return "application/octet-stream", fmt.Errorf("file appears to be binary or executable, not text/CSV")
+	}
+
+	// 2. HTTP Content Detection
+	detectedContentType := http.DetectContentType(buffer[:n])
+	detectedContentType = strings.ToLower(strings.Split(detectedContentType, ";")[0]) // Normalize
+
+	// Allowed detected types. Note we removed generic octet-stream unless it passed the binary check,
+	// but standard http.DetectContentType defaults to octet-stream for anything it doesn't recognize.
+	// Since we already ran isBinaryContent(), if it is still octet-stream here, it's likely weird text
+	// or a format Go doesn't know. We will force a stricter list here.
 	allowedDetectedTypes := map[string]bool{
-		"text/plain":               true,
-		"text/csv":                 true,
-		"application/csv":          true,
-		"application/octet-stream": true, // Be cautious with this; strict parsing is key later
+		"text/plain":      true,
+		"text/csv":        true,
+		"text/xml":        true,
+		"application/xml": true,
+		"application/csv": true,
 	}
 
 	if !allowedDetectedTypes[detectedContentType] {
-		logger.L.Warn("Disallowed detected file content type (magic bytes)", "detectedContentType", detectedContentType)
-		return detectedContentType, fmt.Errorf("detected file content type '%s' is not consistent with a CSV file", detectedContentType)
+		// Log specific warning for octet-stream even if it passed binary check
+		if detectedContentType == "application/octet-stream" {
+			logger.L.Warn("File rejected: content type detected as octet-stream (ambiguous)")
+		} else {
+			logger.L.Warn("Disallowed detected file content type", "detectedContentType", detectedContentType)
+		}
+		return detectedContentType, fmt.Errorf("detected file content type '%s' is not allowed", detectedContentType)
 	}
 
-	logger.L.Debug("File content type (magic bytes) validated", "detectedContentType", detectedContentType)
+	logger.L.Debug("File content type validated", "detectedContentType", detectedContentType)
 	return detectedContentType, nil
 }

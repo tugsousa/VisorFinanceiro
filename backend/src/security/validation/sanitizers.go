@@ -5,38 +5,47 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/microcosm-cc/bluemonday" // <-- ADICIONADO
+	"github.com/microcosm-cc/bluemonday"
 )
 
 // ErrValidationFailed remains the same
-// (A declaração foi movida para field_validator.go)
+// (The declaration was moved to field_validator.go)
 
 var (
-	// Definição da política estrita de sanitização
+	// Definition of strict sanitization policy
 	strictHTMLPolicy *bluemonday.Policy
 )
 
 func init() {
-	// Inicializar a política estrita uma vez no arranque
-	strictHTMLPolicy = bluemonday.StrictPolicy() // Remove todas as tags HTML
+	// Initialize strict policy once at startup
+	strictHTMLPolicy = bluemonday.StrictPolicy() // Removes all HTML tags
 }
 
-// SanitizeText remove todas as tags e atributos HTML de uma string de input,
-// prevenindo XSS antes de guardar na base de dados.
+// SanitizeText removes all HTML tags and attributes from an input string,
+// preventing XSS before saving to the database.
 func SanitizeText(s string) string {
 	return strictHTMLPolicy.Sanitize(s)
 }
 
 // SanitizeForFormulaInjection prepends a single quote if the string starts with a formula character.
-// This makes most spreadsheet software treat it as text.
+// This prevents CSV Injection (Formula Injection) in Excel/Sheets.
 func SanitizeForFormulaInjection(s string) string {
+	// It is safer to check the trimmed string to find the trigger character,
+	// but apply the fix to the original string to preserve formatting.
 	trimmed := strings.TrimSpace(s)
-	if len(trimmed) > 0 {
-		firstChar := rune(trimmed[0])
-		if firstChar == '=' || firstChar == '+' || firstChar == '-' || firstChar == '@' || firstChar == '\t' || firstChar == '\r' {
-			return "'" + s // Prepend to the original string 's', not 'trimmed' to preserve original spacing if intended
-		}
+
+	if len(trimmed) == 0 {
+		return s
 	}
+
+	firstChar := rune(trimmed[0])
+
+	// List of characters that trigger formula execution in Excel/LibreOffice/Sheets
+	if firstChar == '=' || firstChar == '+' || firstChar == '-' || firstChar == '@' || firstChar == '\t' || firstChar == '\r' {
+		// Prepend a single quote (') which forces the cell to be treated as text
+		return "'" + s
+	}
+
 	return s
 }
 
