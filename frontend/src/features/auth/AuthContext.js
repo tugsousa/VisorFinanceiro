@@ -1,7 +1,7 @@
 import React, { createContext, useState, useEffect, useContext, useCallback } from 'react';
-import { setAuthRefresher, fetchAndSetCsrfToken, getApiServiceCsrfToken } from '../../lib/api'; // Ajustei o caminho relativo baseado na estrutura
+import { setAuthRefresher, fetchAndSetCsrfToken, getApiServiceCsrfToken } from '../../lib/api';
 import { apiLogin, apiRegister, apiLogout, apiCheckUserHasData, apiRefreshToken } from './api/authApi';
-import logger from '../../lib/utils/logger'; // Ajustei o caminho relativo
+import logger from '../../lib/utils/logger';
 
 export const AuthContext = createContext();
 
@@ -22,13 +22,7 @@ export const AuthProvider = ({ children }) => {
     const [authError, setAuthError] = useState(null);
     const [hasInitialData, setHasInitialData] = useState(null);
     const [checkingData, setCheckingData] = useState(false);
-    const updateUserLocal = (updates) => {
-        setUser(prev => {
-            const newUser = { ...prev, ...updates };
-            localStorage.setItem('user', JSON.stringify(newUser));
-            return newUser;
-        });
-    };
+
     const fetchCsrfTokenAndUpdateService = useCallback(async (isSilent = false) => {
         try {
             const newCsrfToken = await fetchAndSetCsrfToken();
@@ -70,17 +64,29 @@ export const AuthProvider = ({ children }) => {
         }
     }, []);
 
+    // --- NOVO: Função para atualizar o utilizador localmente (ex: após ativar MFA) ---
+    const updateUserLocal = (updates) => {
+        setUser(prev => {
+            if (!prev) return null;
+            const newUser = { ...prev, ...updates };
+            localStorage.setItem('user', JSON.stringify(newUser));
+            return newUser;
+        });
+    };
+
+    // --- ATUALIZADO: Impersonate com suporte a MFA Code ---
     const impersonate = useCallback(async (userId, mfaCode = null) => {
         setIsAuthActionLoading(true);
         setAuthError(null);
         try {
             console.log("🔄 A iniciar impersonation para o ID:", userId);
             
+            // Importação dinâmica para evitar ciclos se houver
             const { apiImpersonateUser } = require('../admin/api/adminApi');
             
-            // Passamos o mfaCode para a API
+            // Agora passamos o mfaCode (que será null na maioria dos casos, ou string se tiver MFA)
             const response = await apiImpersonateUser(userId, mfaCode);
-            console.log("Resposta do backend:", response.data);
+            console.log("✅ Resposta do backend:", response.data);
 
             const { access_token, user: userData } = response.data;
 
@@ -88,25 +94,25 @@ export const AuthProvider = ({ children }) => {
                 throw new Error("Erro Crítico: O backend não enviou o access_token.");
             }
 
-            // 1. Atualizar Estado React
+            // Atualizar Estado React
             setUser(userData);
             setToken(access_token);
-            setRefreshTokenState(null);
+            setRefreshTokenState(null); 
             
+            // Atualizar LocalStorage
             localStorage.setItem('auth_token', access_token);
             localStorage.setItem('user', JSON.stringify(userData));
             localStorage.removeItem('refresh_token');
 
             await fetchCsrfTokenAndUpdateService(true);
-            const checkResult = await checkUserData();
+            await checkUserData();
             
             return true;
         } catch (err) {
-            // Tratamento de erros mantém-se, mas agora pode apanhar erros de MFA inválido
             const errMsg = err.response?.data?.error || err.message || 'Falha ao impersonar utilizador.';
-            console.error("Erro no impersonate:", errMsg, err);
+            console.error("❌ Erro no impersonate:", errMsg, err);
             setAuthError(errMsg);
-            throw err; // Re-throw para o componente lidar com UI (ex: mostrar erro no modal)
+            throw err; // Re-throw para o componente tratar (ex: mostrar erro no modal)
         } finally {
             setIsAuthActionLoading(false);
         }
@@ -139,24 +145,27 @@ export const AuthProvider = ({ children }) => {
     const refreshToken = useCallback(async () => {
         const currentRefreshToken = localStorage.getItem('refresh_token');
         if (!currentRefreshToken) {
-            logger.log("AuthContext: No refresh token available, logging out.");
             await performLogout(false, "No refresh token for refresh attempt");
             return Promise.reject(new Error("No refresh token"));
         }
 
         try {
-            logger.log("AuthContext: Attempting to refresh token...");
             const response = await apiRefreshToken(currentRefreshToken);
-            const { access_token, refresh_token } = response.data;
+            const { access_token, refresh_token, user: updatedUser } = response.data; // Backend pode mandar user atualizado aqui também
 
             setToken(access_token);
             setRefreshTokenState(refresh_token);
             localStorage.setItem('auth_token', access_token);
             localStorage.setItem('refresh_token', refresh_token);
-            logger.log("AuthContext: Token refreshed successfully.");
+            
+            // Se o backend enviar user atualizado no refresh, atualizamos também
+            if (updatedUser) {
+                setUser(updatedUser);
+                localStorage.setItem('user', JSON.stringify(updatedUser));
+            }
+
             return access_token;
         } catch (error) {
-            logger.error("AuthContext: Failed to refresh token, logging out.", error);
             await performLogout(false, "Refresh token failed or expired");
             return Promise.reject(error);
         }
@@ -177,10 +186,10 @@ export const AuthProvider = ({ children }) => {
                 setToken(storedToken);
                 try {
                     const parsedUser = JSON.parse(storedUser);
+                    console.log("AuthContext: User restored from storage", parsedUser); // Debug
                     setUser(parsedUser);
                     await checkUserData();
                 } catch (e) {
-                    logger.error("Failed to parse stored user during init", e);
                     performLogout(false, "Corrupted user data in localStorage on init");
                 }
             } else {
@@ -194,7 +203,6 @@ export const AuthProvider = ({ children }) => {
 
     useEffect(() => {
         const handleLogoutEvent = (event) => {
-            logger.warn(`AuthContext: Received auth-error-logout event. Detail: ${event.detail}. Logging out.`);
             performLogout(false, `Auth error: ${event.detail}`);
         };
         window.addEventListener('auth-error-logout', handleLogoutEvent);
@@ -228,6 +236,8 @@ export const AuthProvider = ({ children }) => {
             const response = await apiLogin(email, password);
             const { access_token, refresh_token, user: userData } = response.data;
 
+            console.log("AuthContext: Login successful. User data:", userData); // Verificar se mfa_enabled vem aqui
+
             setUser(userData);
             setToken(access_token);
             setRefreshTokenState(refresh_token);
@@ -253,6 +263,9 @@ export const AuthProvider = ({ children }) => {
         setIsAuthActionLoading(true);
         setCheckingData(true);
         setAuthError(null);
+        
+        console.log("AuthContext: Google Login. User data:", userDataFromBackend);
+
         setUser(userDataFromBackend);
         setToken(appToken);
         setRefreshTokenState(null);
@@ -289,8 +302,8 @@ export const AuthProvider = ({ children }) => {
                 fetchCsrfToken: fetchCsrfTokenAndUpdateService,
                 refreshUserDataCheck: checkUserData,
                 performLogout,
-                impersonate,
-                updateUserLocal,
+                impersonate, // Função atualizada
+                updateUserLocal // Nova função para updates imediatos
             }}
         >
             {children}

@@ -165,16 +165,19 @@ func GetUserByUsername(db *sql.DB, username string) (*User, error) {
 	SELECT id, username, email, password, auth_provider, upload_count, is_email_verified, 
 	       email_verification_token, email_verification_token_expires_at,
 	       password_reset_token, password_reset_token_expires_at,
-	       created_at, updated_at
+	       created_at, updated_at, mfa_secret, mfa_enabled
 	FROM users 
 	WHERE username = ?`
+
 	row := db.QueryRow(query, username)
+
 	var user User
 	var authProvider sql.NullString
 	var emailVerificationToken sql.NullString
 	var emailVerificationTokenExpiresAt sql.NullTime
 	var passwordResetToken sql.NullString
 	var passwordResetTokenExpiresAt sql.NullTime
+	var mfaSecret sql.NullString // <--- Novo
 
 	err := row.Scan(
 		&user.ID, &user.Username, &user.Email, &user.Password,
@@ -184,6 +187,7 @@ func GetUserByUsername(db *sql.DB, username string) (*User, error) {
 		&emailVerificationToken, &emailVerificationTokenExpiresAt,
 		&passwordResetToken, &passwordResetTokenExpiresAt,
 		&user.CreatedAt, &user.UpdatedAt,
+		&mfaSecret, &user.MfaEnabled, // <--- Novo
 	)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -191,6 +195,8 @@ func GetUserByUsername(db *sql.DB, username string) (*User, error) {
 		}
 		return nil, err
 	}
+
+	// Mapeamento dos NullStrings
 	if authProvider.Valid {
 		user.AuthProvider = authProvider.String
 	}
@@ -206,24 +212,31 @@ func GetUserByUsername(db *sql.DB, username string) (*User, error) {
 	if passwordResetTokenExpiresAt.Valid {
 		user.PasswordResetTokenExpiresAt = passwordResetTokenExpiresAt.Time
 	}
+
+	user.MfaSecret = mfaSecret.String // <--- Novo
+
 	return &user, nil
 }
 
 func GetUserByEmail(db *sql.DB, email string) (*User, error) {
+	// 1. Adicionei mfa_secret e mfa_enabled à query SELECT
 	query := `
 	SELECT id, username, email, password, auth_provider, upload_count, is_email_verified, 
 	       email_verification_token, email_verification_token_expires_at,
 	       password_reset_token, password_reset_token_expires_at,
-	       created_at, updated_at
+	       created_at, updated_at, mfa_secret, mfa_enabled
 	FROM users
 	WHERE email = ?`
+
 	row := db.QueryRow(query, email)
+
 	var user User
 	var authProvider sql.NullString
 	var emailVerificationToken sql.NullString
 	var emailVerificationTokenExpiresAt sql.NullTime
 	var passwordResetToken sql.NullString
 	var passwordResetTokenExpiresAt sql.NullTime
+	var mfaSecret sql.NullString
 
 	err := row.Scan(
 		&user.ID, &user.Username, &user.Email, &user.Password,
@@ -233,13 +246,16 @@ func GetUserByEmail(db *sql.DB, email string) (*User, error) {
 		&emailVerificationToken, &emailVerificationTokenExpiresAt,
 		&passwordResetToken, &passwordResetTokenExpiresAt,
 		&user.CreatedAt, &user.UpdatedAt,
+		&mfaSecret, &user.MfaEnabled,
 	)
+
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, sql.ErrNoRows
 		}
 		return nil, err
 	}
+
 	if authProvider.Valid {
 		user.AuthProvider = authProvider.String
 	}
@@ -255,6 +271,10 @@ func GetUserByEmail(db *sql.DB, email string) (*User, error) {
 	if passwordResetTokenExpiresAt.Valid {
 		user.PasswordResetTokenExpiresAt = passwordResetTokenExpiresAt.Time
 	}
+
+	// 3. Atribuir o valor lido ao objeto User
+	user.MfaSecret = mfaSecret.String
+
 	return &user, nil
 }
 
@@ -263,16 +283,19 @@ func GetUserByVerificationToken(db *sql.DB, token string) (*User, error) {
 	SELECT id, username, email, password, auth_provider, is_email_verified, 
 	       email_verification_token, email_verification_token_expires_at, 
 	       password_reset_token, password_reset_token_expires_at,
-	       created_at, updated_at
+	       created_at, updated_at, mfa_secret, mfa_enabled
 	FROM users
 	WHERE email_verification_token = ?`
+
 	row := db.QueryRow(query, token)
+
 	var user User
 	var authProvider sql.NullString
 	var emailVerificationTokenFromDB sql.NullString
 	var emailVerificationTokenExpiresAt sql.NullTime
 	var passwordResetToken sql.NullString
 	var passwordResetTokenExpiresAt sql.NullTime
+	var mfaSecret sql.NullString // <--- Novo
 
 	err := row.Scan(
 		&user.ID, &user.Username, &user.Email, &user.Password,
@@ -281,13 +304,16 @@ func GetUserByVerificationToken(db *sql.DB, token string) (*User, error) {
 		&emailVerificationTokenFromDB, &emailVerificationTokenExpiresAt,
 		&passwordResetToken, &passwordResetTokenExpiresAt,
 		&user.CreatedAt, &user.UpdatedAt,
+		&mfaSecret, &user.MfaEnabled, // <--- Novo
 	)
+
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, errors.New("invalid or expired verification token")
 		}
 		return nil, err
 	}
+
 	if authProvider.Valid {
 		user.AuthProvider = authProvider.String
 	}
@@ -301,6 +327,9 @@ func GetUserByVerificationToken(db *sql.DB, token string) (*User, error) {
 	if passwordResetTokenExpiresAt.Valid {
 		user.PasswordResetTokenExpiresAt = passwordResetTokenExpiresAt.Time
 	}
+
+	user.MfaSecret = mfaSecret.String // <--- Novo
+
 	return &user, nil
 }
 
@@ -380,16 +409,19 @@ func GetUserByPasswordResetToken(db *sql.DB, token string) (*User, error) {
 	SELECT id, username, email, password, auth_provider, is_email_verified, 
 	       email_verification_token, email_verification_token_expires_at,
 	       password_reset_token, password_reset_token_expires_at,
-	       created_at, updated_at
+	       created_at, updated_at, mfa_secret, mfa_enabled
 	FROM users
 	WHERE password_reset_token = ? AND password_reset_token_expires_at > ?`
+
 	row := db.QueryRow(query, token, time.Now())
+
 	var user User
 	var authProvider sql.NullString
 	var emailVerificationToken sql.NullString
 	var emailVerificationTokenExpiresAt sql.NullTime
 	var passwordResetTokenFromDB sql.NullString
 	var passwordResetTokenExpiresAt sql.NullTime
+	var mfaSecret sql.NullString // <--- Novo
 
 	err := row.Scan(
 		&user.ID, &user.Username, &user.Email, &user.Password,
@@ -398,13 +430,16 @@ func GetUserByPasswordResetToken(db *sql.DB, token string) (*User, error) {
 		&emailVerificationToken, &emailVerificationTokenExpiresAt,
 		&passwordResetTokenFromDB, &passwordResetTokenExpiresAt,
 		&user.CreatedAt, &user.UpdatedAt,
+		&mfaSecret, &user.MfaEnabled, // <--- Novo
 	)
+
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, errors.New("invalid or expired password reset token")
 		}
 		return nil, err
 	}
+
 	if authProvider.Valid {
 		user.AuthProvider = authProvider.String
 	}
@@ -418,6 +453,9 @@ func GetUserByPasswordResetToken(db *sql.DB, token string) (*User, error) {
 	if passwordResetTokenExpiresAt.Valid {
 		user.PasswordResetTokenExpiresAt = passwordResetTokenExpiresAt.Time
 	}
+
+	user.MfaSecret = mfaSecret.String // <--- Novo
+
 	return &user, nil
 }
 

@@ -120,12 +120,14 @@ func (h *UserHandler) HandleGoogleCallback(w http.ResponseWriter, r *http.Reques
 		Email        string `json:"email"`
 		AuthProvider string `json:"auth_provider"`
 		IsAdmin      bool   `json:"is_admin"`
+		MfaEnabled   bool   `json:"mfa_enabled"`
 	}{
 		ID:           user.ID,
 		Username:     user.Username,
 		Email:        user.Email,
 		AuthProvider: user.AuthProvider,
 		IsAdmin:      isUserAdmin,
+		MfaEnabled:   user.MfaEnabled,
 	}
 
 	// 3. Convert our struct to JSON
