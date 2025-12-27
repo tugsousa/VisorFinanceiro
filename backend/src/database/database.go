@@ -19,25 +19,21 @@ import (
 var DB *sql.DB
 
 func InitDB(databasePath string) {
-	// Enable WAL mode and set a 5-second timeout for busy locks
-	// This allows readers and writers to coexist better
-	dsn := fmt.Sprintf("%s?_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)", databasePath)
+	dsn := fmt.Sprintf("%s?_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)&_pragma=foreign_keys(on)", databasePath)
 
 	db, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		stdlog.Fatalf("failed to open database at %s: %v", databasePath, err)
 	}
 
-	// IMPORTANT: Limit open connections.
-	// SQLite restricts to 1 writer at a time. Using 1 max connection essentially serializes
-	// database access in your Go app, preventing "database is locked" errors almost entirely.
+	// Limit open connections to 1 for SQLite to avoid locking issues
 	db.SetMaxOpenConns(1)
 
 	if err = db.Ping(); err != nil {
 		stdlog.Fatalf("failed to ping database: %v", err)
 	}
 	DB = db
-	logger.L.Info("Database connection established with WAL mode and busy_timeout.")
+	logger.L.Info("Database connection established with WAL mode, busy_timeout, and foreign_keys enabled.")
 }
 
 func RunMigrations(databasePath string) {
@@ -55,22 +51,14 @@ func RunMigrations(databasePath string) {
 	var migrationsSourceURL string
 
 	if os.Getenv("GO_ENV") == "PRO" {
-		// In Docker, use the hardcoded path that works
 		migrationsSourceURL = "file:///app/db/migrations"
 	} else {
-		// --- INÍCIO DA CORREÇÃO PARA WINDOWS ---
-		// Get the current working directory
 		cwd, err := os.Getwd()
 		if err != nil {
 			stdlog.Fatalf("failed to get current working directory: %v", err)
 		}
-		// Construct the absolute path to the migrations directory
 		localMigrationsPath := filepath.Join(cwd, "db", "migrations")
-
-		// Format the path into a valid file URI for go-migrate on Windows.
-		// The key is to use "file://" and not "file:///"
 		migrationsSourceURL = fmt.Sprintf("file://%s", filepath.ToSlash(localMigrationsPath))
-		// --- FIM DA CORREÇÃO PARA WINDOWS ---
 	}
 
 	m, err := migrate.NewWithDatabaseInstance(
