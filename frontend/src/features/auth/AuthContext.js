@@ -22,7 +22,13 @@ export const AuthProvider = ({ children }) => {
     const [authError, setAuthError] = useState(null);
     const [hasInitialData, setHasInitialData] = useState(null);
     const [checkingData, setCheckingData] = useState(false);
-
+    const updateUserLocal = (updates) => {
+        setUser(prev => {
+            const newUser = { ...prev, ...updates };
+            localStorage.setItem('user', JSON.stringify(newUser));
+            return newUser;
+        });
+    };
     const fetchCsrfTokenAndUpdateService = useCallback(async (isSilent = false) => {
         try {
             const newCsrfToken = await fetchAndSetCsrfToken();
@@ -64,17 +70,17 @@ export const AuthProvider = ({ children }) => {
         }
     }, []);
 
-    const impersonate = useCallback(async (userId) => {
+    const impersonate = useCallback(async (userId, mfaCode = null) => {
         setIsAuthActionLoading(true);
         setAuthError(null);
         try {
             console.log("🔄 A iniciar impersonation para o ID:", userId);
             
-            // Importação dinâmica
             const { apiImpersonateUser } = require('../admin/api/adminApi');
             
-            const response = await apiImpersonateUser(userId);
-            console.log("✅ Resposta do backend:", response.data);
+            // Passamos o mfaCode para a API
+            const response = await apiImpersonateUser(userId, mfaCode);
+            console.log("Resposta do backend:", response.data);
 
             const { access_token, user: userData } = response.data;
 
@@ -85,31 +91,22 @@ export const AuthProvider = ({ children }) => {
             // 1. Atualizar Estado React
             setUser(userData);
             setToken(access_token);
-            setRefreshTokenState(null); // Impersonation não deve ter refresh token
+            setRefreshTokenState(null);
             
-            // 2. Atualizar LocalStorage IMEDIATAMENTE
             localStorage.setItem('auth_token', access_token);
             localStorage.setItem('user', JSON.stringify(userData));
             localStorage.removeItem('refresh_token');
 
-            // 3. CRÍTICO: Atualizar serviço de CSRF/API
-            // Tal como no login, garantimos que os headers globais ficam alinhados
             await fetchCsrfTokenAndUpdateService(true);
-
-            // 4. Validar se o token funciona
-            // Se isto falhar com 401, o interceptor fará logout, mas agora temos mais garantias
             const checkResult = await checkUserData();
-            console.log("✅ Verificação de dados do utilizador impersonado:", checkResult);
             
             return true;
         } catch (err) {
+            // Tratamento de erros mantém-se, mas agora pode apanhar erros de MFA inválido
             const errMsg = err.response?.data?.error || err.message || 'Falha ao impersonar utilizador.';
-            console.error("❌ Erro no impersonate:", errMsg, err);
+            console.error("Erro no impersonate:", errMsg, err);
             setAuthError(errMsg);
-            
-            // Se falhar, não queremos deixar o admin num estado "meio logado", 
-            // mas o catch do componente vai tratar do feedback visual.
-            throw new Error(errMsg);
+            throw err; // Re-throw para o componente lidar com UI (ex: mostrar erro no modal)
         } finally {
             setIsAuthActionLoading(false);
         }
@@ -292,7 +289,8 @@ export const AuthProvider = ({ children }) => {
                 fetchCsrfToken: fetchCsrfTokenAndUpdateService,
                 refreshUserDataCheck: checkUserData,
                 performLogout,
-                impersonate, // <--- EXPORTADO AQUI
+                impersonate,
+                updateUserLocal,
             }}
         >
             {children}

@@ -4,7 +4,8 @@ import { useQuery } from '@tanstack/react-query';
 import { apiFetchAdminUserDetails } from 'features/admin/api/adminApi';
 import { 
     Box, Typography, CircularProgress, Alert, Paper, Grid, Divider, Link, Card, Tabs, Tab, 
-    FormControl, Select, MenuItem, InputLabel, Button 
+    FormControl, Select, MenuItem, InputLabel, Button,
+    Dialog, DialogTitle, DialogContent, DialogContentText, DialogActions, TextField // <--- NOVOS IMPORTS
 } from '@mui/material';
 import { useAuth } from '../../auth/AuthContext';
 import { DataGrid } from '@mui/x-data-grid';
@@ -45,10 +46,18 @@ const KeyMetricCard = ({ title, value, icon, isPercentage = false, unit = '' }) 
 const UserDetailPage = () => {
     const { userId } = useParams();
     const navigate = useNavigate();
-    const { token, impersonate } = useAuth();
+    
+    // Obter o user atual (admin) para verificar se tem MFA ativo
+    const { token, impersonate, user: currentUser } = useAuth(); 
+    
     const [selectedPortfolioId, setSelectedPortfolioId] = useState('');
     const [currentTab, setCurrentTab] = useState('overview');
+    
+    // --- ESTADOS MFA / IMPERSONATE ---
     const [isImpersonating, setIsImpersonating] = useState(false);
+    const [openImpersonateModal, setOpenImpersonateModal] = useState(false);
+    const [impersonateMfaCode, setImpersonateMfaCode] = useState('');
+    const [impersonateError, setImpersonateError] = useState('');
 
     const { data, isLoading, error } = useQuery({
         queryKey: ['adminUserDetail', userId, selectedPortfolioId],
@@ -56,26 +65,51 @@ const UserDetailPage = () => {
         enabled: !!token && !!userId,
     });
 
-    // Atualiza o portfólio selecionado quando os dados carregam pela primeira vez
     React.useEffect(() => {
         if (data && data.selected_portfolio_id && !selectedPortfolioId) {
             setSelectedPortfolioId(data.selected_portfolio_id);
         }
     }, [data, selectedPortfolioId]);
 
-    const handleImpersonate = async () => {
+    // --- FUNÇÕES DE LÓGICA DO IMPERSONATE ---
+
+    // 1. Inicia o processo (Verifica MFA localmente e abre modal)
+    const handleImpersonateClick = () => {
         if (!data?.user) return;
-        
-        if (!window.confirm(`Tem a certeza que quer entrar como ${data.user.email}?`)) return;
-        
+
+        // Se o admin NÃO tiver MFA ativo, bloqueia e avisa
+        if (!currentUser?.mfa_enabled) {
+            if(window.confirm("Ação Bloqueada: Você deve ativar a Autenticação de Dois Fatores (2FA) nas suas definições antes de poder impersonar utilizadores. Deseja ir para as configurações agora?")) {
+                navigate('/settings');
+            }
+            return;
+        }
+
+        // Se tiver MFA, limpa estados e abre modal
+        setImpersonateError('');
+        setImpersonateMfaCode('');
+        setOpenImpersonateModal(true);
+    };
+
+    // 2. Confirma o código e chama a API
+    const handleConfirmImpersonate = async () => {
+        if (!impersonateMfaCode || impersonateMfaCode.length < 6) {
+            setImpersonateError("Por favor insira um código de 6 dígitos.");
+            return;
+        }
+
         setIsImpersonating(true);
+        setImpersonateError('');
+        
         try {
-            await impersonate(userId);
-            // Sucesso! O AuthContext atualizou o estado, redireciona para o dashboard
+            // Chama a função impersonate passando o ID e o CÓDIGO MFA
+            await impersonate(userId, impersonateMfaCode);
+            // Se não der erro, o AuthContext atualiza o user e redirecionamos
             navigate('/dashboard'); 
         } catch (error) {
             console.error("Erro ao impersonar:", error);
-            alert("Erro ao entrar como utilizador.");
+            // Mostra o erro no modal (ex: "Código inválido")
+            setImpersonateError(error.response?.data?.error || "Código incorreto ou erro no servidor.");
             setIsImpersonating(false);
         }
     };
@@ -84,14 +118,11 @@ const UserDetailPage = () => {
         if (!data?.Metrics) return null;
         const m = data.Metrics;
         
-        // Calcular totais simples baseados nos dados disponíveis
         const stockPL = (m.StockSaleDetails || []).reduce((acc, s) => acc + (s.Delta || 0), 0);
         const optionPL = (m.OptionSaleDetails || []).reduce((acc, o) => acc + (o.Delta || 0), 0);
         const dividendPL = (m.DividendTransactionsList || []).reduce((acc, d) => {
-             // Assumindo que AmountEUR é o valor líquido ou bruto dependendo da transação
-             // Para simplificar, somamos AmountEUR de transações do tipo DIVIDEND (excluindo impostos se estiverem separados ou somando se forem negativos)
              if (d.transaction_type === 'DIVIDEND' && d.transaction_subtype !== 'TAX') return acc + (d.amount_eur || 0);
-             if (d.transaction_type === 'DIVIDEND' && d.transaction_subtype === 'TAX') return acc + (d.amount_eur || 0); // é negativo
+             if (d.transaction_type === 'DIVIDEND' && d.transaction_subtype === 'TAX') return acc + (d.amount_eur || 0); 
              return acc;
         }, 0);
         
@@ -99,16 +130,14 @@ const UserDetailPage = () => {
         const stockCommissions = (m.StockSaleDetails || []).reduce((acc, s) => acc + (s.Commission || 0), 0);
         const optionCommissions = (m.OptionSaleDetails || []).reduce((acc, o) => acc + (o.Commission || 0), 0);
         
-        const totalPL = stockPL + optionPL + dividendPL + totalFees; // Fees geralmente são negativas
+        const totalPL = stockPL + optionPL + dividendPL + totalFees; 
         
-        // Calcular unrealized PL das ações atuais
         const unrealizedStockPL = (data.current_holdings || []).reduce((acc, h) => {
             const mv = h.market_value_eur || 0;
             const cb = Math.abs(h.total_cost_basis_eur || 0);
             return acc + (mv - cb);
         }, 0);
 
-        // Cálculos aproximados para rácios
         const stockWins = (m.StockSaleDetails || []).filter(s => s.Delta > 0).length;
         const stockLosses = (m.StockSaleDetails || []).filter(s => s.Delta <= 0).length;
         const totalTrades = stockWins + stockLosses;
@@ -118,10 +147,10 @@ const UserDetailPage = () => {
             stockPL,
             optionPL,
             dividendPL,
-            totalFeesAndCommissions: totalFees + stockCommissions + optionCommissions, // Isto pode duplicar se Fees já incluir comissões
+            totalFeesAndCommissions: totalFees + stockCommissions + optionCommissions,
             unrealizedStockPL,
             totalPL: totalPL + unrealizedStockPL,
-            portfolioReturn: 0, // Necessitaria de cálculo complexo de TWR ou MWR
+            portfolioReturn: 0,
             winLossRatio,
             avgHoldingPeriodWinners: 0, 
             avgHoldingPeriodLosers: 0
@@ -191,7 +220,7 @@ const UserDetailPage = () => {
                         variant="contained"
                         color="warning"
                         startIcon={isImpersonating ? <CircularProgress size={20} color="inherit" /> : <LoginIcon />}
-                        onClick={handleImpersonate}
+                        onClick={handleImpersonateClick} // <--- CORRIGIDO: Agora aponta para a função existente
                         disabled={isImpersonating}
                         sx={{ textTransform: 'none' }}
                     >
@@ -278,6 +307,40 @@ const UserDetailPage = () => {
                     <DataGrid rows={transactions || []} columns={transactionColumns} getRowId={(row) => row.id} density="compact" />
                 </Paper>
             )}
+
+            {/* --- MODAL DE SEGURANÇA IMPERSONATE --- */}
+            <Dialog open={openImpersonateModal} onClose={() => setOpenImpersonateModal(false)}>
+                <DialogTitle sx={{ bgcolor: 'warning.light', color: 'warning.contrastText' }}>
+                    Acesso Restrito: Impersonar {data?.user?.email}
+                </DialogTitle>
+                <DialogContent sx={{ mt: 2 }}>
+                    <DialogContentText sx={{ mb: 2 }}>
+                        Para aceder à conta deste utilizador, confirme a sua identidade inserindo o código 2FA do seu autenticador.
+                    </DialogContentText>
+                    <TextField
+                        autoFocus
+                        margin="dense"
+                        label="Código 2FA"
+                        type="text"
+                        fullWidth
+                        value={impersonateMfaCode}
+                        onChange={(e) => setImpersonateMfaCode(e.target.value)}
+                        inputProps={{ maxLength: 6, style: { textAlign: 'center', letterSpacing: 4, fontSize: '1.2rem' } }}
+                    />
+                    {impersonateError && (
+                        <Alert severity="error" sx={{ mt: 2 }}>{impersonateError}</Alert>
+                    )}
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={() => setOpenImpersonateModal(false)} color="inherit" disabled={isImpersonating}>
+                        Cancelar
+                    </Button>
+                    <Button onClick={handleConfirmImpersonate} color="warning" variant="contained" disabled={isImpersonating || !impersonateMfaCode}>
+                        {isImpersonating ? <CircularProgress size={24} /> : "Confirmar Acesso"}
+                    </Button>
+                </DialogActions>
+            </Dialog>
+
         </Box>
     );
 };

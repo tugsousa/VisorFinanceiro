@@ -1,31 +1,40 @@
-// frontend/src/pages/SettingsPage.js
+// frontend/src/features/settings/pages/SettingsPage.js
 import React, { useState, useContext } from 'react';
 import {
-  Container, Paper, Box, Typography, TextField, Button, Alert,
-  CircularProgress, Grid, Divider, Dialog, DialogActions,
+  Container, Box, Typography, TextField, Button, Alert,
+  CircularProgress, Divider, Dialog, DialogActions,
   DialogContent, DialogContentText, DialogTitle
 } from '@mui/material';
 import { useMutation } from '@tanstack/react-query';
 import { apiChangePassword, apiDeleteAccount } from 'features/auth/api/authApi';
+import { apiSetupMfa, apiActivateMfa } from '../../admin/api/adminApi'; // Importação dos novos endpoints
 import { AuthContext } from '../../auth/AuthContext';
 import { useNavigate } from 'react-router-dom';
 
 function SettingsPage() {
-  const { user, performLogout, fetchCsrfToken } = useContext(AuthContext);
+  const { user, performLogout, fetchCsrfToken, updateUserLocal } = useContext(AuthContext);
   const navigate = useNavigate();
 
-  // State for Change Password
+  // --- States: Change Password ---
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmNewPassword, setConfirmNewPassword] = useState('');
   const [changePasswordSuccess, setChangePasswordSuccess] = useState('');
   const [changePasswordError, setChangePasswordError] = useState('');
 
-  // State for Delete Account
+  // --- States: Delete Account ---
   const [deletePassword, setDeletePassword] = useState('');
   const [openDeleteConfirm, setOpenDeleteConfirm] = useState(false);
   const [deleteAccountErrorDialog, setDeleteAccountErrorDialog] = useState('');
 
+  // --- States: MFA (2FA) ---
+  const [openMfaModal, setOpenMfaModal] = useState(false);
+  const [mfaData, setMfaData] = useState({ secret: '', qr_code: '' });
+  const [mfaCode, setMfaCode] = useState('');
+  const [mfaError, setMfaError] = useState('');
+  const [isMfaLoading, setIsMfaLoading] = useState(false);
+
+  // --- Mutations: Password & Delete ---
   const changePasswordMutation = useMutation({
     mutationFn: (data) => apiChangePassword(data.currentPassword, data.newPassword, data.confirmNewPassword),
     onSuccess: (data) => {
@@ -56,6 +65,7 @@ function SettingsPage() {
     }
   });
 
+  // --- Handlers: Password ---
   const handleSubmitChangePassword = async (e) => {
     e.preventDefault();
     setChangePasswordError('');
@@ -77,6 +87,7 @@ function SettingsPage() {
     changePasswordMutation.mutate({ currentPassword, newPassword, confirmNewPassword });
   };
 
+  // --- Handlers: Delete Account ---
   const handleOpenDeleteDialog = () => {
     setDeletePassword('');
     setDeleteAccountErrorDialog('');
@@ -90,7 +101,6 @@ function SettingsPage() {
   const handleConfirmDeleteAccount = async () => {
     setDeleteAccountErrorDialog('');
     
-    // Logic is now conditional based on the user's auth provider
     if (user.auth_provider === 'local') {
       if (!deletePassword) {
         setDeleteAccountErrorDialog("Por favor insira a sua password para confirmar a eliminação da conta.");
@@ -99,9 +109,48 @@ function SettingsPage() {
       await fetchCsrfToken(true);
       deleteAccountMutation.mutate(deletePassword);
     } else {
-      // For Google users, no password is required. Pass an empty string.
       await fetchCsrfToken(true);
       deleteAccountMutation.mutate('');
+    }
+  };
+
+  // --- Handlers: MFA (2FA) ---
+  const handleStartMfaSetup = async () => {
+    setIsMfaLoading(true);
+    try {
+        const res = await apiSetupMfa();
+        setMfaData(res.data); // Espera receber { secret, qr_code }
+        setOpenMfaModal(true);
+    } catch (err) {
+        alert("Erro ao iniciar configuração MFA: " + (err.response?.data?.error || err.message));
+    } finally {
+        setIsMfaLoading(false);
+    }
+  };
+
+  const handleActivateMfa = async () => {
+    setMfaError('');
+    if (!mfaCode || mfaCode.length !== 6) {
+        setMfaError("O código deve ter 6 dígitos.");
+        return;
+    }
+    
+    setIsMfaLoading(true);
+    try {
+        await apiActivateMfa(mfaCode);
+        
+        // Atualiza o contexto local para refletir que o MFA está ativo
+        if (updateUserLocal) {
+            updateUserLocal({ mfa_enabled: true });
+        }
+        
+        setOpenMfaModal(false);
+        setMfaCode('');
+        alert("Autenticação de dois fatores ativada com sucesso!");
+    } catch (err) {
+        setMfaError(err.response?.data?.error || "Código inválido ou erro ao ativar.");
+    } finally {
+        setIsMfaLoading(false);
     }
   };
 
@@ -111,7 +160,39 @@ function SettingsPage() {
         Configurações
       </Typography>
 
-      {/* Conditionally render the Change Password section only for local accounts */}
+      {/* --- SECÇÃO MFA (Apenas para Admins) --- */}
+      {user.is_admin && (
+        <>
+            <Box sx={{ p: { xs: 2, sm: 3 }, mb: 4, bgcolor: 'background.paper', border: '1px solid', borderColor: 'divider', borderRadius: 1 }}>
+                <Typography variant="h6" component="h2" gutterBottom display="flex" alignItems="center">
+                    Segurança de Administrador (2FA)
+                </Typography>
+                
+                {user.mfa_enabled ? (
+                    <Alert severity="success" sx={{ mb: 2 }}>
+                        A autenticação de dois fatores (MFA) está <strong>Ativa</strong> na sua conta.
+                    </Alert>
+                ) : (
+                    <>
+                        <Alert severity="warning" sx={{ mb: 2 }}>
+                            O 2FA não está ativo. Você precisa ativá-lo para usar funcionalidades sensíveis como "Impersonate User".
+                        </Alert>
+                        <Button 
+                            variant="contained" 
+                            color="primary" 
+                            onClick={handleStartMfaSetup}
+                            disabled={isMfaLoading}
+                        >
+                            {isMfaLoading ? <CircularProgress size={24} color="inherit" /> : "Configurar 2FA agora"}
+                        </Button>
+                    </>
+                )}
+            </Box>
+            <Divider sx={{ my: 4 }} />
+        </>
+      )}
+
+      {/* --- SECÇÃO ALTERAR PASSWORD (Apenas contas locais) --- */}
       {user.auth_provider === 'local' && (
         <>
           <Box sx={{ p: { xs: 2, sm: 3 }, mb: 4 }}>
@@ -180,7 +261,7 @@ function SettingsPage() {
         </>
       )}
 
-      {/* Delete Account Section */}
+      {/* --- SECÇÃO ELIMINAR CONTA --- */}
       <Box sx={{ p: { xs: 2, sm: 3 } }}>
         <Typography variant="h6" component="h2" gutterBottom color="error.main">
           Elimine a sua conta
@@ -198,7 +279,7 @@ function SettingsPage() {
         </Button>
       </Box>
 
-      {/* Delete Account Confirmation Dialog */}
+      {/* --- DIALOG: CONFIRMAÇÃO ELIMINAR CONTA --- */}
       <Dialog open={openDeleteConfirm} onClose={handleCloseDeleteDialog} maxWidth="xs" fullWidth>
         <DialogTitle sx={{ backgroundColor: 'error.main', color: 'white' }}>Confirmação de eliminação de conta</DialogTitle>
         <DialogContent sx={{ pt: '20px !important' }}>
@@ -212,7 +293,6 @@ function SettingsPage() {
             )}
           </DialogContentText>
 
-          {/* Conditionally render password field for local accounts only */}
           {user.auth_provider === 'local' && (
             <TextField
               autoFocus
@@ -242,6 +322,59 @@ function SettingsPage() {
           </Button>
         </DialogActions>
       </Dialog>
+
+      {/* --- DIALOG: SETUP MFA --- */}
+      <Dialog open={openMfaModal} onClose={() => setOpenMfaModal(false)} maxWidth="sm" fullWidth>
+        <DialogTitle>Configurar Autenticação de 2 Fatores</DialogTitle>
+        <DialogContent sx={{ textAlign: 'center', py: 2 }}>
+            <DialogContentText sx={{ mb: 2 }}>
+                1. Abra a sua aplicação de autenticação (Google Authenticator, Authy, etc).<br/>
+                2. Leia o QR Code abaixo.
+            </DialogContentText>
+            
+            {mfaData.qr_code && (
+                <Box sx={{ my: 2, p: 2, border: '1px solid #eee', borderRadius: 2, display: 'inline-block' }}>
+                    <img 
+                        src={`data:image/png;base64,${mfaData.qr_code}`} 
+                        alt="QR Code MFA" 
+                        style={{ width: 200, height: 200 }} 
+                    />
+                </Box>
+            )}
+            
+            {mfaData.secret && (
+                <Typography variant="body2" sx={{ mt: 1, mb: 2, fontFamily: 'monospace', bgcolor: 'grey.100', p: 1, borderRadius: 1 }}>
+                    Código secreto (backup): {mfaData.secret}
+                </Typography>
+            )}
+
+            <DialogContentText sx={{ mb: 1 }}>
+                3. Insira o código de 6 dígitos gerado pela aplicação:
+            </DialogContentText>
+            
+            <TextField
+                autoFocus
+                margin="dense"
+                id="mfaCode"
+                label="Código 2FA (6 dígitos)"
+                type="text"
+                fullWidth
+                variant="outlined"
+                value={mfaCode}
+                onChange={(e) => setMfaCode(e.target.value)}
+                inputProps={{ maxLength: 6, style: { textAlign: 'center', letterSpacing: 4, fontSize: '1.2rem' } }}
+            />
+            
+            {mfaError && <Alert severity="error" sx={{ mt: 2 }}>{mfaError}</Alert>}
+        </DialogContent>
+        <DialogActions>
+            <Button onClick={() => setOpenMfaModal(false)} color="inherit">Cancelar</Button>
+            <Button onClick={handleActivateMfa} variant="contained" disabled={!mfaCode || isMfaLoading}>
+                {isMfaLoading ? <CircularProgress size={20} color="inherit" /> : "Confirmar e Ativar"}
+            </Button>
+        </DialogActions>
+      </Dialog>
+
     </Container>
   );
 }
