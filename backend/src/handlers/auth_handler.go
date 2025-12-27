@@ -85,12 +85,12 @@ func (h *UserHandler) RegisterUserHandler(w http.ResponseWriter, r *http.Request
 	credentials.Email = strings.ToLower(validation.SanitizeText(strings.TrimSpace(credentials.Email)))
 	credentials.Password = strings.TrimSpace(credentials.Password)
 
-	// If username is empty but email exists, try to derive username from email
+	// Derive username if empty
 	if credentials.Username == "" && strings.Contains(credentials.Email, "@") {
 		credentials.Username = strings.Split(credentials.Email, "@")[0]
 	}
 
-	// Validation
+	// Validations
 	if credentials.Username == "" {
 		sendJSONError(w, "Username is required", http.StatusBadRequest)
 		return
@@ -103,7 +103,6 @@ func (h *UserHandler) RegisterUserHandler(w http.ResponseWriter, r *http.Request
 		sendJSONError(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	// Note: emailRegex is defined in user_handler.go (same package)
 	if !emailRegex.MatchString(credentials.Email) {
 		sendJSONError(w, "Invalid email format", http.StatusBadRequest)
 		return
@@ -112,32 +111,8 @@ func (h *UserHandler) RegisterUserHandler(w http.ResponseWriter, r *http.Request
 		sendJSONError(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-
-	// --- NEW SECURITY CHECK ---
 	if err := validatePasswordComplexity(credentials.Password); err != nil {
 		sendJSONError(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	// Check username uniqueness
-	_, err := model.GetUserByUsername(database.DB, credentials.Username)
-	if err == nil {
-		sendJSONError(w, "Username already exists", http.StatusConflict)
-		return
-	} else if !errors.Is(err, sql.ErrNoRows) {
-		logger.L.Error("Error checking username uniqueness", "error", err)
-		sendJSONError(w, "Failed to process registration", http.StatusInternalServerError)
-		return
-	}
-
-	// Check email uniqueness
-	_, err = model.GetUserByEmail(database.DB, credentials.Email)
-	if err == nil {
-		sendJSONError(w, "Email address already in use", http.StatusConflict)
-		return
-	} else if !errors.Is(err, sql.ErrNoRows) {
-		logger.L.Error("Error checking email uniqueness", "error", err)
-		sendJSONError(w, "Failed to process registration", http.StatusInternalServerError)
 		return
 	}
 
@@ -167,21 +142,64 @@ func (h *UserHandler) RegisterUserHandler(w http.ResponseWriter, r *http.Request
 		EmailVerificationTokenExpiresAt: tokenExpiry,
 	}
 
-	if err := user.CreateUser(database.DB); err != nil {
-		logger.L.Error("Failed to create user in DB", "error", err)
+	tx, err := database.DB.Begin()
+	if err != nil {
+		logger.L.Error("Failed to begin registration transaction", "error", err)
+		sendJSONError(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+	defer tx.Rollback()
+
+	// 1. Create User (This part handles the model logic manually since CreateUser uses DB object)
+	now := time.Now()
+	query := `
+	INSERT INTO users (username, email, password, auth_provider, is_email_verified, email_verification_token, email_verification_token_expires_at, created_at, updated_at)
+	VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+
+	res, err := tx.Exec(
+		query,
+		user.Username, user.Email, user.Password, user.AuthProvider,
+		user.IsEmailVerified, user.EmailVerificationToken, user.EmailVerificationTokenExpiresAt,
+		now, now,
+	)
+
+	if err != nil {
+		// Detect Unique Constraint violation (SQLite error 2067 or string match)
+		if strings.Contains(err.Error(), "UNIQUE constraint failed") {
+			if strings.Contains(err.Error(), "users.username") {
+				sendJSONError(w, "Username already exists", http.StatusConflict)
+			} else {
+				sendJSONError(w, "Email address already in use", http.StatusConflict)
+			}
+			return
+		}
+		logger.L.Error("Failed to insert user in DB", "error", err)
 		sendJSONError(w, "Failed to create user", http.StatusInternalServerError)
 		return
 	}
 
-	// --- MULTI-PORTFOLIO LOGIC ---
-	// Create a default portfolio for the new user
-	_, err = database.DB.Exec("INSERT INTO portfolios (user_id, name, description, is_default) VALUES (?, ?, ?, ?)", user.ID, "Portfolio Principal", "Default Portfolio", true)
+	userID, err := res.LastInsertId()
 	if err != nil {
-		// Log error but don't fail the request (email still needs sending).
-		// User might see an empty dashboard and can create one manually later.
-		logger.L.Error("Failed to create default portfolio for new user", "userID", user.ID, "error", err)
+		logger.L.Error("Failed to get last insert ID", "error", err)
+		sendJSONError(w, "Internal server error", http.StatusInternalServerError)
+		return
 	}
-	// ---------------------------------------
+	user.ID = userID
+
+	// 2. Create Default Portfolio
+	_, err = tx.Exec("INSERT INTO portfolios (user_id, name, description, is_default) VALUES (?, ?, ?, ?)", user.ID, "Portfolio Principal", "Default Portfolio", true)
+	if err != nil {
+		logger.L.Error("Failed to create default portfolio", "userID", user.ID, "error", err)
+		sendJSONError(w, "Failed to initialize account", http.StatusInternalServerError)
+		return
+	}
+
+	if err := tx.Commit(); err != nil {
+		logger.L.Error("Failed to commit registration", "error", err)
+		sendJSONError(w, "Failed to finalize registration", http.StatusInternalServerError)
+		return
+	}
+	// --- ATOMIC TRANSACTION END ---
 
 	logger.L.Info("User registered, verification email to be sent", "userID", user.ID)
 
