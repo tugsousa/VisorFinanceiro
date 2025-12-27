@@ -3,11 +3,12 @@ package handlers
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
-	"net/url"
+	"time"
 
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
@@ -106,14 +107,10 @@ func (h *UserHandler) HandleGoogleCallback(w http.ResponseWriter, r *http.Reques
 		}
 	}
 
-	// --- NEW: Update Login Info ---
 	updateUserLoginInfo(user.ID, r)
-	// --- END NEW ---
 
-	// 1. Check if the user is admin
 	isUserAdmin := isAdmin(user.Email)
 
-	// 2. Create a custom struct to send to the frontend
 	userForFrontend := struct {
 		ID           int64  `json:"id"`
 		Username     string `json:"username"`
@@ -130,7 +127,6 @@ func (h *UserHandler) HandleGoogleCallback(w http.ResponseWriter, r *http.Reques
 		MfaEnabled:   user.MfaEnabled,
 	}
 
-	// 3. Convert our struct to JSON
 	userJSON, err := json.Marshal(userForFrontend)
 	if err != nil {
 		logger.L.Error("Failed to marshal custom user object for frontend", "error", err)
@@ -138,7 +134,6 @@ func (h *UserHandler) HandleGoogleCallback(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	// Generate our own JWT token for the frontend
 	appToken, err := h.authService.GenerateToken(fmt.Sprintf("%d", user.ID))
 	if err != nil {
 		logger.L.Error("Failed to generate app token for Google user", "error", err)
@@ -146,10 +141,30 @@ func (h *UserHandler) HandleGoogleCallback(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	// Redirect to a callback page on the frontend with the token and our user JSON
-	redirectURL := fmt.Sprintf("%s/auth/google/callback?token=%s&user=%s",
-		config.Cfg.FrontendBaseURL,
-		appToken,
-		url.QueryEscape(string(userJSON)))
+	// --- SECURITY FIX: Transfer token via Cookie instead of URL ---
+
+	// Create a JSON object containing both the token and the user data
+	transferData := map[string]string{
+		"token": appToken,
+		"user":  string(userJSON),
+	}
+	transferBytes, _ := json.Marshal(transferData)
+
+	// Encode to Base64 to ensure it is cookie-safe
+	encodedData := base64.StdEncoding.EncodeToString(transferBytes)
+
+	// Set a short-lived cookie (1 minute)
+	http.SetCookie(w, &http.Cookie{
+		Name:     "auth_transfer",
+		Value:    encodedData,
+		Path:     "/",
+		Expires:  time.Now().Add(1 * time.Minute),
+		HttpOnly: false,                                     // Frontend needs to read this!
+		Secure:   config.Cfg.FrontendBaseURL[:5] == "https", // Secure only if prod
+		SameSite: http.SameSiteLaxMode,
+	})
+
+	// Redirect to frontend without sensitive data in URL
+	redirectURL := fmt.Sprintf("%s/auth/google/callback", config.Cfg.FrontendBaseURL)
 	http.Redirect(w, r, redirectURL, http.StatusTemporaryRedirect)
 }

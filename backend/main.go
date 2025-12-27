@@ -91,19 +91,16 @@ var ipLimiter = NewIPRateLimiter(rate.Every(200*time.Millisecond), 10)
 func rateLimitMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Determine the client IP.
-		// Since you have Caddy as a proxy, r.RemoteAddr might be the container IP.
-		// Ideally, Caddy sends X-Forwarded-For.
 		ip := r.RemoteAddr
 		if forwarded := r.Header.Get("X-Forwarded-For"); forwarded != "" {
-			// X-Forwarded-For can be a comma-separated list; the first one is the original client IP.
 			parts := strings.Split(forwarded, ",")
-			ip = strings.TrimSpace(parts[0])
+			// Get the last IP in the list
+			ip = strings.TrimSpace(parts[len(parts)-1])
 		}
 
 		limiter := ipLimiter.GetLimiter(ip)
 		if !limiter.Allow() {
 			http.Error(w, http.StatusText(http.StatusTooManyRequests), http.StatusTooManyRequests)
-			// Log the IP that exceeded the limit
 			logger.L.Warn("Rate limit exceeded", "ip", ip, "path", r.URL.Path)
 			return
 		}
