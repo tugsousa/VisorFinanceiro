@@ -21,6 +21,7 @@ type AppConfig struct {
 	// Security settings
 	JWTSecret          string
 	CSRFAuthKey        []byte
+	OAuthStateString   string
 	AccessTokenExpiry  time.Duration
 	RefreshTokenExpiry time.Duration
 	MaxUploadSizeBytes int64
@@ -77,17 +78,15 @@ func LoadConfig() {
 	log.Println("Loading application configuration...")
 
 	// --- Security & Tokens (Secrets) ---
-	jwtSecret := getEnv("JWT_SECRET", "your-very-secure-and-long-jwt-secret-key-for-hs256-minimum-32-bytes")
-	if jwtSecret == "your-very-secure-and-long-jwt-secret-key-for-hs256-minimum-32-bytes" {
-		log.Println("WARNING: Using default insecure JWT_SECRET. Set JWT_SECRET environment variable for production.")
+	jwtSecret := getRequiredEnv("JWT_SECRET")
+	csrfAuthKeyStr := getRequiredEnv("CSRF_AUTH_KEY")
+	if len(csrfAuthKeyStr) != 32 {
+		log.Fatalf("FATAL: CSRF_AUTH_KEY must be exactly 32 bytes long. Current length: %d", len(csrfAuthKeyStr))
 	}
 
-	csrfAuthKeyStr := getEnv("CSRF_AUTH_KEY", "a-very-secure-32-byte-long-key-must-be-32-bytes!")
-	if csrfAuthKeyStr == "a-very-secure-32-byte-long-key-must-be-32-bytes!" {
-		log.Println("WARNING: Using default insecure CSRF_AUTH_KEY. Set CSRF_AUTH_KEY environment variable for production.")
-	}
-	if len(csrfAuthKeyStr) < 32 {
-		log.Fatalf("FATAL: CSRF_AUTH_KEY must be at least 32 bytes long. Current length: %d", len(csrfAuthKeyStr))
+	oauthStateString := getEnv("OAUTH_STATE_STRING", "secure-random-state-string-for-dev-only")
+	if oauthStateString == "secure-random-state-string-for-dev-only" {
+		log.Println("WARNING: Using default OAUTH_STATE_STRING. Set this in production.")
 	}
 
 	// --- Token Expiry Durations ---
@@ -123,6 +122,7 @@ func LoadConfig() {
 		// Security
 		JWTSecret:          jwtSecret,
 		CSRFAuthKey:        []byte(csrfAuthKeyStr),
+		OAuthStateString:   oauthStateString,
 		AccessTokenExpiry:  accessTokenExpiry,
 		RefreshTokenExpiry: refreshTokenExpiry,
 		MaxUploadSizeBytes: maxUploadSizeBytes,
@@ -167,6 +167,15 @@ func getEnv(key, fallback string) string {
 	}
 	log.Printf("Environment variable %s not set, using default: %s", key, fallback)
 	return fallback
+}
+
+// getRequiredEnv retrieves an environment variable or terminates the application if not set.
+func getRequiredEnv(key string) string {
+	value, exists := os.LookupEnv(key)
+	if !exists || strings.TrimSpace(value) == "" {
+		log.Fatalf("FATAL: Required environment variable %s is not set or is empty. Application cannot start securely.", key)
+	}
+	return value
 }
 
 // getEnvAsInt retrieves an environment variable as an integer or returns a fallback.

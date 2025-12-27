@@ -29,12 +29,12 @@ func InitializeGoogleOAuthConfig() {
 }
 
 func (h *UserHandler) HandleGoogleLogin(w http.ResponseWriter, r *http.Request) {
-	url := googleOauthConfig.AuthCodeURL(oauthStateString)
+	url := googleOauthConfig.AuthCodeURL(config.Cfg.OAuthStateString)
 	http.Redirect(w, r, url, http.StatusTemporaryRedirect)
 }
 
 func (h *UserHandler) HandleGoogleCallback(w http.ResponseWriter, r *http.Request) {
-	if r.FormValue("state") != oauthStateString {
+	if r.FormValue("state") != config.Cfg.OAuthStateString {
 		logger.L.Warn("Invalid OAuth state from Google callback")
 		http.Redirect(w, r, "/signin?error=invalid_state", http.StatusTemporaryRedirect)
 		return
