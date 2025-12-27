@@ -199,7 +199,10 @@ func main() {
 				r.Post("/admin/users/refresh-metrics-batch", userHandler.HandleAdminRefreshMultipleUserMetrics)
 				r.Post("/admin/stats/clear-cache", userHandler.HandleAdminClearStatsCache)
 
-				// Rota de Impersonation (NOVA)
+				r.Post("/admin/mfa/setup", userHandler.HandleSetupMFA)
+				r.Post("/admin/mfa/activate", userHandler.HandleActivateMFA)
+
+				// Impersonation protegida
 				r.Post("/admin/users/{userID}/impersonate", userHandler.HandleImpersonateUser)
 			})
 		})

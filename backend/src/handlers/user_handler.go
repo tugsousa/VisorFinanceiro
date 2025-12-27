@@ -42,6 +42,7 @@ type UserHandler struct {
 	emailService  services.EmailService
 	uploadService services.UploadService
 	cache         *cache.Cache
+	mfaService    *services.MFAService
 }
 
 type TopStockInfo struct {
@@ -692,9 +693,46 @@ func (h *UserHandler) HandleAdminClearStatsCache(w http.ResponseWriter, r *http.
 	w.WriteHeader(http.StatusNoContent)
 }
 
+type ImpersonateRequest struct {
+	MfaCode string `json:"mfa_code"`
+}
+
 func (h *UserHandler) HandleImpersonateUser(w http.ResponseWriter, r *http.Request) {
+	// 1. Obter o ID do Admin que está a fazer o pedido
+	adminID, _ := GetUserIDFromContext(r.Context())
+
+	// 2. Parse do targetUserID da URL
 	targetUserIDStr := chi.URLParam(r, "userID")
-	targetUserID, err := strconv.ParseInt(targetUserIDStr, 10, 64)
+	targetUserID, _ := strconv.ParseInt(targetUserIDStr, 10, 64)
+
+	// 3. Ler o código MFA do body
+	var req ImpersonateRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		sendJSONError(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	// 4. Buscar dados do ADMIN para validar o MFA dele
+	adminUser, err := model.GetUserByID(database.DB, adminID)
+	if err != nil {
+		sendJSONError(w, "Admin user not found", http.StatusUnauthorized)
+		return
+	}
+
+	// 5. Verificar se o admin tem MFA ativo
+	if !adminUser.MfaEnabled {
+		sendJSONError(w, "MFA required. Please enable 2FA in your profile settings.", http.StatusForbidden)
+		return
+	}
+
+	// 6. Validar o código MFA
+	if !h.mfaService.ValidateToken(adminUser.MfaSecret, req.MfaCode) {
+		// Regista tentativa falhada (audit log seria bom aqui)
+		logger.L.Warn("Failed MFA attempt for impersonation", "adminID", adminID)
+		sendJSONError(w, "Código MFA inválido", http.StatusUnauthorized)
+		return
+	}
+
 	if err != nil {
 		sendJSONError(w, "ID de utilizador inválido", http.StatusBadRequest)
 		return
@@ -756,4 +794,56 @@ func (h *UserHandler) HandleImpersonateUser(w http.ResponseWriter, r *http.Reque
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(response)
+}
+
+func (h *UserHandler) HandleSetupMFA(w http.ResponseWriter, r *http.Request) {
+	userID, _ := GetUserIDFromContext(r.Context())
+
+	// Buscar user para obter o username (para o QR code ficar bonito no Google Auth)
+	user, err := model.GetUserByID(database.DB, userID)
+	if err != nil {
+		sendJSONError(w, "User not found", http.StatusNotFound)
+		return
+	}
+
+	secret, qrCode, err := h.mfaService.GenerateMFASecret(user.Username)
+	if err != nil {
+		sendJSONError(w, "Failed to generate MFA", http.StatusInternalServerError)
+		return
+	}
+
+	// Guardar o segredo temporariamente na BD (mas NÃO ativar ainda mfa_enabled)
+	// Precisas de criar um método no model UpdateMfaSecret(userID, secret)
+	if err := user.UpdateMfaSecret(database.DB, secret); err != nil {
+		sendJSONError(w, "Failed to save MFA secret", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{
+		"secret":  secret, // Opcional enviar o texto, caso o QR falhe
+		"qr_code": qrCode, // Imagem base64
+	})
+}
+
+func (h *UserHandler) HandleActivateMFA(w http.ResponseWriter, r *http.Request) {
+	userID, _ := GetUserIDFromContext(r.Context())
+
+	var req struct {
+		Code string `json:"code"`
+	}
+	json.NewDecoder(r.Body).Decode(&req)
+
+	user, _ := model.GetUserByID(database.DB, userID)
+
+	if !h.mfaService.ValidateToken(user.MfaSecret, req.Code) {
+		sendJSONError(w, "Código inválido", http.StatusUnauthorized)
+		return
+	}
+
+	// Ativar na BD. Criar método UpdateMfaEnabled(userID, true)
+	user.UpdateMfaEnabled(database.DB, true)
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"message": "MFA Ativado com sucesso"})
 }
