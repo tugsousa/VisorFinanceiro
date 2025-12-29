@@ -64,15 +64,22 @@ var Cfg *AppConfig
 // LoadConfig loads configuration from environment variables or a .env file.
 // It centralizes all configuration logic for the application.
 func LoadConfig() {
+	// 1. Try loading from the current directory (standard behavior)
 	errEnv := godotenv.Load()
+
+	// 2. If not found, try loading from the parent directory (common when running from /backend)
+	if errEnv != nil {
+		errEnv = godotenv.Load("../.env")
+	}
+
 	if errEnv != nil {
 		if os.IsNotExist(errEnv) {
-			log.Println("Info: No .env file found. Relying on OS environment variables, which is expected in production.")
+			log.Println("Info: No .env file found in current or parent directory. Relying on OS environment variables (expected in production).")
 		} else {
 			log.Printf("Warning: Error loading .env file: %v. Relying on OS environment variables.", errEnv)
 		}
 	} else {
-		log.Println(".env file loaded successfully for local development.")
+		log.Println(".env file loaded successfully.")
 	}
 
 	log.Println("Loading application configuration...")
