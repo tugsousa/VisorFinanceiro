@@ -2,7 +2,6 @@
 import React, { useState, useCallback } from 'react';
 import { useAuth } from '../../auth/AuthContext';
 import { usePortfolio } from '../../portfolio/PortfolioContext';
-// Update API path: go up 3 levels instead of 1
 import { apiUploadFile } from '../../../lib/api'; 
 import { MAX_FILE_SIZE_BYTES, MAX_FILE_SIZE_MB } from '../../../constants';
 import { Typography, Box, Button, LinearProgress, Paper, Alert, Modal, IconButton, Link as MuiLink, CircularProgress } from '@mui/material';
@@ -11,10 +10,10 @@ import { CheckCircleOutline as CheckCircleIcon, ErrorOutline as ErrorIcon, Close
 import IBKRGuidePage from './IBKRGuidePage';
 import DEGIROGuidePage from './DEGIROGuidePage';
 import logger from '../../../lib/utils/logger';
-import UploadDropzone from '../components/UploadDropzone'; // Import the new component
+import UploadDropzone from '../components/UploadDropzone';
+import { Link as RouterLink } from 'react-router-dom';
 
 const modalStyle = {
-  // ... (keep modalStyle as is)
   position: 'absolute',
   top: '50%',
   left: '50%',
@@ -30,7 +29,6 @@ const modalStyle = {
 };
 
 const uploadWithRetry = async (formData, onUploadProgress) => {
-    // ... (keep uploadWithRetry logic as is)
     const MAX_ATTEMPTS = 2;
     let lastError = null;
 
@@ -65,7 +63,6 @@ const UploadPage = () => {
     const [uploadProgress, setUploadProgress] = useState(0);
     const [uploadStatus, setUploadStatus] = useState('idle');
     const [fileError, setFileError] = useState(null);
-    // REMOVED: isDragActive, setIsDragActive, fileInputRef (handled in Dropzone now)
     
     const [guideModal, setGuideModal] = useState(null);
     const handleOpenGuide = (broker) => setGuideModal(broker);
@@ -76,13 +73,13 @@ const UploadPage = () => {
         setUploadProgress(0);
         setUploadStatus('idle');
         setFileError(null);
-        // Note: Resetting file input is handled inside Dropzone or by remounting
     };
     
     const handleFileSelected = useCallback(async (file) => {
         resetState();
         if (!file) return;
 
+        // Added Check: This guard is redundant if the UI is disabled, but good for safety.
         if (!activePortfolio) {
             setFileError('Selecione um portfólio ativo antes de carregar ficheiros.');
             setUploadStatus('error');
@@ -137,19 +134,20 @@ const UploadPage = () => {
         }
     }, [token, queryClient, refreshUserDataCheck, activePortfolio]);
 
-    // REMOVED: handleDragEnter, handleDragLeave, handleDragOver, handleDrop, handleFileInputChange
-
     return (
         <Box sx={{ p: { xs: 2, sm: 3 }, maxWidth: '800px', margin: 'auto' }}>
-            {/* ... Keep Title and Description ... */}
             <Typography variant="h4" component="h1" gutterBottom align="center">
                 Carregar Transações
             </Typography>
             
-            {activePortfolio && (
+            {activePortfolio ? (
                 <Typography variant="subtitle1" align="center" color="primary" sx={{ mb: 1, fontWeight: 'bold' }}>
                     Portfólio Ativo: {activePortfolio.name}
                 </Typography>
+            ) : (
+                <Alert severity="warning" sx={{ mb: 3 }}>
+                    Nenhum portfólio selecionado. Por favor <MuiLink component={RouterLink} to="/portfolio">crie ou selecione um portfólio</MuiLink> antes de continuar.
+                </Alert>
             )}
 
             <Typography variant="body1" color="text.secondary" align="center" sx={{ mb: 1 }}>
@@ -167,12 +165,11 @@ const UploadPage = () => {
                 .
             </Typography>
 
-            <Paper elevation={0} sx={{ p: { xs: 2, sm: 3 }, border: '1px solid', borderColor: 'divider' }}>
+            <Paper elevation={0} sx={{ p: { xs: 2, sm: 3 }, border: '1px solid', borderColor: 'divider', opacity: !activePortfolio ? 0.5 : 1, pointerEvents: !activePortfolio ? 'none' : 'auto' }}>
                 {uploadStatus === 'idle' && (
                     <UploadDropzone onFileSelected={handleFileSelected} />
                 )}
                 
-                {/* ... Keep status states (uploading, processing, success, error) same as before ... */}
                 {uploadStatus === 'uploading' && (
                     <Box sx={{ textAlign: 'center' }}>
                         <Typography variant="h6" sx={{ mb: 2 }}>A enviar {selectedFile?.name}...</Typography>

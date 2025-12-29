@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/patrickmn/go-cache"
@@ -34,7 +35,6 @@ var passwordRegex = regexp.MustCompile(`^.{6,}$`)
 
 var (
 	googleOauthConfig *oauth2.Config
-	oauthStateString  = "random-string-for-security"
 )
 
 type UserHandler struct {
@@ -42,12 +42,45 @@ type UserHandler struct {
 	emailService  services.EmailService
 	uploadService services.UploadService
 	cache         *cache.Cache
+	mfaService    *services.MFAService
 }
 
 type TopStockInfo struct {
 	ISIN        string  `json:"isin"`
 	ProductName string  `json:"productName"`
 	Value       float64 `json:"value"`
+}
+
+func validatePasswordComplexity(password string) error {
+	if len(password) < 8 {
+		return fmt.Errorf("password must be at least 8 characters long")
+	}
+
+	var (
+		hasUpper   bool
+		hasLower   bool
+		hasNumber  bool
+		hasSpecial bool
+	)
+
+	for _, char := range password {
+		switch {
+		case unicode.IsUpper(char):
+			hasUpper = true
+		case unicode.IsLower(char):
+			hasLower = true
+		case unicode.IsNumber(char):
+			hasNumber = true
+		case unicode.IsPunct(char) || unicode.IsSymbol(char):
+			hasSpecial = true
+		}
+	}
+
+	if !hasUpper || !hasLower || !hasNumber || !hasSpecial {
+		return fmt.Errorf("password must contain at least one uppercase letter, one lowercase letter, one number, and one special character")
+	}
+
+	return nil
 }
 
 func NewUserHandler(authService *security.AuthService, emailService services.EmailService, uploadService services.UploadService, reportCache *cache.Cache) *UserHandler {
@@ -213,30 +246,22 @@ func (h *UserHandler) HandleGetAdminStats(w http.ResponseWriter, r *http.Request
 	}
 
 	rangeParam := r.URL.Query().Get("range")
-	var timeFilter string
-	var loginFilter string
-	var uploadFilter string
 
-	// Filtros de tempo para os contadores simples
+	// Default to a wide interval (effectively "All Time") to keep queries parameterized safely
+	interval := "-100 years"
+
+	// Select the SQLite interval modifier based on the requested range
 	switch rangeParam {
 	case "last_7_days":
-		timeFilter = "created_at >= date('now', '-7 days')"
-		loginFilter = "login_at >= date('now', '-7 days')"
-		uploadFilter = "uploaded_at >= date('now', '-7 days')"
+		interval = "-7 days"
 	case "last_30_days":
-		timeFilter = "created_at >= date('now', '-30 days')"
-		loginFilter = "login_at >= date('now', '-30 days')"
-		uploadFilter = "uploaded_at >= date('now', '-30 days')"
+		interval = "-30 days"
 	case "last_365_days":
-		timeFilter = "created_at >= date('now', '-365 days')"
-		loginFilter = "login_at >= date('now', '-365 days')"
-		uploadFilter = "uploaded_at >= date('now', '-365 days')"
-	default:
-		timeFilter = "1=1"
-		loginFilter = "1=1"
-		uploadFilter = "1=1"
+		interval = "-365 days"
 	}
 
+	// Helper to handle queries safely without repeating code
+	// We pass the 'interval' as a parameter (?) to the query
 	var usersWithUploads int
 	database.DB.QueryRow("SELECT COUNT(*) FROM users WHERE total_upload_count > 0").Scan(&usersWithUploads)
 
@@ -246,34 +271,35 @@ func (h *UserHandler) HandleGetAdminStats(w http.ResponseWriter, r *http.Request
 		stats.ActivationRate = 0
 	}
 
-	// 2. Contar Total de Transações (Volume real de dados)
-	// Nota: Como é um COUNT total numa tabela que pode ser grande, é uma métrica geral importante
+	// 2. Total Transactions
 	database.DB.QueryRow("SELECT COUNT(*) FROM processed_transactions").Scan(&stats.TotalTransactions)
 
-	// 1. Métricas Gerais
+	// 1. General Metrics
 	database.DB.QueryRow("SELECT COUNT(*) FROM users").Scan(&stats.TotalUsers)
 	database.DB.QueryRow("SELECT COALESCE(SUM(portfolio_value_eur), 0) FROM users").Scan(&stats.TotalPortfolioValue)
 	database.DB.QueryRow("SELECT metric_value FROM system_metrics WHERE metric_name = 'deleted_user_count'").Scan(&stats.DeletedUserCount)
 	database.DB.QueryRow("SELECT COUNT(*) FROM uploads_history").Scan(&stats.TotalUploads)
+
+	// Active Users (Using fixed intervals for DAU/MAU standards)
 	database.DB.QueryRow("SELECT COUNT(DISTINCT user_id) FROM login_history WHERE login_at > date('now', '-1 day')").Scan(&stats.DailyActiveUsers)
 	database.DB.QueryRow("SELECT COUNT(DISTINCT user_id) FROM login_history WHERE login_at > date('now', '-30 days')").Scan(&stats.MonthlyActiveUsers)
 
-	// 2. Novos Utilizadores (Hoje, Semana, Mês)
+	// 2. New Users (Fixed periods)
 	database.DB.QueryRow("SELECT COUNT(*) FROM users WHERE created_at > date('now', 'start of day')").Scan(&stats.NewUsersToday)
 	database.DB.QueryRow("SELECT COUNT(*) FROM users WHERE created_at > date('now', '-7 days')").Scan(&stats.NewUsersThisWeek)
 	database.DB.QueryRow("SELECT COUNT(*) FROM users WHERE created_at > date('now', 'start of month')").Scan(&stats.NewUsersThisMonth)
 
-	// 3. Métricas no Período Selecionado
-	database.DB.QueryRow("SELECT COUNT(*) FROM users WHERE " + timeFilter).Scan(&stats.NewUsersInPeriod)
-	database.DB.QueryRow("SELECT COUNT(DISTINCT user_id) FROM login_history WHERE " + loginFilter).Scan(&stats.ActiveUsersInPeriod)
+	// 3. Metrics in Selected Period (Parameterized)
+	// Notice we use the '?' placeholder and pass 'interval' as an argument
+	database.DB.QueryRow("SELECT COUNT(*) FROM users WHERE created_at >= date('now', ?)", interval).Scan(&stats.NewUsersInPeriod)
+	database.DB.QueryRow("SELECT COUNT(DISTINCT user_id) FROM login_history WHERE login_at >= date('now', ?)", interval).Scan(&stats.ActiveUsersInPeriod)
 
 	var successfulUploads int
-	database.DB.QueryRow("SELECT COUNT(*) FROM uploads_history WHERE " + uploadFilter).Scan(&successfulUploads)
+	database.DB.QueryRow("SELECT COUNT(*) FROM uploads_history WHERE uploaded_at >= date('now', ?)", interval).Scan(&successfulUploads)
 	stats.UploadsInPeriod = successfulUploads
 
 	var failedUploads int
-	failureTimeFilter := strings.Replace(uploadFilter, "uploaded_at", "failed_at", 1)
-	database.DB.QueryRow("SELECT COUNT(*) FROM upload_failures WHERE " + failureTimeFilter).Scan(&failedUploads)
+	database.DB.QueryRow("SELECT COUNT(*) FROM upload_failures WHERE failed_at >= date('now', ?)", interval).Scan(&failedUploads)
 
 	totalAttempts := successfulUploads + failedUploads
 	if totalAttempts > 0 {
@@ -282,7 +308,8 @@ func (h *UserHandler) HandleGetAdminStats(w http.ResponseWriter, r *http.Request
 		stats.UploadFailureRate = 0
 	}
 
-	// 4. Métricas Financeiras Globais (Cash e Dividendos)
+	// 4. Financial Metrics (Global)
+	// These were previously filtered by strict string checks; we can keep logic simple for now
 	if rangeParam == "all_time" || rangeParam == "" {
 		database.DB.QueryRow(`
 			SELECT COALESCE(SUM(amount_eur), 0)
@@ -301,25 +328,26 @@ func (h *UserHandler) HandleGetAdminStats(w http.ResponseWriter, r *http.Request
 			FROM processed_transactions 
 			WHERE transaction_type = 'DIVIDEND' AND transaction_subtype != 'TAX'`).Scan(&stats.AvgDividendReceivedEURInPeriod)
 	} else {
+		// If you want to support filtering these by date later, add a JOIN with the date column and use 'interval'
 		stats.TotalCashDepositedEURInPeriod = 0
 		stats.CashDepositsInPeriod = 0
 		stats.TotalDividendsReceivedEURInPeriod = 0
 		stats.AvgDividendReceivedEURInPeriod = 0
 	}
 
-	// KPI Removido: AvgTimeToFirstUploadDays (Deixamos a query mas podes ignorar no frontend se quiseres)
+	// KPI: Avg Time to First Upload
 	database.DB.QueryRow(`
 		SELECT COALESCE(AVG(JULIANDAY(first_upload_at) - JULIANDAY(created_at)), 0)
 		FROM users WHERE first_upload_at IS NOT NULL
 	`).Scan(&stats.AvgTimeToFirstUploadDays)
 
-	// 5. Estatísticas de Verificação de Email
+	// 5. Verification Stats
 	var verified, unverified int
 	database.DB.QueryRow("SELECT COUNT(*) FROM users WHERE is_email_verified = 1").Scan(&verified)
 	database.DB.QueryRow("SELECT COUNT(*) FROM users WHERE is_email_verified = 0").Scan(&unverified)
 	stats.VerificationStats = map[string]int{"verified": verified, "unverified": unverified}
 
-	// 6. Top Utilizadores
+	// 6. Top Users Helper
 	fetchUsers := func(query string) []AdminUserView {
 		rows, _ := database.DB.Query(query)
 		if rows == nil {
@@ -348,7 +376,7 @@ func (h *UserHandler) HandleGetAdminStats(w http.ResponseWriter, r *http.Request
 		SELECT id, email, login_count, total_upload_count, portfolio_value_eur, last_login_at, last_login_ip, top_5_holdings
 		FROM users ORDER BY total_upload_count DESC LIMIT 5`)
 
-	// 7. Gráficos: Valor por Corretora
+	// 7. Broker Charts
 	brokerRows, _ := database.DB.Query("SELECT source, COUNT(*) FROM processed_transactions GROUP BY source")
 	if brokerRows != nil {
 		defer brokerRows.Close()
@@ -360,7 +388,7 @@ func (h *UserHandler) HandleGetAdminStats(w http.ResponseWriter, r *http.Request
 		}
 	}
 
-	// 8. Gráficos: Auth Providers
+	// 8. Auth Provider Charts
 	authRows, _ := database.DB.Query("SELECT auth_provider, COUNT(*) FROM users GROUP BY auth_provider")
 	if authRows != nil {
 		defer authRows.Close()
@@ -372,15 +400,19 @@ func (h *UserHandler) HandleGetAdminStats(w http.ResponseWriter, r *http.Request
 		}
 	}
 
-	// --- CORREÇÃO: Preencher os dados dos gráficos de linha (Timeline) ---
-
-	// 9. Novos Utilizadores por Dia (últimos 30 dias)
+	// 9. Timeline Data (Users per day)
+	// Parameterized using the same interval logic if you wish, or fixed 30 days as before.
+	// We will use strict parameters here as well for consistency.
 	rowsUsers, _ := database.DB.Query(`
 		SELECT strftime('%Y-%m-%d', created_at) as day, COUNT(*) 
 		FROM users 
-		WHERE created_at >= date('now', '-30 days') 
+		WHERE created_at >= date('now', ?) 
 		GROUP BY day ORDER BY day ASC
-	`)
+	`, interval) // Changed from hardcoded '-30 days' to follow the filter, or keep '-30 days' if that's the desired UI behavior.
+
+	// If you prefer the chart to ALWAYS be 30 days regardless of filter:
+	// replace `interval` with `"-30 days"` in the line above.
+
 	if rowsUsers != nil {
 		defer rowsUsers.Close()
 		for rowsUsers.Next() {
@@ -390,13 +422,14 @@ func (h *UserHandler) HandleGetAdminStats(w http.ResponseWriter, r *http.Request
 		}
 	}
 
-	// 10. Utilizadores Ativos por Dia (últimos 30 dias)
+	// 10. Timeline Data (Active Users)
 	rowsActive, _ := database.DB.Query(`
 		SELECT strftime('%Y-%m-%d', login_at) as day, COUNT(DISTINCT user_id) 
 		FROM login_history 
-		WHERE login_at >= date('now', '-30 days') 
+		WHERE login_at >= date('now', ?) 
 		GROUP BY day ORDER BY day ASC
-	`)
+	`, interval) // Same note as above
+
 	if rowsActive != nil {
 		defer rowsActive.Close()
 		for rowsActive.Next() {
@@ -422,16 +455,28 @@ func (h *UserHandler) HandleGetAdminUsers(w http.ResponseWriter, r *http.Request
 	offset := (page - 1) * pageSize
 
 	sortBy := r.URL.Query().Get("sortBy")
-	order := r.URL.Query().Get("order")
+	order := strings.ToUpper(r.URL.Query().Get("order")) // Normalize to uppercase
 
-	validSorts := map[string]bool{"created_at": true, "login_count": true, "portfolio_value_eur": true, "total_upload_count": true, "email": true}
+	// 1. White-list allowed columns for sorting
+	validSorts := map[string]bool{
+		"created_at":          true,
+		"login_count":         true,
+		"portfolio_value_eur": true,
+		"total_upload_count":  true,
+		"email":               true,
+	}
 	if !validSorts[sortBy] {
 		sortBy = "created_at"
 	}
-	if order != "asc" {
-		order = "desc"
+
+	// 2. White-list sort direction
+	if order != "ASC" && order != "DESC" {
+		order = "DESC"
 	}
 
+	// 3. Safe Construction
+	// Because 'sortBy' and 'order' are strictly checked against our hardcoded values above,
+	// using Sprintf here is safe from injection.
 	query := fmt.Sprintf(`
 		SELECT id, username, email, auth_provider, created_at, total_upload_count, upload_count,
 		(SELECT COUNT(DISTINCT source) FROM processed_transactions WHERE user_id = u.id) as distinct_broker_count,
@@ -692,11 +737,61 @@ func (h *UserHandler) HandleAdminClearStatsCache(w http.ResponseWriter, r *http.
 	w.WriteHeader(http.StatusNoContent)
 }
 
+type ImpersonateRequest struct {
+	MfaCode string `json:"mfa_code"`
+}
+
 func (h *UserHandler) HandleImpersonateUser(w http.ResponseWriter, r *http.Request) {
+	// 1. Obter o ID do Admin que está a fazer o pedido
+	adminID, _ := GetUserIDFromContext(r.Context())
+
+	// 2. Parse do targetUserID da URL
 	targetUserIDStr := chi.URLParam(r, "userID")
 	targetUserID, err := strconv.ParseInt(targetUserIDStr, 10, 64)
 	if err != nil {
 		sendJSONError(w, "ID de utilizador inválido", http.StatusBadRequest)
+		return
+	}
+
+	// 3. Ler o código MFA do body
+	var req ImpersonateRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		sendJSONError(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	// --- FIX: Sanitize Input ---
+	// Trim whitespace to prevent copy-paste errors
+	req.MfaCode = strings.TrimSpace(req.MfaCode)
+
+	// 4. Buscar dados do ADMIN para validar o MFA dele
+	adminUser, err := model.GetUserByID(database.DB, adminID)
+	if err != nil {
+		sendJSONError(w, "Admin user not found", http.StatusUnauthorized)
+		return
+	}
+
+	// 5. Verificar se o admin tem MFA ativo
+	if !adminUser.MfaEnabled {
+		sendJSONError(w, "MFA required. Please enable 2FA in your profile settings.", http.StatusForbidden)
+		return
+	}
+
+	// --- DEBUG LOGGING ---
+	logger.L.Info("MFA Debug: Impersonation Attempt",
+		"adminID", adminID,
+		"adminUsername", adminUser.Username,
+		"secret_exists", len(adminUser.MfaSecret) > 0,
+		"secret_len", len(adminUser.MfaSecret),
+		"input_code_received", req.MfaCode,
+	)
+
+	// 6. Validar o código MFA
+	if !h.mfaService.ValidateToken(adminUser.MfaSecret, req.MfaCode) {
+		logger.L.Warn("Failed MFA attempt for impersonation: Invalid Code",
+			"adminID", adminID,
+			"input_code", req.MfaCode)
+		sendJSONError(w, "Código MFA inválido", http.StatusUnauthorized)
 		return
 	}
 
@@ -714,7 +809,7 @@ func (h *UserHandler) HandleImpersonateUser(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	// 2. Gerar Refresh Token (Necessário para criar a sessão válida)
+	// 2. Gerar Refresh Token
 	refreshToken, err := h.authService.GenerateRefreshToken()
 	if err != nil {
 		logger.L.Error("Falha ao gerar refresh token de impersonation", "error", err)
@@ -722,8 +817,7 @@ func (h *UserHandler) HandleImpersonateUser(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	// 3. CRIAR A SESSÃO NA BASE DE DADOS (A correção crítica)
-	// O middleware verifica se esta sessão existe. Se não existir, dá 401.
+	// 3. CRIAR A SESSÃO NA BASE DE DADOS
 	session := &model.Session{
 		UserID:       user.ID,
 		Token:        accessToken,
@@ -731,8 +825,7 @@ func (h *UserHandler) HandleImpersonateUser(w http.ResponseWriter, r *http.Reque
 		UserAgent:    "Admin-Impersonation (" + r.UserAgent() + ")",
 		ClientIP:     r.RemoteAddr,
 		IsBlocked:    false,
-		// Usamos a duração do Refresh Token para a sessão não expirar logo
-		ExpiresAt: time.Now().Add(config.Cfg.RefreshTokenExpiry),
+		ExpiresAt:    time.Now().Add(config.Cfg.RefreshTokenExpiry),
 	}
 
 	if err := model.CreateSession(database.DB, session); err != nil {
@@ -741,19 +834,125 @@ func (h *UserHandler) HandleImpersonateUser(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	// 4. Retornar resposta
+	// 4. SECURITY UPDATE: Set Refresh Cookie for the impersonated session
+	setRefreshTokenCookie(w, refreshToken, config.Cfg.RefreshTokenExpiry)
+
+	// 5. Retornar resposta (sem refresh_token no corpo)
 	response := map[string]interface{}{
-		"access_token":  accessToken,
-		"refresh_token": refreshToken, // Opcional, mas útil se quiseres manter a sessão viva
+		"access_token": accessToken,
 		"user": map[string]interface{}{
 			"id":            user.ID,
 			"username":      user.Username,
 			"email":         user.Email,
 			"auth_provider": user.AuthProvider,
 			"is_admin":      isAdmin(user.Email),
+			"mfa_enabled":   user.MfaEnabled,
 		},
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(response)
+}
+
+func (h *UserHandler) HandleSetupMFA(w http.ResponseWriter, r *http.Request) {
+	userID, _ := GetUserIDFromContext(r.Context())
+
+	// Buscar user para obter o username (para o QR code ficar bonito no Google Auth)
+	user, err := model.GetUserByID(database.DB, userID)
+	if err != nil {
+		sendJSONError(w, "User not found", http.StatusNotFound)
+		return
+	}
+
+	secret, qrCode, err := h.mfaService.GenerateMFASecret(user.Username)
+	if err != nil {
+		sendJSONError(w, "Failed to generate MFA", http.StatusInternalServerError)
+		return
+	}
+
+	// Guardar o segredo temporariamente na BD (mas NÃO ativar ainda mfa_enabled)
+	// Precisas de criar um método no model UpdateMfaSecret(userID, secret)
+	if err := user.UpdateMfaSecret(database.DB, secret); err != nil {
+		sendJSONError(w, "Failed to save MFA secret", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{
+		"secret":  secret, // Opcional enviar o texto, caso o QR falhe
+		"qr_code": qrCode, // Imagem base64
+	})
+}
+
+func (h *UserHandler) HandleActivateMFA(w http.ResponseWriter, r *http.Request) {
+	userID, _ := GetUserIDFromContext(r.Context())
+
+	var req struct {
+		Code string `json:"code"`
+	}
+	json.NewDecoder(r.Body).Decode(&req)
+
+	user, _ := model.GetUserByID(database.DB, userID)
+
+	if !h.mfaService.ValidateToken(user.MfaSecret, req.Code) {
+		sendJSONError(w, "Código inválido", http.StatusUnauthorized)
+		return
+	}
+
+	// Ativar na BD. Criar método UpdateMfaEnabled(userID, true)
+	user.UpdateMfaEnabled(database.DB, true)
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"message": "MFA Ativado com sucesso"})
+}
+
+// Struct for the disable request
+type DisableMFARequest struct {
+	Password string `json:"password"`
+}
+
+func (h *UserHandler) HandleDisableMFA(w http.ResponseWriter, r *http.Request) {
+	userID, ok := GetUserIDFromContext(r.Context())
+	if !ok {
+		sendJSONError(w, "Authentication required", http.StatusUnauthorized)
+		return
+	}
+
+	user, err := model.GetUserByID(database.DB, userID)
+	if err != nil {
+		sendJSONError(w, "User not found", http.StatusNotFound)
+		return
+	}
+
+	// 1. Verify Password (only for 'local' accounts) to prevent unauthorized resets
+	// Google/OAuth users don't have passwords, so we rely on the active session.
+	if user.AuthProvider == "local" {
+		var req DisableMFARequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			sendJSONError(w, "Invalid request body", http.StatusBadRequest)
+			return
+		}
+
+		if err := user.CheckPassword(req.Password); err != nil {
+			logger.L.Warn("Password mismatch for MFA disable", "userID", userID)
+			sendJSONError(w, "Incorrect password", http.StatusForbidden)
+			return
+		}
+	}
+
+	// 2. Disable MFA in the Database
+	// We set mfa_enabled to false. We also clear the secret to ensure a clean state.
+	if err := user.UpdateMfaEnabled(database.DB, false); err != nil {
+		logger.L.Error("Failed to disable MFA status", "userID", userID, "error", err)
+		sendJSONError(w, "Failed to disable MFA", http.StatusInternalServerError)
+		return
+	}
+
+	if err := user.UpdateMfaSecret(database.DB, ""); err != nil {
+		logger.L.Error("Failed to clear MFA secret", "userID", userID, "error", err)
+		// We don't return here because the main flag (mfa_enabled) is already false, which is enough to unlock the user.
+	}
+
+	logger.L.Info("MFA Disabled successfully", "userID", userID)
+	w.WriteHeader(http.StatusNoContent)
 }

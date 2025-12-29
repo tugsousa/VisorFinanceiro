@@ -1,7 +1,8 @@
+// frontend/src/features/auth/AuthContext.js
 import React, { createContext, useState, useEffect, useContext, useCallback } from 'react';
-import { setAuthRefresher, fetchAndSetCsrfToken, getApiServiceCsrfToken } from '../../lib/api'; // Ajustei o caminho relativo baseado na estrutura
+import { setAuthRefresher, fetchAndSetCsrfToken, getApiServiceCsrfToken } from '../../lib/api';
 import { apiLogin, apiRegister, apiLogout, apiCheckUserHasData, apiRefreshToken } from './api/authApi';
-import logger from '../../lib/utils/logger'; // Ajustei o caminho relativo
+import logger from '../../lib/utils/logger';
 
 export const AuthContext = createContext();
 
@@ -16,7 +17,7 @@ export const useAuth = () => {
 export const AuthProvider = ({ children }) => {
     const [user, setUser] = useState(null);
     const [token, setToken] = useState(() => localStorage.getItem('auth_token'));
-    const [refreshTokenState, setRefreshTokenState] = useState(() => localStorage.getItem('refresh_token'));
+    // Removed: refresh_token state and localStorage read
     const [isInitialAuthLoading, setIsInitialAuthLoading] = useState(true);
     const [isAuthActionLoading, setIsAuthActionLoading] = useState(false);
     const [authError, setAuthError] = useState(null);
@@ -64,52 +65,46 @@ export const AuthProvider = ({ children }) => {
         }
     }, []);
 
-    const impersonate = useCallback(async (userId) => {
+    const updateUserLocal = (updates) => {
+        setUser(prev => {
+            if (!prev) return null;
+            const newUser = { ...prev, ...updates };
+            localStorage.setItem('user', JSON.stringify(newUser));
+            return newUser;
+        });
+    };
+
+    const impersonate = useCallback(async (userId, mfaCode = null) => {
         setIsAuthActionLoading(true);
         setAuthError(null);
         try {
-            console.log("🔄 A iniciar impersonation para o ID:", userId);
+            console.log("Starting impersonation for ID:", userId);
             
-            // Importação dinâmica
-            const { apiImpersonateUser } = require('../admin/api/adminApi');
+            const { apiImpersonateUser } = await import('../admin/api/adminApi');
             
-            const response = await apiImpersonateUser(userId);
-            console.log("✅ Resposta do backend:", response.data);
-
+            const response = await apiImpersonateUser(userId, mfaCode);
             const { access_token, user: userData } = response.data;
 
             if (!access_token) {
-                throw new Error("Erro Crítico: O backend não enviou o access_token.");
+                throw new Error("Critical Error: Backend did not send access_token.");
             }
 
-            // 1. Atualizar Estado React
             setUser(userData);
             setToken(access_token);
-            setRefreshTokenState(null); // Impersonation não deve ter refresh token
             
-            // 2. Atualizar LocalStorage IMEDIATAMENTE
             localStorage.setItem('auth_token', access_token);
             localStorage.setItem('user', JSON.stringify(userData));
-            localStorage.removeItem('refresh_token');
+            // Removed: localStorage.removeItem('refresh_token');
 
-            // 3. CRÍTICO: Atualizar serviço de CSRF/API
-            // Tal como no login, garantimos que os headers globais ficam alinhados
             await fetchCsrfTokenAndUpdateService(true);
-
-            // 4. Validar se o token funciona
-            // Se isto falhar com 401, o interceptor fará logout, mas agora temos mais garantias
-            const checkResult = await checkUserData();
-            console.log("✅ Verificação de dados do utilizador impersonado:", checkResult);
+            await checkUserData();
             
             return true;
         } catch (err) {
-            const errMsg = err.response?.data?.error || err.message || 'Falha ao impersonar utilizador.';
-            console.error("❌ Erro no impersonate:", errMsg, err);
+            const errMsg = err.response?.data?.error || err.message || 'Impersonation failed.';
+            console.error("Impersonate error:", errMsg, err);
             setAuthError(errMsg);
-            
-            // Se falhar, não queremos deixar o admin num estado "meio logado", 
-            // mas o catch do componente vai tratar do feedback visual.
-            throw new Error(errMsg);
+            throw err;
         } finally {
             setIsAuthActionLoading(false);
         }
@@ -119,12 +114,11 @@ export const AuthProvider = ({ children }) => {
         logger.log(`AuthContext: Performing logout. API call: ${apiCall}. Reason: ${reason}`);
         const oldToken = localStorage.getItem('auth_token');
         localStorage.removeItem('auth_token');
-        localStorage.removeItem('refresh_token');
+        // Removed: localStorage.removeItem('refresh_token');
         localStorage.removeItem('user');
         localStorage.removeItem('has_initial_data');
         setUser(null);
         setToken(null);
-        setRefreshTokenState(null);
         setHasInitialData(null);
         setAuthError(null);
         setIsAuthActionLoading(false);
@@ -140,26 +134,23 @@ export const AuthProvider = ({ children }) => {
     }, [fetchCsrfTokenAndUpdateService]);
 
     const refreshToken = useCallback(async () => {
-        const currentRefreshToken = localStorage.getItem('refresh_token');
-        if (!currentRefreshToken) {
-            logger.log("AuthContext: No refresh token available, logging out.");
-            await performLogout(false, "No refresh token for refresh attempt");
-            return Promise.reject(new Error("No refresh token"));
-        }
-
+        // Changed: We no longer read refresh_token from storage.
+        // We simply call the API. If the HttpOnly cookie is present, it will work.
         try {
-            logger.log("AuthContext: Attempting to refresh token...");
-            const response = await apiRefreshToken(currentRefreshToken);
-            const { access_token, refresh_token } = response.data;
+            const response = await apiRefreshToken(); 
+            const { access_token, user: updatedUser } = response.data;
 
             setToken(access_token);
-            setRefreshTokenState(refresh_token);
             localStorage.setItem('auth_token', access_token);
-            localStorage.setItem('refresh_token', refresh_token);
-            logger.log("AuthContext: Token refreshed successfully.");
+            // Removed: storage of refresh_token
+            
+            if (updatedUser) {
+                setUser(updatedUser);
+                localStorage.setItem('user', JSON.stringify(updatedUser));
+            }
+
             return access_token;
         } catch (error) {
-            logger.error("AuthContext: Failed to refresh token, logging out.", error);
             await performLogout(false, "Refresh token failed or expired");
             return Promise.reject(error);
         }
@@ -181,9 +172,10 @@ export const AuthProvider = ({ children }) => {
                 try {
                     const parsedUser = JSON.parse(storedUser);
                     setUser(parsedUser);
+                    // Instead of just checking data, we can optionally verify the session
+                    // via checkUserData or a silent refresh if needed.
                     await checkUserData();
                 } catch (e) {
-                    logger.error("Failed to parse stored user during init", e);
                     performLogout(false, "Corrupted user data in localStorage on init");
                 }
             } else {
@@ -197,7 +189,6 @@ export const AuthProvider = ({ children }) => {
 
     useEffect(() => {
         const handleLogoutEvent = (event) => {
-            logger.warn(`AuthContext: Received auth-error-logout event. Detail: ${event.detail}. Logging out.`);
             performLogout(false, `Auth error: ${event.detail}`);
         };
         window.addEventListener('auth-error-logout', handleLogoutEvent);
@@ -229,13 +220,15 @@ export const AuthProvider = ({ children }) => {
         try {
             if (!getApiServiceCsrfToken()) await fetchCsrfTokenAndUpdateService();
             const response = await apiLogin(email, password);
-            const { access_token, refresh_token, user: userData } = response.data;
+            const { access_token, user: userData } = response.data;
+
+            console.log("AuthContext: Login successful.");
 
             setUser(userData);
             setToken(access_token);
-            setRefreshTokenState(refresh_token);
+            // Removed: setRefreshTokenState & localStorage.setItem('refresh_token')
+            
             localStorage.setItem('auth_token', access_token);
-            localStorage.setItem('refresh_token', refresh_token);
             localStorage.setItem('user', JSON.stringify(userData));
 
             await fetchCsrfTokenAndUpdateService(true);
@@ -252,16 +245,20 @@ export const AuthProvider = ({ children }) => {
         }
     };
 
+    // Refactored: This function is now simpler as it relies on the backend setting cookies
     const loginWithGoogleToken = useCallback(async (appToken, userDataFromBackend) => {
         setIsAuthActionLoading(true);
         setCheckingData(true);
         setAuthError(null);
+        
+        console.log("AuthContext: Google Login. User data:", userDataFromBackend);
+
         setUser(userDataFromBackend);
         setToken(appToken);
-        setRefreshTokenState(null);
+
         localStorage.setItem('auth_token', appToken);
         localStorage.setItem('user', JSON.stringify(userDataFromBackend));
-        localStorage.removeItem('refresh_token');
+        // Removed: Refresh token handling (assumed handled by HttpOnly cookie on backend)
 
         await checkUserData();
         setIsAuthActionLoading(false);
@@ -292,7 +289,8 @@ export const AuthProvider = ({ children }) => {
                 fetchCsrfToken: fetchCsrfTokenAndUpdateService,
                 refreshUserDataCheck: checkUserData,
                 performLogout,
-                impersonate, // <--- EXPORTADO AQUI
+                impersonate, 
+                updateUserLocal
             }}
         >
             {children}

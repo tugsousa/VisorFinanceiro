@@ -1,44 +1,37 @@
-// frontend/src/utils/formatUtils.js
+// frontend/src/lib/utils/formatUtils.js
 
 /**
  * Formats a number as a currency string (EUR) with customizable options.
  * @param {number|null|undefined} value - The number to format.
- * @param {object} options - Options for Intl.NumberFormat, e.g., { minimumFractionDigits: 4 }.
+ * @param {object} options - Options for Intl.NumberFormat.
  * @returns {string} The formatted currency string.
  */
 export const formatCurrency = (value, options = {}) => {
-  const defaultOptions = {
+  const val = value || 0;
+  
+  // Logic: if value is tiny (non-zero and abs < 0.01), show 4 decimals.
+  const isTiny = val !== 0 && Math.abs(val) < 0.01;
+  const defaults = {
     style: 'currency',
     currency: 'EUR',
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
+    minimumFractionDigits: isTiny ? 4 : 2,
+    maximumFractionDigits: isTiny ? 4 : 2,
   };
 
-  const finalOptions = { ...defaultOptions, ...options };
+  const finalOptions = { ...defaults, ...options };
 
-  // --- SAFETY FIX ---
-  // Ensure minimumFractionDigits is never greater than maximumFractionDigits
-  // to prevent RangeError: invalid digits value (e.g., min=2, max=0)
+  // Safety: Ensure min <= max
   if (finalOptions.maximumFractionDigits !== undefined) {
       if (finalOptions.minimumFractionDigits > finalOptions.maximumFractionDigits) {
           finalOptions.minimumFractionDigits = finalOptions.maximumFractionDigits;
       }
   }
 
-  // Alterado de 'de-DE' para 'pt-PT' para usar o formato de moeda português.
-  return new Intl.NumberFormat('pt-PT', finalOptions).format(value || 0);
+  return new Intl.NumberFormat('pt-PT', finalOptions).format(val);
 };
 
-
-/**
- * Calculates an annualized return percentage.
- * @param {number|null|undefined} netReturn - The net profit or loss.
- * @param {number|null|undefined} costBasis - The initial investment amount.
- * @param {number|string} daysHeld - The number of days the investment was held.
- * @returns {string} Formatted annualized return string (e.g., "10.50%") or "N/A".
- */
 export const calculateAnnualizedReturn = (netReturn, costBasis, daysHeld) => {
-    const numDaysHeld = Number(daysHeld); // Works if daysHeld is number or numeric string
+    const numDaysHeld = Number(daysHeld);
 
     if (
         typeof netReturn !== 'number' ||

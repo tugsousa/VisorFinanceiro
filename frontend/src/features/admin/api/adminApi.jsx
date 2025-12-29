@@ -12,4 +12,15 @@ export const apiFetchAdminUserDetails = (userId, portfolioId = null) => {
 export const apiRefreshMultipleUserMetrics = (userIds) => apiClient.post('/api/admin/users/refresh-metrics-batch', { user_ids: userIds });
 export const apiClearAdminStatsCache = () => apiClient.post('/api/admin/stats/clear-cache');
 
-export const apiImpersonateUser = (userId) => apiClient.post(`/api/admin/users/${userId}/impersonate`);
+export const apiImpersonateUser = (userId, mfaCode = null) => {
+    const body = mfaCode ? { mfa_code: mfaCode } : {};
+    return apiClient.post(`/api/admin/users/${userId}/impersonate`, body);
+};
+
+export const apiSetupMfa = () => apiClient.post('/api/admin/mfa/setup');
+export const apiActivateMfa = (code) => apiClient.post('/api/admin/mfa/activate', { code });
+
+export const apiDisableMfa = (password = null) => {
+    const body = password ? { password } : {};
+    return apiClient.post('/api/admin/mfa/disable', body);
+};

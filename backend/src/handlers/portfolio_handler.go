@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/username/taxfolio/backend/src/logger"
 	"github.com/username/taxfolio/backend/src/models"
 	"github.com/username/taxfolio/backend/src/services"
@@ -170,4 +171,31 @@ func (h *PortfolioHandler) HandleGetOptionHoldings(w http.ResponseWriter, r *htt
 	}
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(optionHoldings)
+}
+
+func (h *PortfolioHandler) HandleRefreshSnapshot(w http.ResponseWriter, r *http.Request) {
+	userID, ok := GetUserIDFromContext(r.Context())
+	if !ok {
+		utils.SendJSONError(w, "Authentication required", http.StatusUnauthorized)
+		return
+	}
+
+	// Extract Portfolio ID from URL path (using Chi)
+	portfolioIDStr := chi.URLParam(r, "id")
+	portfolioID, err := strconv.ParseInt(portfolioIDStr, 10, 64)
+	if err != nil {
+		utils.SendJSONError(w, "Invalid portfolio ID", http.StatusBadRequest)
+		return
+	}
+
+	// Security check: Ensure portfolio belongs to user
+	err = h.uploadService.RefreshDailySnapshot(userID, portfolioID)
+	if err != nil {
+		logger.L.Error("Failed to refresh snapshot", "userID", userID, "error", err)
+		utils.SendJSONError(w, "Failed to refresh portfolio data", http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]string{"status": "ok", "message": "Snapshot refreshed"})
 }

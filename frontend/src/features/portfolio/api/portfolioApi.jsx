@@ -19,3 +19,6 @@ export const apiDeleteTransactions = (criteria) =>
 // File Upload (Often tied to portfolio data)
 export const apiUploadFile = (formData, onUploadProgress) => 
     apiClient.post(API_ENDPOINTS.UPLOAD, formData, { onUploadProgress });
+
+export const apiRefreshPortfolioSnapshot = (portfolioId) => 
+    apiClient.post(`/api/portfolios/${portfolioId}/refresh-snapshot`);
