@@ -19,3 +19,8 @@ export const apiImpersonateUser = (userId, mfaCode = null) => {
 
 export const apiSetupMfa = () => apiClient.post('/api/admin/mfa/setup');
 export const apiActivateMfa = (code) => apiClient.post('/api/admin/mfa/activate', { code });
+
+export const apiDisableMfa = (password = null) => {
+    const body = password ? { password } : {};
+    return apiClient.post('/api/admin/mfa/disable', body);
+};

@@ -905,3 +905,54 @@ func (h *UserHandler) HandleActivateMFA(w http.ResponseWriter, r *http.Request) 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"message": "MFA Ativado com sucesso"})
 }
+
+// Struct for the disable request
+type DisableMFARequest struct {
+	Password string `json:"password"`
+}
+
+func (h *UserHandler) HandleDisableMFA(w http.ResponseWriter, r *http.Request) {
+	userID, ok := GetUserIDFromContext(r.Context())
+	if !ok {
+		sendJSONError(w, "Authentication required", http.StatusUnauthorized)
+		return
+	}
+
+	user, err := model.GetUserByID(database.DB, userID)
+	if err != nil {
+		sendJSONError(w, "User not found", http.StatusNotFound)
+		return
+	}
+
+	// 1. Verify Password (only for 'local' accounts) to prevent unauthorized resets
+	// Google/OAuth users don't have passwords, so we rely on the active session.
+	if user.AuthProvider == "local" {
+		var req DisableMFARequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			sendJSONError(w, "Invalid request body", http.StatusBadRequest)
+			return
+		}
+
+		if err := user.CheckPassword(req.Password); err != nil {
+			logger.L.Warn("Password mismatch for MFA disable", "userID", userID)
+			sendJSONError(w, "Incorrect password", http.StatusForbidden)
+			return
+		}
+	}
+
+	// 2. Disable MFA in the Database
+	// We set mfa_enabled to false. We also clear the secret to ensure a clean state.
+	if err := user.UpdateMfaEnabled(database.DB, false); err != nil {
+		logger.L.Error("Failed to disable MFA status", "userID", userID, "error", err)
+		sendJSONError(w, "Failed to disable MFA", http.StatusInternalServerError)
+		return
+	}
+
+	if err := user.UpdateMfaSecret(database.DB, ""); err != nil {
+		logger.L.Error("Failed to clear MFA secret", "userID", userID, "error", err)
+		// We don't return here because the main flag (mfa_enabled) is already false, which is enough to unlock the user.
+	}
+
+	logger.L.Info("MFA Disabled successfully", "userID", userID)
+	w.WriteHeader(http.StatusNoContent)
+}
