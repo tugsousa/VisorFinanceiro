@@ -234,9 +234,9 @@ func (s *uploadServiceImpl) GetDividendMetrics(userID int64, portfolioID int64) 
 	}
 
 	result := &models.DividendMetricsResult{
-		TotalDividendsTTM:   utils.RoundFloat(totalDividendsTTM, 2),
-		PortfolioYield:      utils.RoundFloat(portfolioYield, 2),
-		YieldOnCost:         utils.RoundFloat(yieldOnCost, 2),
+		TotalDividendsTTM:   totalDividendsTTM,
+		PortfolioYield:      portfolioYield,
+		YieldOnCost:         yieldOnCost,
 		ProjectionByMonth:   monthlyProjection,
 		ProjectionBreakdown: breakdownMap,
 		LastUpdated:         now.Format(time.RFC3339),
@@ -246,6 +246,131 @@ func (s *uploadServiceImpl) GetDividendMetrics(userID int64, portfolioID int64) 
 
 	s.reportCache.Set(cacheKey, result, DefaultCacheExpiration)
 	return result, nil
+}
+func (s *uploadServiceImpl) RefreshDailySnapshot(userID int64, portfolioID int64) error {
+	const SnapshotThrottleMinutes = 15
+
+	// 1. GAP DETECTION & BACKFILL
+	// Check the date of the last successful snapshot to see if we have missing history.
+	var lastUpdateStr string
+	var lastUpdateAt time.Time
+
+	err := database.DB.QueryRow(`
+		SELECT date, updated_at 
+		FROM portfolio_snapshots 
+		WHERE user_id = ? AND portfolio_id = ? 
+		ORDER BY date DESC LIMIT 1`,
+		userID, portfolioID,
+	).Scan(&lastUpdateStr, &lastUpdateAt)
+
+	if err != nil && err != sql.ErrNoRows {
+		return fmt.Errorf("failed to fetch last snapshot date: %w", err)
+	}
+
+	shouldRebuild := false
+	if err == sql.ErrNoRows {
+		// No snapshots exist at all -> Full rebuild needed
+		shouldRebuild = true
+	} else {
+		// Parse the last snapshot date (YYYY-MM-DD)
+		lastDate, parseErr := time.Parse("2006-01-02", lastUpdateStr)
+		if parseErr == nil {
+			// Calculate the gap in days between the last snapshot and today (UTC)
+			// Truncate today to midnight for fair comparison
+			today := time.Now().Truncate(24 * time.Hour)
+			lastDate = lastDate.Truncate(24 * time.Hour)
+
+			daysDiff := today.Sub(lastDate).Hours() / 24
+
+			// If the gap is >= 2 days (meaning at least one full day is missing between Last and Today),
+			// we trigger the backfill/rebuild process to fill the chart gaps.
+			if daysDiff >= 2.0 {
+				logger.L.Info("Snapshot gap detected, triggering history backfill",
+					"userID", userID,
+					"lastDate", lastUpdateStr,
+					"gapDays", daysDiff)
+				shouldRebuild = true
+			}
+		}
+	}
+
+	if shouldRebuild {
+		// RebuildUserHistory iterates from the first transaction to today,
+		// fetching historical prices and generating daily snapshots for all missing days.
+		return s.RebuildUserHistory(userID, portfolioID)
+	}
+
+	// 2. LIVE UPDATE (Standard "Today" Refresh)
+	// If we are here, the history is up to date (gap < 2 days).
+	// We only need to refresh "Today's" value with the latest live prices.
+
+	// Check throttle to prevent spamming live updates
+	if time.Since(lastUpdateAt) < SnapshotThrottleMinutes*time.Minute {
+		logger.L.Info("Snapshot refresh skipped (throttled)", "userID", userID, "portfolioID", portfolioID)
+		return nil
+	}
+
+	logger.L.Info("Calculating daily live snapshot", "userID", userID, "portfolioID", portfolioID)
+	todayStr := time.Now().Format("2006-01-02")
+
+	// Fetch Current Holdings & Calculate Market Value (Equity)
+	// This method fetches live prices from PriceService
+	holdings, err := s.GetCurrentHoldingsWithValue(userID, portfolioID)
+	if err != nil {
+		return fmt.Errorf("failed to calculate current holdings: %w", err)
+	}
+
+	var totalEquity float64 = 0
+	for _, h := range holdings {
+		totalEquity += h.MarketValueEUR
+	}
+
+	// Retrieve Cash Balance & Cumulative Flow from the *latest* available snapshot
+	var cashBalance, cumulativeNetCashflow float64
+
+	// We look for the most recent snapshot (could be today's stale one, or yesterday's)
+	err = database.DB.QueryRow(`
+		SELECT cash_balance, cumulative_net_cashflow 
+		FROM portfolio_snapshots 
+		WHERE user_id = ? AND portfolio_id = ? 
+		ORDER BY date DESC LIMIT 1`,
+		userID, portfolioID,
+	).Scan(&cashBalance, &cumulativeNetCashflow)
+
+	if err != nil {
+		if err == sql.ErrNoRows {
+			// Should be handled by shouldRebuild logic above, but safety fallback
+			cashBalance = 0
+			cumulativeNetCashflow = 0
+		} else {
+			return fmt.Errorf("failed to fetch previous cash balance: %w", err)
+		}
+	}
+
+	// Add Cash to Equity for the Total Portfolio Value
+	totalEquity += cashBalance
+
+	// Upsert into Database
+	query := `
+		INSERT INTO portfolio_snapshots (user_id, portfolio_id, date, total_equity, cumulative_net_cashflow, cash_balance, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+		ON CONFLICT(user_id, portfolio_id, date) DO UPDATE SET
+			total_equity = excluded.total_equity,
+			cumulative_net_cashflow = excluded.cumulative_net_cashflow,
+			cash_balance = excluded.cash_balance,
+			updated_at = CURRENT_TIMESTAMP
+	`
+
+	_, err = database.DB.Exec(query, userID, portfolioID, todayStr, totalEquity, cumulativeNetCashflow, cashBalance)
+	if err != nil {
+		return fmt.Errorf("failed to upsert snapshot: %w", err)
+	}
+
+	// Invalidate cache so the chart updates immediately
+	s.InvalidateUserCache(userID, portfolioID)
+
+	logger.L.Info("Daily live snapshot updated successfully", "userID", userID, "equity", totalEquity)
+	return nil
 }
 
 func (s *uploadServiceImpl) ProcessUpload(fileReader io.Reader, userID int64, portfolioID int64, source, filename string, filesize int64) (*UploadResult, error) {
@@ -388,13 +513,11 @@ func (s *uploadServiceImpl) RebuildUserHistory(userID int64, portfolioID int64) 
 		}
 	}
 
-	// --- CORREÇÃO: Forçar a resolução de Tickers (incluindo Overrides) antes de ler a BD ---
-	// Isto garante que o JEPQ.L (IE000U9J8HX9) é gravado na tabela isin_ticker_map
+	// ... (Price fetching logic remains the same) ...
 	logger.L.Info("Pre-resolving ISINs to Tickers...", "count", len(isinList))
 	_, err = s.priceService.GetCurrentPrices(isinList)
 	if err != nil {
 		logger.L.Warn("Error resolving current prices during history rebuild", "error", err)
-		// Não retornamos erro aqui para tentar continuar com o que já estiver na BD
 	}
 
 	mappings, _ := model.GetMappingsByISINs(database.DB, isinList)
@@ -405,11 +528,10 @@ func (s *uploadServiceImpl) RebuildUserHistory(userID int64, portfolioID int64) 
 	currencyRates := make(map[string]PriceMap)
 	var dataMu sync.Mutex
 
-	// 1. Fetch Asset Prices
+	// 1. Fetch Asset Prices (Existing logic)
 	for isin := range uniqueISINs {
 		mapEntry, ok := mappings[isin]
 		if !ok || mapEntry.TickerSymbol == "" {
-			// Agora isto só deve acontecer se o ativo for realmente inválido/desconhecido
 			logger.L.Warn("No ticker mapping found for ISIN", "isin", isin)
 			continue
 		}
@@ -423,14 +545,6 @@ func (s *uploadServiceImpl) RebuildUserHistory(userID int64, portfolioID int64) 
 				dataMu.Lock()
 				tickerPrices[i] = prices
 				tickerCurrencies[i] = realCurrency
-
-				// Log de debug para confirmar sucesso
-				if len(prices) > 0 {
-					logger.L.Info("Fetched historical prices", "ticker", t, "points", len(prices))
-				} else {
-					logger.L.Warn("Fetched historical prices but got 0 points", "ticker", t)
-				}
-
 				if realCurrency != "EUR" && realCurrency != "" {
 					uniqueCurrencies[realCurrency] = true
 				}
@@ -442,7 +556,7 @@ func (s *uploadServiceImpl) RebuildUserHistory(userID int64, portfolioID int64) 
 	}
 	wg.Wait()
 
-	// 2. Fetch Currency Rates
+	// 2. Fetch Currency Rates (Existing logic)
 	for curr := range uniqueCurrencies {
 		wg.Add(1)
 		go func(c string) {
@@ -472,7 +586,7 @@ func (s *uploadServiceImpl) RebuildUserHistory(userID int64, portfolioID int64) 
 
 	holdings := make(map[string]AssetInfo)
 	cumulativeNetInvested := 0.0
-	currentCash := 0.0
+	currentCash := 0.0 // Tracks Derived Cash Balance
 	lastKnownPrices := make(map[string]float64)
 
 	type Snapshot struct {
@@ -494,10 +608,50 @@ func (s *uploadServiceImpl) RebuildUserHistory(userID int64, portfolioID int64) 
 		for txIndex < totalTxs && txs[txIndex].Date == txDateStr {
 			tx := txs[txIndex]
 
+			// --- 1. Net Invested Logic (Deposits/Withdrawals) ---
 			if tx.TransactionType == "CASH" {
 				cumulativeNetInvested += tx.AmountEUR
 			}
 
+			// --- 2. Derived Cash Balance Logic (The Fix) ---
+			var cashImpact float64
+
+			// Logic specific to IBKR Trades where Amount is Gross Value (not Cash Flow) and Commission is separate
+			if tx.Source == "ibkr" && (tx.TransactionType == "STOCK" || tx.TransactionType == "OPTION" || tx.TransactionType == "ETF" || tx.TransactionType == "WARRANT") {
+				tradeVal := math.Abs(tx.AmountEUR)
+				cost := math.Abs(tx.Commission) // Commission is already converted to EUR in DB
+
+				if tx.BuySell == "BUY" {
+					cashImpact = -tradeVal - cost // Cash Outflow
+				} else { // SELL
+					cashImpact = tradeVal - cost // Cash Inflow (Net of commission)
+				}
+			} else {
+				// Standard Logic (DeGiro, etc.): AmountEUR is the Net Cash Flow (Signed)
+				// Includes Deposits (+), Withdrawals (-), Fees (-), Dividends (+)
+				// DeGiro Trade Amounts are typically Net (include fees) in the source Amount column
+				cashImpact = tx.AmountEUR
+			}
+
+			currentCash += cashImpact
+
+			shouldTrustBalance := true
+			if tx.Source == "degiro" {
+				if tx.TransactionType != "CASH" {
+					shouldTrustBalance = false
+				}
+			}
+
+			// For other brokers (like IBKR) or valid DeGiro CASH lines, we sync with the broker's report.
+			if shouldTrustBalance && tx.BalanceCurrency == "EUR" && tx.CashBalance != 0 {
+				currentCash = tx.CashBalance
+			}
+
+			if shouldTrustBalance && tx.BalanceCurrency == "EUR" && tx.CashBalance != 0 {
+				currentCash = tx.CashBalance
+			}
+
+			// --- 3. Asset Holdings Logic ---
 			if tx.TransactionType == "STOCK" || tx.TransactionType == "ETF" {
 				info := holdings[tx.ISIN]
 				info.Name = tx.ProductName
@@ -512,10 +666,6 @@ func (s *uploadServiceImpl) RebuildUserHistory(userID int64, portfolioID int64) 
 					info.Quantity -= float64(tx.Quantity)
 				}
 				holdings[tx.ISIN] = info
-			}
-
-			if tx.BalanceCurrency == "EUR" {
-				currentCash = tx.CashBalance
 			}
 			txIndex++
 		}
@@ -533,7 +683,6 @@ func (s *uploadServiceImpl) RebuildUserHistory(userID int64, portfolioID int64) 
 			}
 
 			if price == 0 && d.Weekday() != time.Saturday && d.Weekday() != time.Sunday {
-				// Log reduzido para não fazer spam, apenas para o ISIN problemático se persistir
 				if isin == "IE000U9J8HX9" {
 					logger.L.Debug("Still missing price for JEPQ", "date", dateStr)
 				}
@@ -571,13 +720,13 @@ func (s *uploadServiceImpl) RebuildUserHistory(userID int64, portfolioID int64) 
 
 		snapshots = append(snapshots, Snapshot{
 			Date:        dateStr,
-			Equity:      marketValueAssets + currentCash,
+			Equity:      marketValueAssets + currentCash, // Total Equity includes Derived Cash
 			NetInvested: cumulativeNetInvested,
 			Cash:        currentCash,
 		})
 	}
 
-	// Batch Insert Snapshots
+	// Batch Insert Snapshots (Existing logic)
 	if len(snapshots) > 0 {
 		_, _ = database.DB.Exec("DELETE FROM portfolio_snapshots WHERE user_id = ? AND portfolio_id = ?", userID, portfolioID)
 

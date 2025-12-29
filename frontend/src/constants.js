@@ -44,3 +44,5 @@
     export const ALLOWED_FILE_TYPES = ['text/csv', 'application/vnd.ms-excel'];
     export const MAX_FILE_SIZE_MB = 5;
     export const MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024;
+
+    export const DASHBOARD_REFRESH_INTERVAL_MS = 30 * 60 * 1000;

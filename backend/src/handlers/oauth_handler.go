@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"net/url"
+	"time"
 
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
@@ -29,12 +29,12 @@ func InitializeGoogleOAuthConfig() {
 }
 
 func (h *UserHandler) HandleGoogleLogin(w http.ResponseWriter, r *http.Request) {
-	url := googleOauthConfig.AuthCodeURL(oauthStateString)
+	url := googleOauthConfig.AuthCodeURL(config.Cfg.OAuthStateString)
 	http.Redirect(w, r, url, http.StatusTemporaryRedirect)
 }
 
 func (h *UserHandler) HandleGoogleCallback(w http.ResponseWriter, r *http.Request) {
-	if r.FormValue("state") != oauthStateString {
+	if r.FormValue("state") != config.Cfg.OAuthStateString {
 		logger.L.Warn("Invalid OAuth state from Google callback")
 		http.Redirect(w, r, "/signin?error=invalid_state", http.StatusTemporaryRedirect)
 		return
@@ -98,6 +98,9 @@ func (h *UserHandler) HandleGoogleCallback(w http.ResponseWriter, r *http.Reques
 		}
 		user = newUser
 
+		// Also create default portfolio for new Google users
+		_, _ = database.DB.Exec("INSERT INTO portfolios (user_id, name, description, is_default) VALUES (?, ?, ?, ?)", user.ID, "Portfolio Principal", "Default Portfolio", true)
+
 	} else { // User already exists
 		if user.AuthProvider == "local" || user.Password != "" {
 			logger.L.Warn("Google login attempt for existing local account", "userID", user.ID)
@@ -106,37 +109,11 @@ func (h *UserHandler) HandleGoogleCallback(w http.ResponseWriter, r *http.Reques
 		}
 	}
 
-	// --- NEW: Update Login Info ---
 	updateUserLoginInfo(user.ID, r)
-	// --- END NEW ---
 
-	// 1. Check if the user is admin
-	isUserAdmin := isAdmin(user.Email)
+	// --- SECURITY UPDATE: Generate Session and Set Cookie ---
 
-	// 2. Create a custom struct to send to the frontend
-	userForFrontend := struct {
-		ID           int64  `json:"id"`
-		Username     string `json:"username"`
-		Email        string `json:"email"`
-		AuthProvider string `json:"auth_provider"`
-		IsAdmin      bool   `json:"is_admin"`
-	}{
-		ID:           user.ID,
-		Username:     user.Username,
-		Email:        user.Email,
-		AuthProvider: user.AuthProvider,
-		IsAdmin:      isUserAdmin,
-	}
-
-	// 3. Convert our struct to JSON
-	userJSON, err := json.Marshal(userForFrontend)
-	if err != nil {
-		logger.L.Error("Failed to marshal custom user object for frontend", "error", err)
-		http.Redirect(w, r, "/signin?error=user_data_build_failed", http.StatusTemporaryRedirect)
-		return
-	}
-
-	// Generate our own JWT token for the frontend
+	// 1. Generate Access Token
 	appToken, err := h.authService.GenerateToken(fmt.Sprintf("%d", user.ID))
 	if err != nil {
 		logger.L.Error("Failed to generate app token for Google user", "error", err)
@@ -144,10 +121,36 @@ func (h *UserHandler) HandleGoogleCallback(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	// Redirect to a callback page on the frontend with the token and our user JSON
-	redirectURL := fmt.Sprintf("%s/auth/google/callback?token=%s&user=%s",
-		config.Cfg.FrontendBaseURL,
-		appToken,
-		url.QueryEscape(string(userJSON)))
+	// 2. Generate Refresh Token
+	refreshToken, err := h.authService.GenerateRefreshToken()
+	if err != nil {
+		logger.L.Error("Failed to generate refresh token for Google user", "error", err)
+		http.Redirect(w, r, "/signin?error=token_generation_failed", http.StatusTemporaryRedirect)
+		return
+	}
+
+	// 3. Create Session in DB
+	session := &model.Session{
+		UserID:       user.ID,
+		Token:        appToken,
+		RefreshToken: refreshToken,
+		UserAgent:    r.UserAgent(),
+		ClientIP:     r.RemoteAddr,
+		IsBlocked:    false,
+		ExpiresAt:    time.Now().Add(config.Cfg.RefreshTokenExpiry),
+	}
+	if err := model.CreateSession(database.DB, session); err != nil {
+		logger.L.Error("Failed to create session for Google user", "error", err)
+		http.Redirect(w, r, "/signin?error=session_creation_failed", http.StatusTemporaryRedirect)
+		return
+	}
+
+	// 4. Set HttpOnly Cookie
+	setRefreshTokenCookie(w, refreshToken, config.Cfg.RefreshTokenExpiry)
+
+	// 5. Redirect to Frontend Callback
+	// The frontend will immediately call /api/auth/refresh (which uses the cookie we just set)
+	// to get the access token and user info.
+	redirectURL := fmt.Sprintf("%s/auth/google/callback", config.Cfg.FrontendBaseURL)
 	http.Redirect(w, r, redirectURL, http.StatusTemporaryRedirect)
 }

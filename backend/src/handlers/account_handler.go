@@ -1,3 +1,4 @@
+// backend/src/handlers/account_handler.go
 package handlers
 
 import (
@@ -33,7 +34,6 @@ func (h *UserHandler) DeleteAccountHandler(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	// CORREÇÃO: Apenas verificar a password para contas locais
 	if user.AuthProvider == "local" {
 		if err := user.CheckPassword(req.Password); err != nil {
 			logger.L.Warn("Password mismatch for account deletion", "userID", userID)
@@ -49,31 +49,11 @@ func (h *UserHandler) DeleteAccountHandler(w http.ResponseWriter, r *http.Reques
 		sendJSONError(w, "Failed to delete account", http.StatusInternalServerError)
 		return
 	}
-	committed := false
-	defer func() {
-		if !committed && txDB != nil {
-			rbErr := txDB.Rollback()
-			if rbErr != nil {
-				logger.L.Error("Error rolling back DB transaction for account deletion", "userID", userID, "rollbackError", rbErr)
-			}
-		}
-	}()
+	defer txDB.Rollback()
 
 	if _, err = txDB.Exec("UPDATE system_metrics SET metric_value = metric_value + 1 WHERE metric_name = 'deleted_user_count'"); err != nil {
 		logger.L.Error("Failed to increment deleted user count metric", "userID", userID, "error", err)
 		sendJSONError(w, "Failed to update system metrics", http.StatusInternalServerError)
-		return
-	}
-
-	if _, err = txDB.Exec("DELETE FROM processed_transactions WHERE user_id = ?", userID); err != nil {
-		logger.L.Error("Failed to delete processed transactions for user", "userID", userID, "error", err)
-		sendJSONError(w, "Failed to delete account data (transactions)", http.StatusInternalServerError)
-		return
-	}
-
-	if _, err = txDB.Exec("DELETE FROM sessions WHERE user_id = ?", userID); err != nil {
-		logger.L.Error("Failed to delete sessions for user", "userID", userID, "error", err)
-		sendJSONError(w, "Failed to delete account data (sessions)", http.StatusInternalServerError)
 		return
 	}
 
@@ -88,7 +68,6 @@ func (h *UserHandler) DeleteAccountHandler(w http.ResponseWriter, r *http.Reques
 		sendJSONError(w, "Failed to finalize account deletion", http.StatusInternalServerError)
 		return
 	}
-	committed = true
 
 	logger.L.Info("Account deleted successfully", "userID", userID)
 	w.WriteHeader(http.StatusNoContent)

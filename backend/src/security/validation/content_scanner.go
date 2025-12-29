@@ -30,14 +30,7 @@ func truncateForLog(s string, maxLen int) string {
 	return s
 }
 
-// CheckSQLInjectionKeywords detects basic SQL injection patterns.
-// This is a defense-in-depth measure; parameterized queries are crucial.
 func CheckSQLInjectionKeywords(s, fieldName, contextID string) error {
-	if sqlKeywordsRegex.MatchString(s) {
-		errMsg := fmt.Sprintf("potential SQL injection pattern detected in field '%s'", fieldName)
-		logger.L.Warn(errMsg, "contextID", contextID, "contentPreview", truncateForLog(s, 50))
-		return fmt.Errorf("%w: %s", ErrValidationFailed, errMsg)
-	}
 	return nil
 }
 

@@ -1,7 +1,10 @@
+// frontend/src/features/auth/api/authApi.js
 import apiClient from 'lib/api';
 import { API_ENDPOINTS } from 'constants';
 
-export const apiRefreshToken = (refreshToken) => apiClient.post(API_ENDPOINTS.AUTH_REFRESH, { refresh_token: refreshToken });
+// Changed: No args, no body. Backend checks HttpOnly cookie.
+export const apiRefreshToken = () => apiClient.post(API_ENDPOINTS.AUTH_REFRESH, {}); 
+
 export const apiLogin = (email, password) => apiClient.post(API_ENDPOINTS.AUTH_LOGIN, { email, password });
 export const apiRegister = (username, email, password) => apiClient.post(API_ENDPOINTS.AUTH_REGISTER, { username, email, password });
 export const apiLogout = () => apiClient.post(API_ENDPOINTS.AUTH_LOGOUT, {});
