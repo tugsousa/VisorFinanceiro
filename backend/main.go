@@ -267,6 +267,7 @@ func main() {
 
 				r.Post("/admin/mfa/setup", userHandler.HandleSetupMFA)
 				r.Post("/admin/mfa/activate", userHandler.HandleActivateMFA)
+				r.Post("/admin/mfa/disable", userHandler.HandleDisableMFA)
 
 				// Impersonation protegida
 				r.Post("/admin/users/{userID}/impersonate", userHandler.HandleImpersonateUser)

@@ -6,7 +6,7 @@ import {
 } from '@mui/material';
 import { useMutation } from '@tanstack/react-query';
 import { apiChangePassword, apiDeleteAccount } from 'features/auth/api/authApi';
-import { apiSetupMfa, apiActivateMfa } from '../../admin/api/adminApi'; 
+import { apiSetupMfa, apiActivateMfa, apiDisableMfa } from '../../admin/api/adminApi'; 
 import { AuthContext } from '../../auth/AuthContext';
 import { useNavigate } from 'react-router-dom';
 
@@ -26,12 +26,18 @@ function SettingsPage() {
   const [openDeleteConfirm, setOpenDeleteConfirm] = useState(false);
   const [deleteAccountErrorDialog, setDeleteAccountErrorDialog] = useState('');
 
-  // --- States: MFA (2FA) ---
+  // --- States: MFA (2FA) Setup ---
   const [openMfaModal, setOpenMfaModal] = useState(false);
   const [mfaData, setMfaData] = useState({ secret: '', qr_code: '' });
   const [mfaCode, setMfaCode] = useState('');
   const [mfaError, setMfaError] = useState('');
   const [isMfaLoading, setIsMfaLoading] = useState(false);
+
+  // --- States: MFA Disable/Reset ---
+  const [openDisableMfaModal, setOpenDisableMfaModal] = useState(false);
+  const [mfaDisablePassword, setMfaDisablePassword] = useState('');
+  const [mfaDisableError, setMfaDisableError] = useState('');
+  const [isMfaDisabling, setIsMfaDisabling] = useState(false);
   
   // Regex for strong password
   const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[\W_]).{8,}$/;
@@ -65,7 +71,7 @@ function SettingsPage() {
     }
   });
 
-  // --- Handlers: MFA ---
+  // --- Handlers: MFA Setup ---
   const handleStartMfaSetup = async () => {
     setIsMfaLoading(true);
     try {
@@ -105,6 +111,43 @@ function SettingsPage() {
     }
   };
 
+  // --- Handlers: MFA Disable/Reset ---
+  const handleDisableMfa = async () => {
+    setMfaDisableError('');
+    setIsMfaDisabling(true);
+
+    try {
+        // Ensure CSRF token is fresh before sensitive action
+        await fetchCsrfToken(true);
+
+        // Determine payload based on auth provider
+        // If Google user, password is null/ignored by backend logic for this flow, 
+        // but we send what we have.
+        const passwordToSend = user.auth_provider === 'local' ? mfaDisablePassword : null;
+
+        await apiDisableMfa(passwordToSend);
+
+        // 1. Update Local State to reflect MFA is off
+        if (updateUserLocal) updateUserLocal({ mfa_enabled: false });
+
+        // 2. Close Disable Modal & Cleanup
+        setOpenDisableMfaModal(false);
+        setMfaDisablePassword('');
+
+        // 3. Immediately trigger Setup Flow to force re-secure
+        await handleStartMfaSetup();
+
+    } catch (err) {
+        if (err.response?.status === 403) {
+            setMfaDisableError("Password incorreta.");
+        } else {
+            setMfaDisableError(err.response?.data?.error || "Erro ao desativar MFA.");
+        }
+    } finally {
+        setIsMfaDisabling(false);
+    }
+  };
+
   // --- Handlers: Password & Delete ---
   const handleSubmitChangePassword = async (e) => {
     e.preventDefault();
@@ -113,7 +156,6 @@ function SettingsPage() {
 
     if (newPassword !== confirmNewPassword) return setChangePasswordError("Passwords não coincidem.");
     
-    // UPDATED VALIDATION LOGIC
     if (!passwordRegex.test(newPassword)) {
         return setChangePasswordError("A senha deve ter no mínimo 8 caracteres, 1 maiúscula, 1 minúscula, 1 número e 1 símbolo.");
     }
@@ -140,11 +182,19 @@ function SettingsPage() {
             <Box sx={{ p: 3, mb: 4, bgcolor: 'background.paper', border: 1, borderColor: 'divider', borderRadius: 1 }}>
                 <Typography variant="h6" gutterBottom>Segurança de Administrador (2FA)</Typography>
                 
-                {/* Aqui verificamos a flag mfa_enabled que vem do login */}
                 {user.mfa_enabled ? (
-                    <Alert severity="success">
-                        A autenticação de dois fatores (MFA) está <strong>Ativa</strong>.
-                    </Alert>
+                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 2 }}>
+                        <Alert severity="success" sx={{ flexGrow: 1 }}>
+                            A autenticação de dois fatores (MFA) está <strong>Ativa</strong>.
+                        </Alert>
+                        <Button 
+                            variant="outlined" 
+                            color="warning" 
+                            onClick={() => setOpenDisableMfaModal(true)}
+                        >
+                            Redefinir 2FA
+                        </Button>
+                    </Box>
                 ) : (
                     <>
                         <Alert severity="warning" sx={{ mb: 2 }}>
@@ -185,7 +235,7 @@ function SettingsPage() {
         <Button variant="outlined" color="error" onClick={() => setOpenDeleteConfirm(true)}>Eliminar conta</Button>
       </Box>
 
-      {/* --- Dialogs --- */}
+      {/* --- Dialog: Delete Account --- */}
       <Dialog open={openDeleteConfirm} onClose={() => setOpenDeleteConfirm(false)}>
         <DialogTitle>Eliminar Conta</DialogTitle>
         <DialogContent>
@@ -201,6 +251,7 @@ function SettingsPage() {
         </DialogActions>
       </Dialog>
 
+      {/* --- Dialog: MFA Setup --- */}
       <Dialog open={openMfaModal} onClose={() => setOpenMfaModal(false)}>
         <DialogTitle>Configurar 2FA</DialogTitle>
         <DialogContent sx={{ textAlign: 'center' }}>
@@ -215,6 +266,44 @@ function SettingsPage() {
             <Button onClick={handleActivateMfa} variant="contained" disabled={!mfaCode}>Ativar</Button>
         </DialogActions>
       </Dialog>
+
+      {/* --- Dialog: MFA Reset/Disable Confirmation --- */}
+      <Dialog open={openDisableMfaModal} onClose={() => setOpenDisableMfaModal(false)}>
+        <DialogTitle>Redefinir 2FA</DialogTitle>
+        <DialogContent>
+            <DialogContentText sx={{ mb: 2 }}>
+                Tem a certeza que deseja redefinir a sua configuração de 2FA? 
+                Isto irá desativar a proteção atual e pedir-lhe para configurar um novo dispositivo imediatamente.
+            </DialogContentText>
+            
+            {/* Show Password Input only for Local Users */}
+            {user.auth_provider === 'local' && (
+                <TextField 
+                    autoFocus 
+                    margin="dense" 
+                    label="Confirme a sua senha" 
+                    type="password" 
+                    fullWidth 
+                    value={mfaDisablePassword} 
+                    onChange={e => setMfaDisablePassword(e.target.value)} 
+                />
+            )}
+            
+            {mfaDisableError && <Alert severity="error" sx={{ mt: 2 }}>{mfaDisableError}</Alert>}
+        </DialogContent>
+        <DialogActions>
+            <Button onClick={() => setOpenDisableMfaModal(false)} disabled={isMfaDisabling}>Cancelar</Button>
+            <Button 
+                onClick={handleDisableMfa} 
+                color="warning" 
+                variant="contained" 
+                disabled={isMfaDisabling || (user.auth_provider === 'local' && !mfaDisablePassword)}
+            >
+                {isMfaDisabling ? <CircularProgress size={24} color="inherit" /> : "Redefinir e Reconfigurar"}
+            </Button>
+        </DialogActions>
+      </Dialog>
+
     </Container>
   );
 }
