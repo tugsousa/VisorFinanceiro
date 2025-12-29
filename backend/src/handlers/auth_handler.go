@@ -416,14 +416,34 @@ func (h *UserHandler) RefreshTokenHandler(w http.ResponseWriter, r *http.Request
 		return
 	}
 
+	// --- FETCH USER DATA TO RETURN ---
+	// We need to return the user object so the frontend can restore state (e.g. after Google OAuth redirect)
+	user, err := model.GetUserByID(database.DB, oldSession.UserID)
+	if err != nil {
+		logger.L.Error("Failed to retrieve user during refresh", "userID", oldSession.UserID, "error", err)
+		sendJSONError(w, "Failed to retrieve user details", http.StatusInternalServerError)
+		return
+	}
+	user.IsAdmin = isAdmin(user.Email)
+
+	userData := map[string]interface{}{
+		"id":            user.ID,
+		"username":      user.Username,
+		"email":         user.Email,
+		"auth_provider": user.AuthProvider,
+		"is_admin":      user.IsAdmin,
+		"mfa_enabled":   user.MfaEnabled,
+	}
+
 	// --- ROTATION: Set NEW Refresh Token in Cookie ---
 	setRefreshTokenCookie(w, newRefreshToken, config.Cfg.RefreshTokenExpiry)
 
 	logger.L.Info("Token refreshed successfully", "userID", oldSession.UserID)
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{
+	json.NewEncoder(w).Encode(map[string]interface{}{
 		"access_token": newAccessToken,
+		"user":         userData,
 		// No refresh token in body
 	})
 }
