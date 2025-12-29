@@ -249,32 +249,72 @@ func (s *uploadServiceImpl) GetDividendMetrics(userID int64, portfolioID int64) 
 }
 func (s *uploadServiceImpl) RefreshDailySnapshot(userID int64, portfolioID int64) error {
 	const SnapshotThrottleMinutes = 15
-	today := time.Now().Format("2006-01-02")
 
-	// 1. Idempotency Check: Check if a snapshot for today exists and is fresh
-	var lastUpdate time.Time
+	// 1. GAP DETECTION & BACKFILL
+	// Check the date of the last successful snapshot to see if we have missing history.
+	var lastUpdateStr string
+	var lastUpdateAt time.Time
+
 	err := database.DB.QueryRow(`
-		SELECT updated_at 
+		SELECT date, updated_at 
 		FROM portfolio_snapshots 
-		WHERE user_id = ? AND portfolio_id = ? AND date = ?`,
-		userID, portfolioID, today,
-	).Scan(&lastUpdate)
+		WHERE user_id = ? AND portfolio_id = ? 
+		ORDER BY date DESC LIMIT 1`,
+		userID, portfolioID,
+	).Scan(&lastUpdateStr, &lastUpdateAt)
 
-	if err == nil {
-		// Record exists, check freshness
-		if time.Since(lastUpdate) < SnapshotThrottleMinutes*time.Minute {
-			logger.L.Info("Snapshot refresh skipped (throttled)", "userID", userID, "portfolioID", portfolioID)
-			return nil // Return success, no work needed
-		}
-	} else if err != sql.ErrNoRows {
-		// Real DB error
-		return fmt.Errorf("failed to check existing snapshot: %w", err)
+	if err != nil && err != sql.ErrNoRows {
+		return fmt.Errorf("failed to fetch last snapshot date: %w", err)
 	}
 
-	logger.L.Info("Calculating daily snapshot", "userID", userID, "portfolioID", portfolioID)
+	shouldRebuild := false
+	if err == sql.ErrNoRows {
+		// No snapshots exist at all -> Full rebuild needed
+		shouldRebuild = true
+	} else {
+		// Parse the last snapshot date (YYYY-MM-DD)
+		lastDate, parseErr := time.Parse("2006-01-02", lastUpdateStr)
+		if parseErr == nil {
+			// Calculate the gap in days between the last snapshot and today (UTC)
+			// Truncate today to midnight for fair comparison
+			today := time.Now().Truncate(24 * time.Hour)
+			lastDate = lastDate.Truncate(24 * time.Hour)
 
-	// 2. Fetch Current Holdings & Calculate Market Value (Equity)
-	// This method already fetches live prices from PriceService
+			daysDiff := today.Sub(lastDate).Hours() / 24
+
+			// If the gap is >= 2 days (meaning at least one full day is missing between Last and Today),
+			// we trigger the backfill/rebuild process to fill the chart gaps.
+			if daysDiff >= 2.0 {
+				logger.L.Info("Snapshot gap detected, triggering history backfill",
+					"userID", userID,
+					"lastDate", lastUpdateStr,
+					"gapDays", daysDiff)
+				shouldRebuild = true
+			}
+		}
+	}
+
+	if shouldRebuild {
+		// RebuildUserHistory iterates from the first transaction to today,
+		// fetching historical prices and generating daily snapshots for all missing days.
+		return s.RebuildUserHistory(userID, portfolioID)
+	}
+
+	// 2. LIVE UPDATE (Standard "Today" Refresh)
+	// If we are here, the history is up to date (gap < 2 days).
+	// We only need to refresh "Today's" value with the latest live prices.
+
+	// Check throttle to prevent spamming live updates
+	if time.Since(lastUpdateAt) < SnapshotThrottleMinutes*time.Minute {
+		logger.L.Info("Snapshot refresh skipped (throttled)", "userID", userID, "portfolioID", portfolioID)
+		return nil
+	}
+
+	logger.L.Info("Calculating daily live snapshot", "userID", userID, "portfolioID", portfolioID)
+	todayStr := time.Now().Format("2006-01-02")
+
+	// Fetch Current Holdings & Calculate Market Value (Equity)
+	// This method fetches live prices from PriceService
 	holdings, err := s.GetCurrentHoldingsWithValue(userID, portfolioID)
 	if err != nil {
 		return fmt.Errorf("failed to calculate current holdings: %w", err)
@@ -285,8 +325,7 @@ func (s *uploadServiceImpl) RefreshDailySnapshot(userID int64, portfolioID int64
 		totalEquity += h.MarketValueEUR
 	}
 
-	// 3. Retrieve Cash Balance & Cumulative Flow from the *latest* available snapshot
-	// (Since we are only updating market prices, cash/deposits remain static from the last CSV upload)
+	// Retrieve Cash Balance & Cumulative Flow from the *latest* available snapshot
 	var cashBalance, cumulativeNetCashflow float64
 
 	// We look for the most recent snapshot (could be today's stale one, or yesterday's)
@@ -300,7 +339,7 @@ func (s *uploadServiceImpl) RefreshDailySnapshot(userID int64, portfolioID int64
 
 	if err != nil {
 		if err == sql.ErrNoRows {
-			// No history exists at all, assume 0
+			// Should be handled by shouldRebuild logic above, but safety fallback
 			cashBalance = 0
 			cumulativeNetCashflow = 0
 		} else {
@@ -311,8 +350,7 @@ func (s *uploadServiceImpl) RefreshDailySnapshot(userID int64, portfolioID int64
 	// Add Cash to Equity for the Total Portfolio Value
 	totalEquity += cashBalance
 
-	// 4. Upsert into Database
-	// We use ON CONFLICT to handle the "Update if exists" logic
+	// Upsert into Database
 	query := `
 		INSERT INTO portfolio_snapshots (user_id, portfolio_id, date, total_equity, cumulative_net_cashflow, cash_balance, updated_at)
 		VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
@@ -323,7 +361,7 @@ func (s *uploadServiceImpl) RefreshDailySnapshot(userID int64, portfolioID int64
 			updated_at = CURRENT_TIMESTAMP
 	`
 
-	_, err = database.DB.Exec(query, userID, portfolioID, today, totalEquity, cumulativeNetCashflow, cashBalance)
+	_, err = database.DB.Exec(query, userID, portfolioID, todayStr, totalEquity, cumulativeNetCashflow, cashBalance)
 	if err != nil {
 		return fmt.Errorf("failed to upsert snapshot: %w", err)
 	}
@@ -331,7 +369,7 @@ func (s *uploadServiceImpl) RefreshDailySnapshot(userID int64, portfolioID int64
 	// Invalidate cache so the chart updates immediately
 	s.InvalidateUserCache(userID, portfolioID)
 
-	logger.L.Info("Daily snapshot updated successfully", "userID", userID, "equity", totalEquity)
+	logger.L.Info("Daily live snapshot updated successfully", "userID", userID, "equity", totalEquity)
 	return nil
 }
 
