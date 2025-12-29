@@ -4,8 +4,18 @@ import svgr from 'vite-plugin-svgr';
 import path from 'path';
 
 export default defineConfig(({ mode }) => {
-  const env = loadEnv(mode, process.cwd(), '');
+  // Onde o Vite vai procurar o ficheiro .env. 
+  // '..' significa "uma pasta acima", ou seja, a raiz do projeto.
+  const envDir = path.resolve(__dirname, '..'); 
+
+  // Carrega as variáveis da pasta raiz
+  const env = loadEnv(mode, envDir, '');
+
   return {
+    // --- ADICIONA ESTA LINHA ---
+    envDir: envDir, 
+    // ---------------------------
+    
     plugins: [
       react(), 
       svgr({ 
@@ -15,7 +25,6 @@ export default defineConfig(({ mode }) => {
     resolve: {
       alias: {
         src: path.resolve(__dirname, './src'),
-        // Explicit aliases to match your current jsconfig/imports
         features: path.resolve(__dirname, './src/features'),
         lib: path.resolve(__dirname, './src/lib'),
         constants: path.resolve(__dirname, './src/constants.js'),
@@ -28,6 +37,7 @@ export default defineConfig(({ mode }) => {
       open: true,
       proxy: {
         '/api': {
+          // Agora ele consegue ler a variável que está na pasta raiz!
           target: env.REACT_APP_API_BASE_URL || 'http://localhost:8080',
           changeOrigin: true,
           secure: false,
@@ -35,10 +45,9 @@ export default defineConfig(({ mode }) => {
       }
     },
     build: {
-      outDir: 'build', // Keeps the output folder name consistent with CRA
+      outDir: 'build',
       sourcemap: true,
     },
-    // This allows you to keep using process.env.REACT_APP_... in your code
     define: {
       'process.env': env
     }
