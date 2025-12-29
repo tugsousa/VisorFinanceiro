@@ -513,13 +513,11 @@ func (s *uploadServiceImpl) RebuildUserHistory(userID int64, portfolioID int64) 
 		}
 	}
 
-	// --- CORREÇÃO: Forçar a resolução de Tickers (incluindo Overrides) antes de ler a BD ---
-	// Isto garante que o JEPQ.L (IE000U9J8HX9) é gravado na tabela isin_ticker_map
+	// ... (Price fetching logic remains the same) ...
 	logger.L.Info("Pre-resolving ISINs to Tickers...", "count", len(isinList))
 	_, err = s.priceService.GetCurrentPrices(isinList)
 	if err != nil {
 		logger.L.Warn("Error resolving current prices during history rebuild", "error", err)
-		// Não retornamos erro aqui para tentar continuar com o que já estiver na BD
 	}
 
 	mappings, _ := model.GetMappingsByISINs(database.DB, isinList)
@@ -530,11 +528,10 @@ func (s *uploadServiceImpl) RebuildUserHistory(userID int64, portfolioID int64) 
 	currencyRates := make(map[string]PriceMap)
 	var dataMu sync.Mutex
 
-	// 1. Fetch Asset Prices
+	// 1. Fetch Asset Prices (Existing logic)
 	for isin := range uniqueISINs {
 		mapEntry, ok := mappings[isin]
 		if !ok || mapEntry.TickerSymbol == "" {
-			// Agora isto só deve acontecer se o ativo for realmente inválido/desconhecido
 			logger.L.Warn("No ticker mapping found for ISIN", "isin", isin)
 			continue
 		}
@@ -548,14 +545,6 @@ func (s *uploadServiceImpl) RebuildUserHistory(userID int64, portfolioID int64) 
 				dataMu.Lock()
 				tickerPrices[i] = prices
 				tickerCurrencies[i] = realCurrency
-
-				// Log de debug para confirmar sucesso
-				if len(prices) > 0 {
-					logger.L.Info("Fetched historical prices", "ticker", t, "points", len(prices))
-				} else {
-					logger.L.Warn("Fetched historical prices but got 0 points", "ticker", t)
-				}
-
 				if realCurrency != "EUR" && realCurrency != "" {
 					uniqueCurrencies[realCurrency] = true
 				}
@@ -567,7 +556,7 @@ func (s *uploadServiceImpl) RebuildUserHistory(userID int64, portfolioID int64) 
 	}
 	wg.Wait()
 
-	// 2. Fetch Currency Rates
+	// 2. Fetch Currency Rates (Existing logic)
 	for curr := range uniqueCurrencies {
 		wg.Add(1)
 		go func(c string) {
@@ -597,7 +586,7 @@ func (s *uploadServiceImpl) RebuildUserHistory(userID int64, portfolioID int64) 
 
 	holdings := make(map[string]AssetInfo)
 	cumulativeNetInvested := 0.0
-	currentCash := 0.0
+	currentCash := 0.0 // Tracks Derived Cash Balance
 	lastKnownPrices := make(map[string]float64)
 
 	type Snapshot struct {
@@ -619,10 +608,50 @@ func (s *uploadServiceImpl) RebuildUserHistory(userID int64, portfolioID int64) 
 		for txIndex < totalTxs && txs[txIndex].Date == txDateStr {
 			tx := txs[txIndex]
 
+			// --- 1. Net Invested Logic (Deposits/Withdrawals) ---
 			if tx.TransactionType == "CASH" {
 				cumulativeNetInvested += tx.AmountEUR
 			}
 
+			// --- 2. Derived Cash Balance Logic (The Fix) ---
+			var cashImpact float64
+
+			// Logic specific to IBKR Trades where Amount is Gross Value (not Cash Flow) and Commission is separate
+			if tx.Source == "ibkr" && (tx.TransactionType == "STOCK" || tx.TransactionType == "OPTION" || tx.TransactionType == "ETF" || tx.TransactionType == "WARRANT") {
+				tradeVal := math.Abs(tx.AmountEUR)
+				cost := math.Abs(tx.Commission) // Commission is already converted to EUR in DB
+
+				if tx.BuySell == "BUY" {
+					cashImpact = -tradeVal - cost // Cash Outflow
+				} else { // SELL
+					cashImpact = tradeVal - cost // Cash Inflow (Net of commission)
+				}
+			} else {
+				// Standard Logic (DeGiro, etc.): AmountEUR is the Net Cash Flow (Signed)
+				// Includes Deposits (+), Withdrawals (-), Fees (-), Dividends (+)
+				// DeGiro Trade Amounts are typically Net (include fees) in the source Amount column
+				cashImpact = tx.AmountEUR
+			}
+
+			currentCash += cashImpact
+
+			shouldTrustBalance := true
+			if tx.Source == "degiro" {
+				if tx.TransactionType != "CASH" {
+					shouldTrustBalance = false
+				}
+			}
+
+			// For other brokers (like IBKR) or valid DeGiro CASH lines, we sync with the broker's report.
+			if shouldTrustBalance && tx.BalanceCurrency == "EUR" && tx.CashBalance != 0 {
+				currentCash = tx.CashBalance
+			}
+
+			if shouldTrustBalance && tx.BalanceCurrency == "EUR" && tx.CashBalance != 0 {
+				currentCash = tx.CashBalance
+			}
+
+			// --- 3. Asset Holdings Logic ---
 			if tx.TransactionType == "STOCK" || tx.TransactionType == "ETF" {
 				info := holdings[tx.ISIN]
 				info.Name = tx.ProductName
@@ -637,10 +666,6 @@ func (s *uploadServiceImpl) RebuildUserHistory(userID int64, portfolioID int64) 
 					info.Quantity -= float64(tx.Quantity)
 				}
 				holdings[tx.ISIN] = info
-			}
-
-			if tx.BalanceCurrency == "EUR" {
-				currentCash = tx.CashBalance
 			}
 			txIndex++
 		}
@@ -658,7 +683,6 @@ func (s *uploadServiceImpl) RebuildUserHistory(userID int64, portfolioID int64) 
 			}
 
 			if price == 0 && d.Weekday() != time.Saturday && d.Weekday() != time.Sunday {
-				// Log reduzido para não fazer spam, apenas para o ISIN problemático se persistir
 				if isin == "IE000U9J8HX9" {
 					logger.L.Debug("Still missing price for JEPQ", "date", dateStr)
 				}
@@ -696,13 +720,13 @@ func (s *uploadServiceImpl) RebuildUserHistory(userID int64, portfolioID int64) 
 
 		snapshots = append(snapshots, Snapshot{
 			Date:        dateStr,
-			Equity:      marketValueAssets + currentCash,
+			Equity:      marketValueAssets + currentCash, // Total Equity includes Derived Cash
 			NetInvested: cumulativeNetInvested,
 			Cash:        currentCash,
 		})
 	}
 
-	// Batch Insert Snapshots
+	// Batch Insert Snapshots (Existing logic)
 	if len(snapshots) > 0 {
 		_, _ = database.DB.Exec("DELETE FROM portfolio_snapshots WHERE user_id = ? AND portfolio_id = ?", userID, portfolioID)
 
