@@ -4,6 +4,19 @@ import { API_ENDPOINTS } from '../constants';
 import logger from './utils/logger';
 
 let authRefresher = null;
+let isRefreshing = false;
+let failedQueue = [];
+
+const processQueue = (error, token = null) => {
+    failedQueue.forEach(prom => {
+        if (error) {
+            prom.reject(error);
+        } else {
+            prom.resolve(token);
+        }
+    });
+    failedQueue = [];
+};
 
 export const setAuthRefresher = (refresher) => {
   authRefresher = refresher;
@@ -69,24 +82,46 @@ apiClient.interceptors.response.use(
   (response) => response,
   async (error) => {
     const originalRequest = error.config;
+
     if (error.response?.status === 401 && !originalRequest._retry) {
+      if (isRefreshing) {
+        // If already refreshing, queue this request
+        return new Promise((resolve, reject) => {
+          failedQueue.push({ resolve, reject });
+        }).then(token => {
+          originalRequest.headers['Authorization'] = 'Bearer ' + token;
+          return apiClient(originalRequest);
+        }).catch(err => {
+          return Promise.reject(err);
+        });
+      }
+
       originalRequest._retry = true;
-      if (authRefresher) {
-        try {
+      isRefreshing = true;
+
+      try {
+        if (authRefresher) {
           const newAccessToken = await authRefresher();
+          // Process queue with new token
+          processQueue(null, newAccessToken);
+          
           originalRequest.headers['Authorization'] = `Bearer ${newAccessToken}`;
           return apiClient(originalRequest);
-        } catch (refreshError) {
-          return Promise.reject(refreshError);
         }
+      } catch (refreshError) {
+        processQueue(refreshError, null);
+        return Promise.reject(refreshError);
+      } finally {
+        isRefreshing = false;
       }
     }
+
     return Promise.reject(error);
   }
 );
 
-// --- Auth Exports ---
-export const apiRefreshToken = (refreshToken) => apiClient.post(API_ENDPOINTS.AUTH_REFRESH, { refresh_token: refreshToken });
+// --- Auth Exports --- (Keep existing exports)
+export const apiRefreshToken = () => apiClient.post(API_ENDPOINTS.AUTH_REFRESH, {}); // Updated signature
 export const apiLogin = (email, password) => apiClient.post(API_ENDPOINTS.AUTH_LOGIN, { email, password });
 export const apiRegister = (username, email, password) => apiClient.post(API_ENDPOINTS.AUTH_REGISTER, { username, email, password });
 export const apiLogout = () => apiClient.post(API_ENDPOINTS.AUTH_LOGOUT, {});
@@ -102,46 +137,33 @@ export const apiListPortfolios = () => apiClient.get('/api/portfolios');
 export const apiCreatePortfolio = (name, description) => apiClient.post('/api/portfolios', { name, description });
 export const apiDeletePortfolio = (id) => apiClient.delete(`/api/portfolios/${id}`);
 
-// --- Data Operations (Ensure this section exists!) ---
+// --- Data Operations ---
 export const apiUploadFile = (formData, onUploadProgress) => 
     apiClient.post(API_ENDPOINTS.UPLOAD, formData, { onUploadProgress });
-
 export const apiDeleteTransactions = (criteria) => 
     apiClient.delete(API_ENDPOINTS.DELETE_TRANSACTIONS, { data: criteria });
-
 export const apiAddManualTransaction = (transactionData) => 
     apiClient.post('/api/transactions/manual', transactionData);
-
 export const apiFetchRealizedGainsData = (portfolioId) => 
     apiClient.get(API_ENDPOINTS.REALIZEDGAINS_DATA, { params: { portfolio_id: portfolioId } });
-
 export const apiFetchProcessedTransactions = (portfolioId) => 
     apiClient.get(API_ENDPOINTS.PROCESSED_TRANSACTIONS, { params: { portfolio_id: portfolioId } });
-
 export const apiFetchStockHoldings = (portfolioId) => 
     apiClient.get(API_ENDPOINTS.STOCK_HOLDINGS, { params: { portfolio_id: portfolioId } });
-
 export const apiFetchCurrentHoldingsValue = (portfolioId) => 
     apiClient.get(API_ENDPOINTS.CURRENT_HOLDINGS_VALUE, { params: { portfolio_id: portfolioId } });
-
 export const apiFetchOptionHoldings = (portfolioId) => 
     apiClient.get(API_ENDPOINTS.OPTION_HOLDINGS, { params: { portfolio_id: portfolioId } });
-
 export const apiFetchStockSales = (portfolioId) => 
     apiClient.get(API_ENDPOINTS.STOCK_SALES, { params: { portfolio_id: portfolioId } });
-
 export const apiFetchOptionSales = (portfolioId) => 
     apiClient.get(API_ENDPOINTS.OPTION_SALES, { params: { portfolio_id: portfolioId } });
-
 export const apiFetchDividendTaxSummary = (portfolioId) => 
     apiClient.get(API_ENDPOINTS.DIVIDEND_TAX_SUMMARY, { params: { portfolio_id: portfolioId } });
-
 export const apiFetchDividendTransactions = (portfolioId) => 
     apiClient.get(API_ENDPOINTS.DIVIDEND_TRANSACTIONS, { params: { portfolio_id: portfolioId } });
-
 export const apiFetchFees = (portfolioId) => 
     apiClient.get(API_ENDPOINTS.FEES_DATA, { params: { portfolio_id: portfolioId } });
-
 export const apiFetchHistoricalChartData = (portfolioId) => 
     apiClient.get('/api/history/chart', { params: { portfolio_id: portfolioId } });
 

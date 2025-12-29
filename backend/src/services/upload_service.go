@@ -234,9 +234,9 @@ func (s *uploadServiceImpl) GetDividendMetrics(userID int64, portfolioID int64) 
 	}
 
 	result := &models.DividendMetricsResult{
-		TotalDividendsTTM:   utils.RoundFloat(totalDividendsTTM, 2),
-		PortfolioYield:      utils.RoundFloat(portfolioYield, 2),
-		YieldOnCost:         utils.RoundFloat(yieldOnCost, 2),
+		TotalDividendsTTM:   totalDividendsTTM,
+		PortfolioYield:      portfolioYield,
+		YieldOnCost:         yieldOnCost,
 		ProjectionByMonth:   monthlyProjection,
 		ProjectionBreakdown: breakdownMap,
 		LastUpdated:         now.Format(time.RFC3339),

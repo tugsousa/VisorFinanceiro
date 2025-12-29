@@ -775,7 +775,6 @@ func (h *UserHandler) HandleImpersonateUser(w http.ResponseWriter, r *http.Reque
 
 	// 6. Validar o código MFA
 	if !h.mfaService.ValidateToken(adminUser.MfaSecret, req.MfaCode) {
-		// Regista tentativa falhada (audit log seria bom aqui)
 		logger.L.Warn("Failed MFA attempt for impersonation", "adminID", adminID)
 		sendJSONError(w, "Código MFA inválido", http.StatusUnauthorized)
 		return
@@ -795,7 +794,7 @@ func (h *UserHandler) HandleImpersonateUser(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	// 2. Gerar Refresh Token (Necessário para criar a sessão válida)
+	// 2. Gerar Refresh Token
 	refreshToken, err := h.authService.GenerateRefreshToken()
 	if err != nil {
 		logger.L.Error("Falha ao gerar refresh token de impersonation", "error", err)
@@ -803,8 +802,7 @@ func (h *UserHandler) HandleImpersonateUser(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	// 3. CRIAR A SESSÃO NA BASE DE DADOS (A correção crítica)
-	// O middleware verifica se esta sessão existe. Se não existir, dá 401.
+	// 3. CRIAR A SESSÃO NA BASE DE DADOS
 	session := &model.Session{
 		UserID:       user.ID,
 		Token:        accessToken,
@@ -812,8 +810,7 @@ func (h *UserHandler) HandleImpersonateUser(w http.ResponseWriter, r *http.Reque
 		UserAgent:    "Admin-Impersonation (" + r.UserAgent() + ")",
 		ClientIP:     r.RemoteAddr,
 		IsBlocked:    false,
-		// Usamos a duração do Refresh Token para a sessão não expirar logo
-		ExpiresAt: time.Now().Add(config.Cfg.RefreshTokenExpiry),
+		ExpiresAt:    time.Now().Add(config.Cfg.RefreshTokenExpiry),
 	}
 
 	if err := model.CreateSession(database.DB, session); err != nil {
@@ -822,10 +819,12 @@ func (h *UserHandler) HandleImpersonateUser(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	// 4. Retornar resposta
+	// 4. SECURITY UPDATE: Set Refresh Cookie for the impersonated session
+	setRefreshTokenCookie(w, refreshToken, config.Cfg.RefreshTokenExpiry)
+
+	// 5. Retornar resposta (sem refresh_token no corpo)
 	response := map[string]interface{}{
-		"access_token":  accessToken,
-		"refresh_token": refreshToken,
+		"access_token": accessToken,
 		"user": map[string]interface{}{
 			"id":            user.ID,
 			"username":      user.Username,

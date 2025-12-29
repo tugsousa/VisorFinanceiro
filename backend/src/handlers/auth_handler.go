@@ -28,6 +28,20 @@ func isAdmin(email string) bool {
 	return false
 }
 
+// Helper to set the Refresh Token Cookie
+func setRefreshTokenCookie(w http.ResponseWriter, refreshToken string, duration time.Duration) {
+	cookie := &http.Cookie{
+		Name:     "refresh_token",
+		Value:    refreshToken,
+		Path:     "/api/auth/refresh",
+		HttpOnly: true,
+		Secure:   config.Cfg.FrontendBaseURL[:5] == "https", // Secure in Prod (HTTPS)
+		SameSite: http.SameSiteLaxMode,
+		MaxAge:   int(duration.Seconds()),
+	}
+	http.SetCookie(w, cookie)
+}
+
 // updateUserLoginInfo updates user's login stats and records the login event.
 func updateUserLoginInfo(userID int64, r *http.Request) {
 	tx, err := database.DB.Begin()
@@ -150,7 +164,7 @@ func (h *UserHandler) RegisterUserHandler(w http.ResponseWriter, r *http.Request
 	}
 	defer tx.Rollback()
 
-	// 1. Create User (This part handles the model logic manually since CreateUser uses DB object)
+	// 1. Create User
 	now := time.Now()
 	query := `
 	INSERT INTO users (username, email, password, auth_provider, is_email_verified, email_verification_token, email_verification_token_expires_at, created_at, updated_at)
@@ -164,7 +178,6 @@ func (h *UserHandler) RegisterUserHandler(w http.ResponseWriter, r *http.Request
 	)
 
 	if err != nil {
-		// Detect Unique Constraint violation (SQLite error 2067 or string match)
 		if strings.Contains(err.Error(), "UNIQUE constraint failed") {
 			if strings.Contains(err.Error(), "users.username") {
 				sendJSONError(w, "Username already exists", http.StatusConflict)
@@ -199,7 +212,6 @@ func (h *UserHandler) RegisterUserHandler(w http.ResponseWriter, r *http.Request
 		sendJSONError(w, "Failed to finalize registration", http.StatusInternalServerError)
 		return
 	}
-	// --- ATOMIC TRANSACTION END ---
 
 	logger.L.Info("User registered, verification email to be sent", "userID", user.ID)
 
@@ -225,7 +237,7 @@ func (h *UserHandler) RegisterUserHandler(w http.ResponseWriter, r *http.Request
 func (h *UserHandler) LoginUserHandler(w http.ResponseWriter, r *http.Request) {
 	logger.L.Debug("Login request received", "remoteAddr", r.RemoteAddr)
 	origin := r.Header.Get("Origin")
-	if origin == "http://localhost:3000" {
+	if origin == "http://localhost:3000" || origin == "https://visorfinanceiro.pt" {
 		w.Header().Set("Access-Control-Allow-Origin", origin)
 		w.Header().Set("Access-Control-Allow-Credentials", "true")
 	}
@@ -327,6 +339,9 @@ func (h *UserHandler) LoginUserHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// --- SECURITY UPDATE: Set Refresh Token in HttpOnly Cookie ---
+	setRefreshTokenCookie(w, refreshToken, config.Cfg.RefreshTokenExpiry)
+
 	logger.L.Info("User login successful, tokens generated", "userID", user.ID)
 
 	userData := map[string]interface{}{
@@ -340,36 +355,34 @@ func (h *UserHandler) LoginUserHandler(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
-		"access_token":  accessToken,
-		"refresh_token": refreshToken,
-		"user":          userData,
+		"access_token": accessToken,
+		// "refresh_token" REMOVED from body
+		"user": userData,
 	})
 }
 
 func (h *UserHandler) RefreshTokenHandler(w http.ResponseWriter, r *http.Request) {
-	var requestBody struct {
-		RefreshToken string `json:"refresh_token"`
-	}
-
-	if err := json.NewDecoder(r.Body).Decode(&requestBody); err != nil {
-		sendJSONError(w, "Invalid request body", http.StatusBadRequest)
+	// --- SECURITY UPDATE: Read Refresh Token from Cookie ---
+	cookie, err := r.Cookie("refresh_token")
+	if err != nil {
+		logger.L.Warn("Refresh request missing cookie", "error", err)
+		sendJSONError(w, "Refresh token cookie required", http.StatusUnauthorized)
 		return
 	}
+	refreshTokenStr := cookie.Value
 
-	if requestBody.RefreshToken == "" {
-		sendJSONError(w, "Refresh token is required", http.StatusBadRequest)
-		return
-	}
-
-	oldSession, err := model.GetSessionByRefreshToken(database.DB, requestBody.RefreshToken)
+	oldSession, err := model.GetSessionByRefreshToken(database.DB, refreshTokenStr)
 	if err != nil {
 		logger.L.Warn("Refresh token lookup failed or token invalid/expired", "error", err)
+		// Clear invalid cookie
+		http.SetCookie(w, &http.Cookie{Name: "refresh_token", Value: "", Path: "/api/auth/refresh", MaxAge: -1})
 		sendJSONError(w, "Invalid or expired refresh token", http.StatusUnauthorized)
 		return
 	}
 
-	if err := model.DeleteSessionByRefreshToken(database.DB, requestBody.RefreshToken); err != nil {
-		logger.L.Error("Failed to delete old session during refresh", "refreshTokenPrefix", requestBody.RefreshToken[:min(10, len(requestBody.RefreshToken))], "error", err)
+	// Delete old session
+	if err := model.DeleteSessionByRefreshToken(database.DB, refreshTokenStr); err != nil {
+		logger.L.Error("Failed to delete old session during refresh", "error", err)
 	}
 
 	userIDStr := fmt.Sprintf("%d", oldSession.UserID)
@@ -403,19 +416,22 @@ func (h *UserHandler) RefreshTokenHandler(w http.ResponseWriter, r *http.Request
 		return
 	}
 
+	// --- ROTATION: Set NEW Refresh Token in Cookie ---
+	setRefreshTokenCookie(w, newRefreshToken, config.Cfg.RefreshTokenExpiry)
+
 	logger.L.Info("Token refreshed successfully", "userID", oldSession.UserID)
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{
-		"access_token":  newAccessToken,
-		"refresh_token": newRefreshToken,
+		"access_token": newAccessToken,
+		// No refresh token in body
 	})
 }
 
 func (h *UserHandler) LogoutUserHandler(w http.ResponseWriter, r *http.Request) {
 	logger.L.Info("Logout request received")
 	origin := r.Header.Get("Origin")
-	if origin == "http://localhost:3000" {
+	if origin == "http://localhost:3000" || origin == "https://visorfinanceiro.pt" {
 		w.Header().Set("Access-Control-Allow-Origin", origin)
 		w.Header().Set("Access-Control-Allow-Credentials", "true")
 	}
@@ -431,13 +447,19 @@ func (h *UserHandler) LogoutUserHandler(w http.ResponseWriter, r *http.Request) 
 	if tokenString != "" {
 		err := model.DeleteSessionByToken(database.DB, tokenString)
 		if err != nil {
-			logger.L.Warn("Failed to delete session on logout", "tokenPrefix", tokenString[:min(10, len(tokenString))], "error", err)
-		} else {
-			logger.L.Info("Session invalidated successfully on logout", "tokenPrefix", tokenString[:min(10, len(tokenString))])
+			logger.L.Warn("Failed to delete session on logout", "error", err)
 		}
-	} else {
-		logger.L.Warn("Logout attempt with no token in Authorization header")
 	}
+
+	// --- SECURITY UPDATE: Clear Refresh Cookie ---
+	http.SetCookie(w, &http.Cookie{
+		Name:     "refresh_token",
+		Value:    "",
+		Path:     "/api/auth/refresh",
+		HttpOnly: true,
+		Secure:   config.Cfg.FrontendBaseURL[:5] == "https",
+		MaxAge:   -1,
+	})
 
 	w.WriteHeader(http.StatusNoContent)
 }

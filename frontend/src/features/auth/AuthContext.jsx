@@ -17,7 +17,7 @@ export const useAuth = () => {
 export const AuthProvider = ({ children }) => {
     const [user, setUser] = useState(null);
     const [token, setToken] = useState(() => localStorage.getItem('auth_token'));
-    const [refreshTokenState, setRefreshTokenState] = useState(() => localStorage.getItem('refresh_token'));
+    // Removed: refresh_token state and localStorage read
     const [isInitialAuthLoading, setIsInitialAuthLoading] = useState(true);
     const [isAuthActionLoading, setIsAuthActionLoading] = useState(false);
     const [authError, setAuthError] = useState(null);
@@ -78,35 +78,31 @@ export const AuthProvider = ({ children }) => {
         setIsAuthActionLoading(true);
         setAuthError(null);
         try {
-            console.log("🔄 A iniciar impersonation para o ID:", userId);
+            console.log("Starting impersonation for ID:", userId);
             
-            // Dynamic import to avoid cycles
             const { apiImpersonateUser } = require('../admin/api/adminApi');
             
             const response = await apiImpersonateUser(userId, mfaCode);
-            console.log("Resposta do backend:", response.data);
-
             const { access_token, user: userData } = response.data;
 
             if (!access_token) {
-                throw new Error("Erro Crítico: O backend não enviou o access_token.");
+                throw new Error("Critical Error: Backend did not send access_token.");
             }
 
             setUser(userData);
             setToken(access_token);
-            setRefreshTokenState(null); 
             
             localStorage.setItem('auth_token', access_token);
             localStorage.setItem('user', JSON.stringify(userData));
-            localStorage.removeItem('refresh_token');
+            // Removed: localStorage.removeItem('refresh_token');
 
             await fetchCsrfTokenAndUpdateService(true);
             await checkUserData();
             
             return true;
         } catch (err) {
-            const errMsg = err.response?.data?.error || err.message || 'Falha ao impersonar utilizador.';
-            console.error("Erro no impersonate:", errMsg, err);
+            const errMsg = err.response?.data?.error || err.message || 'Impersonation failed.';
+            console.error("Impersonate error:", errMsg, err);
             setAuthError(errMsg);
             throw err;
         } finally {
@@ -118,12 +114,11 @@ export const AuthProvider = ({ children }) => {
         logger.log(`AuthContext: Performing logout. API call: ${apiCall}. Reason: ${reason}`);
         const oldToken = localStorage.getItem('auth_token');
         localStorage.removeItem('auth_token');
-        localStorage.removeItem('refresh_token');
+        // Removed: localStorage.removeItem('refresh_token');
         localStorage.removeItem('user');
         localStorage.removeItem('has_initial_data');
         setUser(null);
         setToken(null);
-        setRefreshTokenState(null);
         setHasInitialData(null);
         setAuthError(null);
         setIsAuthActionLoading(false);
@@ -139,20 +134,15 @@ export const AuthProvider = ({ children }) => {
     }, [fetchCsrfTokenAndUpdateService]);
 
     const refreshToken = useCallback(async () => {
-        const currentRefreshToken = localStorage.getItem('refresh_token');
-        if (!currentRefreshToken) {
-            await performLogout(false, "No refresh token for refresh attempt");
-            return Promise.reject(new Error("No refresh token"));
-        }
-
+        // Changed: We no longer read refresh_token from storage.
+        // We simply call the API. If the HttpOnly cookie is present, it will work.
         try {
-            const response = await apiRefreshToken(currentRefreshToken);
-            const { access_token, refresh_token, user: updatedUser } = response.data;
+            const response = await apiRefreshToken(); 
+            const { access_token, user: updatedUser } = response.data;
 
             setToken(access_token);
-            setRefreshTokenState(refresh_token);
             localStorage.setItem('auth_token', access_token);
-            localStorage.setItem('refresh_token', refresh_token);
+            // Removed: storage of refresh_token
             
             if (updatedUser) {
                 setUser(updatedUser);
@@ -181,8 +171,9 @@ export const AuthProvider = ({ children }) => {
                 setToken(storedToken);
                 try {
                     const parsedUser = JSON.parse(storedUser);
-                    console.log("AuthContext: User restored from storage", parsedUser);
                     setUser(parsedUser);
+                    // Instead of just checking data, we can optionally verify the session
+                    // via checkUserData or a silent refresh if needed.
                     await checkUserData();
                 } catch (e) {
                     performLogout(false, "Corrupted user data in localStorage on init");
@@ -229,15 +220,15 @@ export const AuthProvider = ({ children }) => {
         try {
             if (!getApiServiceCsrfToken()) await fetchCsrfTokenAndUpdateService();
             const response = await apiLogin(email, password);
-            const { access_token, refresh_token, user: userData } = response.data;
+            const { access_token, user: userData } = response.data;
 
-            console.log("AuthContext: Login successful. User data:", userData);
+            console.log("AuthContext: Login successful.");
 
             setUser(userData);
             setToken(access_token);
-            setRefreshTokenState(refresh_token);
+            // Removed: setRefreshTokenState & localStorage.setItem('refresh_token')
+            
             localStorage.setItem('auth_token', access_token);
-            localStorage.setItem('refresh_token', refresh_token);
             localStorage.setItem('user', JSON.stringify(userData));
 
             await fetchCsrfTokenAndUpdateService(true);
@@ -254,36 +245,25 @@ export const AuthProvider = ({ children }) => {
         }
     };
 
-    const loginWithGoogleToken = useCallback(async (appToken, userDataFromBackend, refreshToken = null) => {
+    // Refactored: This function is now simpler as it relies on the backend setting cookies
+    const loginWithGoogleToken = useCallback(async (appToken, userDataFromBackend) => {
         setIsAuthActionLoading(true);
         setCheckingData(true);
         setAuthError(null);
         
         console.log("AuthContext: Google Login. User data:", userDataFromBackend);
 
-        // 1. Update User State
         setUser(userDataFromBackend);
         setToken(appToken);
 
-        // 2. Store Access Token
         localStorage.setItem('auth_token', appToken);
         localStorage.setItem('user', JSON.stringify(userDataFromBackend));
+        // Removed: Refresh token handling (assumed handled by HttpOnly cookie on backend)
 
-        // 3. Handle Refresh Token (Crucial for Session Persistence)
-        if (refreshToken) {
-            setRefreshTokenState(refreshToken);
-            localStorage.setItem('refresh_token', refreshToken);
-        } else {
-            setRefreshTokenState(null);
-            localStorage.removeItem('refresh_token');
-        }
-
-        // 4. Finalize Login
         await checkUserData();
         setIsAuthActionLoading(false);
         setCheckingData(false);
     }, [checkUserData]);
-    // -------------------------------------
 
     const logout = async () => {
         setIsAuthActionLoading(true);
