@@ -234,6 +234,7 @@ func main() {
 			r.Get("/portfolios", pfManagerHandler.ListPortfolios)
 			r.Post("/portfolios", pfManagerHandler.CreatePortfolio)
 			r.Delete("/portfolios/{id}", pfManagerHandler.DeletePortfolio)
+			r.Post("/portfolios/{id}/refresh-snapshot", portfolioHandler.HandleRefreshSnapshot)
 
 			r.Post("/upload", uploadHandler.HandleUpload)
 			r.Get("/realizedgains-data", uploadHandler.HandleGetRealizedGainsData)
