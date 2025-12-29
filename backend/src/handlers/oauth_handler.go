@@ -3,7 +3,6 @@ package handlers
 
 import (
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -99,6 +98,9 @@ func (h *UserHandler) HandleGoogleCallback(w http.ResponseWriter, r *http.Reques
 		}
 		user = newUser
 
+		// Also create default portfolio for new Google users
+		_, _ = database.DB.Exec("INSERT INTO portfolios (user_id, name, description, is_default) VALUES (?, ?, ?, ?)", user.ID, "Portfolio Principal", "Default Portfolio", true)
+
 	} else { // User already exists
 		if user.AuthProvider == "local" || user.Password != "" {
 			logger.L.Warn("Google login attempt for existing local account", "userID", user.ID)
@@ -109,31 +111,9 @@ func (h *UserHandler) HandleGoogleCallback(w http.ResponseWriter, r *http.Reques
 
 	updateUserLoginInfo(user.ID, r)
 
-	isUserAdmin := isAdmin(user.Email)
+	// --- SECURITY UPDATE: Generate Session and Set Cookie ---
 
-	userForFrontend := struct {
-		ID           int64  `json:"id"`
-		Username     string `json:"username"`
-		Email        string `json:"email"`
-		AuthProvider string `json:"auth_provider"`
-		IsAdmin      bool   `json:"is_admin"`
-		MfaEnabled   bool   `json:"mfa_enabled"`
-	}{
-		ID:           user.ID,
-		Username:     user.Username,
-		Email:        user.Email,
-		AuthProvider: user.AuthProvider,
-		IsAdmin:      isUserAdmin,
-		MfaEnabled:   user.MfaEnabled,
-	}
-
-	userJSON, err := json.Marshal(userForFrontend)
-	if err != nil {
-		logger.L.Error("Failed to marshal custom user object for frontend", "error", err)
-		http.Redirect(w, r, "/signin?error=user_data_build_failed", http.StatusTemporaryRedirect)
-		return
-	}
-
+	// 1. Generate Access Token
 	appToken, err := h.authService.GenerateToken(fmt.Sprintf("%d", user.ID))
 	if err != nil {
 		logger.L.Error("Failed to generate app token for Google user", "error", err)
@@ -141,30 +121,36 @@ func (h *UserHandler) HandleGoogleCallback(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	// --- SECURITY FIX: Transfer token via Cookie instead of URL ---
-
-	// Create a JSON object containing both the token and the user data
-	transferData := map[string]string{
-		"token": appToken,
-		"user":  string(userJSON),
+	// 2. Generate Refresh Token
+	refreshToken, err := h.authService.GenerateRefreshToken()
+	if err != nil {
+		logger.L.Error("Failed to generate refresh token for Google user", "error", err)
+		http.Redirect(w, r, "/signin?error=token_generation_failed", http.StatusTemporaryRedirect)
+		return
 	}
-	transferBytes, _ := json.Marshal(transferData)
 
-	// Encode to Base64 to ensure it is cookie-safe
-	encodedData := base64.StdEncoding.EncodeToString(transferBytes)
+	// 3. Create Session in DB
+	session := &model.Session{
+		UserID:       user.ID,
+		Token:        appToken,
+		RefreshToken: refreshToken,
+		UserAgent:    r.UserAgent(),
+		ClientIP:     r.RemoteAddr,
+		IsBlocked:    false,
+		ExpiresAt:    time.Now().Add(config.Cfg.RefreshTokenExpiry),
+	}
+	if err := model.CreateSession(database.DB, session); err != nil {
+		logger.L.Error("Failed to create session for Google user", "error", err)
+		http.Redirect(w, r, "/signin?error=session_creation_failed", http.StatusTemporaryRedirect)
+		return
+	}
 
-	// Set a short-lived cookie (1 minute)
-	http.SetCookie(w, &http.Cookie{
-		Name:     "auth_transfer",
-		Value:    encodedData,
-		Path:     "/",
-		Expires:  time.Now().Add(1 * time.Minute),
-		HttpOnly: false,                                     // Frontend needs to read this!
-		Secure:   config.Cfg.FrontendBaseURL[:5] == "https", // Secure only if prod
-		SameSite: http.SameSiteLaxMode,
-	})
+	// 4. Set HttpOnly Cookie
+	setRefreshTokenCookie(w, refreshToken, config.Cfg.RefreshTokenExpiry)
 
-	// Redirect to frontend without sensitive data in URL
+	// 5. Redirect to Frontend Callback
+	// The frontend will immediately call /api/auth/refresh (which uses the cookie we just set)
+	// to get the access token and user info.
 	redirectURL := fmt.Sprintf("%s/auth/google/callback", config.Cfg.FrontendBaseURL)
 	http.Redirect(w, r, redirectURL, http.StatusTemporaryRedirect)
 }
