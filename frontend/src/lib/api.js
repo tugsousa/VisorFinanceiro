@@ -44,9 +44,13 @@ const apiClient = axios.create({
 
 export const fetchAndSetCsrfToken = async () => {
   try {
-    const response = await apiClient.get(API_ENDPOINTS.AUTH_CSRF);
+    const timestamp = new Date().getTime();
+    const response = await apiClient.get(`${API_ENDPOINTS.AUTH_CSRF}?t=${timestamp}`);
+    
     const newCsrfToken = response.headers['x-csrf-token'] || response.data?.csrfToken;
+    
     if (newCsrfToken) {
+      console.log("Novo CSRF Token obtido:", newCsrfToken.substring(0, 10) + "..."); // Log para debug
       setApiServiceCsrfToken(newCsrfToken);
       return newCsrfToken;
     }
