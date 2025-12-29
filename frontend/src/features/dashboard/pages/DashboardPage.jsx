@@ -10,6 +10,7 @@ import { usePortfolio } from '../../portfolio/PortfolioContext';
 import { useDashboardData } from '../hooks/useDashboardData';
 import { useQuery } from '@tanstack/react-query';
 import { apiFetchHistoricalChartData } from '../../analytics/api/analyticsApi';
+import { apiRefreshPortfolioSnapshot } from '../../portfolio/api/portfolioApi';
 
 // Components
 import DashboardKPISection from '../components/DashboardKPISection';
@@ -56,6 +57,7 @@ const DashboardPage = () => {
     // Auth and Portfolio Hooks
     const { user, hasInitialData, checkingData, token } = useAuth();
     const { activePortfolio, loading: isPortfolioLoading } = usePortfolio();
+    const queryClient = useQueryClient();
 
     // Data Hooks
     const { currentHoldingsValueData, allTransactionsData, isLoading: isDataLoading, isError } = useDashboardData(token);
@@ -231,6 +233,28 @@ const DashboardPage = () => {
     // ######################################################################
     // ### 2. INÍCIO DA LÓGICA DE RETORNO CONDICIONAL ###
     // ######################################################################
+    
+    useEffect(() => {
+        const triggerUpdate = async () => {
+            if (!activePortfolio?.id) return;
+
+            try {
+                // 1. Trigger the backend calculation silently
+                await apiRefreshPortfolioSnapshot(activePortfolio.id);
+                
+                // 2. Refetch the data to show the new values immediately
+                // We invalidate these keys so React Query re-requests them
+                queryClient.invalidateQueries({ queryKey: ['historicalChartData'] });
+                queryClient.invalidateQueries({ queryKey: ['currentHoldingsValue'] });
+                queryClient.invalidateQueries({ queryKey: ['dashboardKPIs'] }); // Or whatever keys affect the KPIs
+            } catch (error) {
+                // Optional: Log error silently, don't disturb the user if the auto-update fails
+                console.warn("Auto-refresh of market data failed", error);
+            }
+        };
+
+        triggerUpdate();
+    }, [activePortfolio?.id, queryClient]);
 
     if (checkingData || isLoading) {
         return <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}><CircularProgress /></Box>;

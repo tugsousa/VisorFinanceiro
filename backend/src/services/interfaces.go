@@ -43,6 +43,7 @@ type UploadService interface {
 
 	GetDividendMetrics(userID int64, portfolioID int64) (*models.DividendMetricsResult, error)
 	RebuildUserHistory(userID int64, portfolioID int64) error
+	RefreshDailySnapshot(userID int64, portfolioID int64) error
 }
 
 type PriceInfo struct {

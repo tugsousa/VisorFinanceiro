@@ -247,6 +247,93 @@ func (s *uploadServiceImpl) GetDividendMetrics(userID int64, portfolioID int64) 
 	s.reportCache.Set(cacheKey, result, DefaultCacheExpiration)
 	return result, nil
 }
+func (s *uploadServiceImpl) RefreshDailySnapshot(userID int64, portfolioID int64) error {
+	const SnapshotThrottleMinutes = 15
+	today := time.Now().Format("2006-01-02")
+
+	// 1. Idempotency Check: Check if a snapshot for today exists and is fresh
+	var lastUpdate time.Time
+	err := database.DB.QueryRow(`
+		SELECT updated_at 
+		FROM portfolio_snapshots 
+		WHERE user_id = ? AND portfolio_id = ? AND date = ?`,
+		userID, portfolioID, today,
+	).Scan(&lastUpdate)
+
+	if err == nil {
+		// Record exists, check freshness
+		if time.Since(lastUpdate) < SnapshotThrottleMinutes*time.Minute {
+			logger.L.Info("Snapshot refresh skipped (throttled)", "userID", userID, "portfolioID", portfolioID)
+			return nil // Return success, no work needed
+		}
+	} else if err != sql.ErrNoRows {
+		// Real DB error
+		return fmt.Errorf("failed to check existing snapshot: %w", err)
+	}
+
+	logger.L.Info("Calculating daily snapshot", "userID", userID, "portfolioID", portfolioID)
+
+	// 2. Fetch Current Holdings & Calculate Market Value (Equity)
+	// This method already fetches live prices from PriceService
+	holdings, err := s.GetCurrentHoldingsWithValue(userID, portfolioID)
+	if err != nil {
+		return fmt.Errorf("failed to calculate current holdings: %w", err)
+	}
+
+	var totalEquity float64 = 0
+	for _, h := range holdings {
+		totalEquity += h.MarketValueEUR
+	}
+
+	// 3. Retrieve Cash Balance & Cumulative Flow from the *latest* available snapshot
+	// (Since we are only updating market prices, cash/deposits remain static from the last CSV upload)
+	var cashBalance, cumulativeNetCashflow float64
+
+	// We look for the most recent snapshot (could be today's stale one, or yesterday's)
+	err = database.DB.QueryRow(`
+		SELECT cash_balance, cumulative_net_cashflow 
+		FROM portfolio_snapshots 
+		WHERE user_id = ? AND portfolio_id = ? 
+		ORDER BY date DESC LIMIT 1`,
+		userID, portfolioID,
+	).Scan(&cashBalance, &cumulativeNetCashflow)
+
+	if err != nil {
+		if err == sql.ErrNoRows {
+			// No history exists at all, assume 0
+			cashBalance = 0
+			cumulativeNetCashflow = 0
+		} else {
+			return fmt.Errorf("failed to fetch previous cash balance: %w", err)
+		}
+	}
+
+	// Add Cash to Equity for the Total Portfolio Value
+	totalEquity += cashBalance
+
+	// 4. Upsert into Database
+	// We use ON CONFLICT to handle the "Update if exists" logic
+	query := `
+		INSERT INTO portfolio_snapshots (user_id, portfolio_id, date, total_equity, cumulative_net_cashflow, cash_balance, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+		ON CONFLICT(user_id, portfolio_id, date) DO UPDATE SET
+			total_equity = excluded.total_equity,
+			cumulative_net_cashflow = excluded.cumulative_net_cashflow,
+			cash_balance = excluded.cash_balance,
+			updated_at = CURRENT_TIMESTAMP
+	`
+
+	_, err = database.DB.Exec(query, userID, portfolioID, today, totalEquity, cumulativeNetCashflow, cashBalance)
+	if err != nil {
+		return fmt.Errorf("failed to upsert snapshot: %w", err)
+	}
+
+	// Invalidate cache so the chart updates immediately
+	s.InvalidateUserCache(userID, portfolioID)
+
+	logger.L.Info("Daily snapshot updated successfully", "userID", userID, "equity", totalEquity)
+	return nil
+}
 
 func (s *uploadServiceImpl) ProcessUpload(fileReader io.Reader, userID int64, portfolioID int64, source, filename string, filesize int64) (*UploadResult, error) {
 	overallStartTime := time.Now()
