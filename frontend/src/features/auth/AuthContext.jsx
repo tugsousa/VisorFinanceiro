@@ -80,7 +80,7 @@ export const AuthProvider = ({ children }) => {
         try {
             console.log("Starting impersonation for ID:", userId);
             
-            const { apiImpersonateUser } = require('../admin/api/adminApi');
+            const { apiImpersonateUser } = await import('../admin/api/adminApi');
             
             const response = await apiImpersonateUser(userId, mfaCode);
             const { access_token, user: userData } = response.data;

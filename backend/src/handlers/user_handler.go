@@ -760,6 +760,10 @@ func (h *UserHandler) HandleImpersonateUser(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
+	// --- FIX: Sanitize Input ---
+	// Trim whitespace to prevent copy-paste errors
+	req.MfaCode = strings.TrimSpace(req.MfaCode)
+
 	// 4. Buscar dados do ADMIN para validar o MFA dele
 	adminUser, err := model.GetUserByID(database.DB, adminID)
 	if err != nil {
@@ -773,9 +777,20 @@ func (h *UserHandler) HandleImpersonateUser(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
+	// --- DEBUG LOGGING ---
+	logger.L.Info("MFA Debug: Impersonation Attempt",
+		"adminID", adminID,
+		"adminUsername", adminUser.Username,
+		"secret_exists", len(adminUser.MfaSecret) > 0,
+		"secret_len", len(adminUser.MfaSecret),
+		"input_code_received", req.MfaCode,
+	)
+
 	// 6. Validar o código MFA
 	if !h.mfaService.ValidateToken(adminUser.MfaSecret, req.MfaCode) {
-		logger.L.Warn("Failed MFA attempt for impersonation", "adminID", adminID)
+		logger.L.Warn("Failed MFA attempt for impersonation: Invalid Code",
+			"adminID", adminID,
+			"input_code", req.MfaCode)
 		sendJSONError(w, "Código MFA inválido", http.StatusUnauthorized)
 		return
 	}
