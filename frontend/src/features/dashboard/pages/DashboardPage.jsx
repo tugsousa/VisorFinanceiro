@@ -1,5 +1,5 @@
 // frontend/src/features/dashboard/pages/DashboardPage.js
-import React, { useMemo } from 'react';
+import React, { useMemo, useEffect } from 'react';
 import { Box, Typography, Card, Alert, Button, CircularProgress, Grid, Tooltip } from '@mui/material';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import ShowChartIcon from '@mui/icons-material/ShowChart';
@@ -8,7 +8,10 @@ import { Link as RouterLink } from 'react-router-dom';
 import { useAuth } from '../../auth/AuthContext';
 import { usePortfolio } from '../../portfolio/PortfolioContext';
 import { useDashboardData } from '../hooks/useDashboardData';
-import { useQuery } from '@tanstack/react-query';
+
+// --- FIXED IMPORT: Added useQueryClient ---
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+
 import { apiFetchHistoricalChartData } from '../../analytics/api/analyticsApi';
 import { apiRefreshPortfolioSnapshot } from '../../portfolio/api/portfolioApi';
 
@@ -19,12 +22,13 @@ import ReturnsPeriodSection from '../components/ReturnsPeriodSection';
 import AllocationSection from '../components/AllocationSection';
 import HeatmapSection from '../components/HeatmapSection';
 
-// Utils
+// Utils & Constants
 import { parseDateRobust } from '../../../lib/utils/dateUtils';
+import { DASHBOARD_REFRESH_INTERVAL_MS } from '../../../constants'; // --- NEW IMPORT ---
 
 // --- FUNÇÃO AUXILIAR: XIRR ---
 const calculateXIRR = (cashFlows, currentValue, guess = 0.1) => {
-    // ... (função calculateXIRR completa) ...
+    // Adiciona o valor final (negativo do valor atual) para fechar o fluxo
     const flows = [...cashFlows, { amount: currentValue, date: new Date() }];
 
     const func = (rate) => {
@@ -50,13 +54,11 @@ const calculateXIRR = (cashFlows, currentValue, guess = 0.1) => {
 };
 
 const DashboardPage = () => {
-    // ######################################################################
-    // ### 1. CHAME TODOS OS HOOKS NO TOPO AQUI, SEMPRE NA MESMA ORDEM ###
-    // ######################################################################
-
     // Auth and Portfolio Hooks
     const { user, hasInitialData, checkingData, token } = useAuth();
     const { activePortfolio, loading: isPortfolioLoading } = usePortfolio();
+    
+    // --- QUERY CLIENT HOOK ---
     const queryClient = useQueryClient();
 
     // Data Hooks
@@ -75,6 +77,43 @@ const DashboardPage = () => {
 
     // Combined Loading State
     const isLoading = isDataLoading || isHistoryLoading || isPortfolioLoading;
+
+    // --- TIME-BASED CONDITIONAL REFRESH LOGIC ---
+    useEffect(() => {
+        const triggerUpdate = async () => {
+            if (!activePortfolio?.id) return;
+
+            const storageKey = `last_snapshot_refresh_${activePortfolio.id}`;
+            const lastRefreshTimestamp = localStorage.getItem(storageKey);
+            const now = Date.now();
+
+            // Check if (Never refreshed) OR (Time elapsed > configured interval)
+            const shouldRefresh = !lastRefreshTimestamp || (now - Number(lastRefreshTimestamp) > DASHBOARD_REFRESH_INTERVAL_MS);
+
+            if (shouldRefresh) {
+                try {
+                    // 1. Trigger the backend calculation
+                    await apiRefreshPortfolioSnapshot(activePortfolio.id);
+                    
+                    // 2. Update the timestamp in local storage
+                    localStorage.setItem(storageKey, now.toString());
+
+                    // 3. Refetch the data to show the new values immediately
+                    queryClient.invalidateQueries({ queryKey: ['historicalChartData'] });
+                    queryClient.invalidateQueries({ queryKey: ['currentHoldingsValue'] });
+                    
+                    // Optional: Invalidate others if KPIs depend on them directly
+                    // queryClient.invalidateQueries({ queryKey: ['dashboardKPIs'] }); 
+
+                } catch (error) {
+                    console.warn("Auto-refresh of market data failed", error);
+                }
+            }
+        };
+
+        triggerUpdate();
+    }, [activePortfolio?.id, queryClient]);
+
 
     // 3. Calcular Métricas
     const metrics = useMemo(() => {
@@ -188,7 +227,7 @@ const DashboardPage = () => {
         }));
     }, [currentHoldingsValueData]);
 
-    // Conteúdo do Tooltip da Evolução (Extraído para manter o JSX limpo)
+    // Conteúdo do Tooltip da Evolução
     const evolutionTooltipContent = (
         <Box sx={{ p: 1 }}>
             <Typography variant="subtitle2" fontWeight="bold" gutterBottom sx={{ color: 'text.primary', fontSize: '0.95rem' }}>
@@ -229,32 +268,6 @@ const DashboardPage = () => {
             </Box>
         </Box>
     );
-
-    // ######################################################################
-    // ### 2. INÍCIO DA LÓGICA DE RETORNO CONDICIONAL ###
-    // ######################################################################
-    
-    useEffect(() => {
-        const triggerUpdate = async () => {
-            if (!activePortfolio?.id) return;
-
-            try {
-                // 1. Trigger the backend calculation silently
-                await apiRefreshPortfolioSnapshot(activePortfolio.id);
-                
-                // 2. Refetch the data to show the new values immediately
-                // We invalidate these keys so React Query re-requests them
-                queryClient.invalidateQueries({ queryKey: ['historicalChartData'] });
-                queryClient.invalidateQueries({ queryKey: ['currentHoldingsValue'] });
-                queryClient.invalidateQueries({ queryKey: ['dashboardKPIs'] }); // Or whatever keys affect the KPIs
-            } catch (error) {
-                // Optional: Log error silently, don't disturb the user if the auto-update fails
-                console.warn("Auto-refresh of market data failed", error);
-            }
-        };
-
-        triggerUpdate();
-    }, [activePortfolio?.id, queryClient]);
 
     if (checkingData || isLoading) {
         return <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}><CircularProgress /></Box>;
