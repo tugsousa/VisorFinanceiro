@@ -50,6 +50,7 @@ type uploadServiceImpl struct {
 	feeProcessor          processors.FeeProcessor
 	priceService          PriceService
 	reportCache           *cache.Cache
+	jobManager            *JobManager
 }
 
 func NewUploadService(
@@ -71,7 +72,12 @@ func NewUploadService(
 		feeProcessor:          feeProcessor,
 		priceService:          priceService,
 		reportCache:           reportCache,
+		jobManager:            NewJobManager(),
 	}
+}
+
+func (s *uploadServiceImpl) GetJobManager() *JobManager {
+	return s.jobManager
 }
 
 // GetDividendMetrics calcula métricas baseadas na carteira ATUAL e histórico real.
@@ -465,20 +471,31 @@ func (s *uploadServiceImpl) ProcessUpload(fileReader io.Reader, userID int64, po
 				}
 			}
 		}(userID)
-		go func() {
-			logger.L.Info("Triggering portfolio metrics update (pre-requisite for history)", "userID", userID)
-			if err := s.UpdateUserPortfolioMetrics(userID, portfolioID); err != nil {
-				logger.L.Error("Failed to update user portfolio metrics", "userID", userID, "error", err)
-			}
-			logger.L.Info("Triggering history rebuild", "userID", userID)
-			if err := s.RebuildUserHistory(userID, portfolioID); err != nil {
-				logger.L.Error("Failed to rebuild user history", "userID", userID, "error", err)
-			}
-		}()
+
+		// Start asynchronous background jobs for heavy processing
+		logger.L.Info("Starting asynchronous background jobs", "userID", userID, "portfolioID", portfolioID)
+
+		// 1. Start history rebuild job
+		_, err := s.jobManager.RebuildHistoryAsync(s, userID, portfolioID)
+		if err != nil {
+			logger.L.Error("Failed to start history rebuild job", "userID", userID, "error", err)
+		}
+
+		// 2. Start metrics update job
+		_, err = s.jobManager.UpdateMetricsAsync(s, userID, portfolioID)
+		if err != nil {
+			logger.L.Error("Failed to start metrics update job", "userID", userID, "error", err)
+		}
+
+		// 3. Start dividend calculation job
+		_, err = s.jobManager.CalculateDividendsAsync(s, userID, portfolioID)
+		if err != nil {
+			logger.L.Error("Failed to start dividend calculation job", "userID", userID, "error", err)
+		}
 	} else {
 		s.InvalidateUserCache(userID, portfolioID)
 	}
-	logger.L.Info("ProcessUpload END", "userID", userID, "duration", time.Since(overallStartTime))
+	logger.L.Info("ProcessUpload END (async jobs started)", "userID", userID, "duration", time.Since(overallStartTime))
 	return s.GetLatestUploadResult(userID, portfolioID)
 }
 

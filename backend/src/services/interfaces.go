@@ -28,6 +28,7 @@ var (
 // UploadService defines the interface for the core upload processing logic.
 type UploadService interface {
 	ProcessUpload(fileReader io.Reader, userID int64, portfolioID int64, source string, filename string, filesize int64) (*UploadResult, error)
+	GetJobManager() *JobManager
 	GetLatestUploadResult(userID int64, portfolioID int64) (*UploadResult, error)
 	GetDividendTaxSummary(userID int64, portfolioID int64) (models.DividendTaxResult, error)
 	GetDividendTransactions(userID int64, portfolioID int64) ([]models.ProcessedTransaction, error)
