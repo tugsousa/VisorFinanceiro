@@ -192,6 +192,7 @@ func main() {
 	txHandler := handlers.NewTransactionHandler(uploadService)
 	feeHandler := handlers.NewFeeHandler(uploadService)
 	pfManagerHandler := handlers.NewPortfolioManagerHandler()
+	jobHandler := handlers.NewJobHandler(uploadService, uploadService.GetJobManager())
 
 	r := chi.NewRouter()
 
@@ -254,6 +255,13 @@ func main() {
 			r.Post("/user/change-password", userHandler.ChangePasswordHandler)
 			r.Post("/user/delete-account", userHandler.DeleteAccountHandler)
 			r.Get("/history/chart", portfolioHandler.HandleGetHistoricalChartData)
+
+			// Job Management Routes
+			r.Get("/jobs", jobHandler.GetJobsHandler)
+			r.Get("/job", jobHandler.GetJobHandler)
+			r.Post("/jobs/rebuild-history", jobHandler.RebuildHistoryHandler)
+			r.Post("/jobs/update-metrics", jobHandler.UpdateMetricsHandler)
+			r.Post("/jobs/calculate-dividends", jobHandler.CalculateDividendsHandler)
 
 			// Rotas de Administração
 			r.Group(func(r chi.Router) {
