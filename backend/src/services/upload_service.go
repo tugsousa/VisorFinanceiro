@@ -435,7 +435,7 @@ func (s *uploadServiceImpl) ProcessUpload(fileReader io.Reader, userID int64, po
 		}
 	}
 
-	// Start background ISIN resolution to warm caches
+	// Start background ISIN resolution to warm caches (optimized)
 	if len(uniqueISINs) > 0 {
 		isinList := make([]string, 0, len(uniqueISINs))
 		for isin := range uniqueISINs {
@@ -444,11 +444,48 @@ func (s *uploadServiceImpl) ProcessUpload(fileReader io.Reader, userID int64, po
 
 		go func() {
 			logger.L.Info("Starting background ISIN resolution", "count", len(isinList), "userID", userID, "portfolioID", portfolioID)
-			_, err := s.priceService.GetCurrentPrices(isinList)
+
+			// Use bulk operations for better performance
+			// 1. Check database mappings in bulk
+			dbMappings, err := model.GetMappingsByISINs(database.DB, isinList)
 			if err != nil {
-				logger.L.Warn("Background ISIN resolution failed", "error", err, "userID", userID, "portfolioID", portfolioID)
+				logger.L.Error("Failed to get ISIN mappings from DB", "error", err, "userID", userID, "portfolioID", portfolioID)
+				return
+			}
+
+			// 2. Filter out already mapped ISINs
+			var isinsToResolve []string
+			for _, isin := range isinList {
+				if _, exists := dbMappings[isin]; !exists {
+					isinsToResolve = append(isinsToResolve, isin)
+				}
+			}
+
+			if len(isinsToResolve) > 0 {
+				// 3. Check failed ISIN cache in bulk
+				failedCache := NewBulkFailedISINCache(1 * time.Hour)
+				failedResults := failedCache.CheckMultiple(isinsToResolve)
+
+				var isinsEligible []string
+				for _, isin := range isinsToResolve {
+					if !failedResults[isin] {
+						isinsEligible = append(isinsEligible, isin)
+					}
+				}
+
+				if len(isinsEligible) > 0 {
+					// 4. Fetch prices in bulk with optimized concurrency
+					_, err := s.priceService.GetCurrentPrices(isinsEligible)
+					if err != nil {
+						logger.L.Warn("Background ISIN resolution failed", "error", err, "userID", userID, "portfolioID", portfolioID)
+					} else {
+						logger.L.Info("Background ISIN resolution completed", "userID", userID, "portfolioID", portfolioID, "resolved", len(isinsEligible))
+					}
+				} else {
+					logger.L.Info("Background ISIN resolution skipped - all ISINs in failed cache", "userID", userID, "portfolioID", portfolioID)
+				}
 			} else {
-				logger.L.Info("Background ISIN resolution completed", "userID", userID, "portfolioID", portfolioID)
+				logger.L.Info("Background ISIN resolution skipped - all ISINs already mapped", "userID", userID, "portfolioID", portfolioID)
 			}
 		}()
 	}

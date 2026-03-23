@@ -2,7 +2,6 @@ package model
 
 import (
 	"database/sql"
-	"fmt"
 	"strings"
 	"time"
 
@@ -137,32 +136,41 @@ func InsertMapping(db *sql.DB, mapping ISINTickerMap) error {
 }
 
 // BatchInsertMappings inserts multiple ISIN-to-ticker mappings in a single batch operation.
+// Optimized for better performance with larger batches.
 func BatchInsertMappings(db *sql.DB, mappings []ISINTickerMap) error {
 	if len(mappings) == 0 {
 		return nil
 	}
 
-	// Prepare batch insert query
-	placeholders := make([]string, len(mappings))
-	args := make([]interface{}, 0, len(mappings)*5)
-
-	for i, mapping := range mappings {
-		placeholders[i] = "(?, ?, ?, ?, ?)"
-		args = append(args, mapping.ISIN, mapping.TickerSymbol, mapping.Exchange, mapping.Currency, time.Now())
+	// Use transaction for better performance with multiple operations
+	tx, err := db.Begin()
+	if err != nil {
+		return err
 	}
+	defer tx.Rollback()
 
-	query := fmt.Sprintf(`
-		INSERT INTO isin_ticker_map (isin, ticker_symbol, exchange, currency, last_checked_at)
-		VALUES %s
+	// Prepare statement once for better performance
+	stmt, err := tx.Prepare(`INSERT INTO isin_ticker_map (isin, ticker_symbol, exchange, currency, last_checked_at)
+		VALUES (?, ?, ?, ?, ?)
 		ON CONFLICT(isin) DO UPDATE SET
 			ticker_symbol = excluded.ticker_symbol,
 			exchange = excluded.exchange,
 			currency = excluded.currency,
-			last_checked_at = excluded.last_checked_at`,
-		strings.Join(placeholders, ", "))
+			last_checked_at = excluded.last_checked_at`)
+	if err != nil {
+		return err
+	}
+	defer stmt.Close()
 
-	_, err := db.Exec(query, args...)
-	return err
+	// Execute batch inserts
+	for _, mapping := range mappings {
+		_, err := stmt.Exec(mapping.ISIN, mapping.TickerSymbol, mapping.Exchange, mapping.Currency, time.Now())
+		if err != nil {
+			return err
+		}
+	}
+
+	return tx.Commit()
 }
 
 // UpdateMappingMetadata updates the sector, industry, and quote_type for a mapping.
