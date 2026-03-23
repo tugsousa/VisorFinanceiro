@@ -29,8 +29,16 @@ const (
 	ckLatestUploadResult  = "agg_latest_upload_result_user_%d_pf_%d"
 	ckDividendSummary     = "agg_dividend_summary_user_%d_pf_%d"
 	// ckDividendMetrics      = "agg_dividend_metrics_user_%d_pf_%d" // Deprecated key
-	DefaultCacheExpiration = 15 * time.Minute
-	CacheCleanupInterval   = 30 * time.Minute
+
+	// Smart Cache Expiration Times
+	DefaultCacheExpiration     = 15 * time.Minute
+	ISINMappingCacheExpiration = 24 * time.Hour   // ISIN mappings rarely change
+	PriceCacheExpiration       = 15 * time.Minute // Prices are volatile
+	HistoricalCacheExpiration  = 1 * time.Hour    // Historical data is moderately volatile
+	DividendCacheExpiration    = 1 * time.Hour    // Dividend data is moderately volatile
+	MetricsCacheExpiration     = 30 * time.Minute // Metrics calculations
+
+	CacheCleanupInterval = 30 * time.Minute
 )
 
 // Helper struct for aggregating purchase lots by ISIN
@@ -503,6 +511,12 @@ func (s *uploadServiceImpl) ProcessUpload(fileReader io.Reader, userID int64, po
 		_, err = s.jobManager.CalculateDividendsAsync(s, userID, portfolioID)
 		if err != nil {
 			logger.L.Error("Failed to start dividend calculation job", "userID", userID, "error", err)
+		}
+
+		// 4. Start cache warming job to proactively fetch commonly used data
+		_, err = s.jobManager.CacheWarmingAsync(s, userID, portfolioID)
+		if err != nil {
+			logger.L.Error("Failed to start cache warming job", "userID", userID, "error", err)
 		}
 	} else {
 		s.InvalidateUserCache(userID, portfolioID)

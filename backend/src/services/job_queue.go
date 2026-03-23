@@ -25,6 +25,7 @@ const (
 	JobTypeUpdateMetrics      = "update_metrics"
 	JobTypeFetchPrices        = "fetch_prices"
 	JobTypeCalculateDividends = "calculate_dividends"
+	JobTypeCacheWarming       = "cache_warming"
 )
 
 // JobStatus constants
@@ -155,6 +156,8 @@ func (w *JobWorker) processJob(job *Job) {
 		err = w.processFetchPrices(job)
 	case JobTypeCalculateDividends:
 		err = w.processCalculateDividends(job)
+	case JobTypeCacheWarming:
+		err = w.processCacheWarming(job)
 	default:
 		err = fmt.Errorf("unknown job type: %s", job.Type)
 	}
@@ -289,6 +292,76 @@ func (w *JobWorker) processCalculateDividends(job *Job) error {
 	return nil
 }
 
+// processCacheWarming processes a cache warming job
+func (w *JobWorker) processCacheWarming(job *Job) error {
+	userID, ok := job.Payload["user_id"].(float64)
+	if !ok {
+		return fmt.Errorf("invalid user_id in payload")
+	}
+
+	portfolioID, ok := job.Payload["portfolio_id"].(float64)
+	if !ok {
+		return fmt.Errorf("invalid portfolio_id in payload")
+	}
+
+	// Get the upload service from payload
+	uploadService, ok := job.Payload["upload_service"].(UploadService)
+	if !ok {
+		return fmt.Errorf("upload_service not found in payload")
+	}
+
+	// Update progress
+	w.updateJobStatus(job.ID, JobStatusRunning, 20, "Starting cache warming")
+
+	// Get current holdings to warm cache with frequently accessed data
+	holdings, err := uploadService.GetCurrentHoldingsWithValue(int64(userID), int64(portfolioID))
+	if err != nil {
+		return fmt.Errorf("failed to get current holdings: %w", err)
+	}
+
+	// Extract ISINs for cache warming
+	var isinList []string
+	for _, holding := range holdings {
+		if holding.ISIN != "" {
+			isinList = append(isinList, holding.ISIN)
+		}
+	}
+
+	// Update progress
+	w.updateJobStatus(job.ID, JobStatusRunning, 50, "Warming price cache")
+
+	// Warm price cache for current holdings
+	if len(isinList) > 0 {
+		// Get price service from upload service (assuming it has access)
+		// For now, we'll just call GetCurrentHoldingsWithValue again which will trigger cache warming
+		_, err := uploadService.GetCurrentHoldingsWithValue(int64(userID), int64(portfolioID))
+		if err != nil {
+			logger.L.Warn("Failed to warm price cache", "error", err)
+		}
+	}
+
+	// Update progress
+	w.updateJobStatus(job.ID, JobStatusRunning, 80, "Warming dividend cache")
+
+	// Warm dividend metrics cache
+	_, err = uploadService.GetDividendMetrics(int64(userID), int64(portfolioID))
+	if err != nil {
+		logger.L.Warn("Failed to warm dividend cache", "error", err)
+	}
+
+	// Update progress
+	w.updateJobStatus(job.ID, JobStatusRunning, 90, "Warming historical data cache")
+
+	// Warm historical chart data cache
+	_, err = uploadService.GetHistoricalChartData(int64(userID), int64(portfolioID))
+	if err != nil {
+		logger.L.Warn("Failed to warm historical chart cache", "error", err)
+	}
+
+	w.updateJobStatus(job.ID, JobStatusRunning, 100, "Cache warming completed")
+	return nil
+}
+
 // updateJobStatus updates the status of a job
 func (w *JobWorker) updateJobStatus(jobID, status string, progress float64, errorMsg string) {
 	w.Queue.mu.Lock()
@@ -373,6 +446,18 @@ func (jm *JobManager) CalculateDividendsAsync(uploadService UploadService, userI
 	}
 
 	return jm.queue.AddJob(JobTypeCalculateDividends, payload)
+}
+
+// CacheWarmingAsync starts an asynchronous cache warming job
+func (jm *JobManager) CacheWarmingAsync(uploadService UploadService, userID, portfolioID int64) (*Job, error) {
+	payload := map[string]interface{}{
+		"user_id":        float64(userID),
+		"portfolio_id":   float64(portfolioID),
+		"upload_service": uploadService,
+		"started_at":     time.Now().Format(time.RFC3339),
+	}
+
+	return jm.queue.AddJob(JobTypeCacheWarming, payload)
 }
 
 // GetJob retrieves a job by ID
