@@ -8,6 +8,7 @@ require (
 	github.com/golang-jwt/jwt/v5 v5.2.2
 	github.com/golang-migrate/migrate/v4 v4.18.3
 	github.com/google/uuid v1.6.0
+	github.com/gorilla/websocket v1.5.3
 	github.com/microcosm-cc/bluemonday v1.0.26 // <-- ADICIONADO
 	golang.org/x/net v0.38.0
 )

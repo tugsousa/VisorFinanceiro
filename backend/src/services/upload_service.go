@@ -20,6 +20,7 @@ import (
 	"github.com/username/taxfolio/backend/src/parsers"
 	"github.com/username/taxfolio/backend/src/processors"
 	"github.com/username/taxfolio/backend/src/utils"
+	"github.com/username/taxfolio/backend/src/websocket"
 )
 
 const (
@@ -402,16 +403,27 @@ func (s *uploadServiceImpl) RefreshDailySnapshot(userID int64, portfolioID int64
 func (s *uploadServiceImpl) ProcessUpload(fileReader io.Reader, userID int64, portfolioID int64, source, filename string, filesize int64) (*UploadResult, error) {
 	overallStartTime := time.Now()
 	logger.L.Info("ProcessUpload START", "userID", userID, "portfolioID", portfolioID, "source", source)
+
+	// Broadcast upload start
+	websocket.BroadcastUploadProgress(userID, portfolioID, 0, 100, "parsing", "Iniciando processamento do arquivo")
+
 	parser, err := parsers.GetParser(source)
 	if err != nil {
+		websocket.BroadcastUploadProgress(userID, portfolioID, 0, 100, "error", fmt.Sprintf("Erro ao obter parser: %v", err))
 		return nil, fmt.Errorf("%w: %v", ErrParsingFailed, err)
 	}
+
+	websocket.BroadcastUploadProgress(userID, portfolioID, 10, 100, "parsing", "Analisando arquivo CSV")
 	canonicalTxs, err := parser.Parse(fileReader)
 	if err != nil {
+		websocket.BroadcastUploadProgress(userID, portfolioID, 0, 100, "error", fmt.Sprintf("Erro ao analisar CSV: %v", err))
 		return nil, fmt.Errorf("%w: %v", ErrParsingFailed, err)
 	}
+
+	websocket.BroadcastUploadProgress(userID, portfolioID, 30, 100, "processing", "Processando transações")
 	newlyProcessedTxs := s.transactionProcessor.Process(canonicalTxs)
 	if len(newlyProcessedTxs) == 0 {
+		websocket.BroadcastUploadProgress(userID, portfolioID, 100, 100, "completed", "Nenhuma nova transação encontrada")
 		return s.GetLatestUploadResult(userID, portfolioID)
 	}
 	dbTx, err := database.DB.Begin()
@@ -474,6 +486,8 @@ func (s *uploadServiceImpl) ProcessUpload(fileReader io.Reader, userID int64, po
 		return nil, fmt.Errorf("error committing transactions: %w", err)
 	}
 	if insertedCount > 0 {
+		websocket.BroadcastUploadProgress(userID, portfolioID, 50, 100, "processing", "Salvando transações no banco de dados")
+
 		go func(uid int64) {
 			logger.L.Info("Checking and setting first upload timestamp", "userID", uid)
 			var firstUploadTime sql.NullTime
@@ -518,8 +532,12 @@ func (s *uploadServiceImpl) ProcessUpload(fileReader io.Reader, userID int64, po
 		if err != nil {
 			logger.L.Error("Failed to start cache warming job", "userID", userID, "error", err)
 		}
+
+		// Broadcast completion
+		websocket.BroadcastUploadProgress(userID, portfolioID, 100, 100, "completed", "Upload concluído com sucesso")
 	} else {
 		s.InvalidateUserCache(userID, portfolioID)
+		websocket.BroadcastUploadProgress(userID, portfolioID, 100, 100, "completed", "Nenhuma nova transação encontrada")
 	}
 	logger.L.Info("ProcessUpload END (async jobs started)", "userID", userID, "duration", time.Since(overallStartTime))
 	return s.GetLatestUploadResult(userID, portfolioID)
