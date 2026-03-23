@@ -208,3 +208,62 @@ func InsertOrUpdatePrice(db *sql.DB, price DailyPrice) error {
 	}
 	return err
 }
+
+// GetHistoricalPricesByTicker returns all rows in daily_prices for a given ticker, keyed by date string.
+// This is a straightforward SELECT date, price FROM daily_prices WHERE ticker_symbol = ? mapped into a map[string]float64.
+func GetHistoricalPricesByTicker(db *sql.DB, ticker string) (map[string]float64, error) {
+	prices := make(map[string]float64)
+	query := `SELECT date, price FROM daily_prices WHERE ticker_symbol = ? ORDER BY date ASC`
+	rows, err := db.Query(query, ticker)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var date string
+		var price float64
+		if err := rows.Scan(&date, &price); err != nil {
+			logger.L.Error("Error scanning historical price row", "ticker", ticker, "error", err)
+			continue
+		}
+		prices[date] = price
+	}
+	return prices, rows.Err()
+}
+
+// StoreHistoricalPricesInDB bulk-upserts a full PriceMap into daily_prices inside a transaction.
+// Called asynchronously (go) so the caller isn't blocked.
+func StoreHistoricalPricesInDB(db *sql.DB, ticker, currency string, prices map[string]float64) error {
+	if len(prices) == 0 {
+		return nil
+	}
+
+	tx, err := db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	stmt, err := tx.Prepare(`
+		INSERT INTO daily_prices (ticker_symbol, date, price, currency, updated_at)
+		VALUES (?, ?, ?, ?, ?)
+		ON CONFLICT(ticker_symbol, date) DO UPDATE SET
+			price = excluded.price,
+			currency = excluded.currency,
+			updated_at = excluded.updated_at;
+	`)
+	if err != nil {
+		return err
+	}
+	defer stmt.Close()
+
+	now := time.Now()
+	for date, price := range prices {
+		if _, err := stmt.Exec(ticker, date, price, currency, now); err != nil {
+			logger.L.Error("Failed to insert historical price row", "ticker", ticker, "date", date, "error", err)
+			return err
+		}
+	}
+
+	return tx.Commit()
+}
