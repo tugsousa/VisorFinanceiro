@@ -426,6 +426,32 @@ func (s *uploadServiceImpl) ProcessUpload(fileReader io.Reader, userID int64, po
 		websocket.BroadcastUploadProgress(userID, portfolioID, 100, 100, "completed", "Nenhuma nova transação encontrada")
 		return s.GetLatestUploadResult(userID, portfolioID)
 	}
+
+	// Extract unique ISINs for background resolution
+	uniqueISINs := make(map[string]bool)
+	for _, tx := range newlyProcessedTxs {
+		if len(tx.ISIN) == 12 {
+			uniqueISINs[tx.ISIN] = true
+		}
+	}
+
+	// Start background ISIN resolution to warm caches
+	if len(uniqueISINs) > 0 {
+		isinList := make([]string, 0, len(uniqueISINs))
+		for isin := range uniqueISINs {
+			isinList = append(isinList, isin)
+		}
+
+		go func() {
+			logger.L.Info("Starting background ISIN resolution", "count", len(isinList), "userID", userID, "portfolioID", portfolioID)
+			_, err := s.priceService.GetCurrentPrices(isinList)
+			if err != nil {
+				logger.L.Warn("Background ISIN resolution failed", "error", err, "userID", userID, "portfolioID", portfolioID)
+			} else {
+				logger.L.Info("Background ISIN resolution completed", "userID", userID, "portfolioID", portfolioID)
+			}
+		}()
+	}
 	dbTx, err := database.DB.Begin()
 	if err != nil {
 		return nil, fmt.Errorf("error beginning database transaction: %w", err)

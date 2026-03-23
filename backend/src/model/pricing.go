@@ -2,6 +2,7 @@ package model
 
 import (
 	"database/sql"
+	"fmt"
 	"strings"
 	"time"
 
@@ -132,6 +133,35 @@ func InsertMapping(db *sql.DB, mapping ISINTickerMap) error {
 		INSERT INTO isin_ticker_map (isin, ticker_symbol, exchange, currency, last_checked_at)
 		VALUES (?, ?, ?, ?, ?)`
 	_, err := db.Exec(query, mapping.ISIN, mapping.TickerSymbol, mapping.Exchange, mapping.Currency, time.Now())
+	return err
+}
+
+// BatchInsertMappings inserts multiple ISIN-to-ticker mappings in a single batch operation.
+func BatchInsertMappings(db *sql.DB, mappings []ISINTickerMap) error {
+	if len(mappings) == 0 {
+		return nil
+	}
+
+	// Prepare batch insert query
+	placeholders := make([]string, len(mappings))
+	args := make([]interface{}, 0, len(mappings)*5)
+
+	for i, mapping := range mappings {
+		placeholders[i] = "(?, ?, ?, ?, ?)"
+		args = append(args, mapping.ISIN, mapping.TickerSymbol, mapping.Exchange, mapping.Currency, time.Now())
+	}
+
+	query := fmt.Sprintf(`
+		INSERT INTO isin_ticker_map (isin, ticker_symbol, exchange, currency, last_checked_at)
+		VALUES %s
+		ON CONFLICT(isin) DO UPDATE SET
+			ticker_symbol = excluded.ticker_symbol,
+			exchange = excluded.exchange,
+			currency = excluded.currency,
+			last_checked_at = excluded.last_checked_at`,
+		strings.Join(placeholders, ", "))
+
+	_, err := db.Exec(query, args...)
 	return err
 }
 

@@ -420,6 +420,8 @@ func (s *priceServiceImpl) getIsinToTickerMap(isins []string) (map[string]string
 		if len(isinsEligible) > 0 {
 			tickerResults := s.fetchTickersParallel(isinsEligible)
 
+			// Collect mappings for batch insert
+			var mappingsToInsert []model.ISINTickerMap
 			for isin, result := range tickerResults {
 				if result.Error != nil {
 					logger.L.Warn("Could not get ticker for ISIN from API", "isin", isin, "error", result.Error)
@@ -432,8 +434,20 @@ func (s *priceServiceImpl) getIsinToTickerMap(isins []string) (map[string]string
 					Exchange:     sql.NullString{String: result.Exchange, Valid: result.Exchange != ""},
 					Currency:     result.Currency,
 				}
-				model.InsertMapping(database.DB, newMapping)
+				mappingsToInsert = append(mappingsToInsert, newMapping)
 				metadataToUpdate[isin] = result.Ticker
+			}
+
+			// Batch insert all mappings at once
+			if len(mappingsToInsert) > 0 {
+				err := model.BatchInsertMappings(database.DB, mappingsToInsert)
+				if err != nil {
+					logger.L.Error("Failed to batch insert ISIN mappings", "error", err)
+					// Fallback to individual inserts
+					for _, mapping := range mappingsToInsert {
+						model.InsertMapping(database.DB, mapping)
+					}
+				}
 			}
 		}
 	}
@@ -903,14 +917,23 @@ type TickerResult struct {
 	Error    error
 }
 
-// fetchTickersParallel fetches tickers for multiple ISINs in parallel with controlled concurrency
+// fetchTickersParallel fetches tickers for multiple ISINs in parallel with enhanced concurrency
 func (s *priceServiceImpl) fetchTickersParallel(isins []string) map[string]TickerResult {
-	const maxWorkers = 10
-	const delayBetweenBatches = 1 * time.Second
+	const maxWorkers = 20                              // Increased from 10 to 20 for better parallelization
+	const delayBetweenBatches = 500 * time.Millisecond // Reduced from 1s to 500ms
+	const maxRetries = 3
+	const baseDelay = 100 * time.Millisecond
 
 	results := make(map[string]TickerResult)
 	resultChan := make(chan TickerResult, len(isins))
 	workerChan := make(chan struct{}, maxWorkers)
+
+	// Circuit breaker state
+	var consecutiveFailures int
+	var circuitOpen bool
+	var circuitOpenTime time.Time
+	const circuitTimeout = 30 * time.Second
+	const failureThreshold = 10
 
 	for i := 0; i < len(isins); i += maxWorkers {
 		end := i + maxWorkers
@@ -925,13 +948,61 @@ func (s *priceServiceImpl) fetchTickersParallel(isins []string) map[string]Ticke
 			go func(isin string) {
 				defer func() { <-workerChan }()
 
-				ticker, exchange, currency, err := s.fetchTickerForISIN(isin)
+				var lastErr error
+				for attempt := 0; attempt < maxRetries; attempt++ {
+					// Check circuit breaker
+					if circuitOpen {
+						if time.Since(circuitOpenTime) > circuitTimeout {
+							circuitOpen = false
+							consecutiveFailures = 0
+							logger.L.Info("Circuit breaker reset", "isin", isin)
+						} else {
+							resultChan <- TickerResult{
+								ISIN:  isin,
+								Error: fmt.Errorf("circuit breaker open"),
+							}
+							return
+						}
+					}
+
+					ticker, exchange, currency, err := s.fetchTickerForISIN(isin)
+					if err == nil {
+						// Success - reset circuit breaker
+						if consecutiveFailures > 0 {
+							consecutiveFailures = 0
+							circuitOpen = false
+						}
+						resultChan <- TickerResult{
+							ISIN:     isin,
+							Ticker:   ticker,
+							Exchange: exchange,
+							Currency: currency,
+							Error:    nil,
+						}
+						return
+					}
+
+					lastErr = err
+					consecutiveFailures++
+
+					// Open circuit if too many failures
+					if consecutiveFailures >= failureThreshold {
+						circuitOpen = true
+						circuitOpenTime = time.Now()
+						logger.L.Warn("Circuit breaker opened due to consecutive failures", "count", consecutiveFailures)
+					}
+
+					// Exponential backoff
+					delay := baseDelay * time.Duration(1<<uint(attempt))
+					if delay > 2*time.Second {
+						delay = 2 * time.Second
+					}
+					time.Sleep(delay)
+				}
+
 				resultChan <- TickerResult{
-					ISIN:     isin,
-					Ticker:   ticker,
-					Exchange: exchange,
-					Currency: currency,
-					Error:    err,
+					ISIN:  isin,
+					Error: fmt.Errorf("failed after %d attempts: %w", maxRetries, lastErr),
 				}
 			}(isin)
 		}
