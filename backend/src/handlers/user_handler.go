@@ -133,8 +133,58 @@ func (h *UserHandler) VerifyEmailHandler(w http.ResponseWriter, r *http.Request)
 	}
 
 	logger.L.Info("Email verified successfully", "userID", user.ID)
+
+	// Auto-login the user after successful verification
+	userIDStr := fmt.Sprintf("%d", user.ID)
+	accessToken, err := h.authService.GenerateToken(userIDStr)
+	if err != nil {
+		logger.L.Error("Failed to generate access token for auto-login", "userID", user.ID, "error", err)
+		sendJSONError(w, "Email verified successfully! You can now log in.", http.StatusOK)
+		return
+	}
+
+	refreshToken, err := h.authService.GenerateRefreshToken()
+	if err != nil {
+		logger.L.Error("Failed to generate refresh token for auto-login", "userID", user.ID, "error", err)
+		sendJSONError(w, "Email verified successfully! You can now log in.", http.StatusOK)
+		return
+	}
+
+	session := &model.Session{
+		UserID:       user.ID,
+		Token:        accessToken,
+		RefreshToken: refreshToken,
+		UserAgent:    r.UserAgent(),
+		ClientIP:     r.RemoteAddr,
+		IsBlocked:    false,
+		ExpiresAt:    time.Now().Add(config.Cfg.RefreshTokenExpiry),
+	}
+	if err := model.CreateSession(database.DB, session); err != nil {
+		logger.L.Error("Failed to create session for auto-login", "userID", user.ID, "error", err)
+		sendJSONError(w, "Email verified successfully! You can now log in.", http.StatusOK)
+		return
+	}
+
+	// Set refresh token cookie for auto-login
+	setRefreshTokenCookie(w, refreshToken, config.Cfg.RefreshTokenExpiry)
+
+	// Prepare user data for response
+	user.IsAdmin = isAdmin(user.Email)
+	userData := map[string]interface{}{
+		"id":            user.ID,
+		"username":      user.Username,
+		"email":         user.Email,
+		"auth_provider": user.AuthProvider,
+		"is_admin":      user.IsAdmin,
+		"mfa_enabled":   user.MfaEnabled,
+	}
+
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{"message": "Email verified successfully! You can now log in."})
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"message":      "Email verified successfully! You are now logged in.",
+		"access_token": accessToken,
+		"user":         userData,
+	})
 }
 
 func GetUserIDFromContext(ctx context.Context) (int64, bool) {
