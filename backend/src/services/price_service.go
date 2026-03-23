@@ -417,35 +417,29 @@ func (s *priceServiceImpl) getIsinToTickerMap(isins []string) (map[string]string
 	}
 
 	if len(isinsToFetch) > 0 {
-		for _, isin := range isinsToFetch {
-			time.Sleep(250 * time.Millisecond)
-			ticker, exchange, currency, err := s.fetchTickerForISIN(isin)
-			if err != nil {
-				logger.L.Warn("Could not get ticker for ISIN from API", "isin", isin, "error", err)
+		// Process ISINs in parallel with controlled concurrency
+		tickerResults := s.fetchTickersParallel(isinsToFetch)
+
+		for isin, result := range tickerResults {
+			if result.Error != nil {
+				logger.L.Warn("Could not get ticker for ISIN from API", "isin", isin, "error", result.Error)
 				continue
 			}
-			isinToTickerMap[isin] = ticker
+			isinToTickerMap[isin] = result.Ticker
 			newMapping := model.ISINTickerMap{
 				ISIN:         isin,
-				TickerSymbol: ticker,
-				Exchange:     sql.NullString{String: exchange, Valid: exchange != ""},
-				Currency:     currency,
+				TickerSymbol: result.Ticker,
+				Exchange:     sql.NullString{String: result.Exchange, Valid: result.Exchange != ""},
+				Currency:     result.Currency,
 			}
 			model.InsertMapping(database.DB, newMapping)
-			metadataToUpdate[isin] = ticker
+			metadataToUpdate[isin] = result.Ticker
 		}
 	}
 
 	if len(metadataToUpdate) > 0 {
-		go func() {
-			for isin, ticker := range metadataToUpdate {
-				time.Sleep(500 * time.Millisecond)
-				sector, industry, qType, err := s.fetchMetadata(ticker)
-				if err == nil {
-					model.UpdateMappingMetadata(database.DB, isin, sector, industry, qType)
-				}
-			}
-		}()
+		// Process metadata updates in parallel
+		go s.updateMetadataParallel(metadataToUpdate)
 	}
 	return isinToTickerMap, nil
 }
@@ -477,18 +471,19 @@ func (s *priceServiceImpl) getTickerToPriceMap(isinToTickerMap map[string]string
 	}
 
 	if len(tickersToFetch) > 0 {
-		for _, ticker := range tickersToFetch {
-			time.Sleep(250 * time.Millisecond)
-			price, currency, err := s.getPriceForTicker(ticker)
-			if err != nil {
-				logger.L.Warn("Could not get price for ticker from API", "ticker", ticker, "error", err)
+		// Fetch prices in parallel with controlled concurrency
+		priceResults := s.fetchPricesParallel(tickersToFetch)
+
+		for ticker, result := range priceResults {
+			if result.Error != nil {
+				logger.L.Warn("Could not get price for ticker from API", "ticker", ticker, "error", result.Error)
 				continue
 			}
 			dailyPrice := model.DailyPrice{
 				TickerSymbol: ticker,
 				Date:         todayStr,
-				Price:        price,
-				Currency:     currency,
+				Price:        result.Price,
+				Currency:     result.Currency,
 			}
 			tickerToPriceMap[ticker] = dailyPrice
 			model.InsertOrUpdatePrice(database.DB, dailyPrice)
@@ -802,6 +797,152 @@ func (s *priceServiceImpl) EnsureBenchmarkData() error {
 		return fmt.Errorf("failed to commit benchmark transaction: %w", err)
 	}
 	return nil
+}
+
+// TickerResult represents the result of fetching a ticker for an ISIN
+type TickerResult struct {
+	ISIN     string
+	Ticker   string
+	Exchange string
+	Currency string
+	Error    error
+}
+
+// fetchTickersParallel fetches tickers for multiple ISINs in parallel with controlled concurrency
+func (s *priceServiceImpl) fetchTickersParallel(isins []string) map[string]TickerResult {
+	// Use a worker pool with controlled concurrency
+	const maxWorkers = 10
+	const delayBetweenBatches = 1 * time.Second
+
+	results := make(map[string]TickerResult)
+	resultChan := make(chan TickerResult, len(isins))
+	workerChan := make(chan struct{}, maxWorkers)
+
+	// Process ISINs in batches to avoid overwhelming the API
+	for i := 0; i < len(isins); i += maxWorkers {
+		end := i + maxWorkers
+		if end > len(isins) {
+			end = len(isins)
+		}
+
+		batch := isins[i:end]
+
+		// Launch workers for this batch
+		for _, isin := range batch {
+			workerChan <- struct{}{} // Acquire worker slot
+			go func(isin string) {
+				defer func() { <-workerChan }() // Release worker slot
+
+				ticker, exchange, currency, err := s.fetchTickerForISIN(isin)
+				resultChan <- TickerResult{
+					ISIN:     isin,
+					Ticker:   ticker,
+					Exchange: exchange,
+					Currency: currency,
+					Error:    err,
+				}
+			}(isin)
+		}
+
+		// Wait for batch to complete
+		for range batch {
+			result := <-resultChan
+			results[result.ISIN] = result
+		}
+
+		// Add delay between batches to be respectful to the API
+		if end < len(isins) {
+			time.Sleep(delayBetweenBatches)
+		}
+	}
+
+	return results
+}
+
+// PriceResult represents the result of fetching a price for a ticker
+type PriceResult struct {
+	Ticker   string
+	Price    float64
+	Currency string
+	Error    error
+}
+
+// fetchPricesParallel fetches prices for multiple tickers in parallel with controlled concurrency
+func (s *priceServiceImpl) fetchPricesParallel(tickers []string) map[string]PriceResult {
+	// Use a worker pool with controlled concurrency
+	const maxWorkers = 8
+	const delayBetweenBatches = 500 * time.Millisecond
+
+	results := make(map[string]PriceResult)
+	resultChan := make(chan PriceResult, len(tickers))
+	workerChan := make(chan struct{}, maxWorkers)
+
+	// Process tickers in batches to avoid overwhelming the API
+	for i := 0; i < len(tickers); i += maxWorkers {
+		end := i + maxWorkers
+		if end > len(tickers) {
+			end = len(tickers)
+		}
+
+		batch := tickers[i:end]
+
+		// Launch workers for this batch
+		for _, ticker := range batch {
+			workerChan <- struct{}{} // Acquire worker slot
+			go func(ticker string) {
+				defer func() { <-workerChan }() // Release worker slot
+
+				price, currency, err := s.getPriceForTicker(ticker)
+				resultChan <- PriceResult{
+					Ticker:   ticker,
+					Price:    price,
+					Currency: currency,
+					Error:    err,
+				}
+			}(ticker)
+		}
+
+		// Wait for batch to complete
+		for range batch {
+			result := <-resultChan
+			results[result.Ticker] = result
+		}
+
+		// Add delay between batches to be respectful to the API
+		if end < len(tickers) {
+			time.Sleep(delayBetweenBatches)
+		}
+	}
+
+	return results
+}
+
+// updateMetadataParallel updates metadata for multiple tickers in parallel
+func (s *priceServiceImpl) updateMetadataParallel(metadataToUpdate map[string]string) {
+	const maxWorkers = 5
+	const delayBetweenRequests = 500 * time.Millisecond
+
+	workerChan := make(chan struct{}, maxWorkers)
+	var wg sync.WaitGroup
+
+	for isin, ticker := range metadataToUpdate {
+		workerChan <- struct{}{} // Acquire worker slot
+		wg.Add(1)
+		go func(isin, ticker string) {
+			defer func() {
+				<-workerChan // Release worker slot
+				wg.Done()
+			}()
+
+			time.Sleep(delayBetweenRequests) // Rate limiting
+			sector, industry, qType, err := s.fetchMetadata(ticker)
+			if err == nil {
+				model.UpdateMappingMetadata(database.DB, isin, sector, industry, qType)
+			}
+		}(isin, ticker)
+	}
+
+	wg.Wait()
 }
 
 func (s *priceServiceImpl) fetchMetadata(ticker string) (string, string, string, error) {
