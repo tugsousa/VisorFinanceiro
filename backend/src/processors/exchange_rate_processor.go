@@ -207,3 +207,51 @@ func extractRateFromResponse(data models.ECBResponse) (float64, error) {
 	}
 	return 0, fmt.Errorf("observation value not found")
 }
+
+// GetExchangeRatesBulk retrieves multiple exchange rates in parallel for better performance
+func GetExchangeRatesBulk(currencies []string, date time.Time) (map[string]float64, error) {
+	if len(currencies) == 0 {
+		return make(map[string]float64), nil
+	}
+
+	results := make(map[string]float64)
+	resultChan := make(chan struct {
+		Currency string
+		Rate     float64
+		Error    error
+	}, len(currencies))
+
+	// Use worker pool for controlled concurrency
+	const maxWorkers = 5
+	workerChan := make(chan struct{}, maxWorkers)
+
+	for _, currency := range currencies {
+		workerChan <- struct{}{}
+		go func(curr string) {
+			defer func() { <-workerChan }()
+
+			rate, err := GetExchangeRate(curr, date)
+			resultChan <- struct {
+				Currency string
+				Rate     float64
+				Error    error
+			}{
+				Currency: curr,
+				Rate:     rate,
+				Error:    err,
+			}
+		}(currency)
+	}
+
+	// Collect results
+	for range currencies {
+		result := <-resultChan
+		if result.Error == nil {
+			results[result.Currency] = result.Rate
+		} else {
+			logger.L.Warn("Failed to get exchange rate", "currency", result.Currency, "error", result.Error)
+		}
+	}
+
+	return results, nil
+}
