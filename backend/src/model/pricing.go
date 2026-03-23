@@ -8,6 +8,61 @@ import (
 	"github.com/username/taxfolio/backend/src/logger"
 )
 
+// FailedISIN represents a row in the failed_isins table.
+// It tracks ISINs that failed to resolve to a ticker symbol.
+type FailedISIN struct {
+	ISIN         string
+	LastFailed   time.Time
+	FailureCount int
+	CreatedAt    time.Time
+	UpdatedAt    time.Time
+}
+
+// InsertFailedISIN inserts or updates a failed ISIN record.
+// If the ISIN already exists, it increments the failure count and updates the timestamp.
+func InsertFailedISIN(db *sql.DB, isin string) error {
+	query := `
+		INSERT INTO failed_isins (isin, last_failed, failure_count, created_at, updated_at)
+		VALUES (?, ?, 1, ?, ?)
+		ON CONFLICT(isin) DO UPDATE SET
+			last_failed = excluded.last_failed,
+			failure_count = failed_isins.failure_count + 1,
+			updated_at = excluded.updated_at;
+	`
+	now := time.Now()
+	_, err := db.Exec(query, isin, now, now, now)
+	return err
+}
+
+// GetFailedISINs retrieves all failed ISINs from the database.
+func GetFailedISINs(db *sql.DB) (map[string]time.Time, error) {
+	failedISINs := make(map[string]time.Time)
+	query := `SELECT isin, last_failed FROM failed_isins`
+	rows, err := db.Query(query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var isin string
+		var lastFailed time.Time
+		if err := rows.Scan(&isin, &lastFailed); err != nil {
+			logger.L.Error("Error scanning failed ISIN row", "error", err)
+			continue
+		}
+		failedISINs[isin] = lastFailed
+	}
+	return failedISINs, rows.Err()
+}
+
+// CleanExpiredFailedISINs removes failed ISIN records older than the specified TTL.
+func CleanExpiredFailedISINs(db *sql.DB, ttl time.Duration) error {
+	cutoff := time.Now().Add(-ttl)
+	query := `DELETE FROM failed_isins WHERE last_failed < ?`
+	_, err := db.Exec(query, cutoff)
+	return err
+}
+
 // ISINTickerMap represents a row in the isin_ticker_map table.
 // It caches the mapping from an ISIN to a specific stock ticker.
 type ISINTickerMap struct {

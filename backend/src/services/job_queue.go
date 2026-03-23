@@ -165,7 +165,7 @@ func (w *JobWorker) processJob(job *Job) {
 		logger.L.Error("Job failed", "job_id", job.ID, "error", err)
 	} else {
 		w.updateJobStatus(job.ID, JobStatusCompleted, 100, "")
-		logger.L.Info("Job completed successfully", "job_id", job.ID)
+		logger.L.Debug("Job completed successfully", "job_id", job.ID)
 	}
 }
 

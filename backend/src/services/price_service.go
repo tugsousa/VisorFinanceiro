@@ -133,11 +133,61 @@ type StockSplit struct {
 	Ratio float64
 }
 
+// FailedISINCache stores failed ISIN lookups to avoid repeated API calls
+type FailedISINCache struct {
+	cache map[string]time.Time
+	mu    sync.RWMutex
+	ttl   time.Duration
+}
+
+func NewFailedISINCache(ttl time.Duration) *FailedISINCache {
+	fc := &FailedISINCache{
+		cache: make(map[string]time.Time),
+		ttl:   ttl,
+	}
+	// Start cleanup goroutine to remove expired entries
+	go fc.cleanupLoop()
+	return fc
+}
+
+func (fc *FailedISINCache) IsFailed(isin string) bool {
+	fc.mu.RLock()
+	defer fc.mu.RUnlock()
+	if lastFailed, exists := fc.cache[isin]; exists {
+		if time.Since(lastFailed) < fc.ttl {
+			return true
+		}
+	}
+	return false
+}
+
+func (fc *FailedISINCache) MarkFailed(isin string) {
+	fc.mu.Lock()
+	defer fc.mu.Unlock()
+	fc.cache[isin] = time.Now()
+}
+
+func (fc *FailedISINCache) cleanupLoop() {
+	ticker := time.NewTicker(5 * time.Minute)
+	defer ticker.Stop()
+	for range ticker.C {
+		fc.mu.Lock()
+		now := time.Now()
+		for isin, lastFailed := range fc.cache {
+			if now.Sub(lastFailed) >= fc.ttl {
+				delete(fc.cache, isin)
+			}
+		}
+		fc.mu.Unlock()
+	}
+}
+
 type priceServiceImpl struct {
-	httpClient    http.Client
-	isInitialized bool
-	crumb         string
-	mu            sync.Mutex
+	httpClient      http.Client
+	isInitialized   bool
+	crumb           string
+	mu              sync.Mutex
+	failedISINCache *FailedISINCache
 }
 
 func NewPriceService() PriceService {
@@ -152,8 +202,9 @@ func NewPriceService() PriceService {
 	}
 
 	s := &priceServiceImpl{
-		httpClient:    client,
-		isInitialized: false,
+		httpClient:      client,
+		isInitialized:   false,
+		failedISINCache: NewFailedISINCache(1 * time.Hour), // Cache failed ISINs for 1 hour
 	}
 
 	go s.initializeYahooSession()
@@ -169,7 +220,7 @@ func (s *priceServiceImpl) initializeYahooSession() {
 		return
 	}
 
-	logger.L.Info("Initializing Yahoo Finance session and fetching Crumb...")
+	logger.L.Debug("Initializing Yahoo Finance session and fetching Crumb...")
 	const userAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
 
 	req1, _ := http.NewRequest("GET", "https://fc.yahoo.com", nil)
@@ -201,10 +252,33 @@ func (s *priceServiceImpl) initializeYahooSession() {
 		bodyBytes, _ := io.ReadAll(resp3.Body)
 		s.crumb = string(bodyBytes)
 		s.isInitialized = true
-		logger.L.Info("Yahoo session initialized successfully", "crumb", s.crumb)
+		logger.L.Debug("Yahoo session initialized successfully", "crumb", s.crumb)
 	} else {
 		logger.L.Warn("Failed to fetch crumb", "status", resp3.Status)
 	}
+
+	// Load failed ISINs from database into cache
+	s.loadFailedISINsFromDB()
+}
+
+// loadFailedISINsFromDB loads failed ISINs from the database into the in-memory cache
+func (s *priceServiceImpl) loadFailedISINsFromDB() {
+	failedISINs, err := model.GetFailedISINs(database.DB)
+	if err != nil {
+		logger.L.Error("Failed to load failed ISINs from database", "error", err)
+		return
+	}
+
+	s.failedISINCache.mu.Lock()
+	defer s.failedISINCache.mu.Unlock()
+
+	for isin, lastFailed := range failedISINs {
+		if time.Since(lastFailed) < s.failedISINCache.ttl {
+			s.failedISINCache.cache[isin] = lastFailed
+		}
+	}
+
+	logger.L.Debug("Loaded failed ISINs from database", "count", len(failedISINs))
 }
 
 func (s *priceServiceImpl) ensureSession() {
@@ -432,6 +506,11 @@ func (s *priceServiceImpl) fetchTickerForISIN(isin string) (string, string, stri
 		return ticker, "Override", "", nil
 	}
 
+	// Check negative cache first to avoid repeated API calls for failed ISINs
+	if s.failedISINCache.IsFailed(isin) {
+		return "", "", "", fmt.Errorf("ISIN %s previously failed lookup, skipping API call", isin)
+	}
+
 	searchURL := fmt.Sprintf("https://query1.finance.yahoo.com/v1/finance/search?q=%s&quotesCount=1&lang=en-US", isin)
 	req, err := http.NewRequest("GET", searchURL, nil)
 	if err != nil {
@@ -448,13 +527,22 @@ func (s *priceServiceImpl) fetchTickerForISIN(isin string) (string, string, stri
 		return "", "", "", fmt.Errorf("failed to read response body: %w", err)
 	}
 	if resp.StatusCode != http.StatusOK {
+		// Mark as failed in cache and database
+		s.failedISINCache.MarkFailed(isin)
+		model.InsertFailedISIN(database.DB, isin)
 		return "", "", "", fmt.Errorf("yahoo search API returned non-OK status %d", resp.StatusCode)
 	}
 	var searchData yahooSearchResponse
 	if err := json.Unmarshal(bodyBytes, &searchData); err != nil {
+		// Mark as failed in cache and database
+		s.failedISINCache.MarkFailed(isin)
+		model.InsertFailedISIN(database.DB, isin)
 		return "", "", "", fmt.Errorf("failed to decode Yahoo search response: %w", err)
 	}
 	if len(searchData.Quotes) == 0 || searchData.Quotes[0].Symbol == "" {
+		// Mark as failed in cache and database
+		s.failedISINCache.MarkFailed(isin)
+		model.InsertFailedISIN(database.DB, isin)
 		return "", "", "", fmt.Errorf("no ticker symbol found for ISIN %s", isin)
 	}
 	quote := searchData.Quotes[0]
@@ -503,9 +591,9 @@ func (s *priceServiceImpl) GetHistoricalPrices(ticker string) (PriceMap, string,
 	// Fazemos isto primeiro. Se falhar, apenas avisamos e continuamos sem correção.
 	splits, errSplits := s.fetchSplits(ticker)
 	if errSplits != nil {
-		logger.L.Warn("Failed to fetch splits (continuing without adjustment)", "ticker", ticker, "error", errSplits)
+		logger.L.Debug("Failed to fetch splits (continuing without adjustment)", "ticker", ticker, "error", errSplits)
 	} else if len(splits) > 0 {
-		logger.L.Info("Splits found", "ticker", ticker, "count", len(splits))
+		logger.L.Debug("Splits found", "ticker", ticker, "count", len(splits))
 	}
 	// ---------------------------
 

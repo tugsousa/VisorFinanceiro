@@ -51,6 +51,8 @@ type uploadServiceImpl struct {
 	priceService          PriceService
 	reportCache           *cache.Cache
 	jobManager            *JobManager
+	// Add rebuild guards to prevent duplicate concurrent rebuilds
+	rebuildRunning sync.Map // key: "userID:portfolioID", value: struct{}{}
 }
 
 func NewUploadService(
@@ -291,7 +293,7 @@ func (s *uploadServiceImpl) RefreshDailySnapshot(userID int64, portfolioID int64
 			// If the gap is >= 2 days (meaning at least one full day is missing between Last and Today),
 			// we trigger the backfill/rebuild process to fill the chart gaps.
 			if daysDiff >= 2.0 {
-				logger.L.Info("Snapshot gap detected, triggering history backfill",
+				logger.L.Debug("Snapshot gap detected, triggering history backfill",
 					"userID", userID,
 					"lastDate", lastUpdateStr,
 					"gapDays", daysDiff)
@@ -301,6 +303,16 @@ func (s *uploadServiceImpl) RefreshDailySnapshot(userID int64, portfolioID int64
 	}
 
 	if shouldRebuild {
+		// Check if rebuild is already running for this user/portfolio
+		key := fmt.Sprintf("%d:%d", userID, portfolioID)
+		if _, loaded := s.rebuildRunning.LoadOrStore(key, struct{}{}); loaded {
+			logger.L.Info("History rebuild already in progress, skipping duplicate",
+				"userID", userID,
+				"portfolioID", portfolioID)
+			return nil
+		}
+		defer s.rebuildRunning.Delete(key)
+
 		// RebuildUserHistory iterates from the first transaction to today,
 		// fetching historical prices and generating daily snapshots for all missing days.
 		return s.RebuildUserHistory(userID, portfolioID)
@@ -1113,16 +1125,19 @@ func (s *uploadServiceImpl) GetHistoricalChartData(userID int64, portfolioID int
 			unitsTrade := pendingCashToInvest / price
 			currentBenchmarkUnits += unitsTrade
 
-			// Logs para debug em datas específicas (abril/maio 2025)
+			// Logs para debug em datas específicas (abril/maio 2025) - Sampled to reduce noise
 			if strings.Contains(date, "2025-04") || strings.Contains(date, "2025-05") {
 				if dailyNetFlow != 0 || pendingCashToInvest != 0 {
-					logger.L.Info("Benchmark Loop Debug",
-						"date", date,
-						"dailyNetFlow", dailyNetFlow,
-						"pendingCash", pendingCashToInvest,
-						"price", price,
-						"unitsTrade", unitsTrade,
-						"totalUnits", currentBenchmarkUnits)
+					// Sample every 10th iteration to reduce log noise
+					if i%10 == 0 {
+						logger.L.Debug("Benchmark Loop Debug",
+							"date", date,
+							"dailyNetFlow", dailyNetFlow,
+							"pendingCash", pendingCashToInvest,
+							"price", price,
+							"unitsTrade", unitsTrade,
+							"totalUnits", currentBenchmarkUnits)
+					}
 				}
 			}
 
