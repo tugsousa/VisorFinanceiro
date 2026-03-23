@@ -36,7 +36,7 @@ func LoadHistoricalRates(filePath string) error {
 	return nil
 }
 
-// GetExchangeRate retrieves the exchange rate using a "Bulk Fetch" strategy.
+// GetExchangeRate retrieves the exchange rate using an optimized bulk fetch strategy.
 func GetExchangeRate(currency string, date time.Time) (float64, error) {
 	if currency == "EUR" {
 		return 1.0, nil
@@ -57,19 +57,24 @@ func GetExchangeRate(currency string, date time.Time) (float64, error) {
 		}
 	}
 
-	// Step B: Look up the rate in cache
-	for i := 0; i < 7; i++ {
+	// Step B: Look up the rate in cache with optimized search
+	// First check the exact date
+	cacheKey := fmt.Sprintf("rate-%s-%s", currency, date.Format("2006-01-02"))
+	if rate, found := rateCache.Get(cacheKey); found {
+		return rate.(float64), nil
+	}
+
+	// If not found, check previous days (weekends/holidays)
+	for i := 1; i <= 7; i++ {
 		queryDate := date.AddDate(0, 0, -i)
 		cacheKey := fmt.Sprintf("rate-%s-%s", currency, queryDate.Format("2006-01-02"))
 
 		if rate, found := rateCache.Get(cacheKey); found {
-			// DEBUG: Log the rate found for verification
-			// logger.L.Debug("Exchange Rate: Cache Hit", "currency", currency, "date", queryDate.Format("2006-01-02"), "rate", rate)
 			return rate.(float64), nil
 		}
 	}
 
-	// Step C: Ultimate Fallback (ECB API)
+	// Step C: Ultimate Fallback (ECB API) - Only if cache is completely empty
 	logger.L.Warn("Exchange Rate: Cache miss after bulk fetch, trying ECB fallback", "currency", currency, "date", date.Format("2006-01-02"))
 
 	rate, err := fetchECBRate(currency, date)
