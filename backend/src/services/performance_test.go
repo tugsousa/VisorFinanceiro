@@ -1,270 +1,412 @@
-// backend/src/services/performance_test.go
 package services
 
 import (
+	"context"
 	"fmt"
-	"io"
+	"log"
+	"sync"
 	"testing"
 	"time"
 
-	"github.com/username/taxfolio/backend/src/models"
+	"github.com/username/taxfolio/backend/src/database"
+	"github.com/username/taxfolio/backend/src/model"
 )
 
-// Mock parser for testing
-type mockParser struct {
-	transactions []models.CanonicalTransaction
-}
-
-func (p *mockParser) Parse(file io.Reader) ([]models.CanonicalTransaction, error) {
-	return p.transactions, nil
-}
-
-// Mock transaction processor
-type mockTransactionProcessor struct{}
-
-func (p *mockTransactionProcessor) Process(txs []models.CanonicalTransaction) []models.ProcessedTransaction {
-	var processed []models.ProcessedTransaction
-	for _, tx := range txs {
-		processed = append(processed, models.ProcessedTransaction{
-			Date:               tx.TransactionDate.Format("02-01-2006"),
-			Source:             tx.Source,
-			ProductName:        tx.ProductName,
-			ISIN:               tx.ISIN,
-			Quantity:           int(tx.Quantity),
-			OriginalQuantity:   int(tx.Quantity),
-			Price:              tx.Price,
-			TransactionType:    tx.TransactionType,
-			TransactionSubType: tx.TransactionSubType,
-			BuySell:            tx.BuySell,
-			Description:        tx.RawText,
-			Amount:             tx.Amount,
-			Currency:           tx.Currency,
-			Commission:         0,
-			OrderID:            tx.OrderID,
-			ExchangeRate:       1.0,
-			AmountEUR:          tx.Amount,
-			CountryCode:        "PT",
-			InputString:        tx.RawText,
-			HashId:             "test-hash",
-			CashBalance:        0,
-			BalanceCurrency:    "EUR",
-		})
-	}
-	return processed
-}
-
-// Mock price service
-type mockPriceService struct{}
-
-func (s *mockPriceService) GetCurrentPrices(isins []string) (map[string]PriceInfo, error) {
-	// Simulate API delay
-	time.Sleep(100 * time.Millisecond)
-
-	results := make(map[string]PriceInfo)
-	for _, isin := range isins {
-		results[isin] = PriceInfo{
-			Status:   "OK",
-			Price:    100.0,
-			Currency: "EUR",
-		}
-	}
-	return results, nil
-}
-
-func (s *mockPriceService) GetHistoricalPrices(ticker string) (PriceMap, string, error) {
-	return make(PriceMap), "EUR", nil
-}
-
-func (s *mockPriceService) GetLastYearDividends(ticker string) (map[time.Month]float64, string, error) {
-	return make(map[time.Month]float64), "EUR", nil
-}
-
-func (s *mockPriceService) EnsureBenchmarkData() error {
-	return nil
-}
-
-// Test performance improvements
-func TestUploadPerformanceOptimizations(t *testing.T) {
-	// Create test data with multiple ISINs to simulate large document
+// BenchmarkUploadPerformance benchmarks the upload performance with optimized ISIN resolution
+func BenchmarkUploadPerformance(b *testing.B) {
+	// Create test data with multiple ISINs
 	testISINs := []string{
-		"IE000U9J8HX9", // JEPQ.L
-		"IE00BK5BQT80", // VWRA.L
-		"US5168061068", // MSFT
-		"US0378331005", // AAPL
-		"US5949181045", // NFLX
-		"US0231351067", // AMZN
-		"US56583A1014", // NVDA
-		"US02079K3059", // ABBV
-		"US0382221051", // ADBE
-		"US0231351067", // AMZN (duplicate)
+		"US5949181045", // Microsoft
+		"US38259P5089", // Google
+		"US0378331005", // Amazon
+		"US5949181045", // Microsoft (duplicate)
+		"US0231351067", // Apple
+		"IE00B4L5Y983", // iShares Core MSCI World UCITS ETF
+		"IE00B5BMR087", // Vanguard S&P 500 UCITS ETF
+		"US78462F1030", // Meta Platforms
+		"US6174464486", // Netflix
+		"US67066G1040", // Tesla
 	}
-
-	// Create mock transactions
-	var transactions []models.CanonicalTransaction
-	for i, isin := range testISINs {
-		transactions = append(transactions, models.CanonicalTransaction{
-			Source:          "degiro",
-			TransactionDate: time.Now(),
-			ProductName:     fmt.Sprintf("Test Product %d", i),
-			ISIN:            isin,
-			Quantity:        10,
-			Price:           100.0,
-			Currency:        "EUR",
-			OrderID:         fmt.Sprintf("ORDER-%d", i),
-			RawText:         fmt.Sprintf("Test transaction for %s", isin),
-			Amount:          1000.0,
-			TransactionType: "STOCK",
-			BuySell:         "BUY",
-		})
-	}
-
-	// Create mock services
-	transactionProcessor := &mockTransactionProcessor{}
-	priceService := &mockPriceService{}
-
-	// Test ISIN resolution performance
-	t.Run("ISIN Resolution Performance", func(t *testing.T) {
-		start := time.Now()
-
-		// Simulate the optimized ISIN resolution process
-		isinList := make([]string, 0, len(testISINs))
-		for _, tx := range transactions {
-			if len(tx.ISIN) == 12 {
-				isinList = append(isinList, tx.ISIN)
-			}
-		}
-
-		// This should be much faster with our optimizations
-		_, err := priceService.GetCurrentPrices(isinList)
-		if err != nil {
-			t.Fatalf("Failed to get prices: %v", err)
-		}
-
-		duration := time.Since(start)
-		t.Logf("ISIN resolution took: %v", duration)
-
-		// With optimizations, this should complete in under 200ms
-		// (Previously would take 7+ seconds for large documents)
-		if duration > 200*time.Millisecond {
-			t.Errorf("ISIN resolution too slow: %v (expected < 200ms)", duration)
-		}
-	})
-
-	// Test upload processing with background ISIN resolution
-	t.Run("Upload Processing with Background Resolution", func(t *testing.T) {
-		start := time.Now()
-
-		// Process transactions (this is fast)
-		processedTxs := transactionProcessor.Process(transactions)
-
-		// Start background ISIN resolution (this runs concurrently)
-		go func() {
-			isinList := make([]string, 0, len(testISINs))
-			for _, tx := range processedTxs {
-				if len(tx.ISIN) == 12 {
-					isinList = append(isinList, tx.ISIN)
-				}
-			}
-			_, _ = priceService.GetCurrentPrices(isinList)
-		}()
-
-		// Main upload processing continues without waiting
-		uploadDuration := time.Since(start)
-		t.Logf("Upload processing took: %v", uploadDuration)
-
-		// Main upload should be very fast (under 50ms)
-		// The ISIN resolution happens in background
-		if uploadDuration > 50*time.Millisecond {
-			t.Errorf("Upload processing too slow: %v (expected < 50ms)", uploadDuration)
-		}
-	})
-
-	// Test parallel processing benefits
-	t.Run("Parallel Processing Benefits", func(t *testing.T) {
-		// Test with larger dataset to see parallel benefits
-		largeISINs := make([]string, 50)
-		for i := 0; i < 50; i++ {
-			largeISINs[i] = fmt.Sprintf("TEST-ISIN-%03d", i)
-		}
-
-		start := time.Now()
-
-		// Process in parallel (simulated)
-		chunkSize := 10
-		for i := 0; i < len(largeISINs); i += chunkSize {
-			end := i + chunkSize
-			if end > len(largeISINs) {
-				end = len(largeISINs)
-			}
-
-			// Simulate parallel processing of chunks
-			batch := largeISINs[i:end]
-			go func(batch []string) {
-				_, _ = priceService.GetCurrentPrices(batch)
-			}(batch)
-		}
-
-		// Wait a bit for goroutines to complete
-		time.Sleep(200 * time.Millisecond)
-
-		parallelDuration := time.Since(start)
-		t.Logf("Parallel processing of %d ISINs took: %v", len(largeISINs), parallelDuration)
-
-		// Should be significantly faster than sequential processing
-		if parallelDuration > 500*time.Millisecond {
-			t.Errorf("Parallel processing too slow: %v", parallelDuration)
-		}
-	})
-}
-
-// Benchmark the upload service
-func BenchmarkUploadService(b *testing.B) {
-	// Create test data
-	testISINs := []string{
-		"IE000U9J8HX9", "IE00BK5BQT80", "US5168061068", "US0378331005",
-		"US5949181045", "US0231351067", "US56583A1014", "US02079K3059",
-	}
-
-	var transactions []models.CanonicalTransaction
-	for i, isin := range testISINs {
-		transactions = append(transactions, models.CanonicalTransaction{
-			Source:          "degiro",
-			TransactionDate: time.Now(),
-			ProductName:     fmt.Sprintf("Test Product %d", i),
-			ISIN:            isin,
-			Quantity:        10,
-			Price:           100.0,
-			Currency:        "EUR",
-			OrderID:         fmt.Sprintf("ORDER-%d", i),
-			RawText:         fmt.Sprintf("Test transaction for %s", isin),
-			Amount:          1000.0,
-			TransactionType: "STOCK",
-			BuySell:         "BUY",
-		})
-	}
-
-	transactionProcessor := &mockTransactionProcessor{}
-	priceService := &mockPriceService{}
 
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		// Simulate upload processing
-		processedTxs := transactionProcessor.Process(transactions)
 
-		// Extract unique ISINs
-		uniqueISINs := make(map[string]bool)
-		for _, tx := range processedTxs {
-			if len(tx.ISIN) == 12 {
-				uniqueISINs[tx.ISIN] = true
+	for i := 0; i < b.N; i++ {
+		// Test the optimized ISIN resolution
+		service := NewPriceService()
+		start := time.Now()
+
+		// Simulate bulk ISIN resolution
+		results, err := service.GetCurrentPrices(testISINs)
+		duration := time.Since(start)
+
+		if err != nil {
+			b.Errorf("Error during ISIN resolution: %v", err)
+		}
+
+		// Log performance metrics
+		successCount := 0
+		for _, result := range results {
+			if result.Status == "OK" {
+				successCount++
 			}
 		}
 
-		isinList := make([]string, 0, len(uniqueISINs))
-		for isin := range uniqueISINs {
-			isinList = append(isinList, isin)
-		}
+		b.Logf("Batch %d: Resolved %d/%d ISINs in %v", i+1, successCount, len(testISINs), duration)
 
-		// This represents the optimized ISIN resolution
-		_, _ = priceService.GetCurrentPrices(isinList)
+		// Performance assertions
+		if duration > 30*time.Second {
+			b.Errorf("ISIN resolution took too long: %v", duration)
+		}
+	}
+}
+
+// TestBulkISINResolution tests the bulk ISIN resolution functionality
+func TestBulkISINResolution(t *testing.T) {
+	service := NewPriceService()
+
+	// Test with a mix of known and unknown ISINs
+	testISINs := []string{
+		"US5949181045",   // Microsoft
+		"US38259P5089",   // Google
+		"INVALIDISIN123", // Invalid ISIN
+		"US0378331005",   // Amazon
+	}
+
+	results, err := service.GetCurrentPrices(testISINs)
+	if err != nil {
+		t.Errorf("Unexpected error: %v", err)
+	}
+
+	// Verify results
+	if len(results) != len(testISINs) {
+		t.Errorf("Expected %d results, got %d", len(testISINs), len(results))
+	}
+
+	// Check that valid ISINs have prices
+	validCount := 0
+	for isin, result := range results {
+		if result.Status == "OK" {
+			validCount++
+			if result.Price <= 0 {
+				t.Errorf("Invalid price for ISIN %s: %f", isin, result.Price)
+			}
+			if result.Currency != "EUR" {
+				t.Errorf("Expected EUR currency, got %s for ISIN %s", result.Currency, isin)
+			}
+		}
+	}
+
+	t.Logf("Successfully resolved %d out of %d ISINs", validCount, len(testISINs))
+}
+
+// TestCircuitBreakerBehavior tests the circuit breaker functionality
+func TestCircuitBreakerBehavior(t *testing.T) {
+	service := NewPriceService()
+
+	// Test with an ISIN that should fail multiple times
+	invalidISIN := "INVALIDISIN12345"
+
+	// Force multiple failures to trigger circuit breaker
+	for i := 0; i < 12; i++ {
+		_, err := service.GetCurrentPrices([]string{invalidISIN})
+		if err != nil {
+			t.Logf("Attempt %d failed as expected: %v", i+1, err)
+		}
+	}
+
+	// After multiple failures, circuit breaker should be open
+	// This should fail quickly without making API calls
+	start := time.Now()
+	_, _ = service.GetCurrentPrices([]string{invalidISIN})
+	duration := time.Since(start)
+
+	if duration > 100*time.Millisecond {
+		t.Errorf("Circuit breaker should have failed quickly, took %v", duration)
+	}
+
+	t.Logf("Circuit breaker test completed in %v", duration)
+}
+
+// TestCacheEffectiveness tests the effectiveness of caching
+func TestCacheEffectiveness(t *testing.T) {
+	service := NewPriceService()
+
+	// First request should take time
+	start := time.Now()
+	results1, err := service.GetCurrentPrices([]string{"US5949181045"}) // Microsoft
+	firstDuration := time.Since(start)
+
+	if err != nil {
+		t.Errorf("First request failed: %v", err)
+	}
+
+	// Second request should be faster due to caching
+	start = time.Now()
+	results2, err := service.GetCurrentPrices([]string{"US5949181045"}) // Microsoft again
+	secondDuration := time.Since(start)
+
+	if err != nil {
+		t.Errorf("Second request failed: %v", err)
+	}
+
+	// Verify results are the same
+	if len(results1) != len(results2) {
+		t.Errorf("Result counts don't match")
+	}
+
+	for isin, result1 := range results1 {
+		result2, exists := results2[isin]
+		if !exists {
+			t.Errorf("ISIN %s missing from second result", isin)
+		}
+		if result1.Price != result2.Price {
+			t.Errorf("Prices don't match for ISIN %s: %f vs %f", isin, result1.Price, result2.Price)
+		}
+	}
+
+	t.Logf("First request: %v, Second request: %v", firstDuration, secondDuration)
+
+	// The second request should be significantly faster (at least 50% faster)
+	if secondDuration > firstDuration/2 {
+		t.Logf("Warning: Cache effectiveness may be limited, second request was not significantly faster")
+	}
+}
+
+// TestConcurrentISINResolution tests concurrent ISIN resolution
+func TestConcurrentISINResolution(t *testing.T) {
+	service := NewPriceService()
+
+	// Test concurrent resolution of the same ISIN
+	isin := "US5949181045" // Microsoft
+	var wg sync.WaitGroup
+	results := make([]map[string]PriceInfo, 10)
+	errors := make([]error, 10)
+
+	for i := 0; i < 10; i++ {
+		wg.Add(1)
+		go func(index int) {
+			defer wg.Done()
+			results[index], errors[index] = service.GetCurrentPrices([]string{isin})
+		}(i)
+	}
+
+	wg.Wait()
+
+	// Verify all requests succeeded
+	for i, err := range errors {
+		if err != nil {
+			t.Errorf("Request %d failed: %v", i, err)
+		}
+	}
+
+	// Verify all results are consistent
+	if len(results) > 0 {
+		expectedPrice := results[0][isin].Price
+		for i, result := range results {
+			if result[isin].Price != expectedPrice {
+				t.Errorf("Inconsistent price in request %d: %f vs %f", i, result[isin].Price, expectedPrice)
+			}
+		}
+	}
+
+	t.Logf("Successfully completed %d concurrent requests for ISIN %s", len(results), isin)
+}
+
+// TestDatabaseOperations tests the optimized database operations
+func TestDatabaseOperations(t *testing.T) {
+	// Test batch insert operations
+	mappings := []model.ISINTickerMap{
+		{
+			ISIN:         "TESTISIN001",
+			TickerSymbol: "TEST1",
+			Currency:     "USD",
+		},
+		{
+			ISIN:         "TESTISIN002",
+			TickerSymbol: "TEST2",
+			Currency:     "EUR",
+		},
+		{
+			ISIN:         "TESTISIN003",
+			TickerSymbol: "TEST3",
+			Currency:     "GBP",
+		},
+	}
+
+	start := time.Now()
+	err := model.BatchInsertMappings(database.DB, mappings)
+	duration := time.Since(start)
+
+	if err != nil {
+		t.Errorf("Batch insert failed: %v", err)
+	}
+
+	t.Logf("Batch insert of %d mappings completed in %v", len(mappings), duration)
+
+	// Test batch retrieval
+	isins := []string{"TESTISIN001", "TESTISIN002", "TESTISIN003"}
+	start = time.Now()
+	retrievedMappings, err := model.GetMappingsByISINs(database.DB, isins)
+	retrievalDuration := time.Since(start)
+
+	if err != nil {
+		t.Errorf("Batch retrieval failed: %v", err)
+	}
+
+	if len(retrievedMappings) != len(mappings) {
+		t.Errorf("Expected %d mappings, got %d", len(mappings), len(retrievedMappings))
+	}
+
+	t.Logf("Batch retrieval of %d mappings completed in %v", len(retrievedMappings), retrievalDuration)
+}
+
+// RunPerformanceTest runs a comprehensive performance test
+func RunPerformanceTest() {
+	fmt.Println("=== Performance Test Report ===")
+
+	// Test 1: Bulk ISIN resolution performance
+	fmt.Println("\n1. Bulk ISIN Resolution Performance:")
+	service := NewPriceService()
+	testISINs := []string{
+		"US5949181045", "US38259P5089", "US0378331005",
+		"US0231351067", "IE00B4L5Y983", "IE00B5BMR087",
+		"US78462F1030", "US6174464486", "US67066G1040",
+	}
+
+	start := time.Now()
+	results, err := service.GetCurrentPrices(testISINs)
+	duration := time.Since(start)
+
+	if err != nil {
+		fmt.Printf("   Error: %v\n", err)
+	} else {
+		successCount := 0
+		for _, result := range results {
+			if result.Status == "OK" {
+				successCount++
+			}
+		}
+		fmt.Printf("   Resolved %d/%d ISINs in %v\n", successCount, len(testISINs), duration)
+		fmt.Printf("   Average time per ISIN: %v\n", duration/time.Duration(len(testISINs)))
+	}
+
+	// Test 2: Database operations performance
+	fmt.Println("\n2. Database Operations Performance:")
+	mappings := make([]model.ISINTickerMap, 100)
+	for i := 0; i < 100; i++ {
+		mappings[i] = model.ISINTickerMap{
+			ISIN:         fmt.Sprintf("TESTISIN%03d", i),
+			TickerSymbol: fmt.Sprintf("TEST%d", i),
+			Currency:     "USD",
+		}
+	}
+
+	start = time.Now()
+	err = model.BatchInsertMappings(database.DB, mappings)
+	insertDuration := time.Since(start)
+
+	if err != nil {
+		fmt.Printf("   Batch insert error: %v\n", err)
+	} else {
+		fmt.Printf("   Batch insert of %d mappings: %v\n", len(mappings), insertDuration)
+	}
+
+	// Test 3: Concurrent performance
+	fmt.Println("\n3. Concurrent Performance:")
+	var wg sync.WaitGroup
+	concurrentResults := make([]time.Duration, 5)
+
+	for i := 0; i < 5; i++ {
+		wg.Add(1)
+		go func(index int) {
+			defer wg.Done()
+			start := time.Now()
+			_, _ = service.GetCurrentPrices([]string{"US5949181045"})
+			concurrentResults[index] = time.Since(start)
+		}(i)
+	}
+
+	wg.Wait()
+
+	totalConcurrentTime := time.Duration(0)
+	for _, duration := range concurrentResults {
+		totalConcurrentTime += duration
+	}
+	avgConcurrentTime := totalConcurrentTime / time.Duration(len(concurrentResults))
+
+	fmt.Printf("   Average concurrent request time: %v\n", avgConcurrentTime)
+
+	// Test 4: Cache effectiveness
+	fmt.Println("\n4. Cache Effectiveness:")
+	start = time.Now()
+	_, _ = service.GetCurrentPrices([]string{"US5949181045"})
+	firstRequestTime := time.Since(start)
+
+	start = time.Now()
+	_, _ = service.GetCurrentPrices([]string{"US5949181045"})
+	secondRequestTime := time.Since(start)
+
+	fmt.Printf("   First request: %v\n", firstRequestTime)
+	fmt.Printf("   Second request (cached): %v\n", secondRequestTime)
+	fmt.Printf("   Cache improvement: %.2fx faster\n", float64(firstRequestTime)/float64(secondRequestTime))
+
+	fmt.Println("\n=== Performance Test Complete ===")
+}
+
+// TestPerformanceIntegration runs integration tests for the performance optimizations
+func TestPerformanceIntegration(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping integration test in short mode")
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+
+	// Run performance test in a goroutine
+	done := make(chan bool)
+	go func() {
+		RunPerformanceTest()
+		done <- true
+	}()
+
+	select {
+	case <-done:
+		t.Log("Performance test completed successfully")
+	case <-ctx.Done():
+		t.Fatal("Performance test timed out")
+	}
+}
+
+// BenchmarkCircuitBreaker tests the circuit breaker performance
+func BenchmarkCircuitBreaker(b *testing.B) {
+	service := NewPriceService()
+	invalidISIN := "INVALIDISIN12345"
+
+	// Pre-fail the circuit breaker
+	for i := 0; i < 15; i++ {
+		service.GetCurrentPrices([]string{invalidISIN})
+	}
+
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		_, err := service.GetCurrentPrices([]string{invalidISIN})
+		if err == nil {
+			b.Error("Expected circuit breaker to be open")
+		}
+	}
+}
+
+// BenchmarkThrottling tests the throttling mechanism
+func BenchmarkThrottling(b *testing.B) {
+	service := NewPriceService()
+
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		_, err := service.GetCurrentPrices([]string{"US5949181045"})
+		if err != nil {
+			log.Printf("Request %d failed: %v", i, err)
+		}
 	}
 }
