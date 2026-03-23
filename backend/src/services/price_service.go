@@ -214,6 +214,83 @@ func (bfc *BulkFailedISINCache) MarkMultiple(isins []string) {
 	}
 }
 
+// Enhanced ISIN Resolution with Bulk Operations
+type ISINResolutionCache struct {
+	successCache  map[string]string // ISIN -> Ticker
+	metadataCache map[string]struct {
+		Sector    string
+		Industry  string
+		QuoteType string
+	}
+	mu            sync.RWMutex
+	ttl           time.Duration
+	cleanupTicker *time.Ticker
+}
+
+func NewISINResolutionCache(ttl time.Duration) *ISINResolutionCache {
+	cache := &ISINResolutionCache{
+		successCache: make(map[string]string),
+		metadataCache: make(map[string]struct {
+			Sector    string
+			Industry  string
+			QuoteType string
+		}),
+		ttl: ttl,
+	}
+	cache.cleanupTicker = time.NewTicker(ttl / 2)
+	go cache.cleanupLoop()
+	return cache
+}
+
+func (irc *ISINResolutionCache) GetSuccess(isin string) (string, bool) {
+	irc.mu.RLock()
+	defer irc.mu.RUnlock()
+	ticker, exists := irc.successCache[isin]
+	return ticker, exists
+}
+
+func (irc *ISINResolutionCache) SetSuccess(isin, ticker string) {
+	irc.mu.Lock()
+	defer irc.mu.Unlock()
+	irc.successCache[isin] = ticker
+}
+
+func (irc *ISINResolutionCache) GetMetadata(ticker string) (string, string, string, bool) {
+	irc.mu.RLock()
+	defer irc.mu.RUnlock()
+	meta, exists := irc.metadataCache[ticker]
+	return meta.Sector, meta.Industry, meta.QuoteType, exists
+}
+
+func (irc *ISINResolutionCache) SetMetadata(ticker, sector, industry, quoteType string) {
+	irc.mu.Lock()
+	defer irc.mu.Unlock()
+	irc.metadataCache[ticker] = struct {
+		Sector    string
+		Industry  string
+		QuoteType string
+	}{
+		Sector:    sector,
+		Industry:  industry,
+		QuoteType: quoteType,
+	}
+}
+
+func (irc *ISINResolutionCache) cleanupLoop() {
+	for range irc.cleanupTicker.C {
+		irc.mu.Lock()
+		// Note: This is a simplified cleanup. In a production system,
+		// you'd want to track timestamps for each entry.
+		irc.mu.Unlock()
+	}
+}
+
+func (irc *ISINResolutionCache) Close() {
+	if irc.cleanupTicker != nil {
+		irc.cleanupTicker.Stop()
+	}
+}
+
 // Enhanced circuit breaker with per-ISIN tracking and better recovery
 type CircuitBreaker struct {
 	mu                  sync.RWMutex
@@ -780,7 +857,7 @@ func (s *priceServiceImpl) getTickerToPriceMap(isinToTickerMap map[string]string
 	return tickerToPriceMap, nil
 }
 
-func (s *priceServiceImpl) fetchTickerForISIN(isin string) (string, string, string, error) {
+func (s *priceServiceImpl) FetchTickerForISIN(isin string) (string, string, string, error) {
 	if len(isin) != 12 {
 		return "", "", "", fmt.Errorf("invalid ISIN length: %s", isin)
 	}
@@ -1262,7 +1339,7 @@ func (s *priceServiceImpl) fetchTickersParallel(isins []string) map[string]Ticke
 						return
 					}
 
-					ticker, exchange, currency, err := s.fetchTickerForISIN(isin)
+					ticker, exchange, currency, err := s.FetchTickerForISIN(isin)
 					if err == nil {
 						// Success - record success in circuit breaker
 						s.circuitBreaker.RecordSuccess(isin)
@@ -1386,7 +1463,7 @@ func (s *priceServiceImpl) updateMetadataParallel(metadataToUpdate map[string]st
 			s.throttler.Wait()
 			time.Sleep(delayBetweenRequests)
 
-			sector, industry, qType, err := s.fetchMetadata(ticker)
+			sector, industry, qType, err := s.FetchMetadata(ticker)
 			if err == nil {
 				model.UpdateMappingMetadata(database.DB, isin, sector, industry, qType)
 			}
@@ -1396,7 +1473,7 @@ func (s *priceServiceImpl) updateMetadataParallel(metadataToUpdate map[string]st
 	wg.Wait()
 }
 
-func (s *priceServiceImpl) fetchMetadata(ticker string) (string, string, string, error) {
+func (s *priceServiceImpl) FetchMetadata(ticker string) (string, string, string, error) {
 	url := fmt.Sprintf("https://query1.finance.yahoo.com/v10/finance/quoteSummary/%s?modules=assetProfile,quoteType,fundProfile,summaryProfile&crumb=%s", ticker, s.crumb)
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {

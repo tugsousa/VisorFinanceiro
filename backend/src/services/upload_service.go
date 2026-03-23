@@ -62,6 +62,8 @@ type uploadServiceImpl struct {
 	jobManager            *JobManager
 	// Add rebuild guards to prevent duplicate concurrent rebuilds
 	rebuildRunning sync.Map // key: "userID:portfolioID", value: struct{}{}
+	// Enhanced caching for upload session
+	isinResolutionCache *ISINResolutionCache
 }
 
 func NewUploadService(
@@ -84,6 +86,7 @@ func NewUploadService(
 		priceService:          priceService,
 		reportCache:           reportCache,
 		jobManager:            NewJobManager(),
+		isinResolutionCache:   NewISINResolutionCache(24 * time.Hour), // 24-hour cache for upload session
 	}
 }
 
