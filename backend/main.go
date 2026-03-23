@@ -221,11 +221,13 @@ func main() {
 			r.Use(handlers.CSRFMiddleware(config.Cfg.CSRFAuthKey))
 			r.Post("/auth/login", userHandler.LoginUserHandler)
 			r.Post("/auth/register", userHandler.RegisterUserHandler)
-			r.Post("/auth/refresh", userHandler.RefreshTokenHandler)
 			r.With(userHandler.AuthMiddleware).Post("/auth/logout", userHandler.LogoutUserHandler)
 			r.Post("/auth/request-password-reset", userHandler.RequestPasswordResetHandler)
 			r.Post("/auth/reset-password", userHandler.ResetPasswordHandler)
 		})
+
+		// Refresh endpoint (exempt from CSRF for OAuth flows)
+		r.Post("/auth/refresh", userHandler.RefreshTokenHandler)
 
 		// Rotas Protegidas (Requerem Autenticação e CSRF)
 		r.Group(func(r chi.Router) {
