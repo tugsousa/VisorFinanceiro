@@ -22,6 +22,7 @@ import (
 	"github.com/username/taxfolio/backend/src/security"
 	"github.com/username/taxfolio/backend/src/services"
 	"github.com/username/taxfolio/backend/src/utils"
+	"github.com/username/taxfolio/backend/src/websocket"
 	"golang.org/x/time/rate"
 )
 
@@ -158,6 +159,9 @@ func main() {
 	logger.L.Info("Initializing database...", "path", config.Cfg.DatabasePath)
 	database.InitDB(config.Cfg.DatabasePath)
 	database.RunMigrations(config.Cfg.DatabasePath)
+
+	// Initialize WebSocket hub
+	websocket.InitializeHub()
 
 	reportCache := cache.New(services.DefaultCacheExpiration, services.CacheCleanupInterval)
 
