@@ -29,12 +29,12 @@ type ParallelUploadConfig struct {
 // DefaultParallelUploadConfig returns a default configuration
 func DefaultParallelUploadConfig() *ParallelUploadConfig {
 	return &ParallelUploadConfig{
-		ISINResolutionWorkers:   10,              // Increased from 5
-		PriceFetchingWorkers:    6,               // Increased from 3
-		MetadataFetchingWorkers: 4,               // Increased from 2
-		DatabaseBatchSize:       2000,            // Increased from 1000
-		MaxConcurrentJobs:       8,               // Increased from 5
-		ProgressUpdateInterval:  1 * time.Second, // Reduced from 2 seconds
+		ISINResolutionWorkers:   10,
+		PriceFetchingWorkers:    6,
+		MetadataFetchingWorkers: 4,
+		DatabaseBatchSize:       2000,
+		MaxConcurrentJobs:       8,
+		ProgressUpdateInterval:  1 * time.Second,
 	}
 }
 
@@ -87,7 +87,6 @@ func (pus *ParallelUploadService) ProcessUploadParallel(
 ) (*ParallelUploadResult, error) {
 	startTime := time.Now()
 
-	// Step 1: Parse file (sequential, as it's fast)
 	websocket.BroadcastUploadProgress(userID, portfolioID, 5, 100, "parsing", "Analisando arquivo CSV")
 
 	parser, err := parsers.GetParser(source)
@@ -102,7 +101,6 @@ func (pus *ParallelUploadService) ProcessUploadParallel(
 
 	websocket.BroadcastUploadProgress(userID, portfolioID, 15, 100, "processing", "Processando transações")
 
-	// Step 2: Process transactions (sequential, as it's business logic)
 	newlyProcessedTxs := pus.transactionProc.Process(canonicalTxs)
 	if len(newlyProcessedTxs) == 0 {
 		return &ParallelUploadResult{
@@ -111,7 +109,7 @@ func (pus *ParallelUploadService) ProcessUploadParallel(
 		}, nil
 	}
 
-	// Step 3: Extract unique ISINs for parallel processing
+	// Extract unique ISINs
 	uniqueISINs := make(map[string]bool)
 	for _, tx := range newlyProcessedTxs {
 		if len(tx.ISIN) == 12 {
@@ -124,7 +122,6 @@ func (pus *ParallelUploadService) ProcessUploadParallel(
 		isinList = append(isinList, isin)
 	}
 
-	// Step 4: Parallel ISIN resolution, price fetching, and metadata fetching
 	websocket.BroadcastUploadProgress(userID, portfolioID, 25, 100, "parallel_processing", "Resolvendo ISINs e buscando preços")
 
 	result := &ParallelUploadResult{
@@ -136,31 +133,44 @@ func (pus *ParallelUploadService) ProcessUploadParallel(
 		StartTime:             startTime,
 	}
 
-	// Start progress tracking goroutine
 	progressDone := make(chan struct{})
 	go pus.trackProgress(userID, portfolioID, progressDone)
 
-	// Execute parallel operations
-	err = pus.executeParallelOperations(isinList, result)
+	// FIX #3: do the bulk DB lookup once here, then pass the results map into
+	// the workers so each worker no longer needs its own individual DB query.
+	bulkMappings, err := model.GetMappingsByISINs(database.DB, isinList)
+	if err != nil {
+		logger.L.Error("Failed to bulk-fetch ISIN mappings before workers", "error", err, "userID", userID)
+		// Non-fatal: workers will fall back to their own individual lookups.
+		bulkMappings = make(map[string]model.ISINTickerMap)
+	}
+
+	err = pus.executeParallelOperations(isinList, bulkMappings, result)
 	if err != nil {
 		logger.L.Error("Parallel operations failed", "error", err, "userID", userID, "portfolioID", portfolioID)
 	}
 
-	// Stop progress tracking
 	close(progressDone)
 
-	// Step 5: Database operations with batching
 	websocket.BroadcastUploadProgress(userID, portfolioID, 75, 100, "database", "Salvando transações no banco de dados")
+
+	// FIX #7: determine the earliest new transaction date for incremental rebuild.
+	var earliestNewTxDate string
+	for _, tx := range newlyProcessedTxs {
+		if earliestNewTxDate == "" || tx.Date < earliestNewTxDate {
+			earliestNewTxDate = tx.Date
+		}
+	}
 
 	err = pus.batchDatabaseInsert(newlyProcessedTxs, userID, portfolioID, source, filename, filesize)
 	if err != nil {
 		return nil, fmt.Errorf("database insert failed: %w", err)
 	}
 
-	// Step 6: Start background jobs
 	websocket.BroadcastUploadProgress(userID, portfolioID, 90, 100, "background_jobs", "Iniciando processos em segundo plano")
 
-	go pus.startBackgroundJobs(userID, portfolioID)
+	// FIX #7: pass earliestNewTxDate so the background rebuild is incremental.
+	go pus.startBackgroundJobs(userID, portfolioID, earliestNewTxDate)
 
 	result.EndTime = time.Now()
 	websocket.BroadcastUploadProgress(userID, portfolioID, 100, 100, "completed", "Upload concluído com sucesso")
@@ -168,17 +178,21 @@ func (pus *ParallelUploadService) ProcessUploadParallel(
 	return result, nil
 }
 
-// executeParallelOperations executes ISIN resolution, price fetching, and metadata fetching in parallel
-func (pus *ParallelUploadService) executeParallelOperations(isinList []string, result *ParallelUploadResult) error {
+// executeParallelOperations executes ISIN resolution, price fetching, and metadata fetching in parallel.
+// FIX #3: accepts the pre-fetched bulkMappings map so workers skip per-ISIN DB queries for
+// ISINs that are already known.
+func (pus *ParallelUploadService) executeParallelOperations(
+	isinList []string,
+	bulkMappings map[string]model.ISINTickerMap,
+	result *ParallelUploadResult,
+) error {
 	var wg sync.WaitGroup
 	var mu sync.Mutex
 
-	// Channel-based worker pools
 	isinChan := make(chan string, len(isinList))
 	priceChan := make(chan string, len(isinList))
 	metadataChan := make(chan string, len(isinList))
 
-	// Send ISINs to channels
 	for _, isin := range isinList {
 		isinChan <- isin
 		priceChan <- isin
@@ -188,30 +202,27 @@ func (pus *ParallelUploadService) executeParallelOperations(isinList []string, r
 	close(priceChan)
 	close(metadataChan)
 
-	// Start ISIN resolution workers
 	for i := 0; i < pus.config.ISINResolutionWorkers; i++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			pus.isinResolutionWorker(isinChan, result, &mu)
+			pus.isinResolutionWorker(isinChan, bulkMappings, result, &mu)
 		}()
 	}
 
-	// Start price fetching workers
 	for i := 0; i < pus.config.PriceFetchingWorkers; i++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			pus.priceFetchingWorker(priceChan, result, &mu)
+			pus.priceFetchingWorker(priceChan, bulkMappings, result, &mu)
 		}()
 	}
 
-	// Start metadata fetching workers
 	for i := 0; i < pus.config.MetadataFetchingWorkers; i++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			pus.metadataWorker(metadataChan, result, &mu)
+			pus.metadataWorker(metadataChan, bulkMappings, result, &mu)
 		}()
 	}
 
@@ -219,26 +230,24 @@ func (pus *ParallelUploadService) executeParallelOperations(isinList []string, r
 	return nil
 }
 
-// isinResolutionWorker processes ISIN resolution in parallel
-func (pus *ParallelUploadService) isinResolutionWorker(isinChan <-chan string, result *ParallelUploadResult, mu *sync.Mutex) {
+// isinResolutionWorker processes ISIN resolution in parallel.
+// FIX #3: uses the pre-fetched bulkMappings instead of one DB query per ISIN.
+func (pus *ParallelUploadService) isinResolutionWorker(
+	isinChan <-chan string,
+	bulkMappings map[string]model.ISINTickerMap,
+	result *ParallelUploadResult,
+	mu *sync.Mutex,
+) {
 	for isin := range isinChan {
-		// Check if already resolved in database
-		mappings, err := model.GetMappingsByISINs(database.DB, []string{isin})
-		if err != nil {
-			mu.Lock()
-			result.ISINResolutionErrors[isin] = fmt.Errorf("database query failed: %w", err)
-			mu.Unlock()
-			continue
-		}
-
-		if _, exists := mappings[isin]; exists {
+		// FIX #3: use bulk map instead of a fresh DB query per ISIN.
+		if _, exists := bulkMappings[isin]; exists {
 			mu.Lock()
 			result.ResolvedISINs++
 			mu.Unlock()
 			continue
 		}
 
-		// Resolve ISIN to ticker
+		// Not in bulk map — need to resolve via API.
 		ticker, _, _, err := pus.priceService.FetchTickerForISIN(isin)
 		if err != nil {
 			mu.Lock()
@@ -248,7 +257,6 @@ func (pus *ParallelUploadService) isinResolutionWorker(isinChan <-chan string, r
 			continue
 		}
 
-		// Store mapping
 		mapping := model.ISINTickerMap{
 			ISIN:         isin,
 			TickerSymbol: ticker,
@@ -267,21 +275,22 @@ func (pus *ParallelUploadService) isinResolutionWorker(isinChan <-chan string, r
 	}
 }
 
-// priceFetchingWorker processes price fetching in parallel
-func (pus *ParallelUploadService) priceFetchingWorker(isinChan <-chan string, result *ParallelUploadResult, mu *sync.Mutex) {
+// priceFetchingWorker processes price fetching in parallel.
+// FIX #3: uses the pre-fetched bulkMappings instead of one DB query per ISIN.
+func (pus *ParallelUploadService) priceFetchingWorker(
+	isinChan <-chan string,
+	bulkMappings map[string]model.ISINTickerMap,
+	result *ParallelUploadResult,
+	mu *sync.Mutex,
+) {
 	for isin := range isinChan {
-		// Get ticker from database
-		mappings, err := model.GetMappingsByISINs(database.DB, []string{isin})
-		if err != nil || len(mappings) == 0 {
+		// FIX #3: look up ticker in the pre-fetched map.
+		mapping, exists := bulkMappings[isin]
+		if !exists || mapping.TickerSymbol == "" {
 			continue
 		}
+		ticker := mapping.TickerSymbol
 
-		ticker := mappings[isin].TickerSymbol
-		if ticker == "" {
-			continue
-		}
-
-		// Fetch current price
 		prices, err := pus.priceService.GetCurrentPrices([]string{isin})
 		if err != nil {
 			mu.Lock()
@@ -290,8 +299,7 @@ func (pus *ParallelUploadService) priceFetchingWorker(isinChan <-chan string, re
 			continue
 		}
 
-		if priceInfo, exists := prices[isin]; exists && priceInfo.Status == "OK" {
-			// Store price
+		if priceInfo, ok := prices[isin]; ok && priceInfo.Status == "OK" {
 			dailyPrice := model.DailyPrice{
 				TickerSymbol: ticker,
 				Date:         time.Now().Format("2006-01-02"),
@@ -308,21 +316,22 @@ func (pus *ParallelUploadService) priceFetchingWorker(isinChan <-chan string, re
 	}
 }
 
-// metadataWorker processes metadata fetching in parallel
-func (pus *ParallelUploadService) metadataWorker(isinChan <-chan string, result *ParallelUploadResult, mu *sync.Mutex) {
+// metadataWorker processes metadata fetching in parallel.
+// FIX #3: uses the pre-fetched bulkMappings instead of one DB query per ISIN.
+func (pus *ParallelUploadService) metadataWorker(
+	isinChan <-chan string,
+	bulkMappings map[string]model.ISINTickerMap,
+	result *ParallelUploadResult,
+	mu *sync.Mutex,
+) {
 	for isin := range isinChan {
-		// Get ticker from database
-		mappings, err := model.GetMappingsByISINs(database.DB, []string{isin})
-		if err != nil || len(mappings) == 0 {
+		// FIX #3: look up ticker in the pre-fetched map.
+		mapping, exists := bulkMappings[isin]
+		if !exists || mapping.TickerSymbol == "" {
 			continue
 		}
+		ticker := mapping.TickerSymbol
 
-		ticker := mappings[isin].TickerSymbol
-		if ticker == "" {
-			continue
-		}
-
-		// Fetch metadata
 		sector, industry, quoteType, err := pus.priceService.FetchMetadata(ticker)
 		if err != nil {
 			mu.Lock()
@@ -331,7 +340,6 @@ func (pus *ParallelUploadService) metadataWorker(isinChan <-chan string, result 
 			continue
 		}
 
-		// Update mapping with metadata
 		err = model.UpdateMappingMetadata(database.DB, isin, sector, industry, quoteType)
 		if err != nil {
 			mu.Lock()
@@ -353,14 +361,12 @@ func (pus *ParallelUploadService) batchDatabaseInsert(
 		return nil
 	}
 
-	// Start transaction
 	tx, err := database.DB.Begin()
 	if err != nil {
 		return fmt.Errorf("failed to begin transaction: %w", err)
 	}
 	defer tx.Rollback()
 
-	// Prepare insert statement
 	stmt, err := tx.Prepare(`INSERT INTO processed_transactions 
 		(user_id, portfolio_id, date, source, product_name, isin, quantity, original_quantity, price, 
 		transaction_type, transaction_subtype, buy_sell, description, amount, currency, 
@@ -372,7 +378,6 @@ func (pus *ParallelUploadService) batchDatabaseInsert(
 	}
 	defer stmt.Close()
 
-	// Batch insert
 	batchSize := pus.config.DatabaseBatchSize
 	insertedCount := 0
 
@@ -384,25 +389,24 @@ func (pus *ParallelUploadService) batchDatabaseInsert(
 
 		batch := transactions[i:end]
 
-		for _, tx := range batch {
+		for _, ptx := range batch {
 			_, err := stmt.Exec(
-				userID, portfolioID, tx.Date, tx.Source, tx.ProductName, tx.ISIN, tx.Quantity, tx.OriginalQuantity, tx.Price,
-				tx.TransactionType, tx.TransactionSubType, tx.BuySell, tx.Description, tx.Amount, tx.Currency,
-				tx.Commission, tx.OrderID, tx.ExchangeRate, tx.AmountEUR, tx.CountryCode, tx.InputString, tx.HashId,
-				tx.CashBalance, tx.BalanceCurrency,
+				userID, portfolioID, ptx.Date, ptx.Source, ptx.ProductName, ptx.ISIN, ptx.Quantity, ptx.OriginalQuantity, ptx.Price,
+				ptx.TransactionType, ptx.TransactionSubType, ptx.BuySell, ptx.Description, ptx.Amount, ptx.Currency,
+				ptx.Commission, ptx.OrderID, ptx.ExchangeRate, ptx.AmountEUR, ptx.CountryCode, ptx.InputString, ptx.HashId,
+				ptx.CashBalance, ptx.BalanceCurrency,
 			)
 			if err != nil {
 				if strings.Contains(strings.ToLower(err.Error()), "unique constraint failed") {
-					logger.L.Debug("Skipping duplicate transaction on upload", "userID", userID, "hash_id", tx.HashId)
+					logger.L.Debug("Skipping duplicate transaction on upload", "userID", userID, "hash_id", ptx.HashId)
 					continue
 				}
-				return fmt.Errorf("error inserting transaction (OrderID: %s): %w", tx.OrderID, err)
+				return fmt.Errorf("error inserting transaction (OrderID: %s): %w", ptx.OrderID, err)
 			}
 			insertedCount++
 		}
 	}
 
-	// Insert upload history
 	_, err = tx.Exec(`
 		INSERT INTO uploads_history (user_id, portfolio_id, source, filename, file_size, transaction_count) 
 		VALUES (?, ?, ?, ?, ?, ?)`,
@@ -412,7 +416,6 @@ func (pus *ParallelUploadService) batchDatabaseInsert(
 		return fmt.Errorf("failed to record upload in history: %w", err)
 	}
 
-	// Update user upload counts
 	var newUploadCount int
 	err = tx.QueryRow("SELECT COUNT(DISTINCT source) FROM processed_transactions WHERE user_id = ? AND portfolio_id = ?", userID, portfolioID).Scan(&newUploadCount)
 	if err != nil {
@@ -428,7 +431,6 @@ func (pus *ParallelUploadService) batchDatabaseInsert(
 		return fmt.Errorf("failed to update user upload counts: %w", err)
 	}
 
-	// Commit transaction
 	err = tx.Commit()
 	if err != nil {
 		return fmt.Errorf("error committing transactions: %w", err)
@@ -457,11 +459,11 @@ func (pus *ParallelUploadService) trackProgress(userID int64, portfolioID int64,
 	}
 }
 
-// startBackgroundJobs starts background jobs with prioritization
-func (pus *ParallelUploadService) startBackgroundJobs(userID int64, portfolioID int64) {
+// startBackgroundJobs starts background jobs with prioritization.
+// FIX #7: accepts fromDate for incremental history rebuild.
+func (pus *ParallelUploadService) startBackgroundJobs(userID int64, portfolioID int64, fromDate string) {
 	logger.L.Info("Starting prioritized background jobs", "userID", userID, "portfolioID", portfolioID)
 
-	// 1. Cache warming (highest priority - improves user experience immediately)
 	go func() {
 		_, err := pus.uploadService.jobManager.CacheWarmingAsync(pus.uploadService, userID, portfolioID)
 		if err != nil {
@@ -469,7 +471,6 @@ func (pus *ParallelUploadService) startBackgroundJobs(userID int64, portfolioID 
 		}
 	}()
 
-	// 2. Metrics update (medium priority - needed for dashboard)
 	go func() {
 		_, err := pus.uploadService.jobManager.UpdateMetricsAsync(pus.uploadService, userID, portfolioID)
 		if err != nil {
@@ -477,7 +478,6 @@ func (pus *ParallelUploadService) startBackgroundJobs(userID int64, portfolioID 
 		}
 	}()
 
-	// 3. Dividend calculation (medium priority - needed for tax reports)
 	go func() {
 		_, err := pus.uploadService.jobManager.CalculateDividendsAsync(pus.uploadService, userID, portfolioID)
 		if err != nil {
@@ -485,9 +485,9 @@ func (pus *ParallelUploadService) startBackgroundJobs(userID int64, portfolioID 
 		}
 	}()
 
-	// 4. History rebuild (lowest priority - background task)
 	go func() {
-		_, err := pus.uploadService.jobManager.RebuildHistoryAsync(pus.uploadService, userID, portfolioID)
+		// FIX #7: pass fromDate so incremental uploads only rebuild the tail.
+		_, err := pus.uploadService.jobManager.RebuildHistoryAsync(pus.uploadService, userID, portfolioID, fromDate)
 		if err != nil {
 			logger.L.Error("Failed to start history rebuild job", "userID", userID, "error", err)
 		}

@@ -70,9 +70,9 @@ func NewJobQueue(maxJobs, maxWorkers int) *JobQueue {
 	}
 }
 
-// NewOptimizedJobQueue creates a job queue with optimized settings for better performance
+// NewOptimizedJobQueue creates a job queue with optimized settings
 func NewOptimizedJobQueue() *JobQueue {
-	return NewJobQueue(200, 10) // Increased from 100 jobs, 5 workers
+	return NewJobQueue(200, 10)
 }
 
 // AddJob adds a new job to the queue
@@ -96,7 +96,6 @@ func (jq *JobQueue) AddJob(jobType string, payload map[string]interface{}) (*Job
 
 	jq.jobs[jobID] = job
 
-	// Start processing immediately if we have available workers
 	if len(jq.workers) < jq.maxWorkers {
 		worker := jq.createWorker()
 		go worker.processJob(job)
@@ -109,7 +108,6 @@ func (jq *JobQueue) AddJob(jobType string, payload map[string]interface{}) (*Job
 func (jq *JobQueue) GetJob(jobID string) (*Job, bool) {
 	jq.mu.RLock()
 	defer jq.mu.RUnlock()
-
 	job, exists := jq.jobs[jobID]
 	return job, exists
 }
@@ -118,7 +116,6 @@ func (jq *JobQueue) GetJob(jobID string) (*Job, bool) {
 func (jq *JobQueue) ListJobs() []*Job {
 	jq.mu.RLock()
 	defer jq.mu.RUnlock()
-
 	jobs := make([]*Job, 0, len(jq.jobs))
 	for _, job := range jq.jobs {
 		jobs = append(jobs, job)
@@ -141,16 +138,13 @@ func (jq *JobQueue) createWorker() *JobWorker {
 // processJob processes a single job
 func (w *JobWorker) processJob(job *Job) {
 	defer func() {
-		// Clean up worker after job completion
 		w.Queue.mu.Lock()
 		delete(w.Queue.workers, w.ID)
 		w.Queue.mu.Unlock()
 	}()
 
-	// Update job status to running
 	w.updateJobStatus(job.ID, JobStatusRunning, 0, "")
 
-	// Process the job based on its type
 	var err error
 	switch job.Type {
 	case JobTypeRebuildHistory:
@@ -167,7 +161,6 @@ func (w *JobWorker) processJob(job *Job) {
 		err = fmt.Errorf("unknown job type: %s", job.Type)
 	}
 
-	// Update final status
 	if err != nil {
 		w.updateJobStatus(job.ID, JobStatusFailed, 100, err.Error())
 		logger.L.Error("Job failed", "job_id", job.ID, "error", err)
@@ -177,7 +170,9 @@ func (w *JobWorker) processJob(job *Job) {
 	}
 }
 
-// processRebuildHistory processes a history rebuild job
+// processRebuildHistory processes a history rebuild job.
+// FIX #7: reads the optional "from_date" field from the payload so that
+// incremental uploads only rebuild the affected portion of the timeline.
 func (w *JobWorker) processRebuildHistory(job *Job) error {
 	userID, ok := job.Payload["user_id"].(float64)
 	if !ok {
@@ -189,17 +184,22 @@ func (w *JobWorker) processRebuildHistory(job *Job) error {
 		return fmt.Errorf("invalid portfolio_id in payload")
 	}
 
-	// Get the upload service from payload
 	uploadService, ok := job.Payload["upload_service"].(UploadService)
 	if !ok {
 		return fmt.Errorf("upload_service not found in payload")
 	}
 
-	// Update progress
+	// FIX #7: use incremental rebuild when a from_date was provided.
+	fromDate, _ := job.Payload["from_date"].(string)
+
 	w.updateJobStatus(job.ID, JobStatusRunning, 10, "Starting history rebuild")
 
-	// Rebuild history
-	err := uploadService.RebuildUserHistory(int64(userID), int64(portfolioID))
+	var err error
+	if fromDate != "" {
+		err = uploadService.RebuildUserHistoryFrom(int64(userID), int64(portfolioID), fromDate)
+	} else {
+		err = uploadService.RebuildUserHistory(int64(userID), int64(portfolioID))
+	}
 	if err != nil {
 		return fmt.Errorf("failed to rebuild history: %w", err)
 	}
@@ -220,16 +220,13 @@ func (w *JobWorker) processUpdateMetrics(job *Job) error {
 		return fmt.Errorf("invalid portfolio_id in payload")
 	}
 
-	// Get the upload service from payload
 	uploadService, ok := job.Payload["upload_service"].(UploadService)
 	if !ok {
 		return fmt.Errorf("upload_service not found in payload")
 	}
 
-	// Update progress
 	w.updateJobStatus(job.ID, JobStatusRunning, 50, "Updating portfolio metrics")
 
-	// Update metrics
 	err := uploadService.UpdateUserPortfolioMetrics(int64(userID), int64(portfolioID))
 	if err != nil {
 		return fmt.Errorf("failed to update metrics: %w", err)
@@ -241,22 +238,18 @@ func (w *JobWorker) processUpdateMetrics(job *Job) error {
 
 // processFetchPrices processes a price fetching job
 func (w *JobWorker) processFetchPrices(job *Job) error {
-	// Get the price service from payload
 	priceService, ok := job.Payload["price_service"].(PriceService)
 	if !ok {
 		return fmt.Errorf("price_service not found in payload")
 	}
 
-	// Get ISIN list
 	isinList, ok := job.Payload["isin_list"].([]string)
 	if !ok {
 		return fmt.Errorf("invalid isin_list in payload")
 	}
 
-	// Update progress
 	w.updateJobStatus(job.ID, JobStatusRunning, 20, "Fetching current prices")
 
-	// Fetch prices
 	_, err := priceService.GetCurrentPrices(isinList)
 	if err != nil {
 		return fmt.Errorf("failed to fetch prices: %w", err)
@@ -278,16 +271,13 @@ func (w *JobWorker) processCalculateDividends(job *Job) error {
 		return fmt.Errorf("invalid portfolio_id in payload")
 	}
 
-	// Get the upload service from payload
 	uploadService, ok := job.Payload["upload_service"].(UploadService)
 	if !ok {
 		return fmt.Errorf("upload_service not found in payload")
 	}
 
-	// Update progress
 	w.updateJobStatus(job.ID, JobStatusRunning, 30, "Calculating dividend metrics")
 
-	// Calculate dividend metrics
 	_, err := uploadService.GetDividendMetrics(int64(userID), int64(portfolioID))
 	if err != nil {
 		return fmt.Errorf("failed to calculate dividend metrics: %w", err)
@@ -297,7 +287,11 @@ func (w *JobWorker) processCalculateDividends(job *Job) error {
 	return nil
 }
 
-// processCacheWarming processes a cache warming job
+// processCacheWarming warms the key caches after an upload.
+// FIX #4: removed the duplicate GetCurrentHoldingsWithValue call that was
+// fetching live prices twice for no reason.  The first call already populates
+// the short-TTL reportCache entry (ckCurrentHoldingsValue), so subsequent
+// calls within the same 2-minute window are free.
 func (w *JobWorker) processCacheWarming(job *Job) error {
 	userID, ok := job.Payload["user_id"].(float64)
 	if !ok {
@@ -309,55 +303,33 @@ func (w *JobWorker) processCacheWarming(job *Job) error {
 		return fmt.Errorf("invalid portfolio_id in payload")
 	}
 
-	// Get the upload service from payload
 	uploadService, ok := job.Payload["upload_service"].(UploadService)
 	if !ok {
 		return fmt.Errorf("upload_service not found in payload")
 	}
 
-	// Update progress
 	w.updateJobStatus(job.ID, JobStatusRunning, 20, "Starting cache warming")
 
-	// Get current holdings to warm cache with frequently accessed data
-	holdings, err := uploadService.GetCurrentHoldingsWithValue(int64(userID), int64(portfolioID))
+	// First call: fetches live prices and caches the result.
+	_, err := uploadService.GetCurrentHoldingsWithValue(int64(userID), int64(portfolioID))
 	if err != nil {
-		return fmt.Errorf("failed to get current holdings: %w", err)
+		// Non-fatal: log and continue warming other caches.
+		logger.L.Warn("Failed to warm holdings cache", "error", err)
 	}
 
-	// Extract ISINs for cache warming
-	var isinList []string
-	for _, holding := range holdings {
-		if holding.ISIN != "" {
-			isinList = append(isinList, holding.ISIN)
-		}
-	}
+	// FIX #4: the second GetCurrentHoldingsWithValue that used to live here has
+	// been removed.  It was a direct duplicate of the call above and caused an
+	// unnecessary extra HTTP round-trip to Yahoo Finance.
 
-	// Update progress
-	w.updateJobStatus(job.ID, JobStatusRunning, 50, "Warming price cache")
+	w.updateJobStatus(job.ID, JobStatusRunning, 60, "Warming dividend cache")
 
-	// Warm price cache for current holdings
-	if len(isinList) > 0 {
-		// Get price service from upload service (assuming it has access)
-		// For now, we'll just call GetCurrentHoldingsWithValue again which will trigger cache warming
-		_, err := uploadService.GetCurrentHoldingsWithValue(int64(userID), int64(portfolioID))
-		if err != nil {
-			logger.L.Warn("Failed to warm price cache", "error", err)
-		}
-	}
-
-	// Update progress
-	w.updateJobStatus(job.ID, JobStatusRunning, 80, "Warming dividend cache")
-
-	// Warm dividend metrics cache
 	_, err = uploadService.GetDividendMetrics(int64(userID), int64(portfolioID))
 	if err != nil {
 		logger.L.Warn("Failed to warm dividend cache", "error", err)
 	}
 
-	// Update progress
-	w.updateJobStatus(job.ID, JobStatusRunning, 90, "Warming historical data cache")
+	w.updateJobStatus(job.ID, JobStatusRunning, 80, "Warming historical data cache")
 
-	// Warm historical chart data cache
 	_, err = uploadService.GetHistoricalChartData(int64(userID), int64(portfolioID))
 	if err != nil {
 		logger.L.Warn("Failed to warm historical chart cache", "error", err)
@@ -384,15 +356,17 @@ func (jq *JobQueue) Stop() {
 	jq.mu.Lock()
 	defer jq.mu.Unlock()
 
-	// Stop all workers
 	for _, worker := range jq.workers {
 		close(worker.StopChan)
 	}
 
-	// Clear jobs
 	jq.jobs = make(map[string]*Job)
 	jq.workers = make(map[string]*JobWorker)
 }
+
+// ---------------------------------------------------------------------------
+// JobManager
+// ---------------------------------------------------------------------------
 
 // JobManager manages the job queue and provides a simple interface
 type JobManager struct {
@@ -402,26 +376,28 @@ type JobManager struct {
 // NewJobManager creates a new job manager
 func NewJobManager() *JobManager {
 	return &JobManager{
-		queue: NewJobQueue(100, 5), // Max 100 jobs, 5 workers
+		queue: NewJobQueue(100, 5),
 	}
 }
 
-// NewOptimizedJobManager creates a job manager with optimized settings for better performance
+// NewOptimizedJobManager creates a job manager with optimized settings
 func NewOptimizedJobManager() *JobManager {
 	return &JobManager{
-		queue: NewOptimizedJobQueue(), // Use optimized job queue
+		queue: NewOptimizedJobQueue(),
 	}
 }
 
-// RebuildHistoryAsync starts an asynchronous history rebuild
-func (jm *JobManager) RebuildHistoryAsync(uploadService UploadService, userID, portfolioID int64) (*Job, error) {
+// RebuildHistoryAsync starts an asynchronous history rebuild.
+// FIX #7: accepts fromDate (DD-MM-YYYY) so incremental uploads only rebuild
+// the affected portion of the snapshot timeline.  Pass "" for a full rebuild.
+func (jm *JobManager) RebuildHistoryAsync(uploadService UploadService, userID, portfolioID int64, fromDate string) (*Job, error) {
 	payload := map[string]interface{}{
 		"user_id":        float64(userID),
 		"portfolio_id":   float64(portfolioID),
 		"upload_service": uploadService,
+		"from_date":      fromDate, // FIX #7: "" means full rebuild
 		"started_at":     time.Now().Format(time.RFC3339),
 	}
-
 	return jm.queue.AddJob(JobTypeRebuildHistory, payload)
 }
 
@@ -433,7 +409,6 @@ func (jm *JobManager) UpdateMetricsAsync(uploadService UploadService, userID, po
 		"upload_service": uploadService,
 		"started_at":     time.Now().Format(time.RFC3339),
 	}
-
 	return jm.queue.AddJob(JobTypeUpdateMetrics, payload)
 }
 
@@ -444,7 +419,6 @@ func (jm *JobManager) FetchPricesAsync(priceService PriceService, isinList []str
 		"price_service": priceService,
 		"started_at":    time.Now().Format(time.RFC3339),
 	}
-
 	return jm.queue.AddJob(JobTypeFetchPrices, payload)
 }
 
@@ -456,7 +430,6 @@ func (jm *JobManager) CalculateDividendsAsync(uploadService UploadService, userI
 		"upload_service": uploadService,
 		"started_at":     time.Now().Format(time.RFC3339),
 	}
-
 	return jm.queue.AddJob(JobTypeCalculateDividends, payload)
 }
 
@@ -468,7 +441,6 @@ func (jm *JobManager) CacheWarmingAsync(uploadService UploadService, userID, por
 		"upload_service": uploadService,
 		"started_at":     time.Now().Format(time.RFC3339),
 	}
-
 	return jm.queue.AddJob(JobTypeCacheWarming, payload)
 }
 
