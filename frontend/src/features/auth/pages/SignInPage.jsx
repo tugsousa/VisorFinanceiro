@@ -1,6 +1,6 @@
 // frontend/src/pages/SignInPage.js
 import React, { useState, useContext, useEffect } from 'react';
-import { Link as RouterLink } from 'react-router-dom';
+import { Link as RouterLink, useLocation } from 'react-router-dom';
 import { AuthContext } from '../AuthContext';
 import {
   Box, Typography, TextField, Button, Alert, CircularProgress, Grid, Link, Divider, SvgIcon
@@ -27,6 +27,52 @@ function SignInPage() {
   const [localError, setLocalError] = useState('');
   const [localSuccess, setLocalSuccess] = useState(false);
   const { login, isAuthActionLoading, authError: contextAuthError } = useContext(AuthContext);
+  const location = useLocation();
+
+  // Handle URL error parameters from OAuth redirects
+  useEffect(() => {
+    const urlParams = new URLSearchParams(location.search);
+    const errorParam = urlParams.get('error');
+    
+    if (errorParam) {
+      let errorMessage = '';
+      
+      switch (errorParam) {
+        case 'email_already_exists_local':
+          errorMessage = 'Esta conta de email já está associada a uma conta local. Por favor, faça login usando sua conta local ou entre em contato com o suporte.';
+          break;
+        case 'invalid_state':
+          errorMessage = 'Estado de autenticação inválido. Por favor, tente novamente.';
+          break;
+        case 'token_exchange_failed':
+          errorMessage = 'Falha ao trocar código de autorização. Por favor, tente novamente.';
+          break;
+        case 'userinfo_failed':
+          errorMessage = 'Falha ao obter informações da conta Google. Por favor, tente novamente.';
+          break;
+        case 'email_not_verified_by_google':
+          errorMessage = 'O email da sua conta Google não está verificado. Por favor, verifique seu email no Google e tente novamente.';
+          break;
+        case 'user_creation_failed':
+          errorMessage = 'Falha ao criar conta. Por favor, tente novamente ou entre em contato com o suporte.';
+          break;
+        case 'token_generation_failed':
+          errorMessage = 'Falha ao gerar tokens de autenticação. Por favor, tente novamente.';
+          break;
+        case 'session_creation_failed':
+          errorMessage = 'Falha ao criar sessão de autenticação. Por favor, tente novamente.';
+          break;
+        default:
+          errorMessage = 'Ocorreu um erro durante a autenticação. Por favor, tente novamente.';
+      }
+      
+      setLocalError(errorMessage);
+      
+      // Remove the error parameter from URL to prevent it from persisting
+      const newUrl = location.pathname;
+      window.history.replaceState({}, '', newUrl);
+    }
+  }, [location]);
 
   useEffect(() => {
     if (contextAuthError) {
