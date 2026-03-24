@@ -70,6 +70,11 @@ func NewJobQueue(maxJobs, maxWorkers int) *JobQueue {
 	}
 }
 
+// NewOptimizedJobQueue creates a job queue with optimized settings for better performance
+func NewOptimizedJobQueue() *JobQueue {
+	return NewJobQueue(200, 10) // Increased from 100 jobs, 5 workers
+}
+
 // AddJob adds a new job to the queue
 func (jq *JobQueue) AddJob(jobType string, payload map[string]interface{}) (*Job, error) {
 	jq.mu.Lock()
@@ -398,6 +403,13 @@ type JobManager struct {
 func NewJobManager() *JobManager {
 	return &JobManager{
 		queue: NewJobQueue(100, 5), // Max 100 jobs, 5 workers
+	}
+}
+
+// NewOptimizedJobManager creates a job manager with optimized settings for better performance
+func NewOptimizedJobManager() *JobManager {
+	return &JobManager{
+		queue: NewOptimizedJobQueue(), // Use optimized job queue
 	}
 }
 

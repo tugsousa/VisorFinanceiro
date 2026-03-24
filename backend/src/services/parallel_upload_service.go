@@ -29,12 +29,12 @@ type ParallelUploadConfig struct {
 // DefaultParallelUploadConfig returns a default configuration
 func DefaultParallelUploadConfig() *ParallelUploadConfig {
 	return &ParallelUploadConfig{
-		ISINResolutionWorkers:   5,
-		PriceFetchingWorkers:    3,
-		MetadataFetchingWorkers: 2,
-		DatabaseBatchSize:       1000,
-		MaxConcurrentJobs:       5,
-		ProgressUpdateInterval:  2 * time.Second,
+		ISINResolutionWorkers:   10,              // Increased from 5
+		PriceFetchingWorkers:    6,               // Increased from 3
+		MetadataFetchingWorkers: 4,               // Increased from 2
+		DatabaseBatchSize:       2000,            // Increased from 1000
+		MaxConcurrentJobs:       8,               // Increased from 5
+		ProgressUpdateInterval:  1 * time.Second, // Reduced from 2 seconds
 	}
 }
 

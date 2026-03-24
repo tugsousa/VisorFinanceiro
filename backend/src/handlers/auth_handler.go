@@ -42,6 +42,14 @@ func setRefreshTokenCookie(w http.ResponseWriter, refreshToken string, duration 
 	http.SetCookie(w, cookie)
 }
 
+// Helper function to send JSON error with custom status code
+func sendJSONErrorWithCode(w http.ResponseWriter, message string, statusCode int) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(statusCode)
+	logger.L.Warn("Sending JSON error to client", "message", message, "statusCode", statusCode)
+	json.NewEncoder(w).Encode(map[string]string{"error": message})
+}
+
 // updateUserLoginInfo updates user's login stats and records the login event.
 func updateUserLoginInfo(userID int64, r *http.Request) {
 	tx, err := database.DB.Begin()
@@ -380,6 +388,22 @@ func (h *UserHandler) RefreshTokenHandler(w http.ResponseWriter, r *http.Request
 		return
 	}
 
+	// Check if user still exists in database (handles fresh database scenario)
+	user, err := model.GetUserByID(database.DB, oldSession.UserID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			logger.L.Warn("User not found during refresh - likely fresh database scenario", "userID", oldSession.UserID)
+			// Clear the refresh token cookie since the user no longer exists
+			http.SetCookie(w, &http.Cookie{Name: "refresh_token", Value: "", Path: "/api/auth/refresh", MaxAge: -1})
+			// Return a specific error code for database reset scenario
+			sendJSONErrorWithCode(w, "Database has been reset. Please log in again.", http.StatusGone)
+			return
+		}
+		logger.L.Error("Failed to retrieve user during refresh", "userID", oldSession.UserID, "error", err)
+		sendJSONError(w, "Failed to retrieve user details", http.StatusInternalServerError)
+		return
+	}
+
 	// Delete old session
 	if err := model.DeleteSessionByRefreshToken(database.DB, refreshTokenStr); err != nil {
 		logger.L.Error("Failed to delete old session during refresh", "error", err)
@@ -416,14 +440,6 @@ func (h *UserHandler) RefreshTokenHandler(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	// --- FETCH USER DATA TO RETURN ---
-	// We need to return the user object so the frontend can restore state (e.g. after Google OAuth redirect)
-	user, err := model.GetUserByID(database.DB, oldSession.UserID)
-	if err != nil {
-		logger.L.Error("Failed to retrieve user during refresh", "userID", oldSession.UserID, "error", err)
-		sendJSONError(w, "Failed to retrieve user details", http.StatusInternalServerError)
-		return
-	}
 	user.IsAdmin = isAdmin(user.Email)
 
 	userData := map[string]interface{}{

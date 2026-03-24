@@ -85,7 +85,32 @@ func NewUploadService(
 		feeProcessor:          feeProcessor,
 		priceService:          priceService,
 		reportCache:           reportCache,
-		jobManager:            NewJobManager(),
+		jobManager:            NewOptimizedJobManager(),               // Use optimized job manager
+		isinResolutionCache:   NewISINResolutionCache(24 * time.Hour), // 24-hour cache for upload session
+	}
+}
+
+// NewOptimizedUploadService creates an upload service with optimized settings
+func NewOptimizedUploadService(
+	transactionProcessor *processors.TransactionProcessor,
+	dividendProcessor processors.DividendProcessor,
+	stockProcessor processors.StockProcessor,
+	optionProcessor processors.OptionProcessor,
+	cashMovementProcessor processors.CashMovementProcessor,
+	feeProcessor processors.FeeProcessor,
+	priceService PriceService,
+	reportCache *cache.Cache,
+) UploadService {
+	return &uploadServiceImpl{
+		transactionProcessor:  transactionProcessor,
+		dividendProcessor:     dividendProcessor,
+		stockProcessor:        stockProcessor,
+		optionProcessor:       optionProcessor,
+		cashMovementProcessor: cashMovementProcessor,
+		feeProcessor:          feeProcessor,
+		priceService:          priceService,
+		reportCache:           reportCache,
+		jobManager:            NewOptimizedJobManager(),               // Use optimized job manager
 		isinResolutionCache:   NewISINResolutionCache(24 * time.Hour), // 24-hour cache for upload session
 	}
 }

@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -104,6 +105,82 @@ func RecordOperation(operation string, duration time.Duration, success bool) {
 
 	// Track operation counts for frequency analysis
 	performanceMonitor.operationCounts[operation]++
+}
+
+// RecordAPIOperation records API call performance with enhanced metrics
+func RecordAPIOperation(operation string, duration time.Duration, success bool, apiEndpoint string) {
+	// Record general operation
+	RecordOperation(operation, duration, success)
+
+	// Record API-specific metrics
+	apiOperation := fmt.Sprintf("api_%s_%s", operation, apiEndpoint)
+	RecordOperation(apiOperation, duration, success)
+}
+
+// GetSlowOperationsWithThreshold returns operations that are slower than the threshold with detailed analysis
+func GetSlowOperationsWithThreshold(threshold time.Duration) []SlowOperation {
+	performanceMonitor.mu.RLock()
+	defer performanceMonitor.mu.RUnlock()
+
+	var slowOps []SlowOperation
+	for op, stats := range performanceMonitor.metrics {
+		if stats.TotalCalls > 0 {
+			avgTime := stats.TotalDuration / time.Duration(stats.TotalCalls)
+			if avgTime > threshold {
+				slowOps = append(slowOps, SlowOperation{
+					Operation: op,
+					AvgTime:   avgTime,
+					CallCount: stats.TotalCalls,
+				})
+			}
+		}
+	}
+	return slowOps
+}
+
+// GetOptimizationRecommendations provides recommendations for performance improvements
+func GetOptimizationRecommendations() []string {
+	recommendations := []string{}
+
+	// Check for slow operations
+	slowOps := GetSlowOperationsWithThreshold(1 * time.Second)
+	for _, op := range slowOps {
+		if strings.Contains(op.Operation, "api_") {
+			recommendations = append(recommendations,
+				fmt.Sprintf("API call '%s' is slow (avg: %v, calls: %d) - consider caching or parallelization",
+					op.Operation, op.AvgTime, op.CallCount))
+		} else if strings.Contains(op.Operation, "database") {
+			recommendations = append(recommendations,
+				fmt.Sprintf("Database operation '%s' is slow (avg: %v, calls: %d) - consider query optimization",
+					op.Operation, op.AvgTime, op.CallCount))
+		} else if strings.Contains(op.Operation, "upload") {
+			recommendations = append(recommendations,
+				fmt.Sprintf("Upload operation '%s' is slow (avg: %v, calls: %d) - consider parallel processing",
+					op.Operation, op.AvgTime, op.CallCount))
+		}
+	}
+
+	// Check for high error rates
+	for op, stats := range performanceMonitor.metrics {
+		if stats.TotalCalls > 10 {
+			errorRate := float64(stats.Errors) / float64(stats.TotalCalls) * 100
+			if errorRate > 5 {
+				recommendations = append(recommendations,
+					fmt.Sprintf("Operation '%s' has high error rate (%.2f%%) - investigate reliability issues",
+						op, errorRate))
+			}
+		}
+	}
+
+	// Check for high frequency operations
+	frequentOps := GetFrequentOperations(100)
+	for op, count := range frequentOps {
+		recommendations = append(recommendations,
+			fmt.Sprintf("Operation '%s' is called frequently (%d times) - consider batching or caching",
+				op, count))
+	}
+
+	return recommendations
 }
 
 // RecordOperationWithFunc is a convenience function that records an operation automatically
