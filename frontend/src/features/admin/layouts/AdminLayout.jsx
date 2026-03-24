@@ -14,9 +14,28 @@ const AdminLayout = () => {
     const location = useLocation();
 
     return (
-        <Box sx={{ display: 'flex', height: 'calc(100vh - 100px)', mt: 2 }}>
+        // FIX: Removed `height: 'calc(100vh - 100px)'` which was the root cause.
+        // That fixed height forced the content area into a scrollable box of fixed size.
+        // On pages with little content (AdminUsersPage), the content box ended early,
+        // making the sidebar border appear shorter than on content-heavy pages.
+        // Now both sidebar and content grow naturally to match the page height.
+        <Box sx={{ display: 'flex', alignItems: 'flex-start', mt: 2 }}>
             {/* Sidebar Lateral */}
-            <Paper elevation={0} sx={{ width: 240, borderRight: 1, borderColor: 'divider', mr: 3, height: '100%' }}>
+            <Paper
+                elevation={0}
+                sx={{
+                    width: 180,
+                    flexShrink: 0,
+                    borderRight: 1,
+                    borderColor: 'divider',
+                    mr: 3,
+                    // Sidebar sticks to the top while scrolling and always fills
+                    // at least the visible viewport height so the border never ends abruptly.
+                    position: 'sticky',
+                    top: 0,
+                    minHeight: 'calc(100vh - 80px)',
+                }}
+            >
                 <Box sx={{ p: 2 }}>
                     <Typography variant="overline" color="text.secondary" fontWeight="bold">
                         Administração
@@ -24,14 +43,14 @@ const AdminLayout = () => {
                 </Box>
                 <List>
                     {MENU_ITEMS.map((item) => (
-                        <ListItem 
-                            button 
-                            key={item.text} 
+                        <ListItem
+                            button
+                            key={item.text}
                             onClick={() => navigate(item.path)}
                             selected={location.pathname.startsWith(item.path)}
-                            sx={{ 
-                                borderRadius: 1, 
-                                mb: 0.5, 
+                            sx={{
+                                borderRadius: 1,
+                                mb: 0.5,
                                 mx: 1,
                                 width: 'auto',
                                 '&.Mui-selected': { bgcolor: 'primary.light', color: 'primary.dark' },
@@ -48,7 +67,9 @@ const AdminLayout = () => {
             </Paper>
 
             {/* Área de Conteúdo Principal */}
-            <Box sx={{ flexGrow: 1, overflow: 'auto', px: 2 }}>
+            {/* FIX: Removed `overflow: 'auto'` — content now scrolls at the page level,
+                not trapped inside a fixed-height box. */}
+            <Box sx={{ flexGrow: 1, px: 2, minWidth: 0 }}>
                 <Outlet />
             </Box>
         </Box>

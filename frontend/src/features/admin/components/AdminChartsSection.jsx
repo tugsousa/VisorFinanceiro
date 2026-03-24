@@ -4,6 +4,13 @@ import { Bar, Line, Doughnut } from 'react-chartjs-2';
 import { DataGrid } from '@mui/x-data-grid';
 import { getTopUsersTableColumns } from '../config/adminGridConfig';
 
+// Shared height constants — single source of truth for the charts section.
+// FIX: Unified all card heights. Previously ChartCard was 400px and TopUsersTable 450px,
+// which produced a ragged two-row layout. Both are now CHART_CARD_HEIGHT so the grid rows
+// align regardless of column count.
+const CHART_CARD_HEIGHT = 420;
+const TOP_USERS_TABLE_HEIGHT = 420;
+
 const ChartCard = ({ type, data, options, title }) => {
     const ChartComponent = type === 'doughnut' ? Doughnut : (type === 'bar' ? Bar : Line);
     
@@ -39,7 +46,7 @@ const ChartCard = ({ type, data, options, title }) => {
             variant="outlined" 
             sx={{ 
                 p: 3, 
-                height: 400, 
+                height: CHART_CARD_HEIGHT,
                 display: 'flex', 
                 flexDirection: 'column',
                 borderRadius: 3,
@@ -66,15 +73,13 @@ const ChartCard = ({ type, data, options, title }) => {
     );
 };
 
-// ATUALIZAÇÃO AQUI: Adicionada a prop 'metricKey' para mapear o valor correto
 const TopUsersTable = ({ users, title, valueHeader, metricKey }) => {
     const columns = getTopUsersTableColumns(valueHeader);
     
-    // Mapeia o campo específico (ex: login_count) para 'value' que a coluna espera
     const rows = users ? users.map((user, index) => ({ 
         id: index, 
         ...user,
-        value: user[metricKey] //
+        value: user[metricKey]
     })) : [];
 
     return (
@@ -82,7 +87,7 @@ const TopUsersTable = ({ users, title, valueHeader, metricKey }) => {
             variant="outlined" 
             sx={{ 
                 p: 3, 
-                height: 450, 
+                height: TOP_USERS_TABLE_HEIGHT,
                 display: 'flex', 
                 flexDirection: 'column',
                 borderRadius: 3,
@@ -97,21 +102,25 @@ const TopUsersTable = ({ users, title, valueHeader, metricKey }) => {
             }}
         >
             <Typography variant="h6" sx={{ 
-                mb: 3, 
+                mb: 2,
                 textAlign: 'center',
                 fontWeight: 700,
                 color: '#1f2937',
-                letterSpacing: '-0.02em'
+                letterSpacing: '-0.02em',
+                flexShrink: 0,
             }}>
                 {title}
             </Typography>
+            {/* FIX: flexGrow:1 + height:'100%' ensures DataGrid fills remaining space
+                without overflowing the fixed-height Paper container. */}
             <Box sx={{ flexGrow: 1 }}>
                 <DataGrid 
                     rows={rows} 
                     columns={columns} 
                     density="compact" 
-                    hideFooter 
+                    hideFooter
                     sx={{
+                        height: '100%',
                         '& .MuiDataGrid-cell': {
                             fontSize: '0.875rem',
                         },
