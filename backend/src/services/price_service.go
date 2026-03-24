@@ -550,8 +550,8 @@ func NewPriceService() PriceService {
 		httpClient:      client,
 		isInitialized:   false,
 		failedISINCache: NewFailedISINCache(1 * time.Hour),
-		circuitBreaker:  NewCircuitBreaker(10, 5*time.Minute),                 // Increased threshold, reduced timeout
-		throttler:       NewAdaptiveRequestThrottler(8, 200*time.Millisecond), // 8 tokens, refill every 200ms = ~5 req/s
+		circuitBreaker:  NewCircuitBreaker(10, 5*time.Minute),                  // Increased threshold, reduced timeout
+		throttler:       NewAdaptiveRequestThrottler(20, 100*time.Millisecond), // 20 tokens, refill every 100ms = ~10 req/s
 		successCache:    make(map[string]string),
 	}
 
@@ -1444,16 +1444,22 @@ func (s *priceServiceImpl) fetchPricesParallel(tickers []string) map[string]Pric
 
 // updateMetadataParallel updates metadata for multiple tickers in parallel
 func (s *priceServiceImpl) updateMetadataParallel(metadataToUpdate map[string]string) {
-	const maxWorkers = 4                         // Reduced from 5
-	const delayBetweenRequests = 1 * time.Second // Increased from 500ms
+	const maxWorkers = 6                                // Increased from 4
+	const delayBetweenRequests = 500 * time.Millisecond // Reduced from 1 second
 
 	workerChan := make(chan struct{}, maxWorkers)
 	var wg sync.WaitGroup
 
+	// Group metadata updates by ticker to avoid duplicate API calls
+	tickerToIsins := make(map[string][]string)
 	for isin, ticker := range metadataToUpdate {
+		tickerToIsins[ticker] = append(tickerToIsins[ticker], isin)
+	}
+
+	for ticker, isins := range tickerToIsins {
 		workerChan <- struct{}{}
 		wg.Add(1)
-		go func(isin, ticker string) {
+		go func(ticker string, isins []string) {
 			defer func() {
 				<-workerChan
 				wg.Done()
@@ -1465,9 +1471,12 @@ func (s *priceServiceImpl) updateMetadataParallel(metadataToUpdate map[string]st
 
 			sector, industry, qType, err := s.FetchMetadata(ticker)
 			if err == nil {
-				model.UpdateMappingMetadata(database.DB, isin, sector, industry, qType)
+				// Update all ISINs for this ticker
+				for _, isin := range isins {
+					model.UpdateMappingMetadata(database.DB, isin, sector, industry, qType)
+				}
 			}
-		}(isin, ticker)
+		}(ticker, isins)
 	}
 
 	wg.Wait()

@@ -64,8 +64,8 @@ func GetExchangeRate(currency string, date time.Time) (float64, error) {
 		return rate.(float64), nil
 	}
 
-	// If not found, check previous days (weekends/holidays)
-	for i := 1; i <= 7; i++ {
+	// If not found, check previous days (weekends/holidays) - Reduced from 7 to 5 days
+	for i := 1; i <= 5; i++ {
 		queryDate := date.AddDate(0, 0, -i)
 		cacheKey := fmt.Sprintf("rate-%s-%s", currency, queryDate.Format("2006-01-02"))
 

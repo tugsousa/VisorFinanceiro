@@ -191,9 +191,17 @@ export const AuthProvider = ({ children }) => {
         const handleLogoutEvent = (event) => {
             performLogout(false, `Auth error: ${event.detail}`);
         };
+        
+        const handleDatabaseResetEvent = (event) => {
+            performLogout(false, `Database reset: ${event.detail}`);
+        };
+        
         window.addEventListener('auth-error-logout', handleLogoutEvent);
+        window.addEventListener('auth-database-reset', handleDatabaseResetEvent);
+        
         return () => {
             window.removeEventListener('auth-error-logout', handleLogoutEvent);
+            window.removeEventListener('auth-database-reset', handleDatabaseResetEvent);
         };
     }, [performLogout]);
 

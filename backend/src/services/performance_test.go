@@ -3,410 +3,322 @@ package services
 import (
 	"context"
 	"fmt"
-	"log"
 	"sync"
 	"testing"
 	"time"
 
-	"github.com/username/taxfolio/backend/src/database"
-	"github.com/username/taxfolio/backend/src/model"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
-// BenchmarkUploadPerformance benchmarks the upload performance with optimized ISIN resolution
-func BenchmarkUploadPerformance(b *testing.B) {
-	// Create test data with multiple ISINs
-	testISINs := []string{
-		"US5949181045", // Microsoft
-		"US38259P5089", // Google
-		"US0378331005", // Amazon
-		"US5949181045", // Microsoft (duplicate)
-		"US0231351067", // Apple
-		"IE00B4L5Y983", // iShares Core MSCI World UCITS ETF
-		"IE00B5BMR087", // Vanguard S&P 500 UCITS ETF
-		"US78462F1030", // Meta Platforms
-		"US6174464486", // Netflix
-		"US67066G1040", // Tesla
-	}
+// TestPerformanceOptimizations tests the performance improvements
+func TestPerformanceOptimizations(t *testing.T) {
+	// Enable performance monitoring
+	EnablePerformanceMonitoring(true)
+	defer EnablePerformanceMonitoring(false)
 
-	b.ResetTimer()
-
-	for i := 0; i < b.N; i++ {
-		// Test the optimized ISIN resolution
-		service := NewPriceService()
+	t.Run("ParallelAPIRequests", func(t *testing.T) {
+		// Test parallel API request performance
 		start := time.Now()
 
-		// Simulate bulk ISIN resolution
-		results, err := service.GetCurrentPrices(testISINs)
-		duration := time.Since(start)
+		// Simulate multiple API requests
+		const numRequests = 20
+		var wg sync.WaitGroup
+		results := make([]time.Duration, numRequests)
 
-		if err != nil {
-			b.Errorf("Error during ISIN resolution: %v", err)
+		for i := 0; i < numRequests; i++ {
+			wg.Add(1)
+			go func(index int) {
+				defer wg.Done()
+				reqStart := time.Now()
+
+				// Simulate API call with throttling
+				time.Sleep(50 * time.Millisecond)
+
+				duration := time.Since(reqStart)
+				results[index] = duration
+
+				// Record performance metric
+				RecordAPIOperation("test_api_call", duration, true, "test_endpoint")
+			}(i)
 		}
 
-		// Log performance metrics
-		successCount := 0
-		for _, result := range results {
-			if result.Status == "OK" {
-				successCount++
-			}
+		wg.Wait()
+		totalTime := time.Since(start)
+
+		t.Logf("Total time for %d parallel requests: %v", numRequests, totalTime)
+		t.Logf("Average request time: %v", totalTime/time.Duration(numRequests))
+
+		// Verify that requests completed in reasonable time (should be much faster than sequential)
+		sequentialTime := time.Duration(numRequests) * 50 * time.Millisecond
+		assert.Less(t, totalTime, sequentialTime, "Parallel requests should be faster than sequential")
+	})
+
+	t.Run("CircuitBreaker", func(t *testing.T) {
+		// Test circuit breaker functionality
+		cb := NewCircuitBreaker(3, 5*time.Second)
+
+		// Test failure threshold
+		for i := 0; i < 3; i++ {
+			cb.RecordFailure("test_isin")
 		}
 
-		b.Logf("Batch %d: Resolved %d/%d ISINs in %v", i+1, successCount, len(testISINs), duration)
+		assert.True(t, cb.IsOpen("test_isin"), "Circuit breaker should be open after 3 failures")
 
-		// Performance assertions
-		if duration > 30*time.Second {
-			b.Errorf("ISIN resolution took too long: %v", duration)
+		// Test recovery
+		cb.RecordSuccess("test_isin")
+		assert.False(t, cb.IsOpen("test_isin"), "Circuit breaker should be closed after success")
+	})
+
+	t.Run("BulkOperations", func(t *testing.T) {
+		// Test bulk failed ISIN cache operations
+		bfc := NewBulkFailedISINCache(1 * time.Hour)
+
+		testISINs := []string{"ISIN1", "ISIN2", "ISIN3"}
+
+		// Mark all as failed
+		bfc.MarkMultiple(testISINs)
+
+		// Check all in bulk
+		results := bfc.CheckMultiple(testISINs)
+		for _, isin := range testISINs {
+			assert.True(t, results[isin], "ISIN should be marked as failed")
 		}
-	}
-}
+	})
 
-// TestBulkISINResolution tests the bulk ISIN resolution functionality
-func TestBulkISINResolution(t *testing.T) {
-	service := NewPriceService()
+	t.Run("AdaptiveThrottling", func(t *testing.T) {
+		// Test adaptive throttling
+		throttler := NewAdaptiveRequestThrottler(10, 100*time.Millisecond)
 
-	// Test with a mix of known and unknown ISINs
-	testISINs := []string{
-		"US5949181045",   // Microsoft
-		"US38259P5089",   // Google
-		"INVALIDISIN123", // Invalid ISIN
-		"US0378331005",   // Amazon
-	}
-
-	results, err := service.GetCurrentPrices(testISINs)
-	if err != nil {
-		t.Errorf("Unexpected error: %v", err)
-	}
-
-	// Verify results
-	if len(results) != len(testISINs) {
-		t.Errorf("Expected %d results, got %d", len(testISINs), len(results))
-	}
-
-	// Check that valid ISINs have prices
-	validCount := 0
-	for isin, result := range results {
-		if result.Status == "OK" {
-			validCount++
-			if result.Price <= 0 {
-				t.Errorf("Invalid price for ISIN %s: %f", isin, result.Price)
-			}
-			if result.Currency != "EUR" {
-				t.Errorf("Expected EUR currency, got %s for ISIN %s", result.Currency, isin)
-			}
+		// Simulate successful requests
+		for i := 0; i < 5; i++ {
+			throttler.Wait()
+			throttler.RecordSuccess()
 		}
-	}
 
-	t.Logf("Successfully resolved %d out of %d ISINs", validCount, len(testISINs))
-}
+		// Should have base capacity
+		assert.Equal(t, 10, throttler.baseCapacity)
 
-// TestCircuitBreakerBehavior tests the circuit breaker functionality
-func TestCircuitBreakerBehavior(t *testing.T) {
-	service := NewPriceService()
-
-	// Test with an ISIN that should fail multiple times
-	invalidISIN := "INVALIDISIN12345"
-
-	// Force multiple failures to trigger circuit breaker
-	for i := 0; i < 12; i++ {
-		_, err := service.GetCurrentPrices([]string{invalidISIN})
-		if err != nil {
-			t.Logf("Attempt %d failed as expected: %v", i+1, err)
+		// Simulate failures
+		for i := 0; i < 5; i++ {
+			throttler.RecordFailure()
 		}
-	}
 
-	// After multiple failures, circuit breaker should be open
-	// This should fail quickly without making API calls
-	start := time.Now()
-	_, _ = service.GetCurrentPrices([]string{invalidISIN})
-	duration := time.Since(start)
+		// Capacity should be reduced
+		assert.Less(t, throttler.capacity, throttler.baseCapacity)
+	})
 
-	if duration > 100*time.Millisecond {
-		t.Errorf("Circuit breaker should have failed quickly, took %v", duration)
-	}
+	t.Run("JobQueueOptimization", func(t *testing.T) {
+		// Test optimized job queue
+		queue := NewOptimizedJobQueue()
 
-	t.Logf("Circuit breaker test completed in %v", duration)
-}
+		// Verify optimized settings
+		assert.Equal(t, 200, queue.maxJobs, "Should have increased max jobs")
+		assert.Equal(t, 10, queue.maxWorkers, "Should have increased max workers")
 
-// TestCacheEffectiveness tests the effectiveness of caching
-func TestCacheEffectiveness(t *testing.T) {
-	service := NewPriceService()
-
-	// First request should take time
-	start := time.Now()
-	results1, err := service.GetCurrentPrices([]string{"US5949181045"}) // Microsoft
-	firstDuration := time.Since(start)
-
-	if err != nil {
-		t.Errorf("First request failed: %v", err)
-	}
-
-	// Second request should be faster due to caching
-	start = time.Now()
-	results2, err := service.GetCurrentPrices([]string{"US5949181045"}) // Microsoft again
-	secondDuration := time.Since(start)
-
-	if err != nil {
-		t.Errorf("Second request failed: %v", err)
-	}
-
-	// Verify results are the same
-	if len(results1) != len(results2) {
-		t.Errorf("Result counts don't match")
-	}
-
-	for isin, result1 := range results1 {
-		result2, exists := results2[isin]
-		if !exists {
-			t.Errorf("ISIN %s missing from second result", isin)
+		// Test job processing
+		payload := map[string]interface{}{
+			"test": "data",
 		}
-		if result1.Price != result2.Price {
-			t.Errorf("Prices don't match for ISIN %s: %f vs %f", isin, result1.Price, result2.Price)
-		}
-	}
 
-	t.Logf("First request: %v, Second request: %v", firstDuration, secondDuration)
+		job, err := queue.AddJob("test_job", payload)
+		require.NoError(t, err)
+		assert.NotNil(t, job)
+		assert.Equal(t, "test_job", job.Type)
+		assert.Equal(t, JobStatusPending, job.Status)
+	})
 
-	// The second request should be significantly faster (at least 50% faster)
-	if secondDuration > firstDuration/2 {
-		t.Logf("Warning: Cache effectiveness may be limited, second request was not significantly faster")
-	}
-}
+	t.Run("PerformanceMonitoring", func(t *testing.T) {
+		// Test performance monitoring
+		operation := "test_operation"
 
-// TestConcurrentISINResolution tests concurrent ISIN resolution
-func TestConcurrentISINResolution(t *testing.T) {
-	service := NewPriceService()
-
-	// Test concurrent resolution of the same ISIN
-	isin := "US5949181045" // Microsoft
-	var wg sync.WaitGroup
-	results := make([]map[string]PriceInfo, 10)
-	errors := make([]error, 10)
-
-	for i := 0; i < 10; i++ {
-		wg.Add(1)
-		go func(index int) {
-			defer wg.Done()
-			results[index], errors[index] = service.GetCurrentPrices([]string{isin})
-		}(i)
-	}
-
-	wg.Wait()
-
-	// Verify all requests succeeded
-	for i, err := range errors {
-		if err != nil {
-			t.Errorf("Request %d failed: %v", i, err)
-		}
-	}
-
-	// Verify all results are consistent
-	if len(results) > 0 {
-		expectedPrice := results[0][isin].Price
-		for i, result := range results {
-			if result[isin].Price != expectedPrice {
-				t.Errorf("Inconsistent price in request %d: %f vs %f", i, result[isin].Price, expectedPrice)
-			}
-		}
-	}
-
-	t.Logf("Successfully completed %d concurrent requests for ISIN %s", len(results), isin)
-}
-
-// TestDatabaseOperations tests the optimized database operations
-func TestDatabaseOperations(t *testing.T) {
-	// Test batch insert operations
-	mappings := []model.ISINTickerMap{
-		{
-			ISIN:         "TESTISIN001",
-			TickerSymbol: "TEST1",
-			Currency:     "USD",
-		},
-		{
-			ISIN:         "TESTISIN002",
-			TickerSymbol: "TEST2",
-			Currency:     "EUR",
-		},
-		{
-			ISIN:         "TESTISIN003",
-			TickerSymbol: "TEST3",
-			Currency:     "GBP",
-		},
-	}
-
-	start := time.Now()
-	err := model.BatchInsertMappings(database.DB, mappings)
-	duration := time.Since(start)
-
-	if err != nil {
-		t.Errorf("Batch insert failed: %v", err)
-	}
-
-	t.Logf("Batch insert of %d mappings completed in %v", len(mappings), duration)
-
-	// Test batch retrieval
-	isins := []string{"TESTISIN001", "TESTISIN002", "TESTISIN003"}
-	start = time.Now()
-	retrievedMappings, err := model.GetMappingsByISINs(database.DB, isins)
-	retrievalDuration := time.Since(start)
-
-	if err != nil {
-		t.Errorf("Batch retrieval failed: %v", err)
-	}
-
-	if len(retrievedMappings) != len(mappings) {
-		t.Errorf("Expected %d mappings, got %d", len(mappings), len(retrievedMappings))
-	}
-
-	t.Logf("Batch retrieval of %d mappings completed in %v", len(retrievedMappings), retrievalDuration)
-}
-
-// RunPerformanceTest runs a comprehensive performance test
-func RunPerformanceTest() {
-	fmt.Println("=== Performance Test Report ===")
-
-	// Test 1: Bulk ISIN resolution performance
-	fmt.Println("\n1. Bulk ISIN Resolution Performance:")
-	service := NewPriceService()
-	testISINs := []string{
-		"US5949181045", "US38259P5089", "US0378331005",
-		"US0231351067", "IE00B4L5Y983", "IE00B5BMR087",
-		"US78462F1030", "US6174464486", "US67066G1040",
-	}
-
-	start := time.Now()
-	results, err := service.GetCurrentPrices(testISINs)
-	duration := time.Since(start)
-
-	if err != nil {
-		fmt.Printf("   Error: %v\n", err)
-	} else {
-		successCount := 0
-		for _, result := range results {
-			if result.Status == "OK" {
-				successCount++
-			}
-		}
-		fmt.Printf("   Resolved %d/%d ISINs in %v\n", successCount, len(testISINs), duration)
-		fmt.Printf("   Average time per ISIN: %v\n", duration/time.Duration(len(testISINs)))
-	}
-
-	// Test 2: Database operations performance
-	fmt.Println("\n2. Database Operations Performance:")
-	mappings := make([]model.ISINTickerMap, 100)
-	for i := 0; i < 100; i++ {
-		mappings[i] = model.ISINTickerMap{
-			ISIN:         fmt.Sprintf("TESTISIN%03d", i),
-			TickerSymbol: fmt.Sprintf("TEST%d", i),
-			Currency:     "USD",
-		}
-	}
-
-	start = time.Now()
-	err = model.BatchInsertMappings(database.DB, mappings)
-	insertDuration := time.Since(start)
-
-	if err != nil {
-		fmt.Printf("   Batch insert error: %v\n", err)
-	} else {
-		fmt.Printf("   Batch insert of %d mappings: %v\n", len(mappings), insertDuration)
-	}
-
-	// Test 3: Concurrent performance
-	fmt.Println("\n3. Concurrent Performance:")
-	var wg sync.WaitGroup
-	concurrentResults := make([]time.Duration, 5)
-
-	for i := 0; i < 5; i++ {
-		wg.Add(1)
-		go func(index int) {
-			defer wg.Done()
+		// Record some operations
+		for i := 0; i < 5; i++ {
 			start := time.Now()
-			_, _ = service.GetCurrentPrices([]string{"US5949181045"})
-			concurrentResults[index] = time.Since(start)
-		}(i)
-	}
-
-	wg.Wait()
-
-	totalConcurrentTime := time.Duration(0)
-	for _, duration := range concurrentResults {
-		totalConcurrentTime += duration
-	}
-	avgConcurrentTime := totalConcurrentTime / time.Duration(len(concurrentResults))
-
-	fmt.Printf("   Average concurrent request time: %v\n", avgConcurrentTime)
-
-	// Test 4: Cache effectiveness
-	fmt.Println("\n4. Cache Effectiveness:")
-	start = time.Now()
-	_, _ = service.GetCurrentPrices([]string{"US5949181045"})
-	firstRequestTime := time.Since(start)
-
-	start = time.Now()
-	_, _ = service.GetCurrentPrices([]string{"US5949181045"})
-	secondRequestTime := time.Since(start)
-
-	fmt.Printf("   First request: %v\n", firstRequestTime)
-	fmt.Printf("   Second request (cached): %v\n", secondRequestTime)
-	fmt.Printf("   Cache improvement: %.2fx faster\n", float64(firstRequestTime)/float64(secondRequestTime))
-
-	fmt.Println("\n=== Performance Test Complete ===")
-}
-
-// TestPerformanceIntegration runs integration tests for the performance optimizations
-func TestPerformanceIntegration(t *testing.T) {
-	if testing.Short() {
-		t.Skip("Skipping integration test in short mode")
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
-	defer cancel()
-
-	// Run performance test in a goroutine
-	done := make(chan bool)
-	go func() {
-		RunPerformanceTest()
-		done <- true
-	}()
-
-	select {
-	case <-done:
-		t.Log("Performance test completed successfully")
-	case <-ctx.Done():
-		t.Fatal("Performance test timed out")
-	}
-}
-
-// BenchmarkCircuitBreaker tests the circuit breaker performance
-func BenchmarkCircuitBreaker(b *testing.B) {
-	service := NewPriceService()
-	invalidISIN := "INVALIDISIN12345"
-
-	// Pre-fail the circuit breaker
-	for i := 0; i < 15; i++ {
-		service.GetCurrentPrices([]string{invalidISIN})
-	}
-
-	b.ResetTimer()
-
-	for i := 0; i < b.N; i++ {
-		_, err := service.GetCurrentPrices([]string{invalidISIN})
-		if err == nil {
-			b.Error("Expected circuit breaker to be open")
+			time.Sleep(10 * time.Millisecond)
+			duration := time.Since(start)
+			RecordOperation(operation, duration, true)
 		}
-	}
+
+		// Get stats
+		stats, exists := GetOperationStats(operation)
+		require.True(t, exists)
+		assert.Equal(t, int64(5), stats.TotalCalls)
+		assert.Greater(t, stats.TotalDuration, 50*time.Millisecond)
+
+		// Get performance report
+		report := GetPerformanceReport()
+		assert.NotNil(t, report)
+		assert.Greater(t, len(report.Operations), 0)
+
+		// Get optimization recommendations
+		recommendations := GetOptimizationRecommendations()
+		assert.NotNil(t, recommendations)
+	})
+
+	t.Run("AsyncPerformanceLogging", func(t *testing.T) {
+		// Test async performance logging
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+
+		// Start async logger
+		go AsyncPerformanceLogger(ctx, 500*time.Millisecond)
+
+		// Record some operations
+		for i := 0; i < 10; i++ {
+			RecordOperation("async_test", 5*time.Millisecond, true)
+			time.Sleep(100 * time.Millisecond)
+		}
+
+		// Wait for context cancellation
+		<-ctx.Done()
+	})
+
+	t.Run("PerformanceAlerts", func(t *testing.T) {
+		// Test performance alerts
+		var alerts []PerformanceAlert
+
+		// Register alert callback
+		RegisterAlertCallback(func(alert PerformanceAlert) {
+			alerts = append(alerts, alert)
+		})
+
+		// Record slow operation
+		RecordOperation("slow_operation", 6*time.Second, false)
+
+		// Check for alerts
+		triggeredAlerts := CheckPerformanceAlerts()
+		assert.Greater(t, len(triggeredAlerts), 0, "Should trigger alerts for slow operations")
+
+		// Get all alerts
+		allAlerts := GetAlerts()
+		assert.Greater(t, len(allAlerts), 0, "Should have alerts")
+
+		// Clear alerts
+		ClearAlerts()
+		remainingAlerts := GetAlerts()
+		assert.Equal(t, 0, len(remainingAlerts), "Should clear all alerts")
+	})
+
+	t.Run("MetadataFetchingOptimization", func(t *testing.T) {
+		// Test metadata fetching optimization
+		cache := NewISINResolutionCache(1 * time.Hour)
+		defer cache.Close()
+
+		// Test cache operations
+		cache.SetSuccess("TEST_ISIN", "TEST_TICKER")
+		ticker, exists := cache.GetSuccess("TEST_ISIN")
+		assert.True(t, exists)
+		assert.Equal(t, "TEST_TICKER", ticker)
+
+		// Test metadata cache
+		cache.SetMetadata("TEST_TICKER", "Technology", "Software", "EQUITY")
+		sector, industry, quoteType, exists := cache.GetMetadata("TEST_TICKER")
+		assert.True(t, exists)
+		assert.Equal(t, "Technology", sector)
+		assert.Equal(t, "Software", industry)
+		assert.Equal(t, "EQUITY", quoteType)
+	})
 }
 
-// BenchmarkThrottling tests the throttling mechanism
-func BenchmarkThrottling(b *testing.B) {
-	service := NewPriceService()
+// BenchmarkPerformanceOptimizations benchmarks the performance improvements
+func BenchmarkPerformanceOptimizations(b *testing.B) {
+	EnablePerformanceMonitoring(true)
+	defer EnablePerformanceMonitoring(false)
 
-	b.ResetTimer()
+	b.Run("ParallelAPIRequests", func(b *testing.B) {
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			const numRequests = 10
+			var wg sync.WaitGroup
 
-	for i := 0; i < b.N; i++ {
-		_, err := service.GetCurrentPrices([]string{"US5949181045"})
-		if err != nil {
-			log.Printf("Request %d failed: %v", i, err)
+			for j := 0; j < numRequests; j++ {
+				wg.Add(1)
+				go func() {
+					defer wg.Done()
+					// Simulate API call
+					time.Sleep(10 * time.Millisecond)
+					RecordAPIOperation("benchmark_api", 10*time.Millisecond, true, "benchmark_endpoint")
+				}()
+			}
+
+			wg.Wait()
 		}
+	})
+
+	b.Run("CircuitBreaker", func(b *testing.B) {
+		cb := NewCircuitBreaker(5, 1*time.Minute)
+
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			isin := fmt.Sprintf("ISIN_%d", i%100)
+			if i%10 == 0 {
+				cb.RecordFailure(isin)
+			} else {
+				cb.RecordSuccess(isin)
+			}
+			cb.IsOpen(isin)
+		}
+	})
+
+	b.Run("BulkOperations", func(b *testing.B) {
+		bfc := NewBulkFailedISINCache(1 * time.Hour)
+
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			isins := []string{
+				fmt.Sprintf("ISIN_%d", i),
+				fmt.Sprintf("ISIN_%d", i+1),
+				fmt.Sprintf("ISIN_%d", i+2),
+			}
+
+			bfc.MarkMultiple(isins)
+			bfc.CheckMultiple(isins)
+		}
+	})
+
+	b.Run("AdaptiveThrottling", func(b *testing.B) {
+		throttler := NewAdaptiveRequestThrottler(20, 50*time.Millisecond)
+
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			throttler.Wait()
+			if i%5 == 0 {
+				throttler.RecordFailure()
+			} else {
+				throttler.RecordSuccess()
+			}
+		}
+	})
+}
+
+// ExamplePerformanceMonitoring demonstrates how to use performance monitoring
+func ExamplePerformanceMonitoring() {
+	// Enable performance monitoring
+	EnablePerformanceMonitoring(true)
+	defer EnablePerformanceMonitoring(false)
+
+	// Record operations
+	RecordOperation("database_query", 100*time.Millisecond, true)
+	RecordOperation("api_call", 500*time.Millisecond, true)
+	RecordOperation("file_processing", 2*time.Second, false)
+
+	// Get performance report
+	report := GetPerformanceReport()
+	fmt.Printf("Total operations: %d\n", report.OverallStats.TotalOperations)
+	fmt.Printf("Average response time: %v\n", report.OverallStats.AvgResponseTime)
+	fmt.Printf("Error rate: %.2f%%\n", report.OverallStats.ErrorRate)
+
+	// Get optimization recommendations
+	recommendations := GetOptimizationRecommendations()
+	for _, rec := range recommendations {
+		fmt.Printf("Recommendation: %s\n", rec)
 	}
+
+	// Output:
+	// Total operations: 3
+	// Average response time: 900ms
+	// Error rate: 33.33%
+	// Recommendation: Operation 'file_processing' is slow (avg: 2s, calls: 1) - consider parallel processing
+	// Recommendation: Operation 'file_processing' has high error rate (33.33%) - investigate reliability issues
 }

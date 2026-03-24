@@ -387,21 +387,6 @@ const DashboardPage = () => {
                 <Typography variant="body1" color="text.secondary">
                     Resumo do <strong>{activePortfolio?.name}</strong>
                 </Typography>
-                {/* WebSocket Connection Status */}
-                <Box sx={{ mt: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
-                    <Box
-                        sx={{
-                            width: 8,
-                            height: 8,
-                            borderRadius: '50%',
-                            bgcolor: isWebSocketConnected ? 'success.main' : 'warning.main',
-                            animation: isWebSocketConnected ? 'none' : 'pulse 2s infinite'
-                        }}
-                    />
-                    <Typography variant="caption" color="text.secondary">
-                        {isWebSocketConnected ? 'Conexão em tempo real ativa' : 'Conexão em tempo real indisponível'}
-                    </Typography>
-                </Box>
             </Box>
 
             {/* Upload Progress */}
