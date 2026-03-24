@@ -33,7 +33,6 @@ func (h *JobHandler) GetJobsHandler(w http.ResponseWriter, r *http.Request) {
 
 	jobs := h.jobManager.ListJobs()
 
-	// Filter jobs for this user (if needed)
 	userJobs := make([]*services.Job, 0)
 	for _, job := range jobs {
 		if job.Payload["user_id"] == float64(userID) {
@@ -68,7 +67,6 @@ func (h *JobHandler) GetJobHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Verify job belongs to user
 	if job.Payload["user_id"] != float64(userID) {
 		http.Error(w, "Job not found", http.StatusNotFound)
 		return
@@ -78,7 +76,8 @@ func (h *JobHandler) GetJobHandler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(job)
 }
 
-// RebuildHistoryHandler triggers a history rebuild job
+// RebuildHistoryHandler triggers a full history rebuild job.
+// Manual triggers always do a full rebuild (fromDate = "").
 func (h *JobHandler) RebuildHistoryHandler(w http.ResponseWriter, r *http.Request) {
 	userID, ok := GetUserIDFromContext(r.Context())
 	if !ok {
@@ -98,7 +97,8 @@ func (h *JobHandler) RebuildHistoryHandler(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	job, err := h.jobManager.RebuildHistoryAsync(h.uploadService, userID, portfolioID)
+	// Pass "" as fromDate so the worker performs a full rebuild.
+	job, err := h.jobManager.RebuildHistoryAsync(h.uploadService, userID, portfolioID, "")
 	if err != nil {
 		logger.L.Error("Failed to start history rebuild job", "userID", userID, "portfolioID", portfolioID, "error", err)
 		http.Error(w, "Failed to start job", http.StatusInternalServerError)

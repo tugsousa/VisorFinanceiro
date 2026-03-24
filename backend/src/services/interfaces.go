@@ -44,6 +44,7 @@ type UploadService interface {
 
 	GetDividendMetrics(userID int64, portfolioID int64) (*models.DividendMetricsResult, error)
 	RebuildUserHistory(userID int64, portfolioID int64) error
+	RebuildUserHistoryFrom(userID int64, portfolioID int64, fromDate string) error
 	RefreshDailySnapshot(userID int64, portfolioID int64) error
 }
 
