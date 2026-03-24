@@ -1,7 +1,7 @@
 // frontend/src/features/admin/components/AdminMetricsSection.js
 
 import React from 'react';
-import { Paper, Box, Typography, Divider, Grid } from '@mui/material';
+import { Box, Typography, Divider, Grid } from '@mui/material';
 import StatCard from './StatCard';
 import { formatCurrency } from '../../../lib/utils/formatUtils';
 
@@ -14,13 +14,7 @@ const AdminMetricsSection = ({ statsData, statsLoading }) => {
     };
 
     return (
-        <Paper component={Box} variant="outlined" sx={{ 
-            p: 4, 
-            mt: 4, 
-            borderColor: 'divider',
-            borderRadius: 4,
-            background: 'white'
-        }}>
+        <Box sx={{ mt: 2 }}>
             <Box sx={{ mb: 4 }}>
                 <Typography variant="h4" component="h2" gutterBottom sx={{ 
                     fontWeight: 800,
@@ -173,7 +167,7 @@ const AdminMetricsSection = ({ statsData, statsLoading }) => {
                     </Grid>
                 </Grid>
             </Box>
-        </Paper>
+        </Box>
     );
 };
 

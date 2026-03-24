@@ -3,7 +3,7 @@ import { useParams, Link as RouterLink, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { apiFetchAdminUserDetails } from 'features/admin/api/adminApi';
 import { 
-    Box, Typography, CircularProgress, Alert, Paper, Grid, Divider, Link, Card, Tabs, Tab, 
+    Box, Typography, CircularProgress, Alert, Grid, Divider, Link, Card, Tabs, Tab, 
     FormControl, Select, MenuItem, InputLabel, Button, Chip, Tooltip,
     Dialog, DialogTitle, DialogContent, DialogContentText, DialogActions, TextField
 } from '@mui/material';
@@ -13,6 +13,10 @@ import { formatCurrency } from '../../../lib/utils/formatUtils';
 import StatCard from '../components/StatCard';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import LoginIcon from '@mui/icons-material/Login';
+
+// Shared height for all tab DataGrid panels (pixels).
+// Using a constant makes future changes a single-line edit.
+const TAB_GRID_HEIGHT = 600;
 
 const KeyMetricCard = ({ title, value, isPercentage = false, unit = '' }) => {
     const isPositive = typeof value === 'number' ? value >= 0 : true;
@@ -52,13 +56,11 @@ const UserDetailPage = () => {
     const { userId } = useParams();
     const navigate = useNavigate();
     
-    // Obter o user atual (admin) para verificar se tem MFA ativo
     const { token, impersonate, user: currentUser } = useAuth(); 
     
     const [selectedPortfolioId, setSelectedPortfolioId] = useState('');
     const [currentTab, setCurrentTab] = useState('overview');
     
-    // --- ESTADOS MFA / IMPERSONATE ---
     const [isImpersonating, setIsImpersonating] = useState(false);
     const [openImpersonateModal, setOpenImpersonateModal] = useState(false);
     const [impersonateMfaCode, setImpersonateMfaCode] = useState('');
@@ -76,13 +78,9 @@ const UserDetailPage = () => {
         }
     }, [data, selectedPortfolioId]);
 
-    // --- FUNÇÕES DE LÓGICA DO IMPERSONATE ---
-
-    // 1. Inicia o processo (Verifica MFA localmente e abre modal)
     const handleImpersonateClick = () => {
         if (!data?.user) return;
 
-        // Se o admin NÃO tiver MFA ativo, bloqueia e avisa
         if (!currentUser?.mfa_enabled) {
             if(window.confirm("Ação Bloqueada: Você deve ativar a Autenticação de Dois Fatores (2FA) nas suas definições antes de poder impersonar utilizadores. Deseja ir para as configurações agora?")) {
                 navigate('/settings');
@@ -90,13 +88,11 @@ const UserDetailPage = () => {
             return;
         }
 
-        // Se tiver MFA, limpa estados e abre modal
         setImpersonateError('');
         setImpersonateMfaCode('');
         setOpenImpersonateModal(true);
     };
 
-    // 2. Confirma o código e chama a API
     const handleConfirmImpersonate = async () => {
         if (!impersonateMfaCode || impersonateMfaCode.length < 6) {
             setImpersonateError("Por favor insira um código de 6 dígitos.");
@@ -107,13 +103,10 @@ const UserDetailPage = () => {
         setImpersonateError('');
         
         try {
-            // Chama a função impersonate passando o ID e o CÓDIGO MFA
             await impersonate(userId, impersonateMfaCode);
-            // Se não der erro, o AuthContext atualiza o user e redirecionamos
             navigate('/dashboard'); 
         } catch (error) {
             console.error("Erro ao impersonar:", error);
-            // Mostra o erro no modal (ex: "Código inválido")
             setImpersonateError(error.response?.data?.error || "Código incorreto ou erro no servidor.");
             setIsImpersonating(false);
         }
@@ -138,8 +131,6 @@ const UserDetailPage = () => {
         const totalPL = stockPL + optionPL + dividendPL + totalFees; 
         
         const unrealizedStockPL = (data.current_holdings || []).reduce((acc, h) => {
-            // Only include rows where we have a real live price; status === 'OK' is set by
-            // the backend only when GetCurrentPrices returned a valid price for that ISIN.
             if (h.status !== 'OK') return acc;
             const mv = h.market_value_eur || 0;
             const cb = Math.abs(h.total_cost_basis_eur || 0);
@@ -237,7 +228,6 @@ const UserDetailPage = () => {
             headerName: 'Custo Base (€)',
             width: 145,
             type: 'number',
-            // v6+: valueFormatter receives (value) directly, not a params object
             valueFormatter: (value) => formatCurrency(Math.abs(value)),
         },
         {
@@ -245,8 +235,6 @@ const UserDetailPage = () => {
             headerName: 'P/L (€)',
             width: 120,
             type: 'number',
-            // v6+: valueGetter receives (value, row) — 'pl_eur' doesn't exist on the row,
-            // so value is undefined; we derive the figure from row fields directly.
             valueGetter: (value, row) => {
                 if (!row || row.status !== 'OK') return null;
                 return (row.market_value_eur || 0) - Math.abs(row.total_cost_basis_eur || 0);
@@ -302,7 +290,7 @@ const UserDetailPage = () => {
                         variant="contained"
                         color="warning"
                         startIcon={isImpersonating ? <CircularProgress size={20} color="inherit" /> : <LoginIcon />}
-                        onClick={handleImpersonateClick} // <--- CORRIGIDO: Agora aponta para a função existente
+                        onClick={handleImpersonateClick}
                         disabled={isImpersonating}
                         sx={{ textTransform: 'none' }}
                     >
@@ -325,7 +313,7 @@ const UserDetailPage = () => {
             {currentTab === 'overview' && (
                 <Grid container spacing={3}>
                     <Grid item xs={12}>
-                        <Paper variant="outlined" sx={{ p: 3 }}>
+                        <Box>
                             <Typography variant="h6" gutterBottom>Informação Geral</Typography>
                             <Divider sx={{ mb: 2 }} />
                             <Grid container spacing={2}>
@@ -334,12 +322,12 @@ const UserDetailPage = () => {
                                 <Grid item xs={12} sm={6} md={3}><StatCard title="Uploads Totais" value={user.total_upload_count} /></Grid>
                                 <Grid item xs={12} sm={6} md={3}><StatCard title="Valor Global (Todos)" value={formatCurrency(user.portfolio_value_eur)} /></Grid>
                             </Grid>
-                        </Paper>
+                        </Box>
                     </Grid>
                     
                     {keyMetrics && (
                         <Grid item xs={12}>
-                            <Paper variant="outlined" sx={{ p: 3 }}>
+                            <Box>
                                 <Typography variant="h6" gutterBottom>Métricas do Portfólio Selecionado</Typography>
                                 <Divider sx={{ mb: 2 }} />
                                 <Grid container spacing={2}>
@@ -354,17 +342,16 @@ const UserDetailPage = () => {
                                     <Grid item xs={6} md={4} lg={3}><KeyMetricCard title="Duração (Ganhos)" value={keyMetrics.avgHoldingPeriodWinners} unit="dias" /></Grid>
                                     <Grid item xs={6} md={4} lg={3}><KeyMetricCard title="Duração (Perdas)" value={keyMetrics.avgHoldingPeriodLosers} unit="dias" /></Grid>
                                 </Grid>
-                            </Paper>
+                            </Box>
                         </Grid>
                     )}
                 </Grid>
             )}
 
             {currentTab === 'holdings' && (
-                <Paper variant="outlined" sx={{ p: 3, height: 600, width: '100%' }}>
+                <Box sx={{ height: TAB_GRID_HEIGHT, width: '100%', display: 'flex', flexDirection: 'column' }}>
                     <Typography variant="h6" gutterBottom>Carteira de Ações Atual</Typography>
 
-                    {/* Banner when at least one holding has no live price */}
                     {currentHoldings && currentHoldings.length > 0 &&
                         currentHoldings.some(h => h.status !== 'OK') && (
                         <Alert severity="warning" sx={{ mb: 2 }}>
@@ -375,16 +362,20 @@ const UserDetailPage = () => {
                     )}
 
                     {currentHoldings && currentHoldings.length > 0 ? (
-                        <DataGrid
-                            rows={currentHoldings}
-                            columns={holdingsColumns}
-                            getRowId={(row) => row.isin + row.product_name}
-                            density="compact"
-                            localeText={{
-                                noRowsLabel: 'Nenhuma posição encontrada',
-                                noResultsOverlayLabel: 'Nenhum resultado encontrado'
-                            }}
-                        />
+                        // flexGrow:1 makes the grid fill exactly the space left after the title/alert
+                        <Box sx={{ flexGrow: 1 }}>
+                            <DataGrid
+                                rows={currentHoldings}
+                                columns={holdingsColumns}
+                                getRowId={(row) => row.isin + row.product_name}
+                                density="compact"
+                                sx={{ height: '100%' }}
+                                localeText={{
+                                    noRowsLabel: 'Nenhuma posição encontrada',
+                                    noResultsOverlayLabel: 'Nenhum resultado encontrado'
+                                }}
+                            />
+                        </Box>
                     ) : (
                         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                             <Typography variant="body1" color="text.secondary">
@@ -400,21 +391,36 @@ const UserDetailPage = () => {
                             </ul>
                         </Box>
                     )}
-                </Paper>
+                </Box>
             )}
 
             {currentTab === 'uploads' && (
-                <Paper variant="outlined" sx={{ p: 3, height: 500, width: '100%' }}>
+                <Box sx={{ height: TAB_GRID_HEIGHT, width: '100%', display: 'flex', flexDirection: 'column' }}>
                     <Typography variant="h6" gutterBottom>Histórico de Uploads</Typography>
-                    <DataGrid rows={upload_history || []} columns={uploadHistoryColumns} density="compact" />
-                </Paper>
+                    <Box sx={{ flexGrow: 1 }}>
+                        <DataGrid
+                            rows={upload_history || []}
+                            columns={uploadHistoryColumns}
+                            density="compact"
+                            sx={{ height: '100%' }}
+                        />
+                    </Box>
+                </Box>
             )}
 
             {currentTab === 'transactions' && (
-                <Paper variant="outlined" sx={{ p: 3, height: 700, width: '100%' }}>
+                <Box sx={{ height: TAB_GRID_HEIGHT, width: '100%', display: 'flex', flexDirection: 'column' }}>
                     <Typography variant="h6" gutterBottom>Transações do Portfólio</Typography>
-                    <DataGrid rows={transactions || []} columns={transactionColumns} getRowId={(row) => row.id} density="compact" />
-                </Paper>
+                    <Box sx={{ flexGrow: 1 }}>
+                        <DataGrid
+                            rows={transactions || []}
+                            columns={transactionColumns}
+                            getRowId={(row) => row.id}
+                            density="compact"
+                            sx={{ height: '100%' }}
+                        />
+                    </Box>
+                </Box>
             )}
 
             {/* --- MODAL DE SEGURANÇA IMPERSONATE --- */}
