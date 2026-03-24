@@ -5,33 +5,38 @@ import { apiFetchAdminUserDetails } from 'features/admin/api/adminApi';
 import { 
     Box, Typography, CircularProgress, Alert, Paper, Grid, Divider, Link, Card, Tabs, Tab, 
     FormControl, Select, MenuItem, InputLabel, Button,
-    Dialog, DialogTitle, DialogContent, DialogContentText, DialogActions, TextField // <--- NOVOS IMPORTS
+    Dialog, DialogTitle, DialogContent, DialogContentText, DialogActions, TextField
 } from '@mui/material';
 import { useAuth } from '../../auth/AuthContext';
 import { DataGrid } from '@mui/x-data-grid';
 import { formatCurrency } from '../../../lib/utils/formatUtils';
-import ArrowBackIcon from '@mui/icons-material/ArrowBack';
-import ShowChartIcon from '@mui/icons-material/ShowChart';
-import CandlestickChartIcon from '@mui/icons-material/CandlestickChart';
-import AttachMoneyIcon from '@mui/icons-material/AttachMoney';
-import RequestQuoteIcon from '@mui/icons-material/RequestQuote';
-import TrendingUpIcon from '@mui/icons-material/TrendingUp';
-import AccountBalanceWalletIcon from '@mui/icons-material/AccountBalanceWallet';
-import PercentIcon from '@mui/icons-material/Percent';
 import StatCard from '../components/StatCard';
-import EmojiEventsIcon from '@mui/icons-material/EmojiEvents';
-import TimelapseIcon from '@mui/icons-material/Timelapse';
+import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import LoginIcon from '@mui/icons-material/Login';
 
-const KeyMetricCard = ({ title, value, icon, isPercentage = false, unit = '' }) => {
+const KeyMetricCard = ({ title, value, isPercentage = false, unit = '' }) => {
     const isPositive = typeof value === 'number' ? value >= 0 : true;
-    const bgColor = unit ? 'rgba(63, 81, 181, 0.1)' : (isPositive ? 'rgba(76, 175, 80, 0.1)' : 'rgba(244, 67, 54, 0.1)');
-    const textColor = unit ? 'primary.main' : (isPositive ? 'success.main' : 'error.main');
+    const bgColor = unit ? '#f8fafc' : (isPositive ? '#f0fdf4' : '#fef2f2');
+    const textColor = unit ? '#1f2937' : (isPositive ? '#166534' : '#991b1b');
+    const borderColor = unit ? '#e5e7eb' : (isPositive ? '#bbf7d0' : '#fecaca');
     
     return (
-        <Card elevation={0} sx={{ display: 'flex', alignItems: 'center', p: 1.5, bgcolor: bgColor, borderRadius: 2, height: '100%' }}>
+        <Card elevation={0} sx={{ 
+            display: 'flex', 
+            alignItems: 'center', 
+            p: 1.5, 
+            bgcolor: bgColor, 
+            borderRadius: 2, 
+            height: '100%',
+            border: '1px solid',
+            borderColor: borderColor
+        }}>
             <Box sx={{ mr: 1.5, color: textColor, fontSize: 32 }}>
-                {React.cloneElement(icon, { fontSize: 'inherit' })}
+                <Box sx={{ width: 32, height: 32, borderRadius: '50%', bgcolor: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <Typography variant="body2" sx={{ fontWeight: 'bold', color: textColor }}>
+                        {title.charAt(0)}
+                    </Typography>
+                </Box>
             </Box>
             <Box>
                 <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 500 }}>{title}</Typography>
@@ -261,16 +266,16 @@ const UserDetailPage = () => {
                                 <Typography variant="h6" gutterBottom>Métricas do Portfólio Selecionado</Typography>
                                 <Divider sx={{ mb: 2 }} />
                                 <Grid container spacing={2}>
-                                    <Grid item xs={6} md={4} lg={3}><KeyMetricCard title="Resultados Ações" value={keyMetrics.stockPL} icon={<ShowChartIcon />} /></Grid>
-                                    <Grid item xs={6} md={4} lg={3}><KeyMetricCard title="Resultados Opções" value={keyMetrics.optionPL} icon={<CandlestickChartIcon />} /></Grid>
-                                    <Grid item xs={6} md={4} lg={3}><KeyMetricCard title="Dividendos" value={keyMetrics.dividendPL} icon={<AttachMoneyIcon />} /></Grid>
-                                    <Grid item xs={6} md={4} lg={3}><KeyMetricCard title="Taxas e Comissões" value={keyMetrics.totalFeesAndCommissions} icon={<RequestQuoteIcon />} /></Grid>
-                                    <Grid item xs={6} md={4} lg={3}><KeyMetricCard title="P/L em Aberto" value={keyMetrics.unrealizedStockPL} icon={<TrendingUpIcon />} /></Grid>
-                                    <Grid item xs={6} md={4} lg={3}><KeyMetricCard title="Retorno Total (€)" value={keyMetrics.totalPL} icon={<AccountBalanceWalletIcon />} /></Grid>
-                                    <Grid item xs={6} md={4} lg={3}><KeyMetricCard title="Retorno Total (%)" value={keyMetrics.portfolioReturn} icon={<PercentIcon />} isPercentage /></Grid>
-                                    <Grid item xs={6} md={4} lg={3}><KeyMetricCard title="Taxa de Sucesso" value={keyMetrics.winLossRatio} icon={<EmojiEventsIcon />} isPercentage /></Grid>
-                                    <Grid item xs={6} md={4} lg={3}><KeyMetricCard title="Duração (Ganhos)" value={keyMetrics.avgHoldingPeriodWinners} icon={<TimelapseIcon />} unit="dias" /></Grid>
-                                    <Grid item xs={6} md={4} lg={3}><KeyMetricCard title="Duração (Perdas)" value={keyMetrics.avgHoldingPeriodLosers} icon={<TimelapseIcon />} unit="dias" /></Grid>
+                                    <Grid item xs={6} md={4} lg={3}><KeyMetricCard title="Resultados Ações" value={keyMetrics.stockPL} /></Grid>
+                                    <Grid item xs={6} md={4} lg={3}><KeyMetricCard title="Resultados Opções" value={keyMetrics.optionPL} /></Grid>
+                                    <Grid item xs={6} md={4} lg={3}><KeyMetricCard title="Dividendos" value={keyMetrics.dividendPL} /></Grid>
+                                    <Grid item xs={6} md={4} lg={3}><KeyMetricCard title="Taxas e Comissões" value={keyMetrics.totalFeesAndCommissions} /></Grid>
+                                    <Grid item xs={6} md={4} lg={3}><KeyMetricCard title="P/L em Aberto" value={keyMetrics.unrealizedStockPL} /></Grid>
+                                    <Grid item xs={6} md={4} lg={3}><KeyMetricCard title="Retorno Total (€)" value={keyMetrics.totalPL} /></Grid>
+                                    <Grid item xs={6} md={4} lg={3}><KeyMetricCard title="Retorno Total (%)" value={keyMetrics.portfolioReturn} isPercentage /></Grid>
+                                    <Grid item xs={6} md={4} lg={3}><KeyMetricCard title="Taxa de Sucesso" value={keyMetrics.winLossRatio} isPercentage /></Grid>
+                                    <Grid item xs={6} md={4} lg={3}><KeyMetricCard title="Duração (Ganhos)" value={keyMetrics.avgHoldingPeriodWinners} unit="dias" /></Grid>
+                                    <Grid item xs={6} md={4} lg={3}><KeyMetricCard title="Duração (Perdas)" value={keyMetrics.avgHoldingPeriodLosers} unit="dias" /></Grid>
                                 </Grid>
                             </Paper>
                         </Grid>
@@ -289,7 +294,7 @@ const UserDetailPage = () => {
                             density="compact" 
                         />
                     ) : (
-                        <Typography>Não existem posições em carteira para este portfólio.</Typography>
+                        <Typography>Valor Mercado: 0 €, Custo Base: 0 €</Typography>
                     )}
                 </Paper>
             )}
