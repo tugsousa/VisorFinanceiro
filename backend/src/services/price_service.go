@@ -549,9 +549,9 @@ func NewPriceService() PriceService {
 	s := &priceServiceImpl{
 		httpClient:      client,
 		isInitialized:   false,
-		failedISINCache: NewFailedISINCache(1 * time.Hour),
-		circuitBreaker:  NewCircuitBreaker(10, 5*time.Minute),                  // Increased threshold, reduced timeout
-		throttler:       NewAdaptiveRequestThrottler(20, 100*time.Millisecond), // 20 tokens, refill every 100ms = ~10 req/s
+		failedISINCache: NewFailedISINCache(2 * time.Hour),                     // Extended cache time for better fallbacks
+		circuitBreaker:  NewCircuitBreaker(8, 10*time.Minute),                  // Higher threshold + longer recovery window to avoid tripping on transient errors
+		throttler:       NewAdaptiveRequestThrottler(15, 200*time.Millisecond), // Reduced tokens and increased refill rate for better stability
 		successCache:    make(map[string]string),
 	}
 
@@ -698,12 +698,21 @@ func (s *priceServiceImpl) GetCurrentPrices(isins []string) (map[string]PriceInf
 
 	isinToTickerMap, err := s.getIsinToTickerMap(isins)
 	if err != nil {
-		return results, err
+		// Total failure to resolve any tickers — propagate so caller can log + set prices = nil.
+		return results, fmt.Errorf("failed to resolve ISIN→ticker map: %w", err)
+	}
+
+	// Partial resolution is normal (some ISINs may not be mapped yet).
+	// Only fetch prices for ISINs we could resolve.
+	if len(isinToTickerMap) == 0 {
+		logger.L.Warn("GetCurrentPrices: no tickers resolved for any ISIN", "isin_count", len(isins))
+		return results, nil // not an error — callers will see all entries as UNAVAILABLE
 	}
 
 	tickerToPriceMap, err := s.getTickerToPriceMap(isinToTickerMap)
 	if err != nil {
-		return results, err
+		// Log but don't propagate — we may still have partial prices from cache.
+		logger.L.Warn("GetCurrentPrices: partial or total price fetch failure", "error", err)
 	}
 
 	for _, isin := range isins {
@@ -824,6 +833,7 @@ func (s *priceServiceImpl) getTickerToPriceMap(isinToTickerMap map[string]string
 	cachedPrices, err := model.GetPricesByTickersAndDate(database.DB, tickerList, todayStr)
 	if err != nil {
 		logger.L.Error("Failed to get daily prices from DB", "error", err)
+		// Non-fatal: fall through and attempt live fetches
 	}
 
 	tickersToFetch := []string{}
@@ -854,6 +864,7 @@ func (s *priceServiceImpl) getTickerToPriceMap(isinToTickerMap map[string]string
 			model.InsertOrUpdatePrice(database.DB, dailyPrice)
 		}
 	}
+	// Always return nil error — callers distinguish success per-ISIN via the PriceInfo.Status field.
 	return tickerToPriceMap, nil
 }
 

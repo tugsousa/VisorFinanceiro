@@ -946,23 +946,34 @@ func (s *uploadServiceImpl) GetCurrentHoldingsWithValue(userID int64, portfolioI
 			uniqueISINs = append(uniqueISINs, isin)
 		}
 	}
+
+	// Try to fetch current prices, but don't fail if it doesn't work.
+	// On error, prices will be nil/empty and each holding will be marked UNAVAILABLE
+	// with MarketValueEUR = 0 so the frontend can distinguish "no data" from "cost basis".
 	prices, err := s.priceService.GetCurrentPrices(uniqueISINs)
 	if err != nil {
-		logger.L.Warn("Could not fetch some or all current prices", "error", err)
+		logger.L.Warn("Could not fetch current prices, holdings will show as UNAVAILABLE", "error", err, "userID", userID, "portfolioID", portfolioID)
+		prices = nil // ensure the map is nil so the guard below is unambiguous
 	}
 
 	mappings, _ := model.GetMappingsByISINs(database.DB, uniqueISINs)
 
 	response := []models.HoldingWithValue{}
 	for isin, holding := range groupedHoldings {
-		priceInfo, found := prices[isin]
 		currentPrice := 0.0
-		marketValue := math.Abs(holding.TotalCostBasisEUR)
+		// Default to 0, NOT cost basis.  The frontend uses Status == "UNAVAILABLE" to
+		// decide whether to fall back to cost basis for display purposes.
+		marketValue := 0.0
 		status := "UNAVAILABLE"
-		if found && priceInfo.Status == "OK" {
-			status = "OK"
-			currentPrice = priceInfo.Price
-			marketValue = priceInfo.Price * float64(holding.TotalQuantity)
+
+		// If we have price data for this specific ISIN, use it
+		if prices != nil {
+			priceInfo, found := prices[isin]
+			if found && priceInfo.Status == "OK" {
+				status = "OK"
+				currentPrice = priceInfo.Price
+				marketValue = priceInfo.Price * float64(holding.TotalQuantity)
+			}
 		}
 
 		var sector, industry, assetType string
@@ -987,6 +998,21 @@ func (s *uploadServiceImpl) GetCurrentHoldingsWithValue(userID int64, portfolioI
 			CountryCode:       countryCode,
 		})
 	}
+
+	// Log the result for debugging
+	pricedCount := 0
+	for _, h := range response {
+		if h.Status == "OK" {
+			pricedCount++
+		}
+	}
+	logger.L.Info("GetCurrentHoldingsWithValue completed",
+		"userID", userID,
+		"portfolioID", portfolioID,
+		"holdingsCount", len(response),
+		"pricedCount", pricedCount,
+		"unavailableCount", len(response)-pricedCount)
+
 	return response, nil
 }
 
