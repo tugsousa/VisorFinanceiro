@@ -4,7 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { apiFetchAdminUserDetails } from 'features/admin/api/adminApi';
 import { 
     Box, Typography, CircularProgress, Alert, Paper, Grid, Divider, Link, Card, Tabs, Tab, 
-    FormControl, Select, MenuItem, InputLabel, Button,
+    FormControl, Select, MenuItem, InputLabel, Button, Chip, Tooltip,
     Dialog, DialogTitle, DialogContent, DialogContentText, DialogActions, TextField
 } from '@mui/material';
 import { useAuth } from '../../auth/AuthContext';
@@ -138,6 +138,9 @@ const UserDetailPage = () => {
         const totalPL = stockPL + optionPL + dividendPL + totalFees; 
         
         const unrealizedStockPL = (data.current_holdings || []).reduce((acc, h) => {
+            // Only include rows where we have a real live price; status === 'OK' is set by
+            // the backend only when GetCurrentPrices returned a valid price for that ISIN.
+            if (h.status !== 'OK') return acc;
             const mv = h.market_value_eur || 0;
             const cb = Math.abs(h.total_cost_basis_eur || 0);
             return acc + (mv - cb);
@@ -164,7 +167,7 @@ const UserDetailPage = () => {
 
     const uploadHistoryColumns = [
         { field: 'id', headerName: 'ID', width: 70 },
-        { field: 'uploaded_at', headerName: 'Data', width: 180, valueFormatter: (params) => new Date(params.value).toLocaleString() },
+        { field: 'uploaded_at', headerName: 'Data', width: 180, valueFormatter: (value) => new Date(value).toLocaleString() },
         { field: 'source', headerName: 'Fonte', width: 100 },
         { field: 'filename', headerName: 'Ficheiro', width: 200 },
         { field: 'transaction_count', headerName: 'Transações', width: 100, type: 'number' },
@@ -175,17 +178,91 @@ const UserDetailPage = () => {
         { field: 'date', headerName: 'Data', width: 110 },
         { field: 'transaction_type', headerName: 'Tipo', width: 100 },
         { field: 'product_name', headerName: 'Produto', width: 250 },
-        { field: 'amount_eur', headerName: 'Valor (€)', width: 120, type: 'number', valueFormatter: (params) => formatCurrency(params.value) },
+        { field: 'amount_eur', headerName: 'Valor (€)', width: 120, type: 'number', valueFormatter: (value) => formatCurrency(value) },
         { field: 'quantity', headerName: 'Qtd', width: 80, type: 'number' },
         { field: 'source', headerName: 'Broker', width: 90 },
     ];
 
     const holdingsColumns = [
-        { field: 'product_name', headerName: 'Produto', width: 250 },
+        { field: 'product_name', headerName: 'Produto', width: 230, flex: 1 },
         { field: 'isin', headerName: 'ISIN', width: 130 },
-        { field: 'quantity', headerName: 'Qtd', width: 80, type: 'number' },
-        { field: 'market_value_eur', headerName: 'Valor Mercado (€)', width: 150, type: 'number', valueFormatter: (params) => formatCurrency(params.value) },
-        { field: 'total_cost_basis_eur', headerName: 'Custo Base (€)', width: 150, type: 'number', valueFormatter: (params) => formatCurrency(Math.abs(params.value)) },
+        { field: 'quantity', headerName: 'Qtd', width: 75, type: 'number' },
+        {
+            field: 'status',
+            headerName: 'Preço',
+            width: 105,
+            renderCell: (params) => {
+                const ok = params.value === 'OK';
+                return (
+                    <Tooltip title={ok ? 'Preço de mercado em tempo real' : 'Preço indisponível — a mostrar custo base'}>
+                        <Chip
+                            label={ok ? 'Live' : 'N/D'}
+                            size="small"
+                            sx={{
+                                bgcolor: ok ? '#dcfce7' : '#fef9c3',
+                                color:   ok ? '#166534' : '#854d0e',
+                                fontWeight: 600,
+                                fontSize: '0.7rem',
+                                height: 20,
+                            }}
+                        />
+                    </Tooltip>
+                );
+            },
+        },
+        {
+            field: 'market_value_eur',
+            headerName: 'Valor Mercado (€)',
+            width: 155,
+            type: 'number',
+            renderCell: (params) => {
+                const priceOk = params.row.status === 'OK';
+                const displayValue = priceOk
+                    ? params.value
+                    : Math.abs(params.row.total_cost_basis_eur || 0);
+                return (
+                    <Tooltip title={priceOk ? '' : 'Preço indisponível — a mostrar custo base como referência'}>
+                        <Typography
+                            variant="body2"
+                            sx={{ color: priceOk ? 'text.primary' : 'text.secondary', fontStyle: priceOk ? 'normal' : 'italic' }}
+                        >
+                            {formatCurrency(displayValue)}
+                        </Typography>
+                    </Tooltip>
+                );
+            },
+        },
+        {
+            field: 'total_cost_basis_eur',
+            headerName: 'Custo Base (€)',
+            width: 145,
+            type: 'number',
+            // v6+: valueFormatter receives (value) directly, not a params object
+            valueFormatter: (value) => formatCurrency(Math.abs(value)),
+        },
+        {
+            field: 'pl_eur',
+            headerName: 'P/L (€)',
+            width: 120,
+            type: 'number',
+            // v6+: valueGetter receives (value, row) — 'pl_eur' doesn't exist on the row,
+            // so value is undefined; we derive the figure from row fields directly.
+            valueGetter: (value, row) => {
+                if (!row || row.status !== 'OK') return null;
+                return (row.market_value_eur || 0) - Math.abs(row.total_cost_basis_eur || 0);
+            },
+            renderCell: (params) => {
+                if (params.value === null || params.value === undefined) {
+                    return <Typography variant="body2" color="text.disabled">—</Typography>;
+                }
+                const positive = params.value >= 0;
+                return (
+                    <Typography variant="body2" sx={{ color: positive ? '#166534' : '#991b1b', fontWeight: 600 }}>
+                        {formatCurrency(params.value)}
+                    </Typography>
+                );
+            },
+        },
     ];
 
     if (isLoading) return <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}><CircularProgress /></Box>;
@@ -286,15 +363,42 @@ const UserDetailPage = () => {
             {currentTab === 'holdings' && (
                 <Paper variant="outlined" sx={{ p: 3, height: 600, width: '100%' }}>
                     <Typography variant="h6" gutterBottom>Carteira de Ações Atual</Typography>
+
+                    {/* Banner when at least one holding has no live price */}
+                    {currentHoldings && currentHoldings.length > 0 &&
+                        currentHoldings.some(h => h.status !== 'OK') && (
+                        <Alert severity="warning" sx={{ mb: 2 }}>
+                            Alguns ativos não têm preço de mercado disponível (marcados como <strong>N/D</strong>).
+                            A coluna <em>Valor Mercado</em> mostra o custo base como referência para essas posições.
+                            O P/L em aberto não está incluído nos totais para esses ativos.
+                        </Alert>
+                    )}
+
                     {currentHoldings && currentHoldings.length > 0 ? (
-                        <DataGrid 
-                            rows={currentHoldings} 
-                            columns={holdingsColumns} 
+                        <DataGrid
+                            rows={currentHoldings}
+                            columns={holdingsColumns}
                             getRowId={(row) => row.isin + row.product_name}
-                            density="compact" 
+                            density="compact"
+                            localeText={{
+                                noRowsLabel: 'Nenhuma posição encontrada',
+                                noResultsOverlayLabel: 'Nenhum resultado encontrado'
+                            }}
                         />
                     ) : (
-                        <Typography>Valor Mercado: 0 €, Custo Base: 0 €</Typography>
+                        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                            <Typography variant="body1" color="text.secondary">
+                                Nenhuma posição encontrada para este portfólio.
+                            </Typography>
+                            <Typography variant="body2" color="text.secondary">
+                                Isso pode ocorrer quando:
+                            </Typography>
+                            <ul style={{ margin: 0, paddingLeft: '20px' }}>
+                                <li>Não há transações carregadas para este portfólio</li>
+                                <li>Todas as posições foram vendidas</li>
+                                <li>As transações ainda estão sendo processadas</li>
+                            </ul>
+                        </Box>
                     )}
                 </Paper>
             )}

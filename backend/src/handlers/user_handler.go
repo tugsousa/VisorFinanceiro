@@ -766,6 +766,10 @@ func (h *UserHandler) HandleGetAdminUserDetails(w http.ResponseWriter, r *http.R
 		if err == nil {
 			response.CurrentHoldings = currentHoldings
 		} else {
+			logger.L.Warn("GetCurrentHoldingsWithValue failed for admin view",
+				"userID", userID,
+				"portfolioID", targetPortfolioID,
+				"error", err)
 			response.CurrentHoldings = []models.HoldingWithValue{}
 		}
 	}
