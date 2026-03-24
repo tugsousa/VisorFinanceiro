@@ -33,9 +33,9 @@ func setRefreshTokenCookie(w http.ResponseWriter, refreshToken string, duration 
 	cookie := &http.Cookie{
 		Name:     "refresh_token",
 		Value:    refreshToken,
-		Path:     "/api/auth/refresh",
+		Path:     "/", // Make cookie available to all API paths
 		HttpOnly: true,
-		Secure:   config.Cfg.FrontendBaseURL[:5] == "https", // Secure in Prod (HTTPS)
+		Secure:   config.Cfg.Port != "8080", // Use HTTPS in production (not localhost)
 		SameSite: http.SameSiteLaxMode,
 		MaxAge:   int(duration.Seconds()),
 	}
@@ -383,7 +383,7 @@ func (h *UserHandler) RefreshTokenHandler(w http.ResponseWriter, r *http.Request
 	if err != nil {
 		logger.L.Warn("Refresh token lookup failed or token invalid/expired", "error", err)
 		// Clear invalid cookie
-		http.SetCookie(w, &http.Cookie{Name: "refresh_token", Value: "", Path: "/api/auth/refresh", MaxAge: -1})
+		http.SetCookie(w, &http.Cookie{Name: "refresh_token", Value: "", Path: "/", MaxAge: -1})
 		sendJSONError(w, "Invalid or expired refresh token", http.StatusUnauthorized)
 		return
 	}
@@ -394,7 +394,7 @@ func (h *UserHandler) RefreshTokenHandler(w http.ResponseWriter, r *http.Request
 		if errors.Is(err, sql.ErrNoRows) {
 			logger.L.Warn("User not found during refresh - likely fresh database scenario", "userID", oldSession.UserID)
 			// Clear the refresh token cookie since the user no longer exists
-			http.SetCookie(w, &http.Cookie{Name: "refresh_token", Value: "", Path: "/api/auth/refresh", MaxAge: -1})
+			http.SetCookie(w, &http.Cookie{Name: "refresh_token", Value: "", Path: "/", MaxAge: -1})
 			// Return a specific error code for database reset scenario
 			sendJSONErrorWithCode(w, "Database has been reset. Please log in again.", http.StatusGone)
 			return
@@ -491,9 +491,9 @@ func (h *UserHandler) LogoutUserHandler(w http.ResponseWriter, r *http.Request) 
 	http.SetCookie(w, &http.Cookie{
 		Name:     "refresh_token",
 		Value:    "",
-		Path:     "/api/auth/refresh",
+		Path:     "/", // Clear cookie for all paths
 		HttpOnly: true,
-		Secure:   config.Cfg.FrontendBaseURL[:5] == "https",
+		Secure:   config.Cfg.Port != "8080", // Use HTTPS in production (not localhost)
 		MaxAge:   -1,
 	})
 
