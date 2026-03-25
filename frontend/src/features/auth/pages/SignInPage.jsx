@@ -39,12 +39,41 @@ const OAUTH_ERROR_MESSAGES = {
     'Não foi possível criar a sua sessão. Por favor, tente novamente.',
 };
 
+// Maps backend error codes and messages to user-friendly pt-PT strings.
+// This ensures the user never sees raw API errors or axios internals.
+const LOGIN_ERROR_MESSAGES = {
+  // Backend codes
+  CSRF_VALIDATION_FAILED: 'Ocorreu um erro de segurança. Por favor, recarregue a página e tente novamente.',
+  EMAIL_NOT_VERIFIED: null, // handled separately below
+  // Backend error strings → friendly messages
+  'Invalid email or password': 'Email ou palavra-passe incorretos. Por favor, verifique os seus dados e tente novamente.',
+  'Invalid request body': 'Pedido inválido. Por favor, tente novamente.',
+  'Failed to create session': 'Não foi possível criar a sessão. Por favor, tente novamente.',
+};
+
+const getFriendlyLoginError = (err) => {
+  const code = err.response?.data?.code;
+  if (code && LOGIN_ERROR_MESSAGES[code] !== undefined) {
+    return LOGIN_ERROR_MESSAGES[code] ?? err.response.data.error;
+  }
+  const backendMessage = err.response?.data?.error;
+  if (backendMessage && LOGIN_ERROR_MESSAGES[backendMessage]) {
+    return LOGIN_ERROR_MESSAGES[backendMessage];
+  }
+  // Network/axios errors (no response at all)
+  if (!err.response) {
+    return 'Não foi possível contactar o servidor. Verifique a sua ligação e tente novamente.';
+  }
+  // Fallback for any unmapped backend message — still better than the raw axios string
+  return backendMessage || 'Ocorreu um erro inesperado. Por favor, tente novamente.';
+};
+
 function SignInPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [localError, setLocalError] = useState('');
   const [localSuccess, setLocalSuccess] = useState(false);
-  const { login, isAuthActionLoading, authError: contextAuthError } = useContext(AuthContext);
+  const { login, isAuthActionLoading } = useContext(AuthContext);
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -72,11 +101,6 @@ function SignInPage() {
     }
   }, [location, navigate]);
 
-  // Surface errors raised by the AuthContext (e.g. wrong password).
-  useEffect(() => {
-    if (contextAuthError) setLocalError(contextAuthError);
-  }, [contextAuthError]);
-
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLocalError('');
@@ -89,10 +113,10 @@ function SignInPage() {
       if (err.response?.data?.code === 'EMAIL_NOT_VERIFIED') {
         setLocalError(
           err.response.data.error ||
-          'Your email has not been verified. A new verification link has been sent.'
+          'O seu email ainda não foi verificado. Foi enviado um novo link de verificação.'
         );
       } else {
-        setLocalError(err.message || 'An unexpected error occurred during sign-in.');
+        setLocalError(getFriendlyLoginError(err));
       }
       setLocalSuccess(false);
     }
