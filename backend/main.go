@@ -22,6 +22,7 @@ import (
 	"github.com/username/taxfolio/backend/src/security"
 	"github.com/username/taxfolio/backend/src/services"
 	"github.com/username/taxfolio/backend/src/utils"
+	"github.com/username/taxfolio/backend/src/websocket"
 	"golang.org/x/time/rate"
 )
 
@@ -159,6 +160,9 @@ func main() {
 	database.InitDB(config.Cfg.DatabasePath)
 	database.RunMigrations(config.Cfg.DatabasePath)
 
+	// Initialize WebSocket hub
+	websocket.InitializeHub()
+
 	reportCache := cache.New(services.DefaultCacheExpiration, services.CacheCleanupInterval)
 
 	handlers.InitializeGoogleOAuthConfig()
@@ -192,6 +196,7 @@ func main() {
 	txHandler := handlers.NewTransactionHandler(uploadService)
 	feeHandler := handlers.NewFeeHandler(uploadService)
 	pfManagerHandler := handlers.NewPortfolioManagerHandler()
+	jobHandler := handlers.NewJobHandler(uploadService, uploadService.GetJobManager())
 
 	r := chi.NewRouter()
 
@@ -220,11 +225,13 @@ func main() {
 			r.Use(handlers.CSRFMiddleware(config.Cfg.CSRFAuthKey))
 			r.Post("/auth/login", userHandler.LoginUserHandler)
 			r.Post("/auth/register", userHandler.RegisterUserHandler)
-			r.Post("/auth/refresh", userHandler.RefreshTokenHandler)
 			r.With(userHandler.AuthMiddleware).Post("/auth/logout", userHandler.LogoutUserHandler)
 			r.Post("/auth/request-password-reset", userHandler.RequestPasswordResetHandler)
 			r.Post("/auth/reset-password", userHandler.ResetPasswordHandler)
 		})
+
+		// Refresh endpoint (exempt from CSRF for OAuth flows)
+		r.Post("/auth/refresh", userHandler.RefreshTokenHandler)
 
 		// Rotas Protegidas (Requerem Autenticação e CSRF)
 		r.Group(func(r chi.Router) {
@@ -254,6 +261,13 @@ func main() {
 			r.Post("/user/change-password", userHandler.ChangePasswordHandler)
 			r.Post("/user/delete-account", userHandler.DeleteAccountHandler)
 			r.Get("/history/chart", portfolioHandler.HandleGetHistoricalChartData)
+
+			// Job Management Routes
+			r.Get("/jobs", jobHandler.GetJobsHandler)
+			r.Get("/job", jobHandler.GetJobHandler)
+			r.Post("/jobs/rebuild-history", jobHandler.RebuildHistoryHandler)
+			r.Post("/jobs/update-metrics", jobHandler.UpdateMetricsHandler)
+			r.Post("/jobs/calculate-dividends", jobHandler.CalculateDividendsHandler)
 
 			// Rotas de Administração
 			r.Group(func(r chi.Router) {

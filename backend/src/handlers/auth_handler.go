@@ -14,7 +14,7 @@ import (
 	"github.com/username/taxfolio/backend/src/config"
 	"github.com/username/taxfolio/backend/src/database"
 	"github.com/username/taxfolio/backend/src/logger"
-	"github.com/username/taxfolio/backend/src/model"
+	"github.com/username/taxfolio/backend/src/models"
 	"github.com/username/taxfolio/backend/src/security/validation"
 )
 
@@ -33,13 +33,21 @@ func setRefreshTokenCookie(w http.ResponseWriter, refreshToken string, duration 
 	cookie := &http.Cookie{
 		Name:     "refresh_token",
 		Value:    refreshToken,
-		Path:     "/api/auth/refresh",
+		Path:     "/", // Make cookie available to all API paths
 		HttpOnly: true,
-		Secure:   config.Cfg.FrontendBaseURL[:5] == "https", // Secure in Prod (HTTPS)
+		Secure:   config.Cfg.Port != "8080", // Use HTTPS in production (not localhost)
 		SameSite: http.SameSiteLaxMode,
 		MaxAge:   int(duration.Seconds()),
 	}
 	http.SetCookie(w, cookie)
+}
+
+// Helper function to send JSON error with custom status code
+func sendJSONErrorWithCode(w http.ResponseWriter, message string, statusCode int) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(statusCode)
+	logger.L.Warn("Sending JSON error to client", "message", message, "statusCode", statusCode)
+	json.NewEncoder(w).Encode(map[string]string{"error": message})
 }
 
 // updateUserLoginInfo updates user's login stats and records the login event.
@@ -146,7 +154,7 @@ func (h *UserHandler) RegisterUserHandler(w http.ResponseWriter, r *http.Request
 	verificationToken := hex.EncodeToString(tokenBytes)
 	tokenExpiry := time.Now().Add(config.Cfg.VerificationTokenExpiry)
 
-	user := &model.User{
+	user := &models.User{
 		Username:                        credentials.Username,
 		Email:                           credentials.Email,
 		Password:                        hashedPassword,
@@ -256,7 +264,7 @@ func (h *UserHandler) LoginUserHandler(w http.ResponseWriter, r *http.Request) {
 	credentials.Email = strings.ToLower(validation.SanitizeText(strings.TrimSpace(credentials.Email)))
 
 	logger.L.Info("Login attempt received")
-	user, err := model.GetUserByEmail(database.DB, credentials.Email)
+	user, err := models.GetUserByEmail(database.DB, credentials.Email)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			logger.L.Warn("User lookup by email failed for login: user not found", "email", credentials.Email)
@@ -324,7 +332,7 @@ func (h *UserHandler) LoginUserHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	session := &model.Session{
+	session := &models.Session{
 		UserID:       user.ID,
 		Token:        accessToken,
 		RefreshToken: refreshToken,
@@ -333,7 +341,7 @@ func (h *UserHandler) LoginUserHandler(w http.ResponseWriter, r *http.Request) {
 		IsBlocked:    false,
 		ExpiresAt:    time.Now().Add(config.Cfg.RefreshTokenExpiry),
 	}
-	if err := model.CreateSession(database.DB, session); err != nil {
+	if err := models.CreateSession(database.DB, session); err != nil {
 		logger.L.Error("Failed to create session", "userID", user.ID, "error", err)
 		sendJSONError(w, "Failed to create session", http.StatusInternalServerError)
 		return
@@ -371,17 +379,33 @@ func (h *UserHandler) RefreshTokenHandler(w http.ResponseWriter, r *http.Request
 	}
 	refreshTokenStr := cookie.Value
 
-	oldSession, err := model.GetSessionByRefreshToken(database.DB, refreshTokenStr)
+	oldSession, err := models.GetSessionByRefreshToken(database.DB, refreshTokenStr)
 	if err != nil {
 		logger.L.Warn("Refresh token lookup failed or token invalid/expired", "error", err)
 		// Clear invalid cookie
-		http.SetCookie(w, &http.Cookie{Name: "refresh_token", Value: "", Path: "/api/auth/refresh", MaxAge: -1})
+		http.SetCookie(w, &http.Cookie{Name: "refresh_token", Value: "", Path: "/", MaxAge: -1})
 		sendJSONError(w, "Invalid or expired refresh token", http.StatusUnauthorized)
 		return
 	}
 
+	// Check if user still exists in database (handles fresh database scenario)
+	user, err := models.GetUserByID(database.DB, oldSession.UserID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			logger.L.Warn("User not found during refresh - likely fresh database scenario", "userID", oldSession.UserID)
+			// Clear the refresh token cookie since the user no longer exists
+			http.SetCookie(w, &http.Cookie{Name: "refresh_token", Value: "", Path: "/", MaxAge: -1})
+			// Return a specific error code for database reset scenario
+			sendJSONErrorWithCode(w, "Database has been reset. Please log in again.", http.StatusGone)
+			return
+		}
+		logger.L.Error("Failed to retrieve user during refresh", "userID", oldSession.UserID, "error", err)
+		sendJSONError(w, "Failed to retrieve user details", http.StatusInternalServerError)
+		return
+	}
+
 	// Delete old session
-	if err := model.DeleteSessionByRefreshToken(database.DB, refreshTokenStr); err != nil {
+	if err := models.DeleteSessionByRefreshToken(database.DB, refreshTokenStr); err != nil {
 		logger.L.Error("Failed to delete old session during refresh", "error", err)
 	}
 
@@ -400,7 +424,7 @@ func (h *UserHandler) RefreshTokenHandler(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	newSession := &model.Session{
+	newSession := &models.Session{
 		UserID:       oldSession.UserID,
 		Token:        newAccessToken,
 		RefreshToken: newRefreshToken,
@@ -410,20 +434,12 @@ func (h *UserHandler) RefreshTokenHandler(w http.ResponseWriter, r *http.Request
 		ExpiresAt:    time.Now().Add(config.Cfg.RefreshTokenExpiry),
 	}
 
-	if err := model.CreateSession(database.DB, newSession); err != nil {
+	if err := models.CreateSession(database.DB, newSession); err != nil {
 		logger.L.Error("Failed to create new session on refresh", "userID", oldSession.UserID, "error", err)
 		sendJSONError(w, "Failed to create new session on refresh", http.StatusInternalServerError)
 		return
 	}
 
-	// --- FETCH USER DATA TO RETURN ---
-	// We need to return the user object so the frontend can restore state (e.g. after Google OAuth redirect)
-	user, err := model.GetUserByID(database.DB, oldSession.UserID)
-	if err != nil {
-		logger.L.Error("Failed to retrieve user during refresh", "userID", oldSession.UserID, "error", err)
-		sendJSONError(w, "Failed to retrieve user details", http.StatusInternalServerError)
-		return
-	}
 	user.IsAdmin = isAdmin(user.Email)
 
 	userData := map[string]interface{}{
@@ -465,7 +481,7 @@ func (h *UserHandler) LogoutUserHandler(w http.ResponseWriter, r *http.Request) 
 	}
 
 	if tokenString != "" {
-		err := model.DeleteSessionByToken(database.DB, tokenString)
+		err := models.DeleteSessionByToken(database.DB, tokenString)
 		if err != nil {
 			logger.L.Warn("Failed to delete session on logout", "error", err)
 		}
@@ -475,9 +491,9 @@ func (h *UserHandler) LogoutUserHandler(w http.ResponseWriter, r *http.Request) 
 	http.SetCookie(w, &http.Cookie{
 		Name:     "refresh_token",
 		Value:    "",
-		Path:     "/api/auth/refresh",
+		Path:     "/", // Clear cookie for all paths
 		HttpOnly: true,
-		Secure:   config.Cfg.FrontendBaseURL[:5] == "https",
+		Secure:   config.Cfg.Port != "8080", // Use HTTPS in production (not localhost)
 		MaxAge:   -1,
 	})
 

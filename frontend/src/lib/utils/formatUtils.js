@@ -7,7 +7,8 @@
  * @returns {string} The formatted currency string.
  */
 export const formatCurrency = (value, options = {}) => {
-  const val = value || 0;
+  // Treat null, undefined, NaN, and non-numbers as 0
+  const val = (typeof value === 'number' && !isNaN(value)) ? value : 0;
   
   // Logic: if value is tiny (non-zero and abs < 0.01), show 4 decimals.
   const isTiny = val !== 0 && Math.abs(val) < 0.01;

@@ -191,9 +191,17 @@ export const AuthProvider = ({ children }) => {
         const handleLogoutEvent = (event) => {
             performLogout(false, `Auth error: ${event.detail}`);
         };
+        
+        const handleDatabaseResetEvent = (event) => {
+            performLogout(false, `Database reset: ${event.detail}`);
+        };
+        
         window.addEventListener('auth-error-logout', handleLogoutEvent);
+        window.addEventListener('auth-database-reset', handleDatabaseResetEvent);
+        
         return () => {
             window.removeEventListener('auth-error-logout', handleLogoutEvent);
+            window.removeEventListener('auth-database-reset', handleDatabaseResetEvent);
         };
     }, [performLogout]);
 
@@ -236,9 +244,12 @@ export const AuthProvider = ({ children }) => {
             return response.data;
         } catch (err) {
             const errMsg = err.response?.data?.error || err.message || 'Login failed.';
-            performLogout(false, `Login failed: ${errMsg}`);
+            // Do NOT call performLogout here — a bad password is not a session error,
+            // and performLogout's async fetchCsrfToken would race and wipe out authError.
+            setUser(null);
+            setToken(null);
             setAuthError(errMsg);
-            throw new Error(errMsg);
+            throw err;
         } finally {
             setIsAuthActionLoading(false);
             setCheckingData(false);

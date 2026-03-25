@@ -28,6 +28,7 @@ var (
 // UploadService defines the interface for the core upload processing logic.
 type UploadService interface {
 	ProcessUpload(fileReader io.Reader, userID int64, portfolioID int64, source string, filename string, filesize int64) (*UploadResult, error)
+	GetJobManager() *JobManager
 	GetLatestUploadResult(userID int64, portfolioID int64) (*UploadResult, error)
 	GetDividendTaxSummary(userID int64, portfolioID int64) (models.DividendTaxResult, error)
 	GetDividendTransactions(userID int64, portfolioID int64) ([]models.ProcessedTransaction, error)
@@ -43,6 +44,7 @@ type UploadService interface {
 
 	GetDividendMetrics(userID int64, portfolioID int64) (*models.DividendMetricsResult, error)
 	RebuildUserHistory(userID int64, portfolioID int64) error
+	RebuildUserHistoryFrom(userID int64, portfolioID int64, fromDate string) error
 	RefreshDailySnapshot(userID int64, portfolioID int64) error
 }
 
@@ -61,4 +63,7 @@ type PriceService interface {
 	EnsureBenchmarkData() error
 	// NOVO MÉTODO ADICIONADO AQUI
 	GetLastYearDividends(ticker string) (map[time.Month]float64, string, error)
+	// Métodos adicionados para paralelização
+	FetchTickerForISIN(isin string) (string, string, string, error)
+	FetchMetadata(ticker string) (string, string, string, error)
 }

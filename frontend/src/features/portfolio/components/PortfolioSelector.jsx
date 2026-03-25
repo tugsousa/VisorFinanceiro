@@ -13,9 +13,12 @@ import {
     Add as AddIcon
 } from '@mui/icons-material';
 import { usePortfolio } from '../PortfolioContext';
+import { usePortfolioSwitch } from '../hooks/usePortfolioSwitch';
+import PortfolioErrorBoundary from './PortfolioErrorBoundary';
 
 export default function PortfolioSelector() {
-    const { portfolios, activePortfolio, switchPortfolio, createPortfolio, deletePortfolio, loading } = usePortfolio();
+    const { portfolios, activePortfolio, createPortfolio, deletePortfolio, loading } = usePortfolio();
+    const { handlePortfolioSwitch, switching, switchError, clearSwitchError } = usePortfolioSwitch();
     
     // UI States
     const [openManageModal, setOpenManageModal] = useState(false);
@@ -28,7 +31,7 @@ export default function PortfolioSelector() {
     const [isProcessing, setIsProcessing] = useState(false);
 
     const handleSwitch = (e) => {
-        switchPortfolio(e.target.value);
+        handlePortfolioSwitch(e.target.value);
     };
 
     const handleCreate = async () => {
@@ -79,105 +82,120 @@ export default function PortfolioSelector() {
     if (loading && portfolios.length === 0) return null;
 
     return (
-        <Box sx={{ display: 'flex', alignItems: 'center', bgcolor: 'rgba(0,0,0,0.04)', borderRadius: 1, p: 0.5, mr: 2 }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', mx: 1, color: 'text.secondary' }}>
-                <WalletIcon fontSize="small" sx={{ mr: 0.5 }} />
-            </Box>
-            
-            {activePortfolio ? (
-                <FormControl variant="standard" size="small" sx={{ minWidth: 120 }}>
-                    <Select
-                        value={activePortfolio.id}
-                        onChange={handleSwitch}
-                        disableUnderline
-                        sx={{ 
-                            fontSize: '0.875rem', 
-                            fontWeight: 500,
-                            '& .MuiSelect-select': { py: 0.5, pr: '24px !important' }
-                        }}
+        <PortfolioErrorBoundary>
+            <Box>
+                {/* Display portfolio switching errors */}
+                {switchError && (
+                    <Alert 
+                        severity="error" 
+                        sx={{ mb: 1 }} 
+                        onClose={clearSwitchError}
                     >
-                        {portfolios.map(p => (
-                            <MenuItem key={p.id} value={p.id}>{p.name}</MenuItem>
-                        ))}
-                    </Select>
-                </FormControl>
-            ) : (
-                <Typography variant="caption" sx={{ mx: 1, color: 'error.main' }}>
-                    Sem Portfólio
-                </Typography>
-            )}
-
-            <Tooltip title="Gerir Portfólios">
-                <IconButton onClick={() => setOpenManageModal(true)} size="small" sx={{ ml: 0.5 }}>
-                    <SettingsIcon fontSize="small" />
-                </IconButton>
-            </Tooltip>
-
-            {/* MANAGE MODAL */}
-            <Dialog open={openManageModal} onClose={resetModal} maxWidth="xs" fullWidth>
-                <DialogTitle>
-                    {view === 'list' ? 'Gerir Portfólios' : 'Novo Portfólio'}
-                </DialogTitle>
+                        {switchError}
+                    </Alert>
+                )}
                 
-                <DialogContent>
-                    {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
+                <Box sx={{ display: 'flex', alignItems: 'center', bgcolor: 'rgba(0,0,0,0.04)', borderRadius: 1, p: 0.5, mr: 2 }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', mx: 1, color: 'text.secondary' }}>
+                        <WalletIcon fontSize="small" sx={{ mr: 0.5 }} />
+                    </Box>
+                    
+                    {activePortfolio ? (
+                        <FormControl variant="standard" size="small" sx={{ minWidth: 120 }}>
+                            <Select
+                                value={activePortfolio.id}
+                                onChange={handleSwitch}
+                                disableUnderline
+                                sx={{ 
+                                    fontSize: '0.875rem', 
+                                    fontWeight: 500,
+                                    '& .MuiSelect-select': { py: 0.5, pr: '24px !important' }
+                                }}
+                            >
+                                {portfolios.map(p => (
+                                    <MenuItem key={p.id} value={p.id}>{p.name}</MenuItem>
+                                ))}
+                            </Select>
+                        </FormControl>
+                    ) : (
+                        <Typography variant="caption" sx={{ mx: 1, color: 'error.main' }}>
+                            Sem Portfólio
+                        </Typography>
+                    )}
 
-                    {view === 'list' ? (
-                        <List dense>
-                            {portfolios.map((p) => (
-                                <React.Fragment key={p.id}>
-                                    <ListItem>
-                                        <ListItemText 
-                                            primary={p.name} 
-                                            secondary={p.is_default ? "Padrão" : p.description} 
-                                            primaryTypographyProps={{ fontWeight: activePortfolio?.id === p.id ? 'bold' : 'normal' }}
-                                        />
-                                        <ListItemSecondaryAction>
-                                            {!p.is_default && (
-                                                <IconButton edge="end" aria-label="delete" onClick={() => handleDelete(p.id)} disabled={isProcessing}>
-                                                    <DeleteIcon color="error" fontSize="small" />
-                                                </IconButton>
-                                            )}
-                                        </ListItemSecondaryAction>
-                                    </ListItem>
-                                    <Divider />
-                                </React.Fragment>
-                            ))}
-                            <Box sx={{ mt: 2, display: 'flex', justifyContent: 'center' }}>
-                                <Button startIcon={<AddIcon />} onClick={() => setView('create')}>
-                                    Criar Novo
-                                </Button>
-                            </Box>
-                        </List>
-                    ) : (
-                        <Box sx={{ mt: 1 }}>
-                            <TextField 
-                                autoFocus margin="dense" label="Nome" fullWidth 
-                                value={newName} onChange={e => setNewName(e.target.value)} 
-                                variant="outlined" size="small"
-                            />
-                            <TextField 
-                                margin="dense" label="Descrição" fullWidth 
-                                value={newDesc} onChange={e => setNewDesc(e.target.value)} 
-                                variant="outlined" size="small" multiline rows={2}
-                            />
-                        </Box>
-                    )}
-                </DialogContent>
-                
-                <DialogActions>
-                    {view === 'create' ? (
-                        <>
-                            <Button onClick={() => setView('list')}>Voltar</Button>
-                            <Button onClick={handleCreate} variant="contained" disabled={isProcessing}>
-                                {isProcessing ? <CircularProgress size={24} /> : 'Criar'}
-                            </Button>
-                        </>
-                    ) : (
-                        <Button onClick={resetModal}>Fechar</Button>
-                    )}
-                </DialogActions>
-            </Dialog>
-        </Box>
+                    <Tooltip title="Gerir Portfólios">
+                        <IconButton onClick={() => setOpenManageModal(true)} size="small" sx={{ ml: 0.5 }}>
+                            <SettingsIcon fontSize="small" />
+                        </IconButton>
+                    </Tooltip>
+
+                    {/* MANAGE MODAL */}
+                    <Dialog open={openManageModal} onClose={resetModal} maxWidth="xs" fullWidth>
+                        <DialogTitle>
+                            {view === 'list' ? 'Gerir Portfólios' : 'Novo Portfólio'}
+                        </DialogTitle>
+                        
+                        <DialogContent>
+                            {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
+
+                            {view === 'list' ? (
+                                <List dense>
+                                    {portfolios.map((p) => (
+                                        <React.Fragment key={p.id}>
+                                            <ListItem>
+                                                <ListItemText 
+                                                    primary={p.name} 
+                                                    secondary={p.is_default ? "Padrão" : p.description} 
+                                                    primaryTypographyProps={{ fontWeight: activePortfolio?.id === p.id ? 'bold' : 'normal' }}
+                                                />
+                                                <ListItemSecondaryAction>
+                                                    {!p.is_default && (
+                                                        <IconButton edge="end" aria-label="delete" onClick={() => handleDelete(p.id)} disabled={isProcessing}>
+                                                            <DeleteIcon color="error" fontSize="small" />
+                                                        </IconButton>
+                                                    )}
+                                                </ListItemSecondaryAction>
+                                            </ListItem>
+                                            <Divider />
+                                        </React.Fragment>
+                                    ))}
+                                    <Box sx={{ mt: 2, display: 'flex', justifyContent: 'center' }}>
+                                        <Button startIcon={<AddIcon />} onClick={() => setView('create')}>
+                                            Criar Novo
+                                        </Button>
+                                    </Box>
+                                </List>
+                            ) : (
+                                <Box sx={{ mt: 1 }}>
+                                    <TextField 
+                                        autoFocus margin="dense" label="Nome" fullWidth 
+                                        value={newName} onChange={e => setNewName(e.target.value)} 
+                                        variant="outlined" size="small"
+                                    />
+                                    <TextField 
+                                        margin="dense" label="Descrição" fullWidth 
+                                        value={newDesc} onChange={e => setNewDesc(e.target.value)} 
+                                        variant="outlined" size="small" multiline rows={2}
+                                    />
+                                </Box>
+                            )}
+                        </DialogContent>
+                        
+                        <DialogActions>
+                            {view === 'create' ? (
+                                <>
+                                    <Button onClick={() => setView('list')}>Voltar</Button>
+                                    <Button onClick={handleCreate} variant="contained" disabled={isProcessing}>
+                                        {isProcessing ? <CircularProgress size={24} /> : 'Criar'}
+                                    </Button>
+                                </>
+                            ) : (
+                                <Button onClick={resetModal}>Fechar</Button>
+                            )}
+                        </DialogActions>
+                    </Dialog>
+                </Box>
+            </Box>
+            </PortfolioErrorBoundary>
     );
 }

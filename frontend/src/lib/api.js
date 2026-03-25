@@ -87,7 +87,60 @@ apiClient.interceptors.response.use(
   async (error) => {
     const originalRequest = error.config;
 
+    // Handle database reset scenario (410 Gone)
+    if (error.response?.status === 410) {
+      logger.error('Database reset detected, clearing authentication state');
+      // Clear all authentication state
+      localStorage.removeItem('auth_token');
+      localStorage.removeItem('user');
+      localStorage.removeItem('has_initial_data');
+      
+      // Clear refresh token cookie by making a request to clear it
+      try {
+        // Make a request to the refresh endpoint to clear the cookie
+        await fetch('/api/auth/refresh', {
+          method: 'POST',
+          credentials: 'include'
+        });
+      } catch (cookieError) {
+        console.warn('Failed to clear refresh token cookie:', cookieError);
+      }
+
+      // Dispatch custom event to notify AuthContext
+      window.dispatchEvent(new CustomEvent('auth-database-reset', { 
+        detail: 'Database has been reset. Please log in again.' 
+      }));
+      
+      return Promise.reject(error);
+    }
+
+    // Auto-recover from CSRF token mismatch: re-fetch the token and retry once.
+    // This handles cases where the token falls out of sync (e.g. after a failed
+    // request cascade invalidated the previous token).
+    if (
+      error.response?.status === 403 &&
+      error.response?.data?.code === 'CSRF_VALIDATION_FAILED' &&
+      !originalRequest._csrfRetry
+    ) {
+      originalRequest._csrfRetry = true;
+      const newToken = await fetchAndSetCsrfToken();
+      if (newToken) {
+        originalRequest.headers['X-CSRF-Token'] = newToken;
+        return apiClient(originalRequest);
+      }
+      return Promise.reject(error);
+    }
+
     if (error.response?.status === 401 && !originalRequest._retry) {
+      // Never attempt a token refresh for auth endpoints themselves.
+      // A 401 from /auth/login means bad credentials — not an expired session.
+      // Trying to refresh here causes the interceptor to swallow the error and
+      // leave the UI stuck in a loading state with no error message shown.
+      const isAuthEndpoint = originalRequest.url?.includes('/auth/');
+      if (isAuthEndpoint) {
+        return Promise.reject(error);
+      }
+
       if (isRefreshing) {
         // If already refreshing, queue this request
         return new Promise((resolve, reject) => {

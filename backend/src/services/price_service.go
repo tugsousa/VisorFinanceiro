@@ -15,8 +15,9 @@ import (
 
 	"github.com/username/taxfolio/backend/src/database"
 	"github.com/username/taxfolio/backend/src/logger"
-	"github.com/username/taxfolio/backend/src/model"
+	"github.com/username/taxfolio/backend/src/models"
 	"github.com/username/taxfolio/backend/src/processors"
+	"github.com/username/taxfolio/backend/src/utils"
 	"golang.org/x/net/publicsuffix"
 )
 
@@ -69,7 +70,6 @@ type yahooHistoryResponse struct {
 	} `json:"chart"`
 }
 
-// --- NOVO: Struct para resposta de Splits (API v8 Chart retorna events) ---
 type yahooSplitsResponse struct {
 	Chart struct {
 		Result []struct {
@@ -127,17 +127,412 @@ type yahooEventsResponse struct {
 
 // --- Service Implementation ---
 
-// --- NOVO: Struct auxiliar interna ---
 type StockSplit struct {
 	Date  time.Time
 	Ratio float64
 }
 
+// FailedISINCache stores failed ISIN lookups to avoid repeated API calls
+type FailedISINCache struct {
+	cache map[string]time.Time
+	mu    sync.RWMutex
+	ttl   time.Duration
+}
+
+func NewFailedISINCache(ttl time.Duration) *FailedISINCache {
+	fc := &FailedISINCache{
+		cache: make(map[string]time.Time),
+		ttl:   ttl,
+	}
+	go fc.cleanupLoop()
+	return fc
+}
+
+func (fc *FailedISINCache) IsFailed(isin string) bool {
+	fc.mu.RLock()
+	defer fc.mu.RUnlock()
+	if lastFailed, exists := fc.cache[isin]; exists {
+		if time.Since(lastFailed) < fc.ttl {
+			return true
+		}
+	}
+	return false
+}
+
+func (fc *FailedISINCache) MarkFailed(isin string) {
+	fc.mu.Lock()
+	defer fc.mu.Unlock()
+	fc.cache[isin] = time.Now()
+}
+
+func (fc *FailedISINCache) cleanupLoop() {
+	ticker := time.NewTicker(5 * time.Minute)
+	defer ticker.Stop()
+	for range ticker.C {
+		fc.mu.Lock()
+		now := time.Now()
+		for isin, lastFailed := range fc.cache {
+			if now.Sub(lastFailed) >= fc.ttl {
+				delete(fc.cache, isin)
+			}
+		}
+		fc.mu.Unlock()
+	}
+}
+
+// BulkFailedISINCache provides optimized bulk operations for failed ISINs
+type BulkFailedISINCache struct {
+	cache *FailedISINCache
+	mu    sync.RWMutex
+}
+
+func NewBulkFailedISINCache(ttl time.Duration) *BulkFailedISINCache {
+	return &BulkFailedISINCache{
+		cache: NewFailedISINCache(ttl),
+	}
+}
+
+// CheckMultiple checks multiple ISINs for failures in a single operation
+func (bfc *BulkFailedISINCache) CheckMultiple(isins []string) map[string]bool {
+	bfc.mu.RLock()
+	defer bfc.mu.RUnlock()
+
+	results := make(map[string]bool, len(isins))
+	for _, isin := range isins {
+		results[isin] = bfc.cache.IsFailed(isin)
+	}
+	return results
+}
+
+// MarkMultiple marks multiple ISINs as failed in a single operation
+func (bfc *BulkFailedISINCache) MarkMultiple(isins []string) {
+	bfc.mu.Lock()
+	defer bfc.mu.Unlock()
+	now := time.Now()
+	for _, isin := range isins {
+		bfc.cache.cache[isin] = now
+	}
+}
+
+// Enhanced ISIN Resolution with Bulk Operations
+type ISINResolutionCache struct {
+	successCache  map[string]string // ISIN -> Ticker
+	metadataCache map[string]struct {
+		Sector    string
+		Industry  string
+		QuoteType string
+	}
+	mu            sync.RWMutex
+	ttl           time.Duration
+	cleanupTicker *time.Ticker
+}
+
+func NewISINResolutionCache(ttl time.Duration) *ISINResolutionCache {
+	cache := &ISINResolutionCache{
+		successCache: make(map[string]string),
+		metadataCache: make(map[string]struct {
+			Sector    string
+			Industry  string
+			QuoteType string
+		}),
+		ttl: ttl,
+	}
+	cache.cleanupTicker = time.NewTicker(ttl / 2)
+	go cache.cleanupLoop()
+	return cache
+}
+
+func (irc *ISINResolutionCache) GetSuccess(isin string) (string, bool) {
+	irc.mu.RLock()
+	defer irc.mu.RUnlock()
+	ticker, exists := irc.successCache[isin]
+	return ticker, exists
+}
+
+func (irc *ISINResolutionCache) SetSuccess(isin, ticker string) {
+	irc.mu.Lock()
+	defer irc.mu.Unlock()
+	irc.successCache[isin] = ticker
+}
+
+func (irc *ISINResolutionCache) GetMetadata(ticker string) (string, string, string, bool) {
+	irc.mu.RLock()
+	defer irc.mu.RUnlock()
+	meta, exists := irc.metadataCache[ticker]
+	return meta.Sector, meta.Industry, meta.QuoteType, exists
+}
+
+func (irc *ISINResolutionCache) SetMetadata(ticker, sector, industry, quoteType string) {
+	irc.mu.Lock()
+	defer irc.mu.Unlock()
+	irc.metadataCache[ticker] = struct {
+		Sector    string
+		Industry  string
+		QuoteType string
+	}{
+		Sector:    sector,
+		Industry:  industry,
+		QuoteType: quoteType,
+	}
+}
+
+func (irc *ISINResolutionCache) cleanupLoop() {
+	for range irc.cleanupTicker.C {
+		irc.mu.Lock()
+		// Note: This is a simplified cleanup. In a production system,
+		// you'd want to track timestamps for each entry.
+		irc.mu.Unlock()
+	}
+}
+
+func (irc *ISINResolutionCache) Close() {
+	if irc.cleanupTicker != nil {
+		irc.cleanupTicker.Stop()
+	}
+}
+
+// Enhanced circuit breaker with per-ISIN tracking and better recovery
+type CircuitBreaker struct {
+	mu                  sync.RWMutex
+	consecutiveFailures map[string]int
+	lastFailureTime     map[string]time.Time
+	state               map[string]bool // true = open, false = closed
+	threshold           int
+	timeout             time.Duration
+}
+
+func NewCircuitBreaker(threshold int, timeout time.Duration) *CircuitBreaker {
+	cb := &CircuitBreaker{
+		consecutiveFailures: make(map[string]int),
+		lastFailureTime:     make(map[string]time.Time),
+		state:               make(map[string]bool),
+		threshold:           threshold,
+		timeout:             timeout,
+	}
+	go cb.cleanupLoop()
+	return cb
+}
+
+func (cb *CircuitBreaker) IsOpen(isin string) bool {
+	cb.mu.RLock()
+	defer cb.mu.RUnlock()
+
+	state, exists := cb.state[isin]
+	if !exists {
+		return false
+	}
+
+	if !state {
+		return false // Closed
+	}
+
+	lastFailure, exists := cb.lastFailureTime[isin]
+	if !exists {
+		return false
+	}
+
+	if time.Since(lastFailure) > cb.timeout {
+		return false // Timeout expired, should be half-open
+	}
+
+	return true
+}
+
+func (cb *CircuitBreaker) RecordSuccess(isin string) {
+	cb.mu.Lock()
+	defer cb.mu.Unlock()
+
+	delete(cb.consecutiveFailures, isin)
+	delete(cb.lastFailureTime, isin)
+	cb.state[isin] = false
+}
+
+func (cb *CircuitBreaker) RecordFailure(isin string) {
+	cb.mu.Lock()
+	defer cb.mu.Unlock()
+
+	cb.consecutiveFailures[isin]++
+	cb.lastFailureTime[isin] = time.Now()
+
+	if cb.consecutiveFailures[isin] >= cb.threshold {
+		cb.state[isin] = true
+	}
+}
+
+func (cb *CircuitBreaker) cleanupLoop() {
+	ticker := time.NewTicker(1 * time.Minute)
+	defer ticker.Stop()
+	for range ticker.C {
+		cb.mu.Lock()
+		now := time.Now()
+		for isin, lastFailure := range cb.lastFailureTime {
+			if now.Sub(lastFailure) > cb.timeout*2 {
+				delete(cb.consecutiveFailures, isin)
+				delete(cb.lastFailureTime, isin)
+				delete(cb.state, isin)
+			}
+		}
+		cb.mu.Unlock()
+	}
+}
+
+// BulkCircuitBreaker provides optimized bulk operations for circuit breaker checks
+type BulkCircuitBreaker struct {
+	cb *CircuitBreaker
+	mu sync.RWMutex
+}
+
+func NewBulkCircuitBreaker(threshold int, timeout time.Duration) *BulkCircuitBreaker {
+	return &BulkCircuitBreaker{
+		cb: NewCircuitBreaker(threshold, timeout),
+	}
+}
+
+// CheckMultiple checks multiple ISINs for open circuit breakers in a single operation
+func (bcb *BulkCircuitBreaker) CheckMultiple(isins []string) map[string]bool {
+	bcb.mu.RLock()
+	defer bcb.mu.RUnlock()
+
+	results := make(map[string]bool, len(isins))
+	for _, isin := range isins {
+		results[isin] = bcb.cb.IsOpen(isin)
+	}
+	return results
+}
+
+// RecordMultiple records failures for multiple ISINs in a single operation
+func (bcb *BulkCircuitBreaker) RecordMultipleFailures(isins []string) {
+	bcb.mu.Lock()
+	defer bcb.mu.Unlock()
+	now := time.Now()
+	for _, isin := range isins {
+		bcb.cb.consecutiveFailures[isin]++
+		bcb.cb.lastFailureTime[isin] = now
+		if bcb.cb.consecutiveFailures[isin] >= bcb.cb.threshold {
+			bcb.cb.state[isin] = true
+		}
+	}
+}
+
+// RecordMultipleSuccesses records successes for multiple ISINs in a single operation
+func (bcb *BulkCircuitBreaker) RecordMultipleSuccesses(isins []string) {
+	bcb.mu.Lock()
+	defer bcb.mu.Unlock()
+	for _, isin := range isins {
+		delete(bcb.cb.consecutiveFailures, isin)
+		delete(bcb.cb.lastFailureTime, isin)
+		bcb.cb.state[isin] = false
+	}
+}
+
+// AdaptiveRequestThrottler implements adaptive token bucket throttling to prevent API rate limiting
+type AdaptiveRequestThrottler struct {
+	mu              sync.Mutex
+	tokens          int
+	capacity        int
+	refillRate      time.Duration
+	lastRefill      time.Time
+	lastFailureTime time.Time
+	failureCount    int
+	baseCapacity    int
+	baseRefillRate  time.Duration
+}
+
+func NewAdaptiveRequestThrottler(capacity int, refillRate time.Duration) *AdaptiveRequestThrottler {
+	return &AdaptiveRequestThrottler{
+		tokens:         capacity,
+		capacity:       capacity,
+		refillRate:     refillRate,
+		lastRefill:     time.Now(),
+		baseCapacity:   capacity,
+		baseRefillRate: refillRate,
+	}
+}
+
+func (rt *AdaptiveRequestThrottler) Allow() bool {
+	rt.mu.Lock()
+	defer rt.mu.Unlock()
+
+	now := time.Now()
+	elapsed := now.Sub(rt.lastRefill)
+	tokensToAdd := int(elapsed / rt.refillRate)
+
+	if tokensToAdd > 0 {
+		rt.tokens = min(rt.capacity, rt.tokens+tokensToAdd)
+		rt.lastRefill = now
+	}
+
+	if rt.tokens > 0 {
+		rt.tokens--
+		return true
+	}
+	return false
+}
+
+func (rt *AdaptiveRequestThrottler) Wait() {
+	for !rt.Allow() {
+		time.Sleep(100 * time.Millisecond)
+	}
+}
+
+// RecordFailure records a failed request and adapts the throttling parameters
+func (rt *AdaptiveRequestThrottler) RecordFailure() {
+	rt.mu.Lock()
+	defer rt.mu.Unlock()
+
+	rt.failureCount++
+	rt.lastFailureTime = time.Now()
+
+	// Adaptive backoff: reduce capacity and increase refill rate after failures
+	if rt.failureCount >= 3 {
+		// Reduce capacity by 25% but not below 2
+		rt.capacity = max(2, int(float64(rt.baseCapacity)*0.75))
+		// Increase refill rate by 50% (slower refill)
+		rt.refillRate = time.Duration(float64(rt.baseRefillRate) * 1.5)
+		logger.L.Debug("Adaptive throttling: reduced capacity and increased refill rate",
+			"capacity", rt.capacity,
+			"refill_rate", rt.refillRate)
+	}
+}
+
+// RecordSuccess records a successful request and resets throttling parameters if needed
+func (rt *AdaptiveRequestThrottler) RecordSuccess() {
+	rt.mu.Lock()
+	defer rt.mu.Unlock()
+
+	// Reset if we haven't failed recently (5 minutes)
+	if time.Since(rt.lastFailureTime) > 5*time.Minute {
+		rt.failureCount = 0
+		rt.capacity = rt.baseCapacity
+		rt.refillRate = rt.baseRefillRate
+	}
+}
+
+// max returns the maximum of two integers
+func max(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
+}
+
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+
 type priceServiceImpl struct {
-	httpClient    http.Client
-	isInitialized bool
-	crumb         string
-	mu            sync.Mutex
+	httpClient      http.Client
+	isInitialized   bool
+	crumb           string
+	mu              sync.Mutex
+	failedISINCache *FailedISINCache
+	circuitBreaker  *CircuitBreaker
+	throttler       *AdaptiveRequestThrottler
+	successCache    map[string]string // ISIN -> Ticker cache
+	cacheMu         sync.RWMutex
 }
 
 func NewPriceService() PriceService {
@@ -148,12 +543,16 @@ func NewPriceService() PriceService {
 
 	client := http.Client{
 		Jar:     jar,
-		Timeout: 30 * time.Second, // Aumentei ligeiramente o timeout
+		Timeout: 30 * time.Second,
 	}
 
 	s := &priceServiceImpl{
-		httpClient:    client,
-		isInitialized: false,
+		httpClient:      client,
+		isInitialized:   false,
+		failedISINCache: NewFailedISINCache(2 * time.Hour),                     // Extended cache time for better fallbacks
+		circuitBreaker:  NewCircuitBreaker(8, 10*time.Minute),                  // Higher threshold + longer recovery window to avoid tripping on transient errors
+		throttler:       NewAdaptiveRequestThrottler(15, 200*time.Millisecond), // Reduced tokens and increased refill rate for better stability
+		successCache:    make(map[string]string),
 	}
 
 	go s.initializeYahooSession()
@@ -169,7 +568,7 @@ func (s *priceServiceImpl) initializeYahooSession() {
 		return
 	}
 
-	logger.L.Info("Initializing Yahoo Finance session and fetching Crumb...")
+	logger.L.Debug("Initializing Yahoo Finance session and fetching Crumb...")
 	const userAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
 
 	req1, _ := http.NewRequest("GET", "https://fc.yahoo.com", nil)
@@ -201,10 +600,31 @@ func (s *priceServiceImpl) initializeYahooSession() {
 		bodyBytes, _ := io.ReadAll(resp3.Body)
 		s.crumb = string(bodyBytes)
 		s.isInitialized = true
-		logger.L.Info("Yahoo session initialized successfully", "crumb", s.crumb)
+		logger.L.Debug("Yahoo session initialized successfully", "crumb", s.crumb)
 	} else {
 		logger.L.Warn("Failed to fetch crumb", "status", resp3.Status)
 	}
+
+	s.loadFailedISINsFromDB()
+}
+
+func (s *priceServiceImpl) loadFailedISINsFromDB() {
+	failedISINs, err := models.GetFailedISINs(database.DB)
+	if err != nil {
+		logger.L.Error("Failed to load failed ISINs from database", "error", err)
+		return
+	}
+
+	s.failedISINCache.mu.Lock()
+	defer s.failedISINCache.mu.Unlock()
+
+	for isin, lastFailed := range failedISINs {
+		if time.Since(lastFailed) < s.failedISINCache.ttl {
+			s.failedISINCache.cache[isin] = lastFailed
+		}
+	}
+
+	logger.L.Debug("Loaded failed ISINs from database", "count", len(failedISINs))
 }
 
 func (s *priceServiceImpl) ensureSession() {
@@ -217,9 +637,7 @@ func (s *priceServiceImpl) ensureSession() {
 	}
 }
 
-// --- NOVO: Função para buscar Splits via API Chart (events=split) ---
 func (s *priceServiceImpl) fetchSplits(ticker string) ([]StockSplit, error) {
-	// Period1: Ano 2000 até agora
 	now := time.Now().Unix()
 	period1 := int64(946684800) // 2000-01-01
 
@@ -238,7 +656,6 @@ func (s *priceServiceImpl) fetchSplits(ticker string) ([]StockSplit, error) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		// Se falhar (ex: 404), assumimos sem splits
 		return []StockSplit{}, nil
 	}
 
@@ -258,10 +675,7 @@ func (s *priceServiceImpl) fetchSplits(ticker string) ([]StockSplit, error) {
 		if splitEvent.Denominator == 0 {
 			continue
 		}
-		// Yahoo Ratio: Numerator / Denominator
-		// Ex: Reverse Split 1:20 -> Num 1, Denom 20 -> Ratio 0.05
 		ratio := splitEvent.Numerator / splitEvent.Denominator
-
 		splits = append(splits, StockSplit{
 			Date:  time.Unix(splitEvent.Date, 0),
 			Ratio: ratio,
@@ -284,12 +698,21 @@ func (s *priceServiceImpl) GetCurrentPrices(isins []string) (map[string]PriceInf
 
 	isinToTickerMap, err := s.getIsinToTickerMap(isins)
 	if err != nil {
-		return results, err
+		// Total failure to resolve any tickers — propagate so caller can log + set prices = nil.
+		return results, fmt.Errorf("failed to resolve ISIN→ticker map: %w", err)
+	}
+
+	// Partial resolution is normal (some ISINs may not be mapped yet).
+	// Only fetch prices for ISINs we could resolve.
+	if len(isinToTickerMap) == 0 {
+		logger.L.Warn("GetCurrentPrices: no tickers resolved for any ISIN", "isin_count", len(isins))
+		return results, nil // not an error — callers will see all entries as UNAVAILABLE
 	}
 
 	tickerToPriceMap, err := s.getTickerToPriceMap(isinToTickerMap)
 	if err != nil {
-		return results, err
+		// Log but don't propagate — we may still have partial prices from cache.
+		logger.L.Warn("GetCurrentPrices: partial or total price fetch failure", "error", err)
 	}
 
 	for _, isin := range isins {
@@ -325,7 +748,7 @@ func (s *priceServiceImpl) getIsinToTickerMap(isins []string) (map[string]string
 	isinToTickerMap := make(map[string]string)
 	metadataToUpdate := make(map[string]string)
 
-	dbMappings, err := model.GetMappingsByISINs(database.DB, isins)
+	dbMappings, err := models.GetMappingsByISINs(database.DB, isins)
 	if err != nil {
 		logger.L.Error("Failed to get ISIN mappings from DB", "error", err)
 	}
@@ -343,41 +766,60 @@ func (s *priceServiceImpl) getIsinToTickerMap(isins []string) (map[string]string
 	}
 
 	if len(isinsToFetch) > 0 {
+		// --- 1.3: Filter out ISINs that have previously failed before hitting the API ---
+		isinsEligible := make([]string, 0, len(isinsToFetch))
 		for _, isin := range isinsToFetch {
-			time.Sleep(250 * time.Millisecond)
-			ticker, exchange, currency, err := s.fetchTickerForISIN(isin)
-			if err != nil {
-				logger.L.Warn("Could not get ticker for ISIN from API", "isin", isin, "error", err)
+			if s.failedISINCache.IsFailed(isin) {
+				logger.L.Debug("Skipping previously-failed ISIN", "isin", isin)
 				continue
 			}
-			isinToTickerMap[isin] = ticker
-			newMapping := model.ISINTickerMap{
-				ISIN:         isin,
-				TickerSymbol: ticker,
-				Exchange:     sql.NullString{String: exchange, Valid: exchange != ""},
-				Currency:     currency,
+			isinsEligible = append(isinsEligible, isin)
+		}
+
+		// --- 1.1: Fetch tickers in parallel instead of sequentially ---
+		if len(isinsEligible) > 0 {
+			tickerResults := s.fetchTickersParallel(isinsEligible)
+
+			// Collect mappings for batch insert
+			var mappingsToInsert []models.ISINTickerMap
+			for isin, result := range tickerResults {
+				if result.Error != nil {
+					logger.L.Warn("Could not get ticker for ISIN from API", "isin", isin, "error", result.Error)
+					continue
+				}
+				isinToTickerMap[isin] = result.Ticker
+				newMapping := models.ISINTickerMap{
+					ISIN:         isin,
+					TickerSymbol: result.Ticker,
+					Exchange:     sql.NullString{String: result.Exchange, Valid: result.Exchange != ""},
+					Currency:     result.Currency,
+				}
+				mappingsToInsert = append(mappingsToInsert, newMapping)
+				metadataToUpdate[isin] = result.Ticker
 			}
-			model.InsertMapping(database.DB, newMapping)
-			metadataToUpdate[isin] = ticker
+
+			// Batch insert all mappings at once
+			if len(mappingsToInsert) > 0 {
+				err := models.BatchInsertMappings(database.DB, mappingsToInsert)
+				if err != nil {
+					logger.L.Error("Failed to batch insert ISIN mappings", "error", err)
+					// Fallback to individual inserts
+					for _, mapping := range mappingsToInsert {
+						models.InsertMapping(database.DB, mapping)
+					}
+				}
+			}
 		}
 	}
 
 	if len(metadataToUpdate) > 0 {
-		go func() {
-			for isin, ticker := range metadataToUpdate {
-				time.Sleep(500 * time.Millisecond)
-				sector, industry, qType, err := s.fetchMetadata(ticker)
-				if err == nil {
-					model.UpdateMappingMetadata(database.DB, isin, sector, industry, qType)
-				}
-			}
-		}()
+		go s.updateMetadataParallel(metadataToUpdate)
 	}
 	return isinToTickerMap, nil
 }
 
-func (s *priceServiceImpl) getTickerToPriceMap(isinToTickerMap map[string]string) (map[string]model.DailyPrice, error) {
-	tickerToPriceMap := make(map[string]model.DailyPrice)
+func (s *priceServiceImpl) getTickerToPriceMap(isinToTickerMap map[string]string) (map[string]models.DailyPrice, error) {
+	tickerToPriceMap := make(map[string]models.DailyPrice)
 	uniqueTickers := make(map[string]bool)
 	for _, ticker := range isinToTickerMap {
 		uniqueTickers[ticker] = true
@@ -388,9 +830,10 @@ func (s *priceServiceImpl) getTickerToPriceMap(isinToTickerMap map[string]string
 	}
 
 	todayStr := time.Now().Format("2006-01-02")
-	cachedPrices, err := model.GetPricesByTickersAndDate(database.DB, tickerList, todayStr)
+	cachedPrices, err := models.GetPricesByTickersAndDate(database.DB, tickerList, todayStr)
 	if err != nil {
 		logger.L.Error("Failed to get daily prices from DB", "error", err)
+		// Non-fatal: fall through and attempt live fetches
 	}
 
 	tickersToFetch := []string{}
@@ -402,28 +845,30 @@ func (s *priceServiceImpl) getTickerToPriceMap(isinToTickerMap map[string]string
 		}
 	}
 
+	// --- 1.2: Fetch prices in parallel instead of sequentially ---
 	if len(tickersToFetch) > 0 {
-		for _, ticker := range tickersToFetch {
-			time.Sleep(250 * time.Millisecond)
-			price, currency, err := s.getPriceForTicker(ticker)
-			if err != nil {
-				logger.L.Warn("Could not get price for ticker from API", "ticker", ticker, "error", err)
+		priceResults := s.fetchPricesParallel(tickersToFetch)
+
+		for ticker, result := range priceResults {
+			if result.Error != nil {
+				logger.L.Warn("Could not get price for ticker from API", "ticker", ticker, "error", result.Error)
 				continue
 			}
-			dailyPrice := model.DailyPrice{
+			dailyPrice := models.DailyPrice{
 				TickerSymbol: ticker,
 				Date:         todayStr,
-				Price:        price,
-				Currency:     currency,
+				Price:        result.Price,
+				Currency:     result.Currency,
 			}
 			tickerToPriceMap[ticker] = dailyPrice
-			model.InsertOrUpdatePrice(database.DB, dailyPrice)
+			models.InsertOrUpdatePrice(database.DB, dailyPrice)
 		}
 	}
+	// Always return nil error — callers distinguish success per-ISIN via the PriceInfo.Status field.
 	return tickerToPriceMap, nil
 }
 
-func (s *priceServiceImpl) fetchTickerForISIN(isin string) (string, string, string, error) {
+func (s *priceServiceImpl) FetchTickerForISIN(isin string) (string, string, string, error) {
 	if len(isin) != 12 {
 		return "", "", "", fmt.Errorf("invalid ISIN length: %s", isin)
 	}
@@ -432,32 +877,78 @@ func (s *priceServiceImpl) fetchTickerForISIN(isin string) (string, string, stri
 		return ticker, "Override", "", nil
 	}
 
+	// Check success cache first
+	s.cacheMu.RLock()
+	if ticker, exists := s.successCache[isin]; exists {
+		s.cacheMu.RUnlock()
+		logger.L.Debug("ISIN ticker found in success cache", "isin", isin, "ticker", ticker)
+		return ticker, "", "", nil
+	}
+	s.cacheMu.RUnlock()
+
+	// Check circuit breaker first
+	if s.circuitBreaker.IsOpen(isin) {
+		return "", "", "", fmt.Errorf("circuit breaker open for ISIN %s", isin)
+	}
+
+	// Check negative cache
+	if s.failedISINCache.IsFailed(isin) {
+		return "", "", "", fmt.Errorf("ISIN %s previously failed lookup, skipping API call", isin)
+	}
+
+	// Wait for throttler token
+	s.throttler.Wait()
+
 	searchURL := fmt.Sprintf("https://query1.finance.yahoo.com/v1/finance/search?q=%s&quotesCount=1&lang=en-US", isin)
 	req, err := http.NewRequest("GET", searchURL, nil)
 	if err != nil {
 		return "", "", "", err
 	}
 	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
+
 	resp, err := s.httpClient.Do(req)
 	if err != nil {
+		s.circuitBreaker.RecordFailure(isin)
 		return "", "", "", fmt.Errorf("failed to call Yahoo search API: %w", err)
 	}
 	defer resp.Body.Close()
+
 	bodyBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
+		s.circuitBreaker.RecordFailure(isin)
 		return "", "", "", fmt.Errorf("failed to read response body: %w", err)
 	}
+
 	if resp.StatusCode != http.StatusOK {
+		s.circuitBreaker.RecordFailure(isin)
+		s.failedISINCache.MarkFailed(isin)
+		models.InsertFailedISIN(database.DB, isin)
 		return "", "", "", fmt.Errorf("yahoo search API returned non-OK status %d", resp.StatusCode)
 	}
+
 	var searchData yahooSearchResponse
 	if err := json.Unmarshal(bodyBytes, &searchData); err != nil {
+		s.circuitBreaker.RecordFailure(isin)
+		s.failedISINCache.MarkFailed(isin)
+		models.InsertFailedISIN(database.DB, isin)
 		return "", "", "", fmt.Errorf("failed to decode Yahoo search response: %w", err)
 	}
+
 	if len(searchData.Quotes) == 0 || searchData.Quotes[0].Symbol == "" {
+		s.circuitBreaker.RecordFailure(isin)
+		s.failedISINCache.MarkFailed(isin)
+		models.InsertFailedISIN(database.DB, isin)
 		return "", "", "", fmt.Errorf("no ticker symbol found for ISIN %s", isin)
 	}
+
 	quote := searchData.Quotes[0]
+
+	// Cache successful result
+	s.cacheMu.Lock()
+	s.successCache[isin] = quote.Symbol
+	s.cacheMu.Unlock()
+
+	s.circuitBreaker.RecordSuccess(isin)
 	return quote.Symbol, quote.Exchange, quote.Currency, nil
 }
 
@@ -496,18 +987,121 @@ func (s *priceServiceImpl) getPriceForTicker(ticker string) (float64, string, er
 	return meta.RegularMarketPrice, meta.Currency, nil
 }
 
+// HistoricalResult holds the result of fetching historical prices for one ticker.
+type HistoricalResult struct {
+	Ticker   string
+	Prices   PriceMap
+	Currency string
+	Error    error
+}
+
+// fetchHistoricalPricesParallel fetches historical prices for multiple tickers concurrently.
+// --- 2.1: Parallel Historical Price Fetching ---
+func (s *priceServiceImpl) fetchHistoricalPricesParallel(tickers []string) map[string]HistoricalResult {
+	const maxWorkers = 5
+	const delayBetweenBatches = 1 * time.Second
+
+	results := make(map[string]HistoricalResult)
+	resultChan := make(chan HistoricalResult, len(tickers))
+	workerChan := make(chan struct{}, maxWorkers)
+
+	for i := 0; i < len(tickers); i += maxWorkers {
+		end := i + maxWorkers
+		if end > len(tickers) {
+			end = len(tickers)
+		}
+		batch := tickers[i:end]
+
+		for _, ticker := range batch {
+			workerChan <- struct{}{}
+			go func(t string) {
+				defer func() { <-workerChan }()
+
+				// --- 2.2: Check DB cache before hitting the API ---
+				cached, err := models.GetHistoricalPricesByTicker(database.DB, t)
+				if err == nil && len(cached) > 0 {
+					logger.L.Debug("Historical prices served from DB cache", "ticker", t, "points", len(cached))
+					resultChan <- HistoricalResult{Ticker: t, Prices: cached, Currency: ""}
+					return
+				}
+
+				prices, currency, err := s.GetHistoricalPrices(t)
+				if err != nil {
+					resultChan <- HistoricalResult{Ticker: t, Error: err}
+					return
+				}
+
+				// Persist to DB cache asynchronously so callers aren't blocked.
+				go s.storeHistoricalPricesInDB(t, currency, prices)
+
+				resultChan <- HistoricalResult{Ticker: t, Prices: prices, Currency: currency}
+			}(ticker)
+		}
+
+		// Drain this batch before starting the next one.
+		for range batch {
+			r := <-resultChan
+			results[r.Ticker] = r
+		}
+
+		if end < len(tickers) {
+			time.Sleep(delayBetweenBatches)
+		}
+	}
+
+	return results
+}
+
+// storeHistoricalPricesInDB persists a full PriceMap for one ticker into daily_prices.
+// --- 2.2: Historical Data Caching (write side) ---
+func (s *priceServiceImpl) storeHistoricalPricesInDB(ticker, currency string, prices PriceMap) {
+	if len(prices) == 0 {
+		return
+	}
+
+	tx, err := database.DB.Begin()
+	if err != nil {
+		logger.L.Error("storeHistoricalPricesInDB: failed to begin tx", "ticker", ticker, "error", err)
+		return
+	}
+	defer tx.Rollback()
+
+	stmt, err := tx.Prepare(`
+		INSERT INTO daily_prices (ticker_symbol, date, price, currency, updated_at)
+		VALUES (?, ?, ?, ?, ?)
+		ON CONFLICT(ticker_symbol, date) DO UPDATE SET
+			price      = excluded.price,
+			updated_at = excluded.updated_at;
+	`)
+	if err != nil {
+		logger.L.Error("storeHistoricalPricesInDB: failed to prepare stmt", "ticker", ticker, "error", err)
+		return
+	}
+	defer stmt.Close()
+
+	now := time.Now()
+	for date, price := range prices {
+		if _, err := stmt.Exec(ticker, date, price, currency, now); err != nil {
+			logger.L.Warn("storeHistoricalPricesInDB: failed to insert row", "ticker", ticker, "date", date, "error", err)
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		logger.L.Error("storeHistoricalPricesInDB: failed to commit", "ticker", ticker, "error", err)
+	} else {
+		logger.L.Debug("Historical prices stored in DB cache", "ticker", ticker, "points", len(prices))
+	}
+}
+
 func (s *priceServiceImpl) GetHistoricalPrices(ticker string) (PriceMap, string, error) {
 	s.ensureSession()
 
-	// --- NOVO: Buscar Splits ---
-	// Fazemos isto primeiro. Se falhar, apenas avisamos e continuamos sem correção.
 	splits, errSplits := s.fetchSplits(ticker)
 	if errSplits != nil {
-		logger.L.Warn("Failed to fetch splits (continuing without adjustment)", "ticker", ticker, "error", errSplits)
+		logger.L.Debug("Failed to fetch splits (continuing without adjustment)", "ticker", ticker, "error", errSplits)
 	} else if len(splits) > 0 {
-		logger.L.Info("Splits found", "ticker", ticker, "count", len(splits))
+		logger.L.Debug("Splits found", "ticker", ticker, "count", len(splits))
 	}
-	// ---------------------------
 
 	now := time.Now().Unix()
 	tenYearsAgo := time.Now().AddDate(-10, 0, 0).Unix()
@@ -577,10 +1171,6 @@ func (s *priceServiceImpl) GetHistoricalPrices(ticker string) (PriceMap, string,
 		currentDate := time.Unix(ts, 0)
 		dateStr := currentDate.Format("2006-01-02")
 
-		// --- NOVO: Lógica de Correção de Splits (Un-adjustment) ---
-		// Se a data deste preço for ANTERIOR a um split, multiplicamos pelo ratio.
-		// Ex: Preço Yahoo (ajustado) = 90. Split futuro foi 1:20 (0.05).
-		// Preço Real = 90 * 0.05 = 4.5
 		if len(splits) > 0 {
 			for _, split := range splits {
 				if currentDate.Before(split.Date) {
@@ -588,7 +1178,6 @@ func (s *priceServiceImpl) GetHistoricalPrices(ticker string) (PriceMap, string,
 				}
 			}
 		}
-		// -----------------------------------------------------------
 
 		priceMap[dateStr] = price
 		sortedDates = append(sortedDates, dateStr)
@@ -716,7 +1305,195 @@ func (s *priceServiceImpl) EnsureBenchmarkData() error {
 	return nil
 }
 
-func (s *priceServiceImpl) fetchMetadata(ticker string) (string, string, string, error) {
+// TickerResult represents the result of fetching a ticker for an ISIN
+type TickerResult struct {
+	ISIN     string
+	Ticker   string
+	Exchange string
+	Currency string
+	Error    error
+}
+
+// fetchTickersParallel fetches tickers for multiple ISINs in parallel with optimized concurrency
+func (s *priceServiceImpl) fetchTickersParallel(isins []string) map[string]TickerResult {
+	const maxWorkers = 8                               // Reduced from 20 to 8 to reduce load
+	const delayBetweenBatches = 100 * time.Millisecond // Increased from 500ms to 1s
+	const maxRetries = 3
+	const baseDelay = 100 * time.Millisecond // Increased base delay
+
+	results := make(map[string]TickerResult)
+	resultChan := make(chan TickerResult, len(isins))
+	workerChan := make(chan struct{}, maxWorkers)
+
+	for i := 0; i < len(isins); i += maxWorkers {
+		end := i + maxWorkers
+		if end > len(isins) {
+			end = len(isins)
+		}
+
+		batch := isins[i:end]
+
+		for _, isin := range batch {
+			workerChan <- struct{}{}
+			go func(isin string) {
+				defer func() { <-workerChan }()
+
+				var lastErr error
+				for attempt := 0; attempt < maxRetries; attempt++ {
+					// Check per-ISIN circuit breaker
+					if s.circuitBreaker.IsOpen(isin) {
+						logger.L.Debug("ISIN circuit breaker open, skipping", "isin", isin)
+						resultChan <- TickerResult{
+							ISIN:  isin,
+							Error: fmt.Errorf("circuit breaker open for ISIN %s", isin),
+						}
+						return
+					}
+
+					ticker, exchange, currency, err := s.FetchTickerForISIN(isin)
+					if err == nil {
+						// Success - record success in circuit breaker
+						s.circuitBreaker.RecordSuccess(isin)
+						resultChan <- TickerResult{
+							ISIN:     isin,
+							Ticker:   ticker,
+							Exchange: exchange,
+							Currency: currency,
+							Error:    nil,
+						}
+						return
+					}
+
+					lastErr = err
+					s.circuitBreaker.RecordFailure(isin)
+
+					// Exponential backoff with jitter
+					delay := baseDelay * time.Duration(1<<uint(attempt))
+					if delay > 3*time.Second {
+						delay = 3 * time.Second
+					}
+					// Add jitter to prevent thundering herd
+					jitter := time.Duration(utils.RandInt(50, 150)) * time.Millisecond
+					time.Sleep(delay + jitter)
+				}
+
+				resultChan <- TickerResult{
+					ISIN:  isin,
+					Error: fmt.Errorf("failed after %d attempts: %w", maxRetries, lastErr),
+				}
+			}(isin)
+		}
+
+		for range batch {
+			result := <-resultChan
+			results[result.ISIN] = result
+		}
+
+		if end < len(isins) {
+			time.Sleep(delayBetweenBatches)
+		}
+	}
+
+	return results
+}
+
+// PriceResult represents the result of fetching a price for a ticker
+type PriceResult struct {
+	Ticker   string
+	Price    float64
+	Currency string
+	Error    error
+}
+
+// fetchPricesParallel fetches prices for multiple tickers in parallel with controlled concurrency
+func (s *priceServiceImpl) fetchPricesParallel(tickers []string) map[string]PriceResult {
+	const maxWorkers = 6                               // Reduced from 8 to further reduce load
+	const delayBetweenBatches = 800 * time.Millisecond // Increased from 500ms
+
+	results := make(map[string]PriceResult)
+	resultChan := make(chan PriceResult, len(tickers))
+	workerChan := make(chan struct{}, maxWorkers)
+
+	for i := 0; i < len(tickers); i += maxWorkers {
+		end := i + maxWorkers
+		if end > len(tickers) {
+			end = len(tickers)
+		}
+
+		batch := tickers[i:end]
+
+		for _, ticker := range batch {
+			workerChan <- struct{}{}
+			go func(ticker string) {
+				defer func() { <-workerChan }()
+
+				// Wait for throttler token
+				s.throttler.Wait()
+
+				price, currency, err := s.getPriceForTicker(ticker)
+				resultChan <- PriceResult{
+					Ticker:   ticker,
+					Price:    price,
+					Currency: currency,
+					Error:    err,
+				}
+			}(ticker)
+		}
+
+		for range batch {
+			result := <-resultChan
+			results[result.Ticker] = result
+		}
+
+		if end < len(tickers) {
+			time.Sleep(delayBetweenBatches)
+		}
+	}
+
+	return results
+}
+
+// updateMetadataParallel updates metadata for multiple tickers in parallel
+func (s *priceServiceImpl) updateMetadataParallel(metadataToUpdate map[string]string) {
+	const maxWorkers = 6                                // Increased from 4
+	const delayBetweenRequests = 500 * time.Millisecond // Reduced from 1 second
+
+	workerChan := make(chan struct{}, maxWorkers)
+	var wg sync.WaitGroup
+
+	// Group metadata updates by ticker to avoid duplicate API calls
+	tickerToIsins := make(map[string][]string)
+	for isin, ticker := range metadataToUpdate {
+		tickerToIsins[ticker] = append(tickerToIsins[ticker], isin)
+	}
+
+	for ticker, isins := range tickerToIsins {
+		workerChan <- struct{}{}
+		wg.Add(1)
+		go func(ticker string, isins []string) {
+			defer func() {
+				<-workerChan
+				wg.Done()
+			}()
+
+			// Wait for throttler token
+			s.throttler.Wait()
+			time.Sleep(delayBetweenRequests)
+
+			sector, industry, qType, err := s.FetchMetadata(ticker)
+			if err == nil {
+				// Update all ISINs for this ticker
+				for _, isin := range isins {
+					models.UpdateMappingMetadata(database.DB, isin, sector, industry, qType)
+				}
+			}
+		}(ticker, isins)
+	}
+
+	wg.Wait()
+}
+
+func (s *priceServiceImpl) FetchMetadata(ticker string) (string, string, string, error) {
 	url := fmt.Sprintf("https://query1.finance.yahoo.com/v10/finance/quoteSummary/%s?modules=assetProfile,quoteType,fundProfile,summaryProfile&crumb=%s", ticker, s.crumb)
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {

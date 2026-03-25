@@ -19,7 +19,6 @@ import (
 	"github.com/username/taxfolio/backend/src/config"
 	"github.com/username/taxfolio/backend/src/database"
 	"github.com/username/taxfolio/backend/src/logger"
-	"github.com/username/taxfolio/backend/src/model"
 	"github.com/username/taxfolio/backend/src/models"
 	"github.com/username/taxfolio/backend/src/security"
 	"github.com/username/taxfolio/backend/src/services"
@@ -106,7 +105,7 @@ func (h *UserHandler) VerifyEmailHandler(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	user, err := model.GetUserByVerificationToken(database.DB, token)
+	user, err := models.GetUserByVerificationToken(database.DB, token)
 	if err != nil {
 		logger.L.Warn("Verification token lookup failed", "tokenPrefix", token[:min(10, len(token))], "error", err)
 		sendJSONError(w, "Invalid or expired verification token.", http.StatusBadRequest)
@@ -133,8 +132,58 @@ func (h *UserHandler) VerifyEmailHandler(w http.ResponseWriter, r *http.Request)
 	}
 
 	logger.L.Info("Email verified successfully", "userID", user.ID)
+
+	// Auto-login the user after successful verification
+	userIDStr := fmt.Sprintf("%d", user.ID)
+	accessToken, err := h.authService.GenerateToken(userIDStr)
+	if err != nil {
+		logger.L.Error("Failed to generate access token for auto-login", "userID", user.ID, "error", err)
+		sendJSONError(w, "Email verified successfully! You can now log in.", http.StatusOK)
+		return
+	}
+
+	refreshToken, err := h.authService.GenerateRefreshToken()
+	if err != nil {
+		logger.L.Error("Failed to generate refresh token for auto-login", "userID", user.ID, "error", err)
+		sendJSONError(w, "Email verified successfully! You can now log in.", http.StatusOK)
+		return
+	}
+
+	session := &models.Session{
+		UserID:       user.ID,
+		Token:        accessToken,
+		RefreshToken: refreshToken,
+		UserAgent:    r.UserAgent(),
+		ClientIP:     r.RemoteAddr,
+		IsBlocked:    false,
+		ExpiresAt:    time.Now().Add(config.Cfg.RefreshTokenExpiry),
+	}
+	if err := models.CreateSession(database.DB, session); err != nil {
+		logger.L.Error("Failed to create session for auto-login", "userID", user.ID, "error", err)
+		sendJSONError(w, "Email verified successfully! You can now log in.", http.StatusOK)
+		return
+	}
+
+	// Set refresh token cookie for auto-login
+	setRefreshTokenCookie(w, refreshToken, config.Cfg.RefreshTokenExpiry)
+
+	// Prepare user data for response
+	user.IsAdmin = isAdmin(user.Email)
+	userData := map[string]interface{}{
+		"id":            user.ID,
+		"username":      user.Username,
+		"email":         user.Email,
+		"auth_provider": user.AuthProvider,
+		"is_admin":      user.IsAdmin,
+		"mfa_enabled":   user.MfaEnabled,
+	}
+
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{"message": "Email verified successfully! You can now log in."})
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"message":      "Email verified successfully! You are now logged in.",
+		"access_token": accessToken,
+		"user":         userData,
+	})
 }
 
 func GetUserIDFromContext(ctx context.Context) (int64, bool) {
@@ -159,7 +208,7 @@ func (h *UserHandler) AdminMiddleware(next http.Handler) http.Handler {
 			return
 		}
 
-		user, err := model.GetUserByID(database.DB, userID)
+		user, err := models.GetUserByID(database.DB, userID)
 		if err != nil {
 			sendJSONError(w, "User not found", http.StatusNotFound)
 			return
@@ -716,6 +765,10 @@ func (h *UserHandler) HandleGetAdminUserDetails(w http.ResponseWriter, r *http.R
 		if err == nil {
 			response.CurrentHoldings = currentHoldings
 		} else {
+			logger.L.Warn("GetCurrentHoldingsWithValue failed for admin view",
+				"userID", userID,
+				"portfolioID", targetPortfolioID,
+				"error", err)
 			response.CurrentHoldings = []models.HoldingWithValue{}
 		}
 	}
@@ -765,7 +818,7 @@ func (h *UserHandler) HandleImpersonateUser(w http.ResponseWriter, r *http.Reque
 	req.MfaCode = strings.TrimSpace(req.MfaCode)
 
 	// 4. Buscar dados do ADMIN para validar o MFA dele
-	adminUser, err := model.GetUserByID(database.DB, adminID)
+	adminUser, err := models.GetUserByID(database.DB, adminID)
 	if err != nil {
 		sendJSONError(w, "Admin user not found", http.StatusUnauthorized)
 		return
@@ -795,7 +848,7 @@ func (h *UserHandler) HandleImpersonateUser(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	user, err := model.GetUserByID(database.DB, targetUserID)
+	user, err := models.GetUserByID(database.DB, targetUserID)
 	if err != nil {
 		sendJSONError(w, "Utilizador não encontrado", http.StatusNotFound)
 		return
@@ -818,7 +871,7 @@ func (h *UserHandler) HandleImpersonateUser(w http.ResponseWriter, r *http.Reque
 	}
 
 	// 3. CRIAR A SESSÃO NA BASE DE DADOS
-	session := &model.Session{
+	session := &models.Session{
 		UserID:       user.ID,
 		Token:        accessToken,
 		RefreshToken: refreshToken,
@@ -828,7 +881,7 @@ func (h *UserHandler) HandleImpersonateUser(w http.ResponseWriter, r *http.Reque
 		ExpiresAt:    time.Now().Add(config.Cfg.RefreshTokenExpiry),
 	}
 
-	if err := model.CreateSession(database.DB, session); err != nil {
+	if err := models.CreateSession(database.DB, session); err != nil {
 		logger.L.Error("Falha ao registar sessão de impersonation na BD", "userID", user.ID, "error", err)
 		sendJSONError(w, "Falha ao iniciar sessão simulada", http.StatusInternalServerError)
 		return
@@ -858,7 +911,7 @@ func (h *UserHandler) HandleSetupMFA(w http.ResponseWriter, r *http.Request) {
 	userID, _ := GetUserIDFromContext(r.Context())
 
 	// Buscar user para obter o username (para o QR code ficar bonito no Google Auth)
-	user, err := model.GetUserByID(database.DB, userID)
+	user, err := models.GetUserByID(database.DB, userID)
 	if err != nil {
 		sendJSONError(w, "User not found", http.StatusNotFound)
 		return
@@ -871,7 +924,7 @@ func (h *UserHandler) HandleSetupMFA(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Guardar o segredo temporariamente na BD (mas NÃO ativar ainda mfa_enabled)
-	// Precisas de criar um método no model UpdateMfaSecret(userID, secret)
+	// Precisas de criar um método no models UpdateMfaSecret(userID, secret)
 	if err := user.UpdateMfaSecret(database.DB, secret); err != nil {
 		sendJSONError(w, "Failed to save MFA secret", http.StatusInternalServerError)
 		return
@@ -892,7 +945,7 @@ func (h *UserHandler) HandleActivateMFA(w http.ResponseWriter, r *http.Request) 
 	}
 	json.NewDecoder(r.Body).Decode(&req)
 
-	user, _ := model.GetUserByID(database.DB, userID)
+	user, _ := models.GetUserByID(database.DB, userID)
 
 	if !h.mfaService.ValidateToken(user.MfaSecret, req.Code) {
 		sendJSONError(w, "Código inválido", http.StatusUnauthorized)
@@ -918,7 +971,7 @@ func (h *UserHandler) HandleDisableMFA(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	user, err := model.GetUserByID(database.DB, userID)
+	user, err := models.GetUserByID(database.DB, userID)
 	if err != nil {
 		sendJSONError(w, "User not found", http.StatusNotFound)
 		return
