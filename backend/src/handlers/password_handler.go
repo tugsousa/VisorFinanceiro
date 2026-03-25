@@ -39,14 +39,14 @@ func (h *UserHandler) RequestPasswordResetHandler(w http.ResponseWriter, r *http
 	if err != nil {
 		logger.L.Info("Password reset requested for email, user not found or DB error, sending generic response", "errorIfAny", err)
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]string{"message": "If an account with that email exists and is verified, a password reset link has been sent."})
+		json.NewEncoder(w).Encode(map[string]string{"message": "Se existir uma conta associada a este e-mail e a mesma estiver verificada, foi enviado um link de reposição de palavra-passe."})
 		return
 	}
 
 	if !user.IsEmailVerified {
 		logger.L.Info("Password reset requested for unverified email, sending generic response", "email", req.Email, "userID", user.ID)
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]string{"message": "If an account with that email exists and is verified, a password reset link has been sent."})
+		json.NewEncoder(w).Encode(map[string]string{"message": "Se existir uma conta associada a este e-mail e a mesma estiver verificada, foi enviado um link de reposição de palavra-passe."})
 		return
 	}
 
@@ -72,7 +72,7 @@ func (h *UserHandler) RequestPasswordResetHandler(w http.ResponseWriter, r *http
 
 	logger.L.Info("Password reset email process initiated successfully", "email", req.Email, "userID", user.ID)
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{"message": "If an account with that email exists and is verified, a password reset link has been sent."})
+	json.NewEncoder(w).Encode(map[string]string{"message": "Se existir uma conta associada a este e-mail e a mesma estiver verificada, foi enviado um link de reposição de palavra-passe."})
 }
 
 func (h *UserHandler) ResetPasswordHandler(w http.ResponseWriter, r *http.Request) {
@@ -121,7 +121,7 @@ func (h *UserHandler) ResetPasswordHandler(w http.ResponseWriter, r *http.Reques
 
 	logger.L.Info("Password reset successfully", "userID", user.ID)
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{"message": "Password has been reset successfully. You can now log in with your new password."})
+	json.NewEncoder(w).Encode(map[string]string{"message": "A palavra-passe foi reposta com sucesso. Já pode iniciar sessão com a sua nova palavra-passe."})
 }
 
 func (h *UserHandler) ChangePasswordHandler(w http.ResponseWriter, r *http.Request) {
@@ -181,5 +181,5 @@ func (h *UserHandler) ChangePasswordHandler(w http.ResponseWriter, r *http.Reque
 
 	logger.L.Info("Password changed successfully", "userID", userID)
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{"message": "Password changed successfully."})
+	json.NewEncoder(w).Encode(map[string]string{"message": "Palavra-passe alterada com sucesso."})
 }

@@ -18,6 +18,14 @@ import (
 	"github.com/username/taxfolio/backend/src/model"
 )
 
+// frontendSignInError builds an absolute URL to the frontend /signin page with
+// an error query param. Using an absolute URL is required because this handler
+// runs on the backend port (e.g. :8080); a relative redirect like "/signin"
+// would keep the browser on the backend, producing a 404.
+func frontendSignInError(errorCode string) string {
+	return fmt.Sprintf("%s/signin?error=%s", config.Cfg.FrontendBaseURL, errorCode)
+}
+
 func InitializeGoogleOAuthConfig() {
 	googleOauthConfig = &oauth2.Config{
 		RedirectURL:  config.Cfg.GoogleRedirectURL,
@@ -36,7 +44,7 @@ func (h *UserHandler) HandleGoogleLogin(w http.ResponseWriter, r *http.Request) 
 func (h *UserHandler) HandleGoogleCallback(w http.ResponseWriter, r *http.Request) {
 	if r.FormValue("state") != config.Cfg.OAuthStateString {
 		logger.L.Warn("Invalid OAuth state from Google callback")
-		http.Redirect(w, r, "/signin?error=invalid_state", http.StatusTemporaryRedirect)
+		http.Redirect(w, r, frontendSignInError("invalid_state"), http.StatusTemporaryRedirect)
 		return
 	}
 
@@ -44,14 +52,14 @@ func (h *UserHandler) HandleGoogleCallback(w http.ResponseWriter, r *http.Reques
 	token, err := googleOauthConfig.Exchange(context.Background(), code)
 	if err != nil {
 		logger.L.Error("Failed to exchange code for token", "error", err)
-		http.Redirect(w, r, "/signin?error=token_exchange_failed", http.StatusTemporaryRedirect)
+		http.Redirect(w, r, frontendSignInError("token_exchange_failed"), http.StatusTemporaryRedirect)
 		return
 	}
 
 	response, err := http.Get("https://www.googleapis.com/oauth2/v2/userinfo?access_token=" + token.AccessToken)
 	if err != nil {
 		logger.L.Error("Failed to get user info from Google", "error", err)
-		http.Redirect(w, r, "/signin?error=userinfo_failed", http.StatusTemporaryRedirect)
+		http.Redirect(w, r, frontendSignInError("userinfo_failed"), http.StatusTemporaryRedirect)
 		return
 	}
 	defer response.Body.Close()
@@ -59,7 +67,7 @@ func (h *UserHandler) HandleGoogleCallback(w http.ResponseWriter, r *http.Reques
 	contents, err := io.ReadAll(response.Body)
 	if err != nil {
 		logger.L.Error("Failed to read user info response body", "error", err)
-		http.Redirect(w, r, "/signin?error=userinfo_read_failed", http.StatusTemporaryRedirect)
+		http.Redirect(w, r, frontendSignInError("userinfo_read_failed"), http.StatusTemporaryRedirect)
 		return
 	}
 
@@ -71,12 +79,12 @@ func (h *UserHandler) HandleGoogleCallback(w http.ResponseWriter, r *http.Reques
 	}
 	if err := json.Unmarshal(contents, &googleUser); err != nil {
 		logger.L.Error("Failed to unmarshal Google user info", "error", err)
-		http.Redirect(w, r, "/signin?error=userinfo_parse_failed", http.StatusTemporaryRedirect)
+		http.Redirect(w, r, frontendSignInError("userinfo_parse_failed"), http.StatusTemporaryRedirect)
 		return
 	}
 
 	if !googleUser.Verified {
-		http.Redirect(w, r, "/signin?error=email_not_verified_by_google", http.StatusTemporaryRedirect)
+		http.Redirect(w, r, frontendSignInError("email_not_verified_by_google"), http.StatusTemporaryRedirect)
 		return
 	}
 
@@ -93,7 +101,7 @@ func (h *UserHandler) HandleGoogleCallback(w http.ResponseWriter, r *http.Reques
 
 		if err := newUser.CreateUser(database.DB); err != nil {
 			logger.L.Error("Failed to create Google user", "error", err)
-			http.Redirect(w, r, "/signin?error=user_creation_failed", http.StatusTemporaryRedirect)
+			http.Redirect(w, r, frontendSignInError("user_creation_failed"), http.StatusTemporaryRedirect)
 			return
 		}
 		user = newUser
@@ -104,7 +112,7 @@ func (h *UserHandler) HandleGoogleCallback(w http.ResponseWriter, r *http.Reques
 	} else { // User already exists
 		if user.AuthProvider == "local" || user.Password != "" {
 			logger.L.Warn("Google login attempt for existing local account", "userID", user.ID)
-			http.Redirect(w, r, "/signin?error=email_already_exists_local", http.StatusTemporaryRedirect)
+			http.Redirect(w, r, frontendSignInError("email_already_exists_local"), http.StatusTemporaryRedirect)
 			return
 		}
 	}
@@ -117,7 +125,7 @@ func (h *UserHandler) HandleGoogleCallback(w http.ResponseWriter, r *http.Reques
 	appToken, err := h.authService.GenerateToken(fmt.Sprintf("%d", user.ID))
 	if err != nil {
 		logger.L.Error("Failed to generate app token for Google user", "error", err)
-		http.Redirect(w, r, "/signin?error=token_generation_failed", http.StatusTemporaryRedirect)
+		http.Redirect(w, r, frontendSignInError("token_generation_failed"), http.StatusTemporaryRedirect)
 		return
 	}
 
@@ -125,7 +133,7 @@ func (h *UserHandler) HandleGoogleCallback(w http.ResponseWriter, r *http.Reques
 	refreshToken, err := h.authService.GenerateRefreshToken()
 	if err != nil {
 		logger.L.Error("Failed to generate refresh token for Google user", "error", err)
-		http.Redirect(w, r, "/signin?error=token_generation_failed", http.StatusTemporaryRedirect)
+		http.Redirect(w, r, frontendSignInError("token_generation_failed"), http.StatusTemporaryRedirect)
 		return
 	}
 
@@ -141,7 +149,7 @@ func (h *UserHandler) HandleGoogleCallback(w http.ResponseWriter, r *http.Reques
 	}
 	if err := model.CreateSession(database.DB, session); err != nil {
 		logger.L.Error("Failed to create session for Google user", "error", err)
-		http.Redirect(w, r, "/signin?error=session_creation_failed", http.StatusTemporaryRedirect)
+		http.Redirect(w, r, frontendSignInError("session_creation_failed"), http.StatusTemporaryRedirect)
 		return
 	}
 
