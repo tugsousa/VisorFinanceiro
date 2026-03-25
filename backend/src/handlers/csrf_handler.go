@@ -100,7 +100,12 @@ func CSRFMiddleware(csrfKey []byte) func(http.Handler) http.Handler {
 				slog.String("referer", r.Header.Get("Referer")),
 			)
 
-			http.Error(w, "CSRF token validation failed", http.StatusForbidden)
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusForbidden)
+			json.NewEncoder(w).Encode(map[string]string{
+				"error": "CSRF token validation failed",
+				"code":  "CSRF_VALIDATION_FAILED",
+			})
 		})
 	}
 }

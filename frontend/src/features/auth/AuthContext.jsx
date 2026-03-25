@@ -244,9 +244,12 @@ export const AuthProvider = ({ children }) => {
             return response.data;
         } catch (err) {
             const errMsg = err.response?.data?.error || err.message || 'Login failed.';
-            performLogout(false, `Login failed: ${errMsg}`);
+            // Do NOT call performLogout here — a bad password is not a session error,
+            // and performLogout's async fetchCsrfToken would race and wipe out authError.
+            setUser(null);
+            setToken(null);
             setAuthError(errMsg);
-            throw new Error(errMsg);
+            throw err;
         } finally {
             setIsAuthActionLoading(false);
             setCheckingData(false);
