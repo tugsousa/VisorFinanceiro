@@ -11,7 +11,7 @@ import (
 	"github.com/username/taxfolio/backend/src/config"
 	"github.com/username/taxfolio/backend/src/database"
 	"github.com/username/taxfolio/backend/src/logger"
-	"github.com/username/taxfolio/backend/src/model"
+	"github.com/username/taxfolio/backend/src/models"
 )
 
 type ChangePasswordRequest struct {
@@ -35,7 +35,7 @@ func (h *UserHandler) RequestPasswordResetHandler(w http.ResponseWriter, r *http
 		return
 	}
 
-	user, err := model.GetUserByEmail(database.DB, req.Email)
+	user, err := models.GetUserByEmail(database.DB, req.Email)
 	if err != nil {
 		logger.L.Info("Password reset requested for email, user not found or DB error, sending generic response", "errorIfAny", err)
 		w.Header().Set("Content-Type", "application/json")
@@ -99,7 +99,7 @@ func (h *UserHandler) ResetPasswordHandler(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	user, err := model.GetUserByPasswordResetToken(database.DB, req.Token)
+	user, err := models.GetUserByPasswordResetToken(database.DB, req.Token)
 	if err != nil {
 		logger.L.Warn("Password reset token lookup failed or token expired", "tokenPrefix", req.Token[:min(10, len(req.Token))], "error", err)
 		sendJSONError(w, "Invalid or expired password reset token.", http.StatusBadRequest)
@@ -146,7 +146,7 @@ func (h *UserHandler) ChangePasswordHandler(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	user, err := model.GetUserByID(database.DB, userID)
+	user, err := models.GetUserByID(database.DB, userID)
 	if err != nil {
 		logger.L.Error("Failed to get user for password change", "userID", userID, "error", err)
 		sendJSONError(w, "Failed to retrieve user information", http.StatusInternalServerError)

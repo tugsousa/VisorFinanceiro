@@ -15,7 +15,7 @@ import (
 	"github.com/username/taxfolio/backend/src/config"
 	"github.com/username/taxfolio/backend/src/database"
 	"github.com/username/taxfolio/backend/src/logger"
-	"github.com/username/taxfolio/backend/src/model"
+	"github.com/username/taxfolio/backend/src/models"
 )
 
 // frontendSignInError builds an absolute URL to the frontend /signin page with
@@ -89,9 +89,9 @@ func (h *UserHandler) HandleGoogleCallback(w http.ResponseWriter, r *http.Reques
 	}
 
 	// Logic to find or create the user
-	user, err := model.GetUserByEmail(database.DB, googleUser.Email)
+	user, err := models.GetUserByEmail(database.DB, googleUser.Email)
 	if err != nil { // User doesn't exist, create them
-		newUser := &model.User{
+		newUser := &models.User{
 			Username:        googleUser.Email,
 			Email:           googleUser.Email,
 			Password:        "",
@@ -138,7 +138,7 @@ func (h *UserHandler) HandleGoogleCallback(w http.ResponseWriter, r *http.Reques
 	}
 
 	// 3. Create Session in DB
-	session := &model.Session{
+	session := &models.Session{
 		UserID:       user.ID,
 		Token:        appToken,
 		RefreshToken: refreshToken,
@@ -147,7 +147,7 @@ func (h *UserHandler) HandleGoogleCallback(w http.ResponseWriter, r *http.Reques
 		IsBlocked:    false,
 		ExpiresAt:    time.Now().Add(config.Cfg.RefreshTokenExpiry),
 	}
-	if err := model.CreateSession(database.DB, session); err != nil {
+	if err := models.CreateSession(database.DB, session); err != nil {
 		logger.L.Error("Failed to create session for Google user", "error", err)
 		http.Redirect(w, r, frontendSignInError("session_creation_failed"), http.StatusTemporaryRedirect)
 		return

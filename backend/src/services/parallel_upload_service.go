@@ -9,7 +9,6 @@ import (
 
 	"github.com/username/taxfolio/backend/src/database"
 	"github.com/username/taxfolio/backend/src/logger"
-	"github.com/username/taxfolio/backend/src/model"
 	"github.com/username/taxfolio/backend/src/models"
 	"github.com/username/taxfolio/backend/src/parsers"
 	"github.com/username/taxfolio/backend/src/processors"
@@ -138,11 +137,11 @@ func (pus *ParallelUploadService) ProcessUploadParallel(
 
 	// FIX #3: do the bulk DB lookup once here, then pass the results map into
 	// the workers so each worker no longer needs its own individual DB query.
-	bulkMappings, err := model.GetMappingsByISINs(database.DB, isinList)
+	bulkMappings, err := models.GetMappingsByISINs(database.DB, isinList)
 	if err != nil {
 		logger.L.Error("Failed to bulk-fetch ISIN mappings before workers", "error", err, "userID", userID)
 		// Non-fatal: workers will fall back to their own individual lookups.
-		bulkMappings = make(map[string]model.ISINTickerMap)
+		bulkMappings = make(map[string]models.ISINTickerMap)
 	}
 
 	err = pus.executeParallelOperations(isinList, bulkMappings, result)
@@ -183,7 +182,7 @@ func (pus *ParallelUploadService) ProcessUploadParallel(
 // ISINs that are already known.
 func (pus *ParallelUploadService) executeParallelOperations(
 	isinList []string,
-	bulkMappings map[string]model.ISINTickerMap,
+	bulkMappings map[string]models.ISINTickerMap,
 	result *ParallelUploadResult,
 ) error {
 	var wg sync.WaitGroup
@@ -234,7 +233,7 @@ func (pus *ParallelUploadService) executeParallelOperations(
 // FIX #3: uses the pre-fetched bulkMappings instead of one DB query per ISIN.
 func (pus *ParallelUploadService) isinResolutionWorker(
 	isinChan <-chan string,
-	bulkMappings map[string]model.ISINTickerMap,
+	bulkMappings map[string]models.ISINTickerMap,
 	result *ParallelUploadResult,
 	mu *sync.Mutex,
 ) {
@@ -257,11 +256,11 @@ func (pus *ParallelUploadService) isinResolutionWorker(
 			continue
 		}
 
-		mapping := model.ISINTickerMap{
+		mapping := models.ISINTickerMap{
 			ISIN:         isin,
 			TickerSymbol: ticker,
 		}
-		err = model.InsertMapping(database.DB, mapping)
+		err = models.InsertMapping(database.DB, mapping)
 		if err != nil {
 			mu.Lock()
 			result.ISINResolutionErrors[isin] = fmt.Errorf("failed to store mapping: %w", err)
@@ -279,7 +278,7 @@ func (pus *ParallelUploadService) isinResolutionWorker(
 // FIX #3: uses the pre-fetched bulkMappings instead of one DB query per ISIN.
 func (pus *ParallelUploadService) priceFetchingWorker(
 	isinChan <-chan string,
-	bulkMappings map[string]model.ISINTickerMap,
+	bulkMappings map[string]models.ISINTickerMap,
 	result *ParallelUploadResult,
 	mu *sync.Mutex,
 ) {
@@ -300,13 +299,13 @@ func (pus *ParallelUploadService) priceFetchingWorker(
 		}
 
 		if priceInfo, ok := prices[isin]; ok && priceInfo.Status == "OK" {
-			dailyPrice := model.DailyPrice{
+			dailyPrice := models.DailyPrice{
 				TickerSymbol: ticker,
 				Date:         time.Now().Format("2006-01-02"),
 				Price:        priceInfo.Price,
 				Currency:     priceInfo.Currency,
 			}
-			err = model.InsertOrUpdatePrice(database.DB, dailyPrice)
+			err = models.InsertOrUpdatePrice(database.DB, dailyPrice)
 			if err != nil {
 				mu.Lock()
 				result.PriceFetchingErrors[ticker] = fmt.Errorf("failed to store price: %w", err)
@@ -320,7 +319,7 @@ func (pus *ParallelUploadService) priceFetchingWorker(
 // FIX #3: uses the pre-fetched bulkMappings instead of one DB query per ISIN.
 func (pus *ParallelUploadService) metadataWorker(
 	isinChan <-chan string,
-	bulkMappings map[string]model.ISINTickerMap,
+	bulkMappings map[string]models.ISINTickerMap,
 	result *ParallelUploadResult,
 	mu *sync.Mutex,
 ) {
@@ -340,7 +339,7 @@ func (pus *ParallelUploadService) metadataWorker(
 			continue
 		}
 
-		err = model.UpdateMappingMetadata(database.DB, isin, sector, industry, quoteType)
+		err = models.UpdateMappingMetadata(database.DB, isin, sector, industry, quoteType)
 		if err != nil {
 			mu.Lock()
 			result.MetadataErrors[ticker] = fmt.Errorf("failed to update metadata: %w", err)
