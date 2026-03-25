@@ -1,4 +1,4 @@
-package model
+package models
 
 import (
 	"database/sql"
@@ -7,6 +7,61 @@ import (
 
 	"github.com/username/taxfolio/backend/src/logger"
 )
+
+// FailedISIN represents a row in the failed_isins table.
+// It tracks ISINs that failed to resolve to a ticker symbol.
+type FailedISIN struct {
+	ISIN         string
+	LastFailed   time.Time
+	FailureCount int
+	CreatedAt    time.Time
+	UpdatedAt    time.Time
+}
+
+// InsertFailedISIN inserts or updates a failed ISIN record.
+// If the ISIN already exists, it increments the failure count and updates the timestamp.
+func InsertFailedISIN(db *sql.DB, isin string) error {
+	query := `
+		INSERT INTO failed_isins (isin, last_failed, failure_count, created_at, updated_at)
+		VALUES (?, ?, 1, ?, ?)
+		ON CONFLICT(isin) DO UPDATE SET
+			last_failed = excluded.last_failed,
+			failure_count = failed_isins.failure_count + 1,
+			updated_at = excluded.updated_at;
+	`
+	now := time.Now()
+	_, err := db.Exec(query, isin, now, now, now)
+	return err
+}
+
+// GetFailedISINs retrieves all failed ISINs from the database.
+func GetFailedISINs(db *sql.DB) (map[string]time.Time, error) {
+	failedISINs := make(map[string]time.Time)
+	query := `SELECT isin, last_failed FROM failed_isins`
+	rows, err := db.Query(query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var isin string
+		var lastFailed time.Time
+		if err := rows.Scan(&isin, &lastFailed); err != nil {
+			logger.L.Error("Error scanning failed ISIN row", "error", err)
+			continue
+		}
+		failedISINs[isin] = lastFailed
+	}
+	return failedISINs, rows.Err()
+}
+
+// CleanExpiredFailedISINs removes failed ISIN records older than the specified TTL.
+func CleanExpiredFailedISINs(db *sql.DB, ttl time.Duration) error {
+	cutoff := time.Now().Add(-ttl)
+	query := `DELETE FROM failed_isins WHERE last_failed < ?`
+	_, err := db.Exec(query, cutoff)
+	return err
+}
 
 // ISINTickerMap represents a row in the isin_ticker_map table.
 // It caches the mapping from an ISIN to a specific stock ticker.
@@ -78,6 +133,44 @@ func InsertMapping(db *sql.DB, mapping ISINTickerMap) error {
 		VALUES (?, ?, ?, ?, ?)`
 	_, err := db.Exec(query, mapping.ISIN, mapping.TickerSymbol, mapping.Exchange, mapping.Currency, time.Now())
 	return err
+}
+
+// BatchInsertMappings inserts multiple ISIN-to-ticker mappings in a single batch operation.
+// Optimized for better performance with larger batches.
+func BatchInsertMappings(db *sql.DB, mappings []ISINTickerMap) error {
+	if len(mappings) == 0 {
+		return nil
+	}
+
+	// Use transaction for better performance with multiple operations
+	tx, err := db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	// Prepare statement once for better performance
+	stmt, err := tx.Prepare(`INSERT INTO isin_ticker_map (isin, ticker_symbol, exchange, currency, last_checked_at)
+		VALUES (?, ?, ?, ?, ?)
+		ON CONFLICT(isin) DO UPDATE SET
+			ticker_symbol = excluded.ticker_symbol,
+			exchange = excluded.exchange,
+			currency = excluded.currency,
+			last_checked_at = excluded.last_checked_at`)
+	if err != nil {
+		return err
+	}
+	defer stmt.Close()
+
+	// Execute batch inserts
+	for _, mapping := range mappings {
+		_, err := stmt.Exec(mapping.ISIN, mapping.TickerSymbol, mapping.Exchange, mapping.Currency, time.Now())
+		if err != nil {
+			return err
+		}
+	}
+
+	return tx.Commit()
 }
 
 // UpdateMappingMetadata updates the sector, industry, and quote_type for a mapping.
@@ -152,4 +245,63 @@ func InsertOrUpdatePrice(db *sql.DB, price DailyPrice) error {
 		logger.L.Error("Failed to insert or update daily price", "ticker", price.TickerSymbol, "date", price.Date, "error", err)
 	}
 	return err
+}
+
+// GetHistoricalPricesByTicker returns all rows in daily_prices for a given ticker, keyed by date string.
+// This is a straightforward SELECT date, price FROM daily_prices WHERE ticker_symbol = ? mapped into a map[string]float64.
+func GetHistoricalPricesByTicker(db *sql.DB, ticker string) (map[string]float64, error) {
+	prices := make(map[string]float64)
+	query := `SELECT date, price FROM daily_prices WHERE ticker_symbol = ? ORDER BY date ASC`
+	rows, err := db.Query(query, ticker)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var date string
+		var price float64
+		if err := rows.Scan(&date, &price); err != nil {
+			logger.L.Error("Error scanning historical price row", "ticker", ticker, "error", err)
+			continue
+		}
+		prices[date] = price
+	}
+	return prices, rows.Err()
+}
+
+// StoreHistoricalPricesInDB bulk-upserts a full PriceMap into daily_prices inside a transaction.
+// Called asynchronously (go) so the caller isn't blocked.
+func StoreHistoricalPricesInDB(db *sql.DB, ticker, currency string, prices map[string]float64) error {
+	if len(prices) == 0 {
+		return nil
+	}
+
+	tx, err := db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	stmt, err := tx.Prepare(`
+		INSERT INTO daily_prices (ticker_symbol, date, price, currency, updated_at)
+		VALUES (?, ?, ?, ?, ?)
+		ON CONFLICT(ticker_symbol, date) DO UPDATE SET
+			price = excluded.price,
+			currency = excluded.currency,
+			updated_at = excluded.updated_at;
+	`)
+	if err != nil {
+		return err
+	}
+	defer stmt.Close()
+
+	now := time.Now()
+	for date, price := range prices {
+		if _, err := stmt.Exec(ticker, date, price, currency, now); err != nil {
+			logger.L.Error("Failed to insert historical price row", "ticker", ticker, "date", date, "error", err)
+			return err
+		}
+	}
+
+	return tx.Commit()
 }

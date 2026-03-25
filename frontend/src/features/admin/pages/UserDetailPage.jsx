@@ -3,35 +3,44 @@ import { useParams, Link as RouterLink, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { apiFetchAdminUserDetails } from 'features/admin/api/adminApi';
 import { 
-    Box, Typography, CircularProgress, Alert, Paper, Grid, Divider, Link, Card, Tabs, Tab, 
-    FormControl, Select, MenuItem, InputLabel, Button,
-    Dialog, DialogTitle, DialogContent, DialogContentText, DialogActions, TextField // <--- NOVOS IMPORTS
+    Box, Typography, CircularProgress, Alert, Grid, Divider, Link, Card, Tabs, Tab, 
+    FormControl, Select, MenuItem, InputLabel, Button, Chip, Tooltip,
+    Dialog, DialogTitle, DialogContent, DialogContentText, DialogActions, TextField
 } from '@mui/material';
 import { useAuth } from '../../auth/AuthContext';
 import { DataGrid } from '@mui/x-data-grid';
 import { formatCurrency } from '../../../lib/utils/formatUtils';
-import ArrowBackIcon from '@mui/icons-material/ArrowBack';
-import ShowChartIcon from '@mui/icons-material/ShowChart';
-import CandlestickChartIcon from '@mui/icons-material/CandlestickChart';
-import AttachMoneyIcon from '@mui/icons-material/AttachMoney';
-import RequestQuoteIcon from '@mui/icons-material/RequestQuote';
-import TrendingUpIcon from '@mui/icons-material/TrendingUp';
-import AccountBalanceWalletIcon from '@mui/icons-material/AccountBalanceWallet';
-import PercentIcon from '@mui/icons-material/Percent';
 import StatCard from '../components/StatCard';
-import EmojiEventsIcon from '@mui/icons-material/EmojiEvents';
-import TimelapseIcon from '@mui/icons-material/Timelapse';
+import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import LoginIcon from '@mui/icons-material/Login';
 
-const KeyMetricCard = ({ title, value, icon, isPercentage = false, unit = '' }) => {
+// Shared height for all tab DataGrid panels (pixels).
+// Using a constant makes future changes a single-line edit.
+const TAB_GRID_HEIGHT = 600;
+
+const KeyMetricCard = ({ title, value, isPercentage = false, unit = '' }) => {
     const isPositive = typeof value === 'number' ? value >= 0 : true;
-    const bgColor = unit ? 'rgba(63, 81, 181, 0.1)' : (isPositive ? 'rgba(76, 175, 80, 0.1)' : 'rgba(244, 67, 54, 0.1)');
-    const textColor = unit ? 'primary.main' : (isPositive ? 'success.main' : 'error.main');
+    const bgColor = unit ? '#f8fafc' : (isPositive ? '#f0fdf4' : '#fef2f2');
+    const textColor = unit ? '#1f2937' : (isPositive ? '#166534' : '#991b1b');
+    const borderColor = unit ? '#e5e7eb' : (isPositive ? '#bbf7d0' : '#fecaca');
     
     return (
-        <Card elevation={0} sx={{ display: 'flex', alignItems: 'center', p: 1.5, bgcolor: bgColor, borderRadius: 2, height: '100%' }}>
+        <Card elevation={0} sx={{ 
+            display: 'flex', 
+            alignItems: 'center', 
+            p: 1.5, 
+            bgcolor: bgColor, 
+            borderRadius: 2, 
+            height: '100%',
+            border: '1px solid',
+            borderColor: borderColor
+        }}>
             <Box sx={{ mr: 1.5, color: textColor, fontSize: 32 }}>
-                {React.cloneElement(icon, { fontSize: 'inherit' })}
+                <Box sx={{ width: 32, height: 32, borderRadius: '50%', bgcolor: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <Typography variant="body2" sx={{ fontWeight: 'bold', color: textColor }}>
+                        {title.charAt(0)}
+                    </Typography>
+                </Box>
             </Box>
             <Box>
                 <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 500 }}>{title}</Typography>
@@ -47,13 +56,11 @@ const UserDetailPage = () => {
     const { userId } = useParams();
     const navigate = useNavigate();
     
-    // Obter o user atual (admin) para verificar se tem MFA ativo
     const { token, impersonate, user: currentUser } = useAuth(); 
     
     const [selectedPortfolioId, setSelectedPortfolioId] = useState('');
     const [currentTab, setCurrentTab] = useState('overview');
     
-    // --- ESTADOS MFA / IMPERSONATE ---
     const [isImpersonating, setIsImpersonating] = useState(false);
     const [openImpersonateModal, setOpenImpersonateModal] = useState(false);
     const [impersonateMfaCode, setImpersonateMfaCode] = useState('');
@@ -71,13 +78,9 @@ const UserDetailPage = () => {
         }
     }, [data, selectedPortfolioId]);
 
-    // --- FUNÇÕES DE LÓGICA DO IMPERSONATE ---
-
-    // 1. Inicia o processo (Verifica MFA localmente e abre modal)
     const handleImpersonateClick = () => {
         if (!data?.user) return;
 
-        // Se o admin NÃO tiver MFA ativo, bloqueia e avisa
         if (!currentUser?.mfa_enabled) {
             if(window.confirm("Ação Bloqueada: Você deve ativar a Autenticação de Dois Fatores (2FA) nas suas definições antes de poder impersonar utilizadores. Deseja ir para as configurações agora?")) {
                 navigate('/settings');
@@ -85,13 +88,11 @@ const UserDetailPage = () => {
             return;
         }
 
-        // Se tiver MFA, limpa estados e abre modal
         setImpersonateError('');
         setImpersonateMfaCode('');
         setOpenImpersonateModal(true);
     };
 
-    // 2. Confirma o código e chama a API
     const handleConfirmImpersonate = async () => {
         if (!impersonateMfaCode || impersonateMfaCode.length < 6) {
             setImpersonateError("Por favor insira um código de 6 dígitos.");
@@ -102,13 +103,10 @@ const UserDetailPage = () => {
         setImpersonateError('');
         
         try {
-            // Chama a função impersonate passando o ID e o CÓDIGO MFA
             await impersonate(userId, impersonateMfaCode);
-            // Se não der erro, o AuthContext atualiza o user e redirecionamos
             navigate('/dashboard'); 
         } catch (error) {
             console.error("Erro ao impersonar:", error);
-            // Mostra o erro no modal (ex: "Código inválido")
             setImpersonateError(error.response?.data?.error || "Código incorreto ou erro no servidor.");
             setIsImpersonating(false);
         }
@@ -133,6 +131,7 @@ const UserDetailPage = () => {
         const totalPL = stockPL + optionPL + dividendPL + totalFees; 
         
         const unrealizedStockPL = (data.current_holdings || []).reduce((acc, h) => {
+            if (h.status !== 'OK') return acc;
             const mv = h.market_value_eur || 0;
             const cb = Math.abs(h.total_cost_basis_eur || 0);
             return acc + (mv - cb);
@@ -159,7 +158,7 @@ const UserDetailPage = () => {
 
     const uploadHistoryColumns = [
         { field: 'id', headerName: 'ID', width: 70 },
-        { field: 'uploaded_at', headerName: 'Data', width: 180, valueFormatter: (params) => new Date(params.value).toLocaleString() },
+        { field: 'uploaded_at', headerName: 'Data', width: 180, valueFormatter: (value) => new Date(value).toLocaleString() },
         { field: 'source', headerName: 'Fonte', width: 100 },
         { field: 'filename', headerName: 'Ficheiro', width: 200 },
         { field: 'transaction_count', headerName: 'Transações', width: 100, type: 'number' },
@@ -170,17 +169,88 @@ const UserDetailPage = () => {
         { field: 'date', headerName: 'Data', width: 110 },
         { field: 'transaction_type', headerName: 'Tipo', width: 100 },
         { field: 'product_name', headerName: 'Produto', width: 250 },
-        { field: 'amount_eur', headerName: 'Valor (€)', width: 120, type: 'number', valueFormatter: (params) => formatCurrency(params.value) },
+        { field: 'amount_eur', headerName: 'Valor (€)', width: 120, type: 'number', valueFormatter: (value) => formatCurrency(value) },
         { field: 'quantity', headerName: 'Qtd', width: 80, type: 'number' },
         { field: 'source', headerName: 'Broker', width: 90 },
     ];
 
     const holdingsColumns = [
-        { field: 'product_name', headerName: 'Produto', width: 250 },
+        { field: 'product_name', headerName: 'Produto', width: 230, flex: 1 },
         { field: 'isin', headerName: 'ISIN', width: 130 },
-        { field: 'quantity', headerName: 'Qtd', width: 80, type: 'number' },
-        { field: 'market_value_eur', headerName: 'Valor Mercado (€)', width: 150, type: 'number', valueFormatter: (params) => formatCurrency(params.value) },
-        { field: 'total_cost_basis_eur', headerName: 'Custo Base (€)', width: 150, type: 'number', valueFormatter: (params) => formatCurrency(Math.abs(params.value)) },
+        { field: 'quantity', headerName: 'Qtd', width: 75, type: 'number' },
+        {
+            field: 'status',
+            headerName: 'Preço',
+            width: 105,
+            renderCell: (params) => {
+                const ok = params.value === 'OK';
+                return (
+                    <Tooltip title={ok ? 'Preço de mercado em tempo real' : 'Preço indisponível — a mostrar custo base'}>
+                        <Chip
+                            label={ok ? 'Live' : 'N/D'}
+                            size="small"
+                            sx={{
+                                bgcolor: ok ? '#dcfce7' : '#fef9c3',
+                                color:   ok ? '#166534' : '#854d0e',
+                                fontWeight: 600,
+                                fontSize: '0.7rem',
+                                height: 20,
+                            }}
+                        />
+                    </Tooltip>
+                );
+            },
+        },
+        {
+            field: 'market_value_eur',
+            headerName: 'Valor Mercado (€)',
+            width: 155,
+            type: 'number',
+            renderCell: (params) => {
+                const priceOk = params.row.status === 'OK';
+                const displayValue = priceOk
+                    ? params.value
+                    : Math.abs(params.row.total_cost_basis_eur || 0);
+                return (
+                    <Tooltip title={priceOk ? '' : 'Preço indisponível — a mostrar custo base como referência'}>
+                        <Typography
+                            variant="body2"
+                            sx={{ color: priceOk ? 'text.primary' : 'text.secondary', fontStyle: priceOk ? 'normal' : 'italic' }}
+                        >
+                            {formatCurrency(displayValue)}
+                        </Typography>
+                    </Tooltip>
+                );
+            },
+        },
+        {
+            field: 'total_cost_basis_eur',
+            headerName: 'Custo Base (€)',
+            width: 145,
+            type: 'number',
+            valueFormatter: (value) => formatCurrency(Math.abs(value)),
+        },
+        {
+            field: 'pl_eur',
+            headerName: 'P/L (€)',
+            width: 120,
+            type: 'number',
+            valueGetter: (value, row) => {
+                if (!row || row.status !== 'OK') return null;
+                return (row.market_value_eur || 0) - Math.abs(row.total_cost_basis_eur || 0);
+            },
+            renderCell: (params) => {
+                if (params.value === null || params.value === undefined) {
+                    return <Typography variant="body2" color="text.disabled">—</Typography>;
+                }
+                const positive = params.value >= 0;
+                return (
+                    <Typography variant="body2" sx={{ color: positive ? '#166534' : '#991b1b', fontWeight: 600 }}>
+                        {formatCurrency(params.value)}
+                    </Typography>
+                );
+            },
+        },
     ];
 
     if (isLoading) return <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}><CircularProgress /></Box>;
@@ -220,7 +290,7 @@ const UserDetailPage = () => {
                         variant="contained"
                         color="warning"
                         startIcon={isImpersonating ? <CircularProgress size={20} color="inherit" /> : <LoginIcon />}
-                        onClick={handleImpersonateClick} // <--- CORRIGIDO: Agora aponta para a função existente
+                        onClick={handleImpersonateClick}
                         disabled={isImpersonating}
                         sx={{ textTransform: 'none' }}
                     >
@@ -243,7 +313,7 @@ const UserDetailPage = () => {
             {currentTab === 'overview' && (
                 <Grid container spacing={3}>
                     <Grid item xs={12}>
-                        <Paper variant="outlined" sx={{ p: 3 }}>
+                        <Box>
                             <Typography variant="h6" gutterBottom>Informação Geral</Typography>
                             <Divider sx={{ mb: 2 }} />
                             <Grid container spacing={2}>
@@ -252,60 +322,105 @@ const UserDetailPage = () => {
                                 <Grid item xs={12} sm={6} md={3}><StatCard title="Uploads Totais" value={user.total_upload_count} /></Grid>
                                 <Grid item xs={12} sm={6} md={3}><StatCard title="Valor Global (Todos)" value={formatCurrency(user.portfolio_value_eur)} /></Grid>
                             </Grid>
-                        </Paper>
+                        </Box>
                     </Grid>
                     
                     {keyMetrics && (
                         <Grid item xs={12}>
-                            <Paper variant="outlined" sx={{ p: 3 }}>
+                            <Box>
                                 <Typography variant="h6" gutterBottom>Métricas do Portfólio Selecionado</Typography>
                                 <Divider sx={{ mb: 2 }} />
                                 <Grid container spacing={2}>
-                                    <Grid item xs={6} md={4} lg={3}><KeyMetricCard title="Resultados Ações" value={keyMetrics.stockPL} icon={<ShowChartIcon />} /></Grid>
-                                    <Grid item xs={6} md={4} lg={3}><KeyMetricCard title="Resultados Opções" value={keyMetrics.optionPL} icon={<CandlestickChartIcon />} /></Grid>
-                                    <Grid item xs={6} md={4} lg={3}><KeyMetricCard title="Dividendos" value={keyMetrics.dividendPL} icon={<AttachMoneyIcon />} /></Grid>
-                                    <Grid item xs={6} md={4} lg={3}><KeyMetricCard title="Taxas e Comissões" value={keyMetrics.totalFeesAndCommissions} icon={<RequestQuoteIcon />} /></Grid>
-                                    <Grid item xs={6} md={4} lg={3}><KeyMetricCard title="P/L em Aberto" value={keyMetrics.unrealizedStockPL} icon={<TrendingUpIcon />} /></Grid>
-                                    <Grid item xs={6} md={4} lg={3}><KeyMetricCard title="Retorno Total (€)" value={keyMetrics.totalPL} icon={<AccountBalanceWalletIcon />} /></Grid>
-                                    <Grid item xs={6} md={4} lg={3}><KeyMetricCard title="Retorno Total (%)" value={keyMetrics.portfolioReturn} icon={<PercentIcon />} isPercentage /></Grid>
-                                    <Grid item xs={6} md={4} lg={3}><KeyMetricCard title="Taxa de Sucesso" value={keyMetrics.winLossRatio} icon={<EmojiEventsIcon />} isPercentage /></Grid>
-                                    <Grid item xs={6} md={4} lg={3}><KeyMetricCard title="Duração (Ganhos)" value={keyMetrics.avgHoldingPeriodWinners} icon={<TimelapseIcon />} unit="dias" /></Grid>
-                                    <Grid item xs={6} md={4} lg={3}><KeyMetricCard title="Duração (Perdas)" value={keyMetrics.avgHoldingPeriodLosers} icon={<TimelapseIcon />} unit="dias" /></Grid>
+                                    <Grid item xs={6} md={4} lg={3}><KeyMetricCard title="Resultados Ações" value={keyMetrics.stockPL} /></Grid>
+                                    <Grid item xs={6} md={4} lg={3}><KeyMetricCard title="Resultados Opções" value={keyMetrics.optionPL} /></Grid>
+                                    <Grid item xs={6} md={4} lg={3}><KeyMetricCard title="Dividendos" value={keyMetrics.dividendPL} /></Grid>
+                                    <Grid item xs={6} md={4} lg={3}><KeyMetricCard title="Taxas e Comissões" value={keyMetrics.totalFeesAndCommissions} /></Grid>
+                                    <Grid item xs={6} md={4} lg={3}><KeyMetricCard title="P/L em Aberto" value={keyMetrics.unrealizedStockPL} /></Grid>
+                                    <Grid item xs={6} md={4} lg={3}><KeyMetricCard title="Retorno Total (€)" value={keyMetrics.totalPL} /></Grid>
+                                    <Grid item xs={6} md={4} lg={3}><KeyMetricCard title="Retorno Total (%)" value={keyMetrics.portfolioReturn} isPercentage /></Grid>
+                                    <Grid item xs={6} md={4} lg={3}><KeyMetricCard title="Taxa de Sucesso" value={keyMetrics.winLossRatio} isPercentage /></Grid>
+                                    <Grid item xs={6} md={4} lg={3}><KeyMetricCard title="Duração (Ganhos)" value={keyMetrics.avgHoldingPeriodWinners} unit="dias" /></Grid>
+                                    <Grid item xs={6} md={4} lg={3}><KeyMetricCard title="Duração (Perdas)" value={keyMetrics.avgHoldingPeriodLosers} unit="dias" /></Grid>
                                 </Grid>
-                            </Paper>
+                            </Box>
                         </Grid>
                     )}
                 </Grid>
             )}
 
             {currentTab === 'holdings' && (
-                <Paper variant="outlined" sx={{ p: 3, height: 600, width: '100%' }}>
+                <Box sx={{ height: TAB_GRID_HEIGHT, width: '100%', display: 'flex', flexDirection: 'column' }}>
                     <Typography variant="h6" gutterBottom>Carteira de Ações Atual</Typography>
-                    {currentHoldings && currentHoldings.length > 0 ? (
-                        <DataGrid 
-                            rows={currentHoldings} 
-                            columns={holdingsColumns} 
-                            getRowId={(row) => row.isin + row.product_name}
-                            density="compact" 
-                        />
-                    ) : (
-                        <Typography>Não existem posições em carteira para este portfólio.</Typography>
+
+                    {currentHoldings && currentHoldings.length > 0 &&
+                        currentHoldings.some(h => h.status !== 'OK') && (
+                        <Alert severity="warning" sx={{ mb: 2 }}>
+                            Alguns ativos não têm preço de mercado disponível (marcados como <strong>N/D</strong>).
+                            A coluna <em>Valor Mercado</em> mostra o custo base como referência para essas posições.
+                            O P/L em aberto não está incluído nos totais para esses ativos.
+                        </Alert>
                     )}
-                </Paper>
+
+                    {currentHoldings && currentHoldings.length > 0 ? (
+                        // flexGrow:1 makes the grid fill exactly the space left after the title/alert
+                        <Box sx={{ flexGrow: 1 }}>
+                            <DataGrid
+                                rows={currentHoldings}
+                                columns={holdingsColumns}
+                                getRowId={(row) => row.isin + row.product_name}
+                                density="compact"
+                                sx={{ height: '100%' }}
+                                localeText={{
+                                    noRowsLabel: 'Nenhuma posição encontrada',
+                                    noResultsOverlayLabel: 'Nenhum resultado encontrado'
+                                }}
+                            />
+                        </Box>
+                    ) : (
+                        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                            <Typography variant="body1" color="text.secondary">
+                                Nenhuma posição encontrada para este portfólio.
+                            </Typography>
+                            <Typography variant="body2" color="text.secondary">
+                                Isso pode ocorrer quando:
+                            </Typography>
+                            <ul style={{ margin: 0, paddingLeft: '20px' }}>
+                                <li>Não há transações carregadas para este portfólio</li>
+                                <li>Todas as posições foram vendidas</li>
+                                <li>As transações ainda estão sendo processadas</li>
+                            </ul>
+                        </Box>
+                    )}
+                </Box>
             )}
 
             {currentTab === 'uploads' && (
-                <Paper variant="outlined" sx={{ p: 3, height: 500, width: '100%' }}>
+                <Box sx={{ height: TAB_GRID_HEIGHT, width: '100%', display: 'flex', flexDirection: 'column' }}>
                     <Typography variant="h6" gutterBottom>Histórico de Uploads</Typography>
-                    <DataGrid rows={upload_history || []} columns={uploadHistoryColumns} density="compact" />
-                </Paper>
+                    <Box sx={{ flexGrow: 1 }}>
+                        <DataGrid
+                            rows={upload_history || []}
+                            columns={uploadHistoryColumns}
+                            density="compact"
+                            sx={{ height: '100%' }}
+                        />
+                    </Box>
+                </Box>
             )}
 
             {currentTab === 'transactions' && (
-                <Paper variant="outlined" sx={{ p: 3, height: 700, width: '100%' }}>
+                <Box sx={{ height: TAB_GRID_HEIGHT, width: '100%', display: 'flex', flexDirection: 'column' }}>
                     <Typography variant="h6" gutterBottom>Transações do Portfólio</Typography>
-                    <DataGrid rows={transactions || []} columns={transactionColumns} getRowId={(row) => row.id} density="compact" />
-                </Paper>
+                    <Box sx={{ flexGrow: 1 }}>
+                        <DataGrid
+                            rows={transactions || []}
+                            columns={transactionColumns}
+                            getRowId={(row) => row.id}
+                            density="compact"
+                            sx={{ height: '100%' }}
+                        />
+                    </Box>
+                </Box>
             )}
 
             {/* --- MODAL DE SEGURANÇA IMPERSONATE --- */}

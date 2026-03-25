@@ -1,7 +1,8 @@
 // frontend/src/pages/VerifyEmailPage.js
-import React, { useMemo } from 'react';
+import React, { useMemo, useContext, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
+import { useAuth } from '../AuthContext';
 import { API_ENDPOINTS } from '../../../constants';
 
 import { apiVerifyEmail } from '../../../lib/api';
@@ -11,6 +12,7 @@ import { Typography, Box, CircularProgress, Alert } from '@mui/material';
 const VerifyEmailPage = () => {
   const location = useLocation();
   const navigate = useNavigate();
+  const { loginWithGoogleToken } = useAuth();
 
   const token = useMemo(() => {
     const queryParams = new URLSearchParams(location.search);
@@ -29,12 +31,26 @@ const VerifyEmailPage = () => {
     refetchOnWindowFocus: false,
   });
   
-  React.useEffect(() => {
-      if (isSuccess) {
-          // CORREÇÃO: Remover o setTimeout para navegação imediata
-          navigate('/signin?verified=true');
+  useEffect(() => {
+    if (isSuccess && data) {
+      // Check if the response contains auto-login data
+      if (data.access_token && data.user) {
+        // Auto-login the user
+        loginWithGoogleToken(data.access_token, data.user)
+          .then(() => {
+            navigate('/dashboard', { replace: true });
+          })
+          .catch((err) => {
+            console.error('Auto-login failed:', err);
+            // Fallback to signin page with verification success message
+            navigate('/signin?verified=true');
+          });
+      } else {
+        // Fallback to signin page with verification success message
+        navigate('/signin?verified=true');
       }
-  }, [isSuccess, navigate]);
+    }
+  }, [isSuccess, data, loginWithGoogleToken, navigate]);
 
 
   return (
@@ -60,7 +76,7 @@ const VerifyEmailPage = () => {
 
       {isError && (
         <Alert severity="error" sx={{ my: 2, width: '100%', maxWidth: '500px' }}>
-          {error.message || 'An unknown error occurred.'}
+          {error.message || 'Ocorreu um erro durante a verificação.'}
         </Alert>
       )}
 

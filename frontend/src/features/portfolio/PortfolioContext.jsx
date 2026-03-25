@@ -55,8 +55,7 @@ export const PortfolioProvider = ({ children }) => {
         if (target) {
             setActivePortfolio(target);
             localStorage.setItem('active_portfolio_id', target.id);
-            // We reload to ensure clean state for all components
-            window.location.reload(); 
+            // Removed forced reload - let components update naturally through context
         }
     };
 

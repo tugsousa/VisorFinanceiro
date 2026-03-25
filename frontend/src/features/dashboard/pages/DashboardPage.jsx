@@ -1,6 +1,6 @@
 // frontend/src/features/dashboard/pages/DashboardPage.js
-import React, { useMemo, useEffect } from 'react';
-import { Box, Typography, Card, Alert, Button, CircularProgress, Grid, Tooltip } from '@mui/material';
+import React, { useMemo, useEffect, useState } from 'react';
+import { Box, Typography, Card, Alert, Button, CircularProgress, Grid, Tooltip, LinearProgress, Snackbar, Alert as MuiAlert } from '@mui/material';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import ShowChartIcon from '@mui/icons-material/ShowChart';
 import CompareArrowsIcon from '@mui/icons-material/CompareArrows';
@@ -62,7 +62,7 @@ const DashboardPage = () => {
     const queryClient = useQueryClient();
 
     // Data Hooks
-    const { currentHoldingsValueData, allTransactionsData, isLoading: isDataLoading, isError } = useDashboardData(token);
+    const { currentHoldingsValueData, allTransactionsData, isLoading: isDataLoading, isError, uploadProgress, isWebSocketConnected } = useDashboardData(token);
 
     // Historical Data Hook (useQuery)
     const { data: historicalData, isLoading: isHistoryLoading } = useQuery({
@@ -75,10 +75,13 @@ const DashboardPage = () => {
         enabled: !!activePortfolio?.id,
     });
 
+    // Upload Progress State
+    const [showUploadProgress, setShowUploadProgress] = useState(false);
+
     // Combined Loading State
     const isLoading = isDataLoading || isHistoryLoading || isPortfolioLoading;
 
-    // --- TIME-BASED CONDITIONAL REFRESH LOGIC ---
+    // --- TIME-BASED CONDITIONAL REFRESH LOGIC WITH SMART REFRESH ---
     useEffect(() => {
         const triggerUpdate = async () => {
             if (!activePortfolio?.id) return;
@@ -111,8 +114,46 @@ const DashboardPage = () => {
             }
         };
 
+        // Initial trigger
         triggerUpdate();
+
+        // Set up interval for smart refresh
+        const interval = setInterval(() => {
+            // Check for recent uploads in the last 2 hours to refresh more frequently
+            const recentUploads = localStorage.getItem(`recent_uploads_${activePortfolio.id}`);
+            const now = Date.now();
+            
+            if (recentUploads) {
+                const lastUploadTime = parseInt(recentUploads);
+                const hoursSinceUpload = (now - lastUploadTime) / (1000 * 60 * 60);
+                
+                // If upload was recent (last 2 hours), refresh every 2 minutes instead of 5
+                if (hoursSinceUpload < 2) {
+                    triggerUpdate();
+                }
+            } else {
+                // Normal refresh interval
+                triggerUpdate();
+            }
+        }, DASHBOARD_REFRESH_INTERVAL_MS);
+
+        return () => clearInterval(interval);
     }, [activePortfolio?.id, queryClient]);
+
+    // Handle upload progress updates
+    useEffect(() => {
+        if (uploadProgress) {
+            setShowUploadProgress(true);
+            if (uploadProgress.Status === 'completed' || uploadProgress.Status === 'error') {
+                // Refresh data after upload completes
+                setTimeout(() => {
+                    queryClient.invalidateQueries({ queryKey: ['historicalChartData'] });
+                    queryClient.invalidateQueries({ queryKey: ['currentHoldingsValue'] });
+                    setShowUploadProgress(false);
+                }, 2000);
+            }
+        }
+    }, [uploadProgress, queryClient]);
 
 
     // 3. Calcular Métricas
@@ -301,6 +342,41 @@ const DashboardPage = () => {
 
     if (isError) return <Alert severity="error">Erro ao carregar dados do dashboard.</Alert>;
 
+    // Upload Progress Component
+    const UploadProgressComponent = () => {
+        if (!showUploadProgress || !uploadProgress) return null;
+
+        return (
+            <Box sx={{ mb: 3 }}>
+                <Card sx={{ p: 2, borderLeft: '4px solid', borderColor: 'primary.main' }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
+                        <Typography variant="subtitle2" sx={{ fontWeight: 'bold' }}>
+                            Upload em Progresso
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary">
+                            {uploadProgress.Status}
+                        </Typography>
+                    </Box>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                        <Box sx={{ flexGrow: 1 }}>
+                            <LinearProgress 
+                                variant="determinate" 
+                                value={uploadProgress.Progress} 
+                                sx={{ height: 8, borderRadius: 4 }}
+                            />
+                        </Box>
+                        <Typography variant="body2" sx={{ minWidth: 40, textAlign: 'right' }}>
+                            {Math.round(uploadProgress.Progress)}%
+                        </Typography>
+                    </Box>
+                    <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                        {uploadProgress.Message}
+                    </Typography>
+                </Card>
+            </Box>
+        );
+    };
+
     return (
         <Box sx={{ p: { xs: 2, sm: 3 } }}>
             {/* Header */}
@@ -312,6 +388,9 @@ const DashboardPage = () => {
                     Resumo do <strong>{activePortfolio?.name}</strong>
                 </Typography>
             </Box>
+
+            {/* Upload Progress */}
+            <UploadProgressComponent />
 
             {/* SECTION 1: HEADER / KPIs */}
             <Box sx={{ mb: 8 }}>

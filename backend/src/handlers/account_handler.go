@@ -7,7 +7,7 @@ import (
 
 	"github.com/username/taxfolio/backend/src/database"
 	"github.com/username/taxfolio/backend/src/logger"
-	"github.com/username/taxfolio/backend/src/model"
+	"github.com/username/taxfolio/backend/src/models"
 )
 
 type DeleteAccountRequest struct {
@@ -27,7 +27,7 @@ func (h *UserHandler) DeleteAccountHandler(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	user, err := model.GetUserByID(database.DB, userID)
+	user, err := models.GetUserByID(database.DB, userID)
 	if err != nil {
 		logger.L.Error("Failed to get user for account deletion", "userID", userID, "error", err)
 		sendJSONError(w, "Failed to retrieve user information", http.StatusInternalServerError)

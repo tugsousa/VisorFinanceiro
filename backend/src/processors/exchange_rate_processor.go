@@ -36,7 +36,7 @@ func LoadHistoricalRates(filePath string) error {
 	return nil
 }
 
-// GetExchangeRate retrieves the exchange rate using a "Bulk Fetch" strategy.
+// GetExchangeRate retrieves the exchange rate using an optimized bulk fetch strategy.
 func GetExchangeRate(currency string, date time.Time) (float64, error) {
 	if currency == "EUR" {
 		return 1.0, nil
@@ -57,19 +57,24 @@ func GetExchangeRate(currency string, date time.Time) (float64, error) {
 		}
 	}
 
-	// Step B: Look up the rate in cache
-	for i := 0; i < 7; i++ {
+	// Step B: Look up the rate in cache with optimized search
+	// First check the exact date
+	cacheKey := fmt.Sprintf("rate-%s-%s", currency, date.Format("2006-01-02"))
+	if rate, found := rateCache.Get(cacheKey); found {
+		return rate.(float64), nil
+	}
+
+	// If not found, check previous days (weekends/holidays) - Reduced from 7 to 5 days
+	for i := 1; i <= 5; i++ {
 		queryDate := date.AddDate(0, 0, -i)
 		cacheKey := fmt.Sprintf("rate-%s-%s", currency, queryDate.Format("2006-01-02"))
 
 		if rate, found := rateCache.Get(cacheKey); found {
-			// DEBUG: Log the rate found for verification
-			// logger.L.Debug("Exchange Rate: Cache Hit", "currency", currency, "date", queryDate.Format("2006-01-02"), "rate", rate)
 			return rate.(float64), nil
 		}
 	}
 
-	// Step C: Ultimate Fallback (ECB API)
+	// Step C: Ultimate Fallback (ECB API) - Only if cache is completely empty
 	logger.L.Warn("Exchange Rate: Cache miss after bulk fetch, trying ECB fallback", "currency", currency, "date", date.Format("2006-01-02"))
 
 	rate, err := fetchECBRate(currency, date)
@@ -201,4 +206,52 @@ func extractRateFromResponse(data models.ECBResponse) (float64, error) {
 		}
 	}
 	return 0, fmt.Errorf("observation value not found")
+}
+
+// GetExchangeRatesBulk retrieves multiple exchange rates in parallel for better performance
+func GetExchangeRatesBulk(currencies []string, date time.Time) (map[string]float64, error) {
+	if len(currencies) == 0 {
+		return make(map[string]float64), nil
+	}
+
+	results := make(map[string]float64)
+	resultChan := make(chan struct {
+		Currency string
+		Rate     float64
+		Error    error
+	}, len(currencies))
+
+	// Use worker pool for controlled concurrency
+	const maxWorkers = 5
+	workerChan := make(chan struct{}, maxWorkers)
+
+	for _, currency := range currencies {
+		workerChan <- struct{}{}
+		go func(curr string) {
+			defer func() { <-workerChan }()
+
+			rate, err := GetExchangeRate(curr, date)
+			resultChan <- struct {
+				Currency string
+				Rate     float64
+				Error    error
+			}{
+				Currency: curr,
+				Rate:     rate,
+				Error:    err,
+			}
+		}(currency)
+	}
+
+	// Collect results
+	for range currencies {
+		result := <-resultChan
+		if result.Error == nil {
+			results[result.Currency] = result.Rate
+		} else {
+			logger.L.Warn("Failed to get exchange rate", "currency", result.Currency, "error", result.Error)
+		}
+	}
+
+	return results, nil
 }
