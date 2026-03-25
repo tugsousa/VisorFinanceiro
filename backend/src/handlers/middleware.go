@@ -11,7 +11,7 @@ import (
 	"github.com/google/uuid" // <-- Adicionar "github.com/google/uuid" ao go.mod
 	"github.com/username/taxfolio/backend/src/database"
 	"github.com/username/taxfolio/backend/src/logger"
-	"github.com/username/taxfolio/backend/src/model"
+	"github.com/username/taxfolio/backend/src/models"
 )
 
 // As chaves de contexto contextKey e userIDContextKey são definidas em user_handler.go
@@ -71,10 +71,10 @@ func (h *UserHandler) AuthMiddleware(next http.Handler) http.Handler {
 			return
 		}
 
-		_, err = model.GetSessionByToken(database.DB, tokenString)
+		_, err = models.GetSessionByToken(database.DB, tokenString)
 		if err != nil {
 			userIDIntCheck, _ := strconv.ParseInt(userIDStr, 10, 64)
-			user, userErr := model.GetUserByID(database.DB, userIDIntCheck)
+			user, userErr := models.GetUserByID(database.DB, userIDIntCheck)
 			if userErr != nil {
 				ctxLogger.Warn("AuthMiddleware: User not found for token after session check failed", "userID", userIDStr, "error", userErr)
 				sendJSONError(w, "Invalid session or user", http.StatusUnauthorized)

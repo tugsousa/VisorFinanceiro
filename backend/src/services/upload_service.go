@@ -15,7 +15,6 @@ import (
 	"github.com/patrickmn/go-cache"
 	"github.com/username/taxfolio/backend/src/database"
 	"github.com/username/taxfolio/backend/src/logger"
-	"github.com/username/taxfolio/backend/src/model"
 	"github.com/username/taxfolio/backend/src/models"
 	"github.com/username/taxfolio/backend/src/parsers"
 	"github.com/username/taxfolio/backend/src/processors"
@@ -127,7 +126,7 @@ func (s *uploadServiceImpl) GetDividendMetrics(userID int64, portfolioID int64) 
 	for i, h := range holdings {
 		isinList[i] = h.ISIN
 	}
-	mappings, _ := model.GetMappingsByISINs(database.DB, isinList)
+	mappings, _ := models.GetMappingsByISINs(database.DB, isinList)
 
 	var mu sync.Mutex
 	var wg sync.WaitGroup
@@ -416,7 +415,7 @@ func (s *uploadServiceImpl) ProcessUpload(fileReader io.Reader, userID int64, po
 			logger.L.Info("Starting background ISIN resolution", "count", len(isinList), "userID", userID, "portfolioID", portfolioID)
 
 			// FIX #3: single bulk DB lookup before dispatching any workers.
-			dbMappings, err := model.GetMappingsByISINs(database.DB, isinList)
+			dbMappings, err := models.GetMappingsByISINs(database.DB, isinList)
 			if err != nil {
 				logger.L.Error("Failed to get ISIN mappings from DB", "error", err, "userID", userID, "portfolioID", portfolioID)
 				return
@@ -633,7 +632,7 @@ func (s *uploadServiceImpl) rebuildUserHistoryFrom(userID int64, portfolioID int
 		logger.L.Warn("Error resolving current prices during history rebuild", "error", err)
 	}
 
-	mappings, _ := model.GetMappingsByISINs(database.DB, isinList)
+	mappings, _ := models.GetMappingsByISINs(database.DB, isinList)
 
 	var wg sync.WaitGroup
 	tickerPrices := make(map[string]PriceMap)
@@ -1002,7 +1001,7 @@ func (s *uploadServiceImpl) GetCurrentHoldingsWithValue(userID int64, portfolioI
 	}
 
 	// FIX #3: single bulk mapping lookup instead of one-per-ISIN.
-	mappings, _ := model.GetMappingsByISINs(database.DB, uniqueISINs)
+	mappings, _ := models.GetMappingsByISINs(database.DB, uniqueISINs)
 
 	response := []models.HoldingWithValue{}
 	for isin, holding := range groupedHoldings {

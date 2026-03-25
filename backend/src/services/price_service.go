@@ -15,7 +15,7 @@ import (
 
 	"github.com/username/taxfolio/backend/src/database"
 	"github.com/username/taxfolio/backend/src/logger"
-	"github.com/username/taxfolio/backend/src/model"
+	"github.com/username/taxfolio/backend/src/models"
 	"github.com/username/taxfolio/backend/src/processors"
 	"github.com/username/taxfolio/backend/src/utils"
 	"golang.org/x/net/publicsuffix"
@@ -609,7 +609,7 @@ func (s *priceServiceImpl) initializeYahooSession() {
 }
 
 func (s *priceServiceImpl) loadFailedISINsFromDB() {
-	failedISINs, err := model.GetFailedISINs(database.DB)
+	failedISINs, err := models.GetFailedISINs(database.DB)
 	if err != nil {
 		logger.L.Error("Failed to load failed ISINs from database", "error", err)
 		return
@@ -748,7 +748,7 @@ func (s *priceServiceImpl) getIsinToTickerMap(isins []string) (map[string]string
 	isinToTickerMap := make(map[string]string)
 	metadataToUpdate := make(map[string]string)
 
-	dbMappings, err := model.GetMappingsByISINs(database.DB, isins)
+	dbMappings, err := models.GetMappingsByISINs(database.DB, isins)
 	if err != nil {
 		logger.L.Error("Failed to get ISIN mappings from DB", "error", err)
 	}
@@ -781,14 +781,14 @@ func (s *priceServiceImpl) getIsinToTickerMap(isins []string) (map[string]string
 			tickerResults := s.fetchTickersParallel(isinsEligible)
 
 			// Collect mappings for batch insert
-			var mappingsToInsert []model.ISINTickerMap
+			var mappingsToInsert []models.ISINTickerMap
 			for isin, result := range tickerResults {
 				if result.Error != nil {
 					logger.L.Warn("Could not get ticker for ISIN from API", "isin", isin, "error", result.Error)
 					continue
 				}
 				isinToTickerMap[isin] = result.Ticker
-				newMapping := model.ISINTickerMap{
+				newMapping := models.ISINTickerMap{
 					ISIN:         isin,
 					TickerSymbol: result.Ticker,
 					Exchange:     sql.NullString{String: result.Exchange, Valid: result.Exchange != ""},
@@ -800,12 +800,12 @@ func (s *priceServiceImpl) getIsinToTickerMap(isins []string) (map[string]string
 
 			// Batch insert all mappings at once
 			if len(mappingsToInsert) > 0 {
-				err := model.BatchInsertMappings(database.DB, mappingsToInsert)
+				err := models.BatchInsertMappings(database.DB, mappingsToInsert)
 				if err != nil {
 					logger.L.Error("Failed to batch insert ISIN mappings", "error", err)
 					// Fallback to individual inserts
 					for _, mapping := range mappingsToInsert {
-						model.InsertMapping(database.DB, mapping)
+						models.InsertMapping(database.DB, mapping)
 					}
 				}
 			}
@@ -818,8 +818,8 @@ func (s *priceServiceImpl) getIsinToTickerMap(isins []string) (map[string]string
 	return isinToTickerMap, nil
 }
 
-func (s *priceServiceImpl) getTickerToPriceMap(isinToTickerMap map[string]string) (map[string]model.DailyPrice, error) {
-	tickerToPriceMap := make(map[string]model.DailyPrice)
+func (s *priceServiceImpl) getTickerToPriceMap(isinToTickerMap map[string]string) (map[string]models.DailyPrice, error) {
+	tickerToPriceMap := make(map[string]models.DailyPrice)
 	uniqueTickers := make(map[string]bool)
 	for _, ticker := range isinToTickerMap {
 		uniqueTickers[ticker] = true
@@ -830,7 +830,7 @@ func (s *priceServiceImpl) getTickerToPriceMap(isinToTickerMap map[string]string
 	}
 
 	todayStr := time.Now().Format("2006-01-02")
-	cachedPrices, err := model.GetPricesByTickersAndDate(database.DB, tickerList, todayStr)
+	cachedPrices, err := models.GetPricesByTickersAndDate(database.DB, tickerList, todayStr)
 	if err != nil {
 		logger.L.Error("Failed to get daily prices from DB", "error", err)
 		// Non-fatal: fall through and attempt live fetches
@@ -854,14 +854,14 @@ func (s *priceServiceImpl) getTickerToPriceMap(isinToTickerMap map[string]string
 				logger.L.Warn("Could not get price for ticker from API", "ticker", ticker, "error", result.Error)
 				continue
 			}
-			dailyPrice := model.DailyPrice{
+			dailyPrice := models.DailyPrice{
 				TickerSymbol: ticker,
 				Date:         todayStr,
 				Price:        result.Price,
 				Currency:     result.Currency,
 			}
 			tickerToPriceMap[ticker] = dailyPrice
-			model.InsertOrUpdatePrice(database.DB, dailyPrice)
+			models.InsertOrUpdatePrice(database.DB, dailyPrice)
 		}
 	}
 	// Always return nil error — callers distinguish success per-ISIN via the PriceInfo.Status field.
@@ -922,7 +922,7 @@ func (s *priceServiceImpl) FetchTickerForISIN(isin string) (string, string, stri
 	if resp.StatusCode != http.StatusOK {
 		s.circuitBreaker.RecordFailure(isin)
 		s.failedISINCache.MarkFailed(isin)
-		model.InsertFailedISIN(database.DB, isin)
+		models.InsertFailedISIN(database.DB, isin)
 		return "", "", "", fmt.Errorf("yahoo search API returned non-OK status %d", resp.StatusCode)
 	}
 
@@ -930,14 +930,14 @@ func (s *priceServiceImpl) FetchTickerForISIN(isin string) (string, string, stri
 	if err := json.Unmarshal(bodyBytes, &searchData); err != nil {
 		s.circuitBreaker.RecordFailure(isin)
 		s.failedISINCache.MarkFailed(isin)
-		model.InsertFailedISIN(database.DB, isin)
+		models.InsertFailedISIN(database.DB, isin)
 		return "", "", "", fmt.Errorf("failed to decode Yahoo search response: %w", err)
 	}
 
 	if len(searchData.Quotes) == 0 || searchData.Quotes[0].Symbol == "" {
 		s.circuitBreaker.RecordFailure(isin)
 		s.failedISINCache.MarkFailed(isin)
-		model.InsertFailedISIN(database.DB, isin)
+		models.InsertFailedISIN(database.DB, isin)
 		return "", "", "", fmt.Errorf("no ticker symbol found for ISIN %s", isin)
 	}
 
@@ -1018,7 +1018,7 @@ func (s *priceServiceImpl) fetchHistoricalPricesParallel(tickers []string) map[s
 				defer func() { <-workerChan }()
 
 				// --- 2.2: Check DB cache before hitting the API ---
-				cached, err := model.GetHistoricalPricesByTicker(database.DB, t)
+				cached, err := models.GetHistoricalPricesByTicker(database.DB, t)
 				if err == nil && len(cached) > 0 {
 					logger.L.Debug("Historical prices served from DB cache", "ticker", t, "points", len(cached))
 					resultChan <- HistoricalResult{Ticker: t, Prices: cached, Currency: ""}
@@ -1484,7 +1484,7 @@ func (s *priceServiceImpl) updateMetadataParallel(metadataToUpdate map[string]st
 			if err == nil {
 				// Update all ISINs for this ticker
 				for _, isin := range isins {
-					model.UpdateMappingMetadata(database.DB, isin, sector, industry, qType)
+					models.UpdateMappingMetadata(database.DB, isin, sector, industry, qType)
 				}
 			}
 		}(ticker, isins)
