@@ -887,10 +887,13 @@ func (h *UserHandler) HandleImpersonateUser(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	// 4. SECURITY UPDATE: Set Refresh Cookie for the impersonated session
-	setRefreshTokenCookie(w, refreshToken, config.Cfg.RefreshTokenExpiry)
+	// NOTE: We intentionally do NOT set a refresh_token cookie for impersonation.
+	// Impersonation is a temporary admin action scoped to the current access token lifetime.
+	// Setting a cookie would overwrite the admin's own session cookie and persist after
+	// the browser is closed, which is what caused the Google OAuth sign-in bug where the
+	// impersonation refresh cookie raced against and consumed the new Google OAuth session.
 
-	// 5. Retornar resposta (sem refresh_token no corpo)
+	// 4. Retornar resposta (sem refresh_token no corpo)
 	response := map[string]interface{}{
 		"access_token": accessToken,
 		"user": map[string]interface{}{
