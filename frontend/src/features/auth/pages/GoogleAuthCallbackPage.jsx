@@ -28,7 +28,13 @@ const GoogleAuthCallbackPage = () => {
             try {
                 logger.log("GoogleAuthCallback: AuthContext settled. Starting finalization...");
 
-                // 3. Limpar token antigo e pedir novo (Critico para resolver o erro 403 Forbidden)
+                // 3. Clear any stale client-side auth state left over from a previous session
+                // (e.g. admin impersonation). This prevents the axios interceptor from treating
+                // the new OAuth refresh cookie as a rotation target for an old expired token,
+                // which would consume the Google session before we can use it here.
+                localStorage.removeItem('auth_token');
+                localStorage.removeItem('user');
+                localStorage.removeItem('has_initial_data');
                 setApiServiceCsrfToken(null);
                 await fetchAndSetCsrfToken();
 
