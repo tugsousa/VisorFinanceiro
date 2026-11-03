@@ -189,6 +189,74 @@ func TestStockProcessor_SplitOrderChargesItsCommissionOnce(t *testing.T) {
 	assertAmount(t, "commission", 2, total)
 }
 
+func TestStockProcessor_SplitsCommissionBetweenSaleAndPurchase(t *testing.T) {
+	logger.InitLogger("error")
+	if err := utils.InitCountryData("../../data/country.json"); err != nil {
+		t.Fatalf("failed to load country data: %v", err)
+	}
+	buy := models.ProcessedTransaction{
+		Source: "ibkr", Date: "29-01-2025", ProductName: "COLRUYT", ISIN: "BE0974256852", TransactionType: "STOCK",
+		BuySell: "BUY", Quantity: 3, OriginalQuantity: 3, Amount: -90, AmountEUR: -90, ExchangeRate: 1, Commission: 1.005, OrderID: "buy",
+	}
+	sell := buy
+	sell.Date, sell.BuySell, sell.Quantity, sell.OriginalQuantity = "15-04-2025", "SELL", 3, 3
+	sell.Amount, sell.AmountEUR, sell.Commission, sell.OrderID = 120, 120, 1, "sell"
+	secondLot := buy
+	secondLot.Date, secondLot.Quantity, secondLot.OriginalQuantity = "30-01-2025", 2, 2
+	secondLot.Commission, secondLot.OrderID = 0, "second-buy"
+	firstLot := buy
+	firstLot.Quantity, firstLot.OriginalQuantity = 1, 1
+
+	details, _ := NewStockProcessor().Process([]models.ProcessedTransaction{firstLot, secondLot, sell})
+
+	if len(details) != 2 {
+		t.Fatalf("expected 2 matched lots, got %d", len(details))
+	}
+	assertAmount(t, "sale part of first lot", 0.33, details[0].SaleCommission)
+	assertAmount(t, "buy part of first lot", 1.01, details[0].BuyCommission)
+	assertAmount(t, "sale part of second lot", 0.67, details[1].SaleCommission)
+	assertAmount(t, "buy part of second lot", 0, details[1].BuyCommission)
+	for _, detail := range details {
+		assertAmount(t, "commission parts", detail.Commission, detail.SaleCommission+detail.BuyCommission)
+	}
+}
+
+// FIFO matches by ISIN, so a sale can close a lot bought at another broker.
+func TestStockProcessor_KeepsBrokerOfEachSide(t *testing.T) {
+	logger.InitLogger("error")
+	if err := utils.InitCountryData("../../data/country.json"); err != nil {
+		t.Fatalf("failed to load country data: %v", err)
+	}
+	buy := models.ProcessedTransaction{
+		Source: "degiro", Date: "29-01-2025", ProductName: "COLRUYT", ISIN: "BE0974256852", TransactionType: "STOCK",
+		BuySell: "BUY", Quantity: 1, OriginalQuantity: 1, Amount: -30, AmountEUR: -30, ExchangeRate: 1, OrderID: "buy",
+	}
+	sell := buy
+	sell.Source, sell.Date, sell.BuySell, sell.Amount, sell.AmountEUR, sell.OrderID = "ibkr", "15-04-2025", "SELL", 40, 40, "sell"
+
+	details, _ := NewStockProcessor().Process([]models.ProcessedTransaction{buy, sell})
+
+	if len(details) != 1 {
+		t.Fatalf("expected 1 matched lot, got %d", len(details))
+	}
+	if details[0].SaleSource != "ibkr" || details[0].BuySource != "degiro" {
+		t.Errorf("expected sale at ibkr and purchase at degiro, got %q and %q", details[0].SaleSource, details[0].BuySource)
+	}
+}
+
+func TestOptionProcessor_KeepsBrokerOfEachSide(t *testing.T) {
+	details, _ := NewOptionProcessor().Process(processDegiroCSV(t, splitFillOptionsCSV))
+
+	if len(details) == 0 {
+		t.Fatal("expected closed option positions")
+	}
+	for _, detail := range details {
+		if detail.OpenSource != "degiro" || detail.CloseSource != "degiro" {
+			t.Errorf("expected degiro on both sides, got %q and %q", detail.OpenSource, detail.CloseSource)
+		}
+	}
+}
+
 // The fee processor runs on the same slice and needs each order's total.
 func TestSplitOrderAllocationLeavesFeesUntouched(t *testing.T) {
 	txs := processDegiroCSV(t, splitFillOptionsCSV)

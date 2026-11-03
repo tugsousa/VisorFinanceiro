@@ -21,6 +21,8 @@ type HoldingWithValue struct {
 type SaleDetail struct {
 	SaleDate         string
 	BuyDate          string
+	SaleSource       string // Broker of the sale (e.g., degiro, ibkr)
+	BuySource        string // Broker of the purchase; FIFO matches by ISIN, so it can differ from SaleSource
 	ProductName      string
 	ISIN             string
 	Quantity         int
@@ -32,6 +34,8 @@ type SaleDetail struct {
 	BuyAmount        float64 // Purchase amount in original currency
 	BuyExchangeRate  float64 // Exchange rate used for the buy transaction
 	Commission       float64 // Commission/fees
+	SaleCommission   float64 // Part of Commission that comes from the sale
+	BuyCommission    float64 // Part of Commission that comes from the purchase
 	BuyCurrency      string
 	BuyAmountEUR     float64 // Purchase amount in EUR
 	SaleExchangeRate float64 // Exchange rate used for the sale transaction
@@ -55,6 +59,8 @@ type PurchaseLot struct {
 type OptionSaleDetail struct {
 	OpenDate       string  `json:"open_date"`
 	CloseDate      string  `json:"close_date"`
+	OpenSource     string  `json:"open_source"`  // Broker of the opening transaction
+	CloseSource    string  `json:"close_source"` // Broker of the closing transaction
 	ProductName    string  `json:"product_name"` // e.g., "FLW P31.00 18MAR22"
 	Quantity       int     `json:"quantity"`
 	OpenPrice      float64 `json:"open_price"`

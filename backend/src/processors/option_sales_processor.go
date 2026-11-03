@@ -257,6 +257,8 @@ func createOptionSaleDetail(openTx, closeTx *models.ProcessedTransaction, quanti
 	return models.OptionSaleDetail{
 		OpenDate:       openTx.Date,
 		CloseDate:      closeTx.Date,
+		OpenSource:     openTx.Source,
+		CloseSource:    closeTx.Source,
 		ProductName:    openTx.ProductName, // Should be the same
 		Quantity:       quantity,
 		OpenPrice:      openTx.Price,
