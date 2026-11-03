@@ -110,7 +110,9 @@ func (p *DeGiroParser) Parse(file io.Reader) ([]models.CanonicalTransaction, err
 		sourceAmt, _ := strconv.ParseFloat(normalizedAmount, 64)
 		finalAmount := sourceAmt
 
-		if txType == "FEE" || (txType == "DIVIDEND" && subType == "TAX") {
+		// Dividend tax keeps its source sign: DeGiro reverses bookings with positive rows,
+		// which must cancel the original tax when summed.
+		if txType == "FEE" {
 			finalAmount = -math.Abs(sourceAmt)
 		}
 
