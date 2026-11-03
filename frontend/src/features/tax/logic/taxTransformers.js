@@ -50,7 +50,7 @@ export const groupOptionsByCountry = (allOptionSales, selectedYear) => {
       if (!acc[country]) {
         acc[country] = { country_code: country, rendimentoLiquido: 0, impostoPago: 0 };
       }
-      acc[country].rendimentoLiquido += (row.delta || 0);
+      acc[country].rendimentoLiquido += (row.delta || 0) - Math.abs(row.commission || 0);
       return acc;
     }, {});
 

@@ -2,6 +2,7 @@ package processors
 
 import (
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
 
@@ -35,4 +36,47 @@ func CalculateCommission(orderId string, transactions []models.RawTransaction) (
 	}
 
 	return totalCommission, nil
+}
+
+// degiroOrderCommissionsEUR returns each DeGiro order's commission in EUR, from its commission rows.
+// The commission stored on a trade row can't be used for this: it adds up reversals as charges, and
+// it was converted at the trade's exchange rate even when the commission was charged in EUR.
+func degiroOrderCommissionsEUR(txs []models.ProcessedTransaction) map[string]float64 {
+	commissions := make(map[string]float64)
+	for _, tx := range txs {
+		if tx.Source == "degiro" && tx.TransactionType == "COMMISSION_DETAIL" && tx.OrderID != "" {
+			commissions[tx.OrderID] -= tx.AmountEUR
+		}
+	}
+	for orderID, commission := range commissions {
+		commissions[orderID] = math.Max(commission, 0)
+	}
+	return commissions
+}
+
+// allocateDegiroOrderCommissions splits each DeGiro order's commission across its fills, by quantity,
+// so that an order filled in parts doesn't pay the total once per fill. Other sources already report
+// commission per execution. Orders without commission rows use the commission stored on their fills.
+// allTxs must include the commission rows. It updates fills in place, so callers must pass their own copy.
+func allocateDegiroOrderCommissions(fills, allTxs []models.ProcessedTransaction) {
+	orderCommissions := degiroOrderCommissionsEUR(allTxs)
+
+	orderQuantities := make(map[string]int)
+	for _, tx := range fills {
+		if tx.Source == "degiro" && tx.OrderID != "" {
+			orderQuantities[tx.OrderID] += tx.Quantity
+		}
+	}
+
+	for i := range fills {
+		tx := &fills[i]
+		if tx.Source != "degiro" || tx.OrderID == "" || orderQuantities[tx.OrderID] <= 0 {
+			continue
+		}
+		orderCommission, found := orderCommissions[tx.OrderID]
+		if !found {
+			orderCommission = tx.Commission
+		}
+		tx.Commission = orderCommission * float64(tx.Quantity) / float64(orderQuantities[tx.OrderID])
+	}
 }

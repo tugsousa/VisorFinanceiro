@@ -55,6 +55,43 @@ export const calculateAggregatedMetricsByISIN = (allTransactions) => {
 
 
 /**
+ * Calculates the commissions paid in EUR for each ISIN, matching the backend's fee processor.
+ * Every row of a DeGiro order stores the order's total commission (FX rows included), so a DeGiro
+ * order counts once, from its commission rows. Orders without those rows use the stored commission.
+ * Other sources store the commission of each execution on its own row, already in EUR.
+ * @param {Array} transactions - Processed transactions, including the commission rows.
+ * @returns {Object} An object where keys are ISINs and values are the commissions in EUR.
+ */
+const calculateCommissionsByISIN = (transactions) => {
+    const commissions = {};
+    const addCommission = (isin, amount) => {
+        if (!isin) return;
+        commissions[isin] = (commissions[isin] || 0) + amount;
+    };
+
+    const degiroOrders = new Map();
+    transactions.forEach(tx => {
+        if (tx.source !== 'degiro' || tx.transaction_type !== 'COMMISSION_DETAIL' || !tx.order_id) return;
+        const order = degiroOrders.get(tx.order_id) || { isin: tx.isin, commission: 0 };
+        order.commission -= tx.amount_eur || 0;
+        degiroOrders.set(tx.order_id, order);
+    });
+    degiroOrders.forEach(({ isin, commission }) => addCommission(isin, Math.max(commission, 0)));
+
+    const countedOrders = new Set(degiroOrders.keys());
+    transactions.forEach(tx => {
+        if (!(tx.commission > 0)) return;
+        if (tx.source === 'degiro' && tx.order_id) {
+            if (countedOrders.has(tx.order_id)) return;
+            countedOrders.add(tx.order_id);
+        }
+        addCommission(tx.isin, tx.commission);
+    });
+
+    return commissions;
+};
+
+/**
  * A new, more accurate function that combines data from multiple sources.
  * @param {Array} allTransactions - All processed transactions.
  * @param {Array} stockSales - All calculated stock sale details.
@@ -83,29 +120,24 @@ export const calculateCombinedAggregatedMetricsByISIN = (allTransactions, stockS
         }
     });
 
-    // 2. Sum Dividends and Commissions from the raw transaction list for completeness
+    // 2. Sum Dividends from the raw transaction list for completeness
     (allTransactions || []).forEach(tx => {
-        const { isin, transaction_type, transaction_subtype, amount_eur, commission } = tx;
+        const { isin, transaction_type, transaction_subtype, amount_eur } = tx;
         if (!isin) return;
-        
+
         ensureMetric(isin);
 
         // Sum gross dividends
         if (transaction_type === 'DIVIDEND' && transaction_subtype !== 'TAX') {
             metrics[isin].totalDividends += amount_eur || 0;
         }
-
-        // Sum commissions from ALL transaction types (stock buys, sells, options, etc.)
-        if (commission && commission > 0) {
-            // Note: Degiro commissions are already in EUR. IBKR commissions are converted.
-            // The `commission` field in ProcessedTransaction should represent the EUR value.
-            let commissionEUR = commission;
-            if (tx.source !== 'degiro' && tx.currency !== 'EUR' && tx.exchange_rate > 0) {
-                 commissionEUR = commission / tx.exchange_rate;
-            }
-            metrics[isin].totalCommissions += commissionEUR;
-        }
     });
-    
+
+    // 3. Sum Commissions from the raw transaction list
+    Object.entries(calculateCommissionsByISIN(allTransactions || [])).forEach(([isin, commission]) => {
+        ensureMetric(isin);
+        metrics[isin].totalCommissions = commission;
+    });
+
     return metrics;
 }

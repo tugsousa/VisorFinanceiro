@@ -23,6 +23,7 @@ func NewOptionProcessor() OptionProcessor { // Return the interface type
 // returning details of closed option trades and currently open option holdings.
 func (p *optionProcessorImpl) Process(transactions []models.ProcessedTransaction) ([]models.OptionSaleDetail, []models.OptionHolding) {
 	optionTransactions := filterOptionTransactions(transactions)
+	allocateDegiroOrderCommissions(optionTransactions, transactions)
 	transactionsByProduct := groupTransactionsByProduct(optionTransactions)
 
 	var allOptionSaleDetails []models.OptionSaleDetail

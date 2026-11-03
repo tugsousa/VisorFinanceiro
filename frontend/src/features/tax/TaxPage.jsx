@@ -153,7 +153,7 @@ export default function TaxPage() {
       if (!acc[country]) {
         acc[country] = { country_code: country, rendimentoLiquido: 0, impostoPago: 0 };
       }
-      acc[country].rendimentoLiquido += (row.delta || 0);
+      acc[country].rendimentoLiquido += (row.delta || 0) - Math.abs(row.commission || 0);
       acc[country].impostoPago += 0; // Assuming options usually have no withholding tax, explicitly summing 0
       return acc;
     }, {});
