@@ -17,6 +17,7 @@ import StockSalesPage from './features/analytics/pages/StockSalesPage';
 import OptionSalesPage from './features/analytics/pages/OptionSalesPage';
 import DividendsPage from './features/analytics/pages/DividendsPage';
 import FeesPage from './features/analytics/pages/FeesPage';
+import CashFlowsPage from './features/analytics/pages/CashFlowsPage';
 import TaxPage from './features/tax/TaxPage';
 import UploadPage from './features/upload/pages/UploadPage';
 import SettingsPage from './features/settings/pages/SettingsPage';
@@ -59,6 +60,7 @@ function App() {
                             <Route path="/analytics/options" element={<ProtectedRoute><OptionSalesPage /></ProtectedRoute>} />
                             <Route path="/analytics/dividends" element={<ProtectedRoute><DividendsPage /></ProtectedRoute>} />
                             <Route path="/analytics/fees" element={<ProtectedRoute><FeesPage /></ProtectedRoute>} />
+                            <Route path="/analytics/cash-flows" element={<ProtectedRoute><CashFlowsPage /></ProtectedRoute>} />
 
                             {/* Other Features */}
                             <Route path="/tax" element={<ProtectedRoute><TaxPage /></ProtectedRoute>} />

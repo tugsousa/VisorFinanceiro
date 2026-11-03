@@ -8,6 +8,7 @@ import {
     apiFetchFees,
     apiFetchDividendMetrics, 
 } from 'features/analytics/api/analyticsApi';
+import { apiFetchProcessedTransactions } from 'features/portfolio/api/portfolioApi';
 import { usePortfolio } from '../../portfolio/PortfolioContext';
 
 export const useAnalyticsData = (token, types = ['all']) => {
@@ -59,11 +60,18 @@ export const useAnalyticsData = (token, types = ['all']) => {
                 enabled: !!token && !!portfolioId && shouldFetch('metrics'),
                 staleTime: 1000 * 60 * 5,
                 select: (res) => res.data || {}
+            },
+            {
+                queryKey: ['allProcessedTransactions', token, portfolioId],
+                queryFn: () => apiFetchProcessedTransactions(portfolioId),
+                enabled: !!token && !!portfolioId && shouldFetch('transactions'),
+                staleTime: 1000 * 60 * 5,
+                select: (res) => res.data || []
             }
         ]
     });
 
-    const [stockSalesQ, optionSalesQ, dividendSummaryQ, dividendTxsQ, feesQ, dividendMetricsQ] = results;
+    const [stockSalesQ, optionSalesQ, dividendSummaryQ, dividendTxsQ, feesQ, dividendMetricsQ, allTransactionsQ] = results;
 
     return {
         stockSalesData: stockSalesQ.data,
@@ -73,6 +81,7 @@ export const useAnalyticsData = (token, types = ['all']) => {
         feesData: feesQ.data,
 
         dividendMetricsData: dividendMetricsQ.data,
+        allTransactionsData: allTransactionsQ.data,
         
         isLoading: results.some(q => q.isLoading && q.fetchStatus !== 'idle'),
         isError: results.some(q => q.isError)
