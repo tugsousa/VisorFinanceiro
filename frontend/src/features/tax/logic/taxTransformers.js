@@ -1,9 +1,9 @@
-import { getYear } from '../../../lib/utils/dateUtils';
+import { getYear, parseDateRobust } from '../../../lib/utils/dateUtils';
 
 export const filterAndGroupStockSales = (allStockSales, selectedYear) => {
     const numYear = Number(selectedYear);
     const filteredStockSales = (allStockSales || []).filter(item => getYear(item.SaleDate) === numYear);
-    
+
     const groupedSalesMap = filteredStockSales.reduce((acc, sale) => {
       const groupingKey = `${sale.country_code}|${sale.SaleDate}|${sale.BuyDate}`;
 
@@ -13,11 +13,13 @@ export const filterAndGroupStockSales = (allStockSales, selectedYear) => {
           SaleAmountEUR: sale.SaleAmountEUR || 0,
           BuyAmountEUR: Math.abs(sale.BuyAmountEUR || 0),
           Commission: sale.Commission || 0,
+          sales: [sale],
         };
       } else {
         acc[groupingKey].SaleAmountEUR += sale.SaleAmountEUR || 0;
         acc[groupingKey].BuyAmountEUR += Math.abs(sale.BuyAmountEUR || 0);
         acc[groupingKey].Commission += sale.Commission || 0;
+        acc[groupingKey].sales.push(sale);
       }
 
       return acc;
@@ -26,8 +28,15 @@ export const filterAndGroupStockSales = (allStockSales, selectedYear) => {
     return Object.values(groupedSalesMap);
 };
 
-export const transformDividendsForTable = (dividendSummary, selectedYear) => {
+const byDate = (a, b) => parseDateRobust(a.date) - parseDateRobust(b.date);
+
+export const transformDividendsForTable = (dividendSummary, dividendTransactions, selectedYear) => {
     const dividendYearData = dividendSummary?.[selectedYear] || {};
+    const numYear = Number(selectedYear);
+    const yearTransactions = (dividendTransactions || [])
+      .filter(tx => getYear(tx.date) === numYear)
+      .sort(byDate);
+
     return Object.entries(dividendYearData).map(([country, details], index) => ({
       id: `${selectedYear}-${country}-${index}`,
       linha: 801 + index,
@@ -38,26 +47,42 @@ export const transformDividendsForTable = (dividendSummary, selectedYear) => {
       impostoRetido: 0,
       nifEntidade: '',
       retencaoFonte: 0,
+      transactions: yearTransactions.filter(tx => tx.dividend_country === country),
     }));
 };
 
 export const groupOptionsByCountry = (allOptionSales, selectedYear) => {
     const numYear = Number(selectedYear);
     const filteredOptionSales = (allOptionSales || []).filter(item => getYear(item.close_date) === numYear);
-    
+
     const groupedOptions = filteredOptionSales.reduce((acc, row) => {
       const country = row.country_code || 'Unknown';
       if (!acc[country]) {
-        acc[country] = { country_code: country, rendimentoLiquido: 0, impostoPago: 0 };
+        acc[country] = { country_code: country, rendimentoLiquido: 0, impostoPago: 0, sales: [] };
       }
-      acc[country].rendimentoLiquido += (row.delta || 0) - Math.abs(row.commission || 0);
+      acc[country].rendimentoLiquido += getOptionNetIncome(row);
+      acc[country].sales.push(row);
       return acc;
     }, {});
 
-    return {
-        filteredOptionSales,
-        groupedOptionData: Object.values(groupedOptions)
-    };
+    return Object.values(groupedOptions);
+};
+
+export const getOptionNetIncome = (row) => (row.delta || 0) - Math.abs(row.commission || 0);
+
+// Sums the transactions the same way as the backend summary, so both can be compared.
+export const sumDividendTransactions = (transactions) => {
+    const totals = transactions.reduce(
+      (acc, tx) => {
+        if (tx.transaction_subtype === 'TAX') {
+          acc.tax += tx.amount_eur || 0;
+        } else {
+          acc.gross += tx.amount_eur || 0;
+        }
+        return acc;
+      }, { gross: 0, tax: 0 }
+    );
+    return { gross: totals.gross, tax: Math.abs(totals.tax) };
 };
 
 export const calculateStockTotals = (stockSaleDetails) => stockSaleDetails.reduce(

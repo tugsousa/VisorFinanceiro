@@ -1289,6 +1289,7 @@ func (s *uploadServiceImpl) GetDividendTransactions(userID int64, portfolioID in
 	var dividends []models.ProcessedTransaction
 	for _, tx := range userTransactions {
 		if tx.TransactionType == "DIVIDEND" {
+			tx.DividendCountry = utils.GetDividendSourceCountry(tx.ISIN)
 			dividends = append(dividends, tx)
 		}
 	}

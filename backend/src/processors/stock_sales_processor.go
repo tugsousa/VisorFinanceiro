@@ -71,13 +71,17 @@ func calculateSalesAndYearlyHoldings(transactions []models.ProcessedTransaction)
 					buyCommissionToAdd = currentPurchase.Commission
 					currentPurchase.Commission = 0
 				}
-				totalDetailCommission := (tx.Commission * saleRatio) + buyCommissionToAdd
+				saleCommission := tx.Commission * saleRatio
+				totalDetailCommission := utils.RoundFloat(saleCommission+buyCommissionToAdd, 2)
+				roundedSaleCommission := utils.RoundFloat(saleCommission, 2)
 				buyAmountEUR := utils.RoundFloat(currentPurchase.AmountEUR*purchaseRatio, 2)
 				saleAmountEUR := utils.RoundFloat(tx.AmountEUR*saleRatio, 2)
 
 				saleDetails = append(saleDetails, models.SaleDetail{
 					SaleDate:         tx.Date,
 					BuyDate:          currentPurchase.Date,
+					SaleSource:       tx.Source,
+					BuySource:        currentPurchase.Source,
 					ProductName:      tx.ProductName,
 					ISIN:             tx.ISIN,
 					Quantity:         matchedQty,
@@ -91,7 +95,9 @@ func calculateSalesAndYearlyHoldings(transactions []models.ProcessedTransaction)
 					BuyAmountEUR:     buyAmountEUR,
 					BuyPrice:         currentPurchase.Price,
 					BuyExchangeRate:  currentPurchase.ExchangeRate,
-					Commission:       utils.RoundFloat(totalDetailCommission, 2),
+					Commission:       totalDetailCommission,
+					SaleCommission:   roundedSaleCommission,
+					BuyCommission:    utils.RoundFloat(totalDetailCommission-roundedSaleCommission, 2), // Keeps both parts adding up to Commission
 					Delta:            utils.RoundFloat(buyAmountEUR+saleAmountEUR, 2),
 					CountryCode:      utils.GetCountryCodeString(tx.ISIN),
 				})

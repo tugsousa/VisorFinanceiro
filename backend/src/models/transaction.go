@@ -39,6 +39,7 @@ type ProcessedTransaction struct {
 	HashId             string  `json:"hash_id"`                // Generated hash for potential duplicate checking
 	CashBalance        float64 `json:"cash_balance"`
 	BalanceCurrency    string  `json:"balance_currency"`
+	DividendCountry    string  `json:"dividend_country,omitempty"` // Source country of the dividend tax line (not stored)
 }
 
 // CashMovement represents a cash deposit or withdrawal

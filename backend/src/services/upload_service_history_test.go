@@ -4,12 +4,15 @@ import (
 	"database/sql"
 	"errors"
 	"math"
+	"os"
+	"path/filepath"
 	"testing"
 
 	_ "modernc.org/sqlite"
 
 	"github.com/username/taxfolio/backend/src/database"
 	"github.com/username/taxfolio/backend/src/logger"
+	"github.com/username/taxfolio/backend/src/utils"
 )
 
 // historyPriceStub has no prices, so a rebuild only depends on the stored transactions.
@@ -175,5 +178,41 @@ func TestEarliestTxDate_ComparesCalendarDates(t *testing.T) {
 				t.Errorf("expected %q, got %q", tt.want, got)
 			}
 		})
+	}
+}
+
+func TestGetDividendTransactions_SetsSourceCountryFromOverride(t *testing.T) {
+	setupHistoryTestDB(t)
+	if err := utils.InitCountryData("../../data/country.json"); err != nil {
+		t.Fatalf("failed to load country data: %v", err)
+	}
+	path := filepath.Join(t.TempDir(), "overrides.json")
+	content := `[{"isin": "IE0000000001", "alpha2": "GB", "note": "test", "source": "test"}]`
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		t.Fatalf("failed to write overrides file: %v", err)
+	}
+	if err := utils.InitDividendSourceOverrides(path); err != nil {
+		t.Fatalf("failed to load overrides: %v", err)
+	}
+	_, err := database.DB.Exec(`INSERT INTO processed_transactions
+		(user_id, portfolio_id, date, isin, transaction_type, amount_eur, country_code)
+		VALUES (1, 1, '02-10-2025', 'IE0000000001', 'DIVIDEND', 100, ?)`, utils.GetCountryCodeString("IE0000000001"))
+	if err != nil {
+		t.Fatalf("failed to insert dividend: %v", err)
+	}
+
+	dividends, err := (&uploadServiceImpl{}).GetDividendTransactions(1, 1)
+	if err != nil {
+		t.Fatalf("GetDividendTransactions returned error: %v", err)
+	}
+
+	if len(dividends) != 1 {
+		t.Fatalf("expected 1 dividend, got %d", len(dividends))
+	}
+	if want := utils.GetDividendSourceCountry("IE0000000001"); dividends[0].DividendCountry != want {
+		t.Errorf("expected source country %q, got %q", want, dividends[0].DividendCountry)
+	}
+	if dividends[0].DividendCountry == dividends[0].CountryCode {
+		t.Errorf("expected the override to differ from the ISIN country, both were %q", dividends[0].CountryCode)
 	}
 }

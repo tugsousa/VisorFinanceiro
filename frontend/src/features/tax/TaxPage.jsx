@@ -1,5 +1,5 @@
 // frontend/src/features/tax/TaxPage.js
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   Typography, Box, FormControl, InputLabel, Select, MenuItem, Table,
   TableBody, TableCell, TableContainer, TableHead, TableRow, Paper,
@@ -9,12 +9,22 @@ import { useQuery } from '@tanstack/react-query';
 import {
   apiFetchStockSales,
   apiFetchOptionSales,
-  apiFetchDividendTaxSummary
+  apiFetchDividendTaxSummary,
+  apiFetchDividendTransactions
 } from 'features/analytics/api/analyticsApi';
 import { useAuth } from '../auth/AuthContext';
 import { usePortfolio } from '../portfolio/PortfolioContext';
 import { UI_TEXT, NO_YEAR_SELECTED, ALL_YEARS_OPTION } from '../../constants';
 import { getYear, getMonth, getDay, extractYearsFromData } from '../../lib/utils/dateUtils';
+import {
+  filterAndGroupStockSales,
+  transformDividendsForTable,
+  groupOptionsByCountry,
+  calculateStockTotals,
+  calculateOptionTotals,
+  calculateDividendTotals
+} from './logic/taxTransformers';
+import TaxLineDetailDrawer from './components/TaxLineDetailDrawer';
 import './TaxPage.css';
 
 const StyledTableCell = styled(TableCell)(({ theme }) => ({
@@ -34,18 +44,28 @@ const StyledTableBodyCell = styled(TableCell)(({ theme, align = 'center' }) => (
   padding: '4px 6px', fontSize: '0.8rem', verticalAlign: 'middle',
 }));
 
+// The body cells have their own background, so the row states are set on them.
+const SelectableTableRow = styled(TableRow)(({ theme }) => ({
+  cursor: 'pointer',
+  '&:hover td': { backgroundColor: '#f0f9ff' },
+  '&.Mui-selected td, &.Mui-selected:hover td': { backgroundColor: '#cfeaff' },
+  '&:focus-visible': { outline: `2px solid ${theme.palette.primary.main}`, outlineOffset: -2 },
+}));
+
 const fetchTaxReportData = async (portfolioId) => {
-  if (!portfolioId) return { stockSales: [], optionSales: [], dividendSummary: {} };
-  
-  const [stockRes, optionRes, dividendRes] = await Promise.all([
+  if (!portfolioId) return { stockSales: [], optionSales: [], dividendSummary: {}, dividendTransactions: [] };
+
+  const [stockRes, optionRes, dividendRes, dividendTransactionsRes] = await Promise.all([
     apiFetchStockSales(portfolioId),
     apiFetchOptionSales(portfolioId),
     apiFetchDividendTaxSummary(portfolioId),
+    apiFetchDividendTransactions(portfolioId),
   ]);
   return {
     stockSales: stockRes.data || [],
     optionSales: optionRes.data?.OptionSaleDetails || [],
     dividendSummary: dividendRes.data || {},
+    dividendTransactions: dividendTransactionsRes.data || [],
   };
 };
 
@@ -103,67 +123,25 @@ export default function TaxPage() {
     }
   }, [availableYears, queryLoading]);
 
-  const { stockSaleDetails, optionSaleDetails, dividendTaxReportRows, groupedOptionData } = useMemo(() => {
+  const { stockSaleDetails, dividendTaxReportRows, groupedOptionData } = useMemo(() => {
     const year = selectedYear;
     if (year === NO_YEAR_SELECTED || !taxApiData) {
-      return { stockSaleDetails: [], optionSaleDetails: [], dividendTaxReportRows: [], groupedOptionData: [] };
+      return { stockSaleDetails: [], dividendTaxReportRows: [], groupedOptionData: [] };
     }
 
-    const numYear = Number(year);
-    const filteredStockSales = (taxApiData.stockSales || []).filter(item => getYear(item.SaleDate) === numYear);
-    
-    const groupedSalesMap = filteredStockSales.reduce((acc, sale) => {
-      const groupingKey = `${sale.country_code}|${sale.SaleDate}|${sale.BuyDate}`;
-
-      if (!acc[groupingKey]) {
-        acc[groupingKey] = {
-          ...sale,
-          SaleAmountEUR: sale.SaleAmountEUR || 0,
-          BuyAmountEUR: Math.abs(sale.BuyAmountEUR || 0),
-          Commission: sale.Commission || 0,
-        };
-      } else {
-        acc[groupingKey].SaleAmountEUR += sale.SaleAmountEUR || 0;
-        acc[groupingKey].BuyAmountEUR += Math.abs(sale.BuyAmountEUR || 0);
-        acc[groupingKey].Commission += sale.Commission || 0;
-      }
-
-      return acc;
-    }, {});
-
-    const groupedStockSales = Object.values(groupedSalesMap);
-
-    const filteredOptionSales = (taxApiData.optionSales || []).filter(item => getYear(item.close_date) === numYear);
-    
-    const dividendYearData = taxApiData.dividendSummary?.[year] || {};
-    const transformedDividends = Object.entries(dividendYearData).map(([country, details], index) => ({
-      id: `${year}-${country}-${index}`,
-      linha: 801 + index,
-      codigo: 'E11',
-      paisFonte: country,
-      rendimentoBruto: details.gross_amt || 0,
-      impostoFonte: Math.abs(details.taxed_amt || 0),
-      impostoRetido: 0,
-      nifEntidade: '',
-      retencaoFonte: 0,
-    }));
-
-    const groupedOptions = filteredOptionSales.reduce((acc, row) => {
-      const country = row.country_code || 'Unknown';
-      if (!acc[country]) {
-        acc[country] = { country_code: country, rendimentoLiquido: 0, impostoPago: 0 };
-      }
-      acc[country].rendimentoLiquido += (row.delta || 0) - Math.abs(row.commission || 0);
-      acc[country].impostoPago += 0; // Assuming options usually have no withholding tax, explicitly summing 0
-      return acc;
-    }, {});
-
     return {
-      stockSaleDetails: groupedStockSales,
-      optionSaleDetails: filteredOptionSales,
-      dividendTaxReportRows: transformedDividends,
-      groupedOptionData: Object.values(groupedOptions),
+      stockSaleDetails: filterAndGroupStockSales(taxApiData.stockSales, year),
+      dividendTaxReportRows: transformDividendsForTable(taxApiData.dividendSummary, taxApiData.dividendTransactions, year),
+      groupedOptionData: groupOptionsByCountry(taxApiData.optionSales, year),
     };
+  }, [selectedYear, taxApiData]);
+
+  const [selectedLine, setSelectedLine] = useState(null);
+  const closeLineDetail = useCallback(() => setSelectedLine(null), []);
+
+  // The selected line belongs to the data and year it was opened from.
+  useEffect(() => {
+    setSelectedLine(null);
   }, [selectedYear, taxApiData]);
 
   const loading = queryLoading || (token && !taxApiData && !apiError);
@@ -172,32 +150,23 @@ export default function TaxPage() {
     setSelectedYear(event.target.value);
   };
 
-  const stockTotals = useMemo(() => stockSaleDetails.reduce(
-    (acc, row) => {
-      acc.realizacao += row.SaleAmountEUR || 0;
-      acc.aquisicao += Math.abs(row.BuyAmountEUR || 0);
-      acc.despesas += row.Commission || 0;
-      return acc;
-    }, { realizacao: 0, aquisicao: 0, despesas: 0, imposto: 0 }
-  ), [stockSaleDetails]);
+  const getLineRowProps = (type, lineNumber, code, country, line) => ({
+    selected: selectedLine?.type === type && selectedLine?.lineNumber === lineNumber,
+    tabIndex: 0,
+    onClick: () => setSelectedLine({ type, lineNumber, code, country, line }),
+    onKeyDown: (event) => {
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        setSelectedLine({ type, lineNumber, code, country, line });
+      }
+    },
+  });
 
-  const optionTotals = useMemo(() => groupedOptionData.reduce(
-    (acc, group) => {
-      acc.rendimentoLiquido += group.rendimentoLiquido || 0;
-      acc.imposto += group.impostoPago || 0;
-      return acc;
-    }, { rendimentoLiquido: 0, imposto: 0 }
-  ), [groupedOptionData]);
+  const stockTotals = useMemo(() => calculateStockTotals(stockSaleDetails), [stockSaleDetails]);
 
-  const dividendTotals = useMemo(() => dividendTaxReportRows.reduce(
-    (acc, row) => {
-      acc.rendimentoBruto += row.rendimentoBruto || 0;
-      acc.impostoFonte += row.impostoFonte || 0;
-      acc.impostoRetido += row.impostoRetido || 0;
-      acc.retencaoFonte += row.retencaoFonte || 0;
-      return acc;
-    }, { rendimentoBruto: 0, impostoFonte: 0, impostoRetido: 0, retencaoFonte: 0 }
-  ), [dividendTaxReportRows]);
+  const optionTotals = useMemo(() => calculateOptionTotals(groupedOptionData), [groupedOptionData]);
+
+  const dividendTotals = useMemo(() => calculateDividendTotals(dividendTaxReportRows), [dividendTaxReportRows]);
 
   if (!portfolioId) {
     return (
@@ -261,6 +230,9 @@ export default function TaxPage() {
         <Typography sx={{textAlign: 'center', my:2}}>Por favor, selecione um ano para visualizar os dados.</Typography>
       ) : (
         <>
+          <Typography variant="body2" color="text.secondary">
+            Clique numa linha para ver as transações usadas no cálculo.
+          </Typography>
           <Typography variant="h5" component="h2" gutterBottom sx={{ mt: 2, color: '#0183cb', borderBottom: '1px solid #0183cb', pb: 1, fontSize: '1.1rem' }}>
             Anexo J - Quadro 8: Rendimentos de Capitais (Categoria E) - Obtidos no Estrangeiro
           </Typography>
@@ -291,7 +263,7 @@ export default function TaxPage() {
                 <TableBody>
                   {dividendTaxReportRows.length > 0 ? (
                     dividendTaxReportRows.map((row) => (
-                      <TableRow hover key={row.id}>
+                      <SelectableTableRow key={row.id} {...getLineRowProps('dividend', row.linha, row.codigo, row.paisFonte, row)}>
                         <StyledTableBodyCell>{row.linha}</StyledTableBodyCell>
                         <StyledTableBodyCell align="left">{row.codigo}</StyledTableBodyCell>
                         <StyledTableBodyCell align="left">{row.paisFonte}</StyledTableBodyCell>
@@ -301,7 +273,7 @@ export default function TaxPage() {
                         <StyledTableBodyCell>{row.impostoRetido.toFixed(2)}</StyledTableBodyCell>
                         <StyledTableBodyCell align="left">{row.nifEntidade}</StyledTableBodyCell>
                         <StyledTableBodyCell>{row.retencaoFonte.toFixed(2)}</StyledTableBodyCell>
-                      </TableRow>
+                      </SelectableTableRow>
                     ))
                   ) : ( <TableRow><StyledTableBodyCell colSpan={9}>{UI_TEXT.noDataAvailable}</StyledTableBodyCell></TableRow> )}
                 </TableBody>
@@ -370,7 +342,7 @@ export default function TaxPage() {
                    <TableBody>
                     {stockSaleDetails.length > 0 ? (
                       stockSaleDetails.map((row, index) => (
-                        <TableRow hover key={`${row.ISIN}-${row.SaleDate}-${index}`}>
+                        <SelectableTableRow key={`${row.ISIN}-${row.SaleDate}-${index}`} {...getLineRowProps('stock', 951 + index, 'G01', row.country_code, row)}>
                             <StyledTableBodyCell>{951 + index}</StyledTableBodyCell>
                             <StyledTableBodyCell>{row.country_code || ''}</StyledTableBodyCell>
                             <StyledTableBodyCell>G01</StyledTableBodyCell>
@@ -385,7 +357,7 @@ export default function TaxPage() {
                             <StyledTableBodyCell>{row.Commission?.toFixed(2)}</StyledTableBodyCell>
                             <StyledTableBodyCell>{/* Imposto Estrang. */}</StyledTableBodyCell>
                             <StyledTableBodyCell>{/* País Contraparte */}</StyledTableBodyCell>
-                        </TableRow>
+                        </SelectableTableRow>
                       ))
                     ) : ( <TableRow><StyledTableBodyCell colSpan={14}>{UI_TEXT.noDataAvailable}</StyledTableBodyCell></TableRow> )}
                    </TableBody>
@@ -433,14 +405,14 @@ export default function TaxPage() {
                     <TableBody>
                     {groupedOptionData.length > 0 ? (
                       groupedOptionData.map((group, index) => (
-                        <TableRow hover key={`${group.country_code}-${index}`}>
+                        <SelectableTableRow key={`${group.country_code}-${index}`} {...getLineRowProps('option', 991 + index, 'G30', group.country_code, group)}>
                            <StyledTableBodyCell>{991 + index}</StyledTableBodyCell>
                            <StyledTableBodyCell align="left">G30</StyledTableBodyCell>
                            <StyledTableBodyCell align="left">{group.country_code}</StyledTableBodyCell>
                            <StyledTableBodyCell>{(group.rendimentoLiquido || 0).toFixed(2)}</StyledTableBodyCell>
                            <StyledTableBodyCell>{(group.impostoPago || 0).toFixed(2)}</StyledTableBodyCell>
                            <StyledTableBodyCell align="left">{/* País Contraparte */}</StyledTableBodyCell>
-                        </TableRow>
+                        </SelectableTableRow>
                       ))
                     ) : ( <TableRow><StyledTableBodyCell colSpan={6}>{UI_TEXT.noDataAvailable}</StyledTableBodyCell></TableRow> )}
                     </TableBody>
@@ -468,6 +440,7 @@ export default function TaxPage() {
           </Box>
         </>
       )}
+      <TaxLineDetailDrawer selectedLine={selectedLine} onClose={closeLineDetail} />
     </Box>
   );
 }
