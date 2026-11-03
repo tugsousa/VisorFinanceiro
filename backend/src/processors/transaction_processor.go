@@ -4,7 +4,6 @@ package processors
 import (
 	"crypto/sha256"
 	"encoding/hex"
-	"fmt"
 
 	"github.com/username/taxfolio/backend/src/logger"
 	"github.com/username/taxfolio/backend/src/models"
@@ -88,7 +87,6 @@ func (p *TransactionProcessor) Process(txs []models.CanonicalTransaction) []mode
 
 // generateHash creates a unique hash for the transaction based on key source data.
 func generateHash(tx models.CanonicalTransaction) string {
-	input := fmt.Sprintf(tx.RawText)
-	hash := sha256.Sum256([]byte(input))
+	hash := sha256.Sum256([]byte(tx.RawText))
 	return hex.EncodeToString(hash[:])
 }
