@@ -228,7 +228,10 @@ const DashboardPage = () => {
             const prevSnapshot = pastSnapshots.length > 0 ? pastSnapshots[pastSnapshots.length - 1] : null;
 
             if (prevSnapshot) {
-                const rawDiff = totalPortfolioValue - prevSnapshot.portfolio_value;
+                // The snapshots calculate cash differently from cashBalance, so comparing
+                // against them needs their cash, or the difference shows up as a daily change.
+                const snapshotCash = historicalData[historicalData.length - 1].cash_balance || 0;
+                const rawDiff = equityCurrentValue + snapshotCash - prevSnapshot.portfolio_value;
                 dailyChangeValue = rawDiff - netFlowsToday;
                 if (prevSnapshot.portfolio_value > 0) {
                     dailyChangePct = (dailyChangeValue / prevSnapshot.portfolio_value) * 100;

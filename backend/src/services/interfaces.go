@@ -66,4 +66,5 @@ type PriceService interface {
 	// Métodos adicionados para paralelização
 	FetchTickerForISIN(isin string) (string, string, string, error)
 	FetchMetadata(ticker string) (string, string, string, error)
+	FindTickerWithHistory(isin, currentTicker string) (string, PriceMap, string, error)
 }

@@ -156,9 +156,7 @@ func (pus *ParallelUploadService) ProcessUploadParallel(
 	// FIX #7: determine the earliest new transaction date for incremental rebuild.
 	var earliestNewTxDate string
 	for _, tx := range newlyProcessedTxs {
-		if earliestNewTxDate == "" || tx.Date < earliestNewTxDate {
-			earliestNewTxDate = tx.Date
-		}
+		earliestNewTxDate = earliestTxDate(earliestNewTxDate, tx.Date)
 	}
 
 	err = pus.batchDatabaseInsert(newlyProcessedTxs, userID, portfolioID, source, filename, filesize)

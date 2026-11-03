@@ -135,6 +135,16 @@ func InsertMapping(db *sql.DB, mapping ISINTickerMap) error {
 	return err
 }
 
+// UpdateMappingTicker points an existing ISIN mapping to a different listing.
+func UpdateMappingTicker(db *sql.DB, isin, ticker, exchange, currency string) error {
+	query := `
+		UPDATE isin_ticker_map
+		SET ticker_symbol = ?, exchange = ?, currency = ?, last_checked_at = ?
+		WHERE isin = ?`
+	_, err := db.Exec(query, ticker, exchange, currency, time.Now(), isin)
+	return err
+}
+
 // BatchInsertMappings inserts multiple ISIN-to-ticker mappings in a single batch operation.
 // Optimized for better performance with larger batches.
 func BatchInsertMappings(db *sql.DB, mappings []ISINTickerMap) error {
