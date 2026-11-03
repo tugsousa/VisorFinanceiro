@@ -41,9 +41,19 @@ func (p *TransactionProcessor) Process(txs []models.CanonicalTransaction) []mode
 
 		// NOVO PASSO 3: Converter a comissão para EUR.
 		// O campo tx.Commission (Canonical) tem o valor na moeda original.
+		// A comissão pode ser cobrada numa moeda diferente da transação.
+		commissionRate := tx.ExchangeRate
+		if tx.CommissionCurrency != "" && tx.CommissionCurrency != tx.Currency {
+			commissionRate, err = GetExchangeRate(tx.CommissionCurrency, tx.TransactionDate)
+			if err != nil {
+				logger.L.Warn("Could not find commission exchange rate, defaulting to 1.0", "currency", tx.CommissionCurrency, "date", tx.TransactionDate, "orderID", tx.OrderID, "error", err)
+				commissionRate = 1.0
+			}
+		}
+
 		var commissionEUR float64
-		if tx.ExchangeRate > 0 {
-			commissionEUR = tx.Commission / tx.ExchangeRate
+		if commissionRate > 0 {
+			commissionEUR = tx.Commission / commissionRate
 		} else {
 			commissionEUR = tx.Commission // Assume 1:1 se a taxa for 0 ou 1
 		}
