@@ -6,7 +6,7 @@ import "time"
 type HoldingWithValue struct {
 	ISIN              string  `json:"isin"`
 	ProductName       string  `json:"product_name"`
-	Quantity          int     `json:"quantity"`
+	Quantity          float64 `json:"quantity"`
 	TotalCostBasisEUR float64 `json:"total_cost_basis_eur"`
 	CurrentPriceEUR   float64 `json:"current_price_eur"`
 	MarketValueEUR    float64 `json:"market_value_eur"`
@@ -25,7 +25,7 @@ type SaleDetail struct {
 	BuySource        string // Broker of the purchase; FIFO matches by ISIN, so it can differ from SaleSource
 	ProductName      string
 	ISIN             string
-	Quantity         int
+	Quantity         float64
 	SalePrice        float64
 	SaleAmount       float64 // Sale amount in original currency
 	SaleCurrency     string
@@ -43,12 +43,23 @@ type SaleDetail struct {
 	CountryCode      string  `json:"country_code"` // Country code derived from ISIN (e.g., "840 - United States of America (the)")
 }
 
+// UnmatchedSale is the part of a stock sale with no earlier purchase to match, such as when the
+// uploaded history is incomplete. It has no cost basis, so it can't be part of the realized gains.
+type UnmatchedSale struct {
+	SaleDate      string  `json:"sale_date"`
+	Source        string  `json:"source"`
+	ProductName   string  `json:"product_name"`
+	ISIN          string  `json:"isin"`
+	Quantity      float64 `json:"quantity"`
+	SaleAmountEUR float64 `json:"sale_amount_eur"`
+}
+
 // PurchaseLot represents remaining unsold purchase lots for stocks.
 type PurchaseLot struct {
 	BuyDate      string  `json:"buy_date"`
 	ProductName  string  `json:"product_name"`
 	ISIN         string  `json:"isin"`
-	Quantity     int     `json:"quantity"`
+	Quantity     float64 `json:"quantity"`
 	BuyPrice     float64 `json:"buyPrice"`
 	BuyAmount    float64 `json:"buy_amount"`     // Purchase amount in original currency
 	BuyCurrency  string  `json:"buy_currency"`   // Original purchase currency
@@ -62,7 +73,7 @@ type OptionSaleDetail struct {
 	OpenSource     string  `json:"open_source"`  // Broker of the opening transaction
 	CloseSource    string  `json:"close_source"` // Broker of the closing transaction
 	ProductName    string  `json:"product_name"` // e.g., "FLW P31.00 18MAR22"
-	Quantity       int     `json:"quantity"`
+	Quantity       float64 `json:"quantity"`
 	OpenPrice      float64 `json:"open_price"`
 	OpenAmount     float64 `json:"open_amount"` // Open amount in original currency
 	OpenCurrency   string  `json:"open_currency"`
@@ -82,7 +93,7 @@ type OptionSaleDetail struct {
 type OptionHolding struct {
 	OpenDate      string  `json:"open_date"`
 	ProductName   string  `json:"product_name"`
-	Quantity      int     `json:"quantity"` // Positive for long positions, negative for short positions
+	Quantity      float64 `json:"quantity"` // Positive for long positions, negative for short positions
 	OpenPrice     float64 `json:"open_price"`
 	OpenAmount    float64 `json:"open_amount"` // Open amount in original currency
 	OpenCurrency  string  `json:"open_currency"`

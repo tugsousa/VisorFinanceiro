@@ -5,21 +5,58 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/patrickmn/go-cache"
 	"github.com/username/taxfolio/backend/src/logger"
 	"github.com/username/taxfolio/backend/src/models"
+	"github.com/username/taxfolio/backend/src/utils"
 )
 
 // Initialize a new cache for exchange rates.
 // We use a longer expiration (24h) since historical rates don't change.
 var rateCache = cache.New(24*time.Hour, 48*time.Hour)
 
+// yahooHistoryRetryDelay is how long to wait after a failed bulk fetch, so that an outage
+// doesn't add a request timeout to every transaction of an upload.
+const yahooHistoryRetryDelay = 5 * time.Minute
+
+// yahooFXTimezone is where Yahoo's FX days start. Used if a response doesn't report its timezone.
+const yahooFXTimezone = "Europe/London"
+
+// fetchSingleDayRate is the fallback rate source when Yahoo has no rate. Tests replace it.
+var fetchSingleDayRate = fetchECBRate
+
+// minorCurrencies lists the subunits Yahoo and brokers can quote in. This is case-sensitive:
+// "GBp" is pence and "GBP" is pounds.
+var minorCurrencies = map[string]struct {
+	major         string
+	unitsPerMajor float64
+}{
+	"GBp": {"GBP", 100},
+	"GBX": {"GBP", 100},
+	"ZAc": {"ZAR", 100},
+	"ZAC": {"ZAR", 100},
+	"ILA": {"ILS", 100},
+}
+
+// MajorCurrency returns the currency that has exchange rates, and how many units of the given
+// currency make one unit of it.
+func MajorCurrency(currency string) (string, float64) {
+	if minor, ok := minorCurrencies[currency]; ok {
+		return minor.major, minor.unitsPerMajor
+	}
+	return currency, 1
+}
+
 // Local struct to parse Yahoo response
 type yahooRateResponse struct {
 	Chart struct {
 		Result []struct {
+			Meta struct {
+				ExchangeTimezoneName string `json:"exchangeTimezoneName"`
+			} `json:"meta"`
 			Timestamp  []int64 `json:"timestamp"`
 			Indicators struct {
 				Quote []struct {
@@ -36,12 +73,25 @@ func LoadHistoricalRates(filePath string) error {
 	return nil
 }
 
-// GetExchangeRate retrieves the exchange rate using an optimized bulk fetch strategy.
+// GetExchangeRate returns how many units of the currency one EUR buys on a date.
 func GetExchangeRate(currency string, date time.Time) (float64, error) {
 	if currency == "EUR" {
 		return 1.0, nil
 	}
+	if currency == "" {
+		return 0, fmt.Errorf("currency is empty")
+	}
 
+	major, unitsPerMajor := MajorCurrency(currency)
+	rate, err := getMajorCurrencyRate(major, date)
+	if err != nil {
+		return 0, err
+	}
+	return rate * unitsPerMajor, nil
+}
+
+// getMajorCurrencyRate retrieves the exchange rate using an optimized bulk fetch strategy.
+func getMajorCurrencyRate(currency string, date time.Time) (float64, error) {
 	// Step A: Check if we have bulk-fetched this currency recently
 	historyKey := fmt.Sprintf("history-fetched-%s", currency)
 	_, historyLoaded := rateCache.Get(historyKey)
@@ -51,6 +101,7 @@ func GetExchangeRate(currency string, date time.Time) (float64, error) {
 		err := fetchAndCacheYahooHistory(currency)
 		if err != nil {
 			logger.L.Warn("Exchange Rate: Yahoo bulk fetch failed, falling back to single-day ECB", "currency", currency, "error", err)
+			rateCache.Set(historyKey, true, yahooHistoryRetryDelay)
 		} else {
 			// Mark history as loaded for 24 hours
 			rateCache.Set(historyKey, true, 24*time.Hour)
@@ -77,7 +128,7 @@ func GetExchangeRate(currency string, date time.Time) (float64, error) {
 	// Step C: Ultimate Fallback (ECB API) - Only if cache is completely empty
 	logger.L.Warn("Exchange Rate: Cache miss after bulk fetch, trying ECB fallback", "currency", currency, "date", date.Format("2006-01-02"))
 
-	rate, err := fetchECBRate(currency, date)
+	rate, err := fetchSingleDayRate(currency, date)
 	if err == nil && rate > 0 {
 		cacheKey := fmt.Sprintf("rate-%s-%s", currency, date.Format("2006-01-02"))
 		rateCache.Set(cacheKey, rate, cache.DefaultExpiration)
@@ -120,13 +171,24 @@ func fetchAndCacheYahooHistory(currency string) error {
 		return err
 	}
 
-	if data.Chart.Error != nil || len(data.Chart.Result) == 0 {
+	return cacheYahooRates(currency, ticker, data)
+}
+
+// cacheYahooRates stores each rate of a Yahoo response under its trading date.
+func cacheYahooRates(currency, ticker string, data yahooRateResponse) error {
+	if data.Chart.Error != nil || len(data.Chart.Result) == 0 || len(data.Chart.Result[0].Indicators.Quote) == 0 {
 		return fmt.Errorf("yahoo api error or empty result")
 	}
 
 	result := data.Chart.Result[0]
 	timestamps := result.Timestamp
 	quotes := result.Indicators.Quote[0].Close
+
+	timezoneName := result.Meta.ExchangeTimezoneName
+	if timezoneName == "" {
+		timezoneName = yahooFXTimezone
+	}
+	location := utils.ExchangeLocation(timezoneName)
 
 	if len(timestamps) != len(quotes) {
 		return fmt.Errorf("mismatched timestamp and quote lengths")
@@ -144,7 +206,7 @@ func fetchAndCacheYahooHistory(currency string) error {
 		}
 
 		// Convert timestamp to YYYY-MM-DD string
-		dateStr := time.Unix(ts, 0).Format("2006-01-02")
+		dateStr := time.Unix(ts, 0).In(location).Format("2006-01-02")
 
 		// Create cache key: rate-USD-2023-01-01
 		key := fmt.Sprintf("rate-%s-%s", currency, dateStr)
@@ -162,13 +224,15 @@ func fetchAndCacheYahooHistory(currency string) error {
 	return nil
 }
 
-// fetchECBRate performs the existing logic for querying the ECB (Single Day)
+// fetchECBRate returns the latest ECB rate up to a date. The ECB has no rates on weekends and
+// holidays, so it asks for the previous days too.
 func fetchECBRate(currency string, date time.Time) (float64, error) {
 	dateStr := date.Format("2006-01-02")
+	startDateStr := date.AddDate(0, 0, -5).Format("2006-01-02")
 	seriesKey := fmt.Sprintf("D.%s.EUR.SP00.A", currency)
 	url := fmt.Sprintf(
 		"https://data-api.ecb.europa.eu/service/data/EXR/%s?startPeriod=%s&endPeriod=%s&format=jsondata",
-		seriesKey, dateStr, dateStr,
+		seriesKey, startDateStr, dateStr,
 	)
 
 	logger.L.Debug("ECB Fallback Request", "url", url)
@@ -192,17 +256,25 @@ func fetchECBRate(currency string, date time.Time) (float64, error) {
 	return extractRateFromResponse(ecbData)
 }
 
-// extractRateFromResponse safely navigates the complex ECB JSON structure
+// extractRateFromResponse safely navigates the complex ECB JSON structure.
+// Observations are keyed by their position in the period, so the highest key is the latest.
 func extractRateFromResponse(data models.ECBResponse) (float64, error) {
 	if len(data.DataSets) == 0 {
 		return 0, fmt.Errorf("no dataSets in response")
 	}
 	seriesMap := data.DataSets[0].Series
 	for _, seriesData := range seriesMap {
-		if observations, ok := seriesData.Observations["0"]; ok {
-			if len(observations) > 0 {
-				return observations[0], nil
+		latestPosition := -1
+		var latestRate float64
+		for key, observation := range seriesData.Observations {
+			position, err := strconv.Atoi(key)
+			if err == nil && position > latestPosition && len(observation) > 0 {
+				latestPosition = position
+				latestRate = observation[0]
 			}
+		}
+		if latestPosition >= 0 {
+			return latestRate, nil
 		}
 	}
 	return 0, fmt.Errorf("observation value not found")

@@ -31,6 +31,13 @@ export const formatCurrency = (value, options = {}) => {
   return new Intl.NumberFormat('pt-PT', finalOptions).format(val);
 };
 
+/**
+ * Removes float noise from a share quantity, which can be fractional.
+ * @param {number|null|undefined} value - The quantity to format.
+ * @returns {number|string} The quantity, or an empty string if there is none.
+ */
+export const formatQuantity = (value) => (typeof value === 'number' ? Number(value.toFixed(6)) : '');
+
 export const calculateAnnualizedReturn = (netReturn, costBasis, daysHeld) => {
     const numDaysHeld = Number(daysHeld);
 

@@ -12,7 +12,8 @@ import { useDashboardData } from '../hooks/useDashboardData';
 // --- FIXED IMPORT: Added useQueryClient ---
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 
-import { apiFetchHistoricalChartData } from '../../analytics/api/analyticsApi';
+import { apiFetchCashBalance, apiFetchHistoricalChartData } from '../../analytics/api/analyticsApi';
+import { getHoldingValueEUR, hasMarketPrice } from '../../analytics/logic/holdingsCalculations';
 import { apiRefreshPortfolioSnapshot } from '../../portfolio/api/portfolioApi';
 
 // Components
@@ -75,11 +76,17 @@ const DashboardPage = () => {
         enabled: !!activePortfolio?.id,
     });
 
+    const { data: cashBalanceData, isLoading: isCashLoading } = useQuery({
+        queryKey: ['cashBalance', token, activePortfolio?.id],
+        queryFn: async () => (await apiFetchCashBalance(activePortfolio.id)).data,
+        enabled: !!token && !!activePortfolio?.id,
+    });
+
     // Upload Progress State
     const [showUploadProgress, setShowUploadProgress] = useState(false);
 
     // Combined Loading State
-    const isLoading = isDataLoading || isHistoryLoading || isPortfolioLoading;
+    const isLoading = isDataLoading || isHistoryLoading || isCashLoading || isPortfolioLoading;
 
     // --- TIME-BASED CONDITIONAL REFRESH LOGIC WITH SMART REFRESH ---
     useEffect(() => {
@@ -173,11 +180,11 @@ const DashboardPage = () => {
         if (!currentHoldingsValueData || !allTransactionsData) return defaults;
 
         // A. Equity
-        const equityCurrentValue = currentHoldingsValueData.reduce((acc, h) => acc + (h.market_value_eur || 0), 0);
+        const equityCurrentValue = currentHoldingsValueData.reduce((acc, h) => acc + getHoldingValueEUR(h), 0);
         const equityInvested = currentHoldingsValueData.reduce((acc, h) => acc + Math.abs(h.total_cost_basis_eur || 0), 0);
 
         // B. Cash
-        const latestBalances = {};
+        const currentCash = cashBalanceData?.cash_balance || 0;
         let sumDeposits = 0;
         let sumWithdrawals = 0;
         let netFlowsToday = 0;
@@ -199,18 +206,6 @@ const DashboardPage = () => {
                     netFlowsToday += amt;
                 }
             }
-
-            if (tx.cash_balance !== undefined && tx.cash_balance !== null && tx.source) {
-                const currentStored = latestBalances[tx.source];
-                if (!currentStored || (txDate && currentStored.date && txDate > currentStored.date) || (tx.id > currentStored.id)) {
-                    latestBalances[tx.source] = { balance: tx.cash_balance, currency: tx.balance_currency, date: txDate, id: tx.id };
-                }
-            }
-        });
-
-        let currentCash = 0;
-        Object.values(latestBalances).forEach(item => {
-            currentCash += item.balance;
         });
 
         // C. Totais
@@ -228,10 +223,7 @@ const DashboardPage = () => {
             const prevSnapshot = pastSnapshots.length > 0 ? pastSnapshots[pastSnapshots.length - 1] : null;
 
             if (prevSnapshot) {
-                // The snapshots calculate cash differently from cashBalance, so comparing
-                // against them needs their cash, or the difference shows up as a daily change.
-                const snapshotCash = historicalData[historicalData.length - 1].cash_balance || 0;
-                const rawDiff = equityCurrentValue + snapshotCash - prevSnapshot.portfolio_value;
+                const rawDiff = equityCurrentValue + currentCash - prevSnapshot.portfolio_value;
                 dailyChangeValue = rawDiff - netFlowsToday;
                 if (prevSnapshot.portfolio_value > 0) {
                     dailyChangePct = (dailyChangeValue / prevSnapshot.portfolio_value) * 100;
@@ -260,13 +252,13 @@ const DashboardPage = () => {
             dailyChangePct,
             annualizedReturn: xirr
         };
-    }, [currentHoldingsValueData, allTransactionsData, historicalData]);
+    }, [currentHoldingsValueData, allTransactionsData, historicalData, cashBalanceData]);
 
     const holdingsForGroupedView = useMemo(() => {
         if (!currentHoldingsValueData) return [];
         return currentHoldingsValueData.map(h => ({
             ...h,
-            marketValueEUR: h.market_value_eur,
+            marketValueEUR: getHoldingValueEUR(h),
             total_cost_basis_eur: Math.abs(h.total_cost_basis_eur)
         }));
     }, [currentHoldingsValueData]);
@@ -394,6 +386,12 @@ const DashboardPage = () => {
 
             {/* Upload Progress */}
             <UploadProgressComponent />
+
+            {currentHoldingsValueData?.some(h => !hasMarketPrice(h)) && (
+                <Alert severity="warning" sx={{ mb: 3 }}>
+                    Alguns ativos não têm preço de mercado disponível. Estão avaliados ao custo, por isso o valor total e o lucro podem não refletir o preço atual.
+                </Alert>
+            )}
 
             {/* SECTION 1: HEADER / KPIs */}
             <Box sx={{ mb: 8 }}>

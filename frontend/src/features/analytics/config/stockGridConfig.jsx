@@ -2,7 +2,7 @@
 import React from 'react';
 import { Box, Typography, CircularProgress, Tooltip, Divider, styled, tooltipClasses } from '@mui/material';
 import { gridNumberComparator, gridStringOrNumberComparator } from '@mui/x-data-grid';
-import { formatCurrency } from 'lib/utils/formatUtils';
+import { formatCurrency, formatQuantity } from 'lib/utils/formatUtils';
 import { parseDateRobust } from 'lib/utils/dateUtils';
 import { ALL_YEARS_OPTION } from 'constants';
 
@@ -76,13 +76,27 @@ const TotalProfitTooltipContent = ({ row }) => (
         <TooltipRow label="Comissões" value={-Math.abs(row.totalCommissions || 0)} color="error.main" />
         <Box sx={{ my: 1 }} />
         <Typography variant="caption" sx={{ color: 'text.disabled', display: 'block', mb: 0.5, textTransform: 'uppercase', fontSize: '0.7rem' }}>Não Realizado</Typography>
-        <TooltipRow label="P/L Aberto" value={row.unrealizedPL} color={row.unrealizedPL >= 0 ? 'success.main' : 'error.main'} />
+        <TooltipRow label="P/L Aberto" value={row.unrealizedPL || 0} color={(row.unrealizedPL || 0) >= 0 ? 'success.main' : 'error.main'} />
         <Divider sx={{ my: 1 }} />
         <TooltipRow label="LUCRO TOTAL" value={row.totalProfitAmount} isTotal={true} color={row.totalProfitAmount >= 0 ? 'success.main' : 'error.main'} />
     </Box>
 );
 
 // --- CELL RENDERERS ---
+
+const CostAsValueCell = ({ value }) => (
+    <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', justifyContent: 'center', height: '100%' }}>
+        <Tooltip title="Preço indisponível — a mostrar o custo como referência">
+            <Typography variant="body2" sx={{ color: 'text.secondary', fontStyle: 'italic' }}>{formatCurrency(value)}</Typography>
+        </Tooltip>
+    </Box>
+);
+
+const NotAvailableCell = () => (
+    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', height: '100%' }}>
+        <Typography variant="body2" sx={{ color: 'text.secondary' }}>N/A</Typography>
+    </Box>
+);
 
 const renderNameTickerCell = (params) => {
     if (params.row.isTotalRow) {
@@ -129,6 +143,7 @@ const renderCurrentValueCombinedCell = (params) => {
             </Box>
         );
     }
+    if (params.row.priceUnavailable) return <CostAsValueCell value={params.row.marketValueEUR} />;
     return (
         <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
             <Typography variant="body2">{formatCurrency(params.row.marketValueEUR)}</Typography>
@@ -278,6 +293,7 @@ const renderCostEURCell = (params) => {
 };
 
 const renderDetailedCurrentValue = (params) => {
+    if (params.row.priceUnavailable) return <CostAsValueCell value={params.row.marketValueEUR} />;
     const marketValue = params.row.marketValueEUR || 0;
     const currentPrice = params.row.current_price_eur || 0;
     return (
@@ -289,6 +305,7 @@ const renderDetailedCurrentValue = (params) => {
 };
 
 const renderUnrealizedGainsDetailedCell = (params) => {
+    if (params.row.priceUnavailable) return <NotAvailableCell />;
     const totalAmount = params.row.unrealizedPLTotal || 0;
     const perShareAmount = params.row.unrealizedPLPerShare || 0;
     const isNegative = totalAmount < 0;
@@ -302,6 +319,7 @@ const renderUnrealizedGainsDetailedCell = (params) => {
 };
 
 const renderDetailedPerformance = (params) => {
+    if (params.row.priceUnavailable) return <NotAvailableCell />;
     const totalReturn = params.row.returnPercentage || 0;
     const annualized = params.row.annualizedReturnStr || 'N/A';
     const color = totalReturn >= 0 ? 'success.main' : 'error.main';
@@ -339,7 +357,7 @@ export const getGroupedColumns = (hiddenCols, isHistorical) => {
     if (isHistorical) {
         return [
             { field: 'product_name_ticker', headerName: 'Nome / Ticker', flex: 1.5, minWidth: 200, valueGetter: (value, row) => row.product_name, renderCell: renderNameTickerCell },
-            { field: 'quantity', headerName: 'Qtd', type: 'number', width: 110, align: 'right', headerAlign: 'right', valueFormatter: (val, row) => row.isTotalRow ? '' : val },
+            { field: 'quantity', headerName: 'Qtd', type: 'number', width: 110, align: 'right', headerAlign: 'right', valueFormatter: (val, row) => row.isTotalRow ? '' : formatQuantity(val) },
             { field: 'total_cost_basis_eur', headerName: 'Custo Total (€)', type: 'number', width: 140, align: 'right', headerAlign: 'right', valueFormatter: (value) => formatCurrency(value), renderCell: (params) => params.row.isTotalRow ? <Box sx={{fontWeight: 'bold'}}>{formatCurrency(params.value)}</Box> : formatCurrency(params.value) },
             { field: 'totalDividends', headerName: 'Dividendos (Hist.)', type: 'number', width: 160, align: 'right', headerAlign: 'right', renderCell: renderLifetimeMetricCell },
             { field: 'totalRealizedStockPL', headerName: 'L/P Ações (Hist.)', type: 'number', width: 160, align: 'right', headerAlign: 'right', renderCell: renderLifetimeMetricCell },
@@ -349,7 +367,7 @@ export const getGroupedColumns = (hiddenCols, isHistorical) => {
 
     let columns = [
         { field: 'product_name_ticker', headerName: 'Nome / ISIN', flex: 1.5, minWidth: 200, valueGetter: (value, row) => row.product_name, renderCell: renderNameTickerCell },
-        { field: 'quantity', headerName: 'Qtd', type: 'number', width: 80, align: 'right', headerAlign: 'right', valueFormatter: (val, row) => row.isTotalRow ? '' : val },
+        { field: 'quantity', headerName: 'Qtd', type: 'number', width: 80, align: 'right', headerAlign: 'right', valueFormatter: (val, row) => row.isTotalRow ? '' : formatQuantity(val) },
         { field: 'total_cost_basis_eur', headerName: 'Custo Médio', type: 'number', width: 120, align: 'right', headerAlign: 'right', renderCell: renderCostBasisCombinedCell },
         { field: 'marketValueEUR', headerName: 'Valor Atual', type: 'number', width: 120, align: 'right', headerAlign: 'right', renderCell: renderCurrentValueCombinedCell },
     ];

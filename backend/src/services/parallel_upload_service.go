@@ -100,7 +100,10 @@ func (pus *ParallelUploadService) ProcessUploadParallel(
 
 	websocket.BroadcastUploadProgress(userID, portfolioID, 15, 100, "processing", "Processando transações")
 
-	newlyProcessedTxs := pus.transactionProc.Process(canonicalTxs)
+	newlyProcessedTxs, err := pus.transactionProc.Process(canonicalTxs)
+	if err != nil {
+		return nil, err
+	}
 	if len(newlyProcessedTxs) == 0 {
 		return &ParallelUploadResult{
 			StartTime: startTime,

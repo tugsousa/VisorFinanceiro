@@ -42,6 +42,21 @@ func isBinaryContent(buf []byte) bool {
 	return false
 }
 
+// trimIncompleteRune removes a multi-byte character cut off at the end of a sample, which would
+// otherwise make valid UTF-8 look invalid.
+func trimIncompleteRune(sample []byte) []byte {
+	for size := 1; size < utf8.UTFMax && size <= len(sample); size++ {
+		start := len(sample) - size
+		if utf8.RuneStart(sample[start]) {
+			if !utf8.FullRune(sample[start:]) {
+				return sample[:start]
+			}
+			break
+		}
+	}
+	return sample
+}
+
 // SECURITY FIX: Check for XML DOCTYPE to prevent XXE
 func containsXMLDoctype(buf []byte) bool {
 	// Simple check for the presence of "<!DOCTYPE" which is required for XXE attacks
@@ -73,7 +88,12 @@ func ValidateFileContentByMagicBytes(file io.ReadSeeker) (string, error) {
 		return "", fmt.Errorf("file is empty")
 	}
 
-	if isBinaryContent(buffer[:n]) {
+	sample := buffer[:n]
+	if n == len(buffer) { // Only a full buffer can have cut a character off
+		sample = trimIncompleteRune(sample)
+	}
+
+	if isBinaryContent(sample) {
 		logger.L.Warn("File rejected: Binary content detected in text upload")
 		return "application/octet-stream", fmt.Errorf("file appears to be binary or executable")
 	}

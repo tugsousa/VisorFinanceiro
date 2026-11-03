@@ -2,6 +2,7 @@ package processors
 
 import (
 	"log"
+	"math"
 	"sort"
 	"strings" // Ensure strings package is imported
 
@@ -58,7 +59,7 @@ func (p *optionProcessorImpl) Process(transactions []models.ProcessedTransaction
 				remainingBuyQty := qty
 				for remainingBuyQty > 0 && len(openShortPositions) > 0 {
 					shortPos := openShortPositions[0]
-					matchQty := utils.MinInt(remainingBuyQty, shortPos.Quantity) // Use utils.MinInt
+					matchQty := math.Min(remainingBuyQty, shortPos.Quantity)
 
 					// Create Sale Detail (Closing a short position - Buy closes Short)
 					saleDetail := createOptionSaleDetail(shortPos, currentTx, matchQty, false) // isLongPosition = false
@@ -85,7 +86,7 @@ func (p *optionProcessorImpl) Process(transactions []models.ProcessedTransaction
 				remainingSellQty := qty
 				for remainingSellQty > 0 && len(openLongPositions) > 0 {
 					longPos := openLongPositions[0]
-					matchQty := utils.MinInt(remainingSellQty, longPos.Quantity) // Use utils.MinInt
+					matchQty := math.Min(remainingSellQty, longPos.Quantity)
 
 					// Create Sale Detail (Closing a long position - Sell closes Long)
 					saleDetail := createOptionSaleDetail(longPos, currentTx, matchQty, true) // isLongPosition = true
@@ -134,7 +135,7 @@ func filterOptionTransactions(transactions []models.ProcessedTransaction) []mode
 			// Ensure quantity is positive for easier matching logic later
 			// The sign of the amount will determine buy/sell direction
 			if tx.Quantity < 0 {
-				log.Printf("Warning: Option transaction %s has negative quantity %d. Taking absolute value.", tx.OrderID, tx.Quantity)
+				log.Printf("Warning: Option transaction %s has negative quantity %v. Taking absolute value.", tx.OrderID, tx.Quantity)
 				tx.Quantity = -tx.Quantity
 			}
 			if tx.Quantity == 0 {
@@ -174,7 +175,7 @@ func sortTransactionsByDate(transactions []models.ProcessedTransaction) {
 
 // Creates an OptionSaleDetail from opening and closing transactions.
 // isLongPosition indicates if the openTx represented buying to open (long).
-func createOptionSaleDetail(openTx, closeTx *models.ProcessedTransaction, quantity int, isLongPosition bool) models.OptionSaleDetail {
+func createOptionSaleDetail(openTx, closeTx *models.ProcessedTransaction, quantity float64, isLongPosition bool) models.OptionSaleDetail {
 	var delta float64
 	// Ensure quantities are not zero before division
 	// Use OriginalQuantity for per-unit calculations of the opening leg
@@ -199,12 +200,12 @@ func createOptionSaleDetail(openTx, closeTx *models.ProcessedTransaction, quanti
 	// Calculate amounts per unit for the matched quantity
 	openAmountPerUnit := 0.0
 	if openOriginalQty != 0 {
-		openAmountPerUnit = openTx.Amount / float64(openOriginalQty) // Use Original Qty
+		openAmountPerUnit = openTx.Amount / openOriginalQty // Use Original Qty
 	}
 	closeAmountPerUnit := 0.0
 	// Handle cases like exercise/assignment where Amount might be 0 but Price isn't necessarily
 	if closeTx.Amount != 0 && closeQty != 0 {
-		closeAmountPerUnit = closeTx.Amount / float64(closeQty)
+		closeAmountPerUnit = closeTx.Amount / closeQty
 	} else if closeTx.Price != 0 { // If amount is 0, use price as per-unit value
 		closeAmountPerUnit = closeTx.Price
 	}
@@ -214,7 +215,7 @@ func createOptionSaleDetail(openTx, closeTx *models.ProcessedTransaction, quanti
 	openAmountEURPerUnit := 0.0
 	if openOriginalQty != 0 { // Use Original Qty
 		if openTx.ExchangeRate != 0 {
-			openAmountEURPerUnit = (openTx.Amount / float64(openOriginalQty)) / openTx.ExchangeRate
+			openAmountEURPerUnit = (openTx.Amount / openOriginalQty) / openTx.ExchangeRate
 		} else {
 			openAmountEURPerUnit = openAmountPerUnit // Assume 1:1 if rate is missing/zero
 		}
@@ -225,7 +226,7 @@ func createOptionSaleDetail(openTx, closeTx *models.ProcessedTransaction, quanti
 		if closeTx.ExchangeRate != 0 {
 			// Base EUR calculation on Amount if available, otherwise Price
 			if closeTx.Amount != 0 {
-				closeAmountEURPerUnit = (closeTx.Amount / float64(closeQty)) / closeTx.ExchangeRate
+				closeAmountEURPerUnit = (closeTx.Amount / closeQty) / closeTx.ExchangeRate
 			} else if closeTx.Price != 0 {
 				// Assume Price is in the original currency if Amount is 0
 				closeAmountEURPerUnit = closeTx.Price / closeTx.ExchangeRate
@@ -236,21 +237,21 @@ func createOptionSaleDetail(openTx, closeTx *models.ProcessedTransaction, quanti
 	}
 
 	// Calculate total amounts for the matched quantity
-	openAmountMatched := openAmountPerUnit * float64(quantity)
-	closeAmountMatched := closeAmountPerUnit * float64(quantity)
-	openAmountEURMatched := openAmountEURPerUnit * float64(quantity)
-	closeAmountEURMatched := closeAmountEURPerUnit * float64(quantity)
+	openAmountMatched := openAmountPerUnit * quantity
+	closeAmountMatched := closeAmountPerUnit * quantity
+	openAmountEURMatched := openAmountEURPerUnit * quantity
+	closeAmountEURMatched := closeAmountEURPerUnit * quantity
 
 	// Commission allocation (simple prorata based on quantity matched)
 	openCommissionPerUnit := 0.0
 	if openOriginalQty != 0 { // Use Original Qty
-		openCommissionPerUnit = openTx.Commission / float64(openOriginalQty)
+		openCommissionPerUnit = openTx.Commission / openOriginalQty
 	}
 	closeCommissionPerUnit := 0.0
 	if closeQty != 0 { // Use closeQty for closing leg
-		closeCommissionPerUnit = closeTx.Commission / float64(closeQty)
+		closeCommissionPerUnit = closeTx.Commission / closeQty
 	}
-	totalCommissionMatched := (openCommissionPerUnit + closeCommissionPerUnit) * float64(quantity)
+	totalCommissionMatched := (openCommissionPerUnit + closeCommissionPerUnit) * quantity
 
 	delta = openAmountEURMatched + closeAmountEURMatched
 
@@ -278,7 +279,7 @@ func createOptionSaleDetail(openTx, closeTx *models.ProcessedTransaction, quanti
 }
 
 // Creates an OptionHolding from an open transaction.
-func createOptionHolding(tx *models.ProcessedTransaction, quantity int) models.OptionHolding {
+func createOptionHolding(tx *models.ProcessedTransaction, quantity float64) models.OptionHolding {
 	// Ensure the holding reflects the remaining quantity if partially closed
 	originalQty := tx.Quantity
 	if originalQty == 0 {
@@ -290,9 +291,9 @@ func createOptionHolding(tx *models.ProcessedTransaction, quantity int) models.O
 		ProductName:   tx.ProductName,
 		Quantity:      quantity, // Signed quantity (+long, -short)
 		OpenPrice:     tx.Price,
-		OpenAmount:    (tx.Amount / float64(originalQty)) * float64(utils.AbsInt(quantity)), // Use utils.AbsInt
+		OpenAmount:    (tx.Amount / originalQty) * math.Abs(quantity),
 		OpenCurrency:  tx.Currency,
-		OpenAmountEUR: (tx.AmountEUR / float64(originalQty)) * float64(utils.AbsInt(quantity)), // Use utils.AbsInt
+		OpenAmountEUR: (tx.AmountEUR / originalQty) * math.Abs(quantity),
 		OpenOrderID:   tx.OrderID,
 	}
 }

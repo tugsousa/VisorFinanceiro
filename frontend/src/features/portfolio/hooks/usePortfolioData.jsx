@@ -10,6 +10,7 @@ import {
 import { apiFetchProcessedTransactions } from 'features/portfolio/api/portfolioApi';
 import { usePortfolio } from '../PortfolioContext';
 import { calculateCombinedAggregatedMetricsByISIN } from '../../../lib/utils/aggregationUtils';
+import { getHoldingValueEUR, hasMarketPrice } from '../../analytics/logic/holdingsCalculations';
 
 export const usePortfolioData = (token) => {
     const { activePortfolio } = usePortfolio();
@@ -116,7 +117,7 @@ export const usePortfolioData = (token) => {
 
             return {
                 ...holding,
-                marketValueEUR: holding.market_value_eur,
+                marketValueEUR: getHoldingValueEUR(holding),
                 total_cost_basis_eur: Math.abs(holding.total_cost_basis_eur),
                 totalRealizedStockPL: metrics.totalRealizedStockPL, 
                 totalDividends: metrics.totalDividends, 
@@ -139,7 +140,7 @@ export const usePortfolioData = (token) => {
 
     const unrealizedStockPL = useMemo(() => {
         if (!currentHoldingsValue) return 0;
-        const totals = currentHoldingsValue.reduce((acc, h) => {
+        const totals = currentHoldingsValue.filter(hasMarketPrice).reduce((acc, h) => {
             acc.marketValue += h.market_value_eur || 0;
             acc.costBasis += Math.abs(h.total_cost_basis_eur || 0);
             return acc;

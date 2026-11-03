@@ -17,7 +17,12 @@ type Job struct {
 	Status    string                 `json:"status"`
 	Progress  float64                `json:"progress"`
 	Error     string                 `json:"error,omitempty"`
+
+	finishedAt time.Time // Zero until the job completes or fails
 }
+
+// finishedJobRetention is how long a finished job stays available for status checks.
+const finishedJobRetention = 1 * time.Hour
 
 // Job types
 const (
@@ -39,10 +44,12 @@ const (
 // JobQueue manages background jobs
 type JobQueue struct {
 	jobs       map[string]*Job
+	pending    []*Job // Jobs waiting for a free worker, oldest first
 	workers    map[string]*JobWorker
 	mu         sync.RWMutex
-	maxJobs    int
+	maxJobs    int // Limit of unfinished jobs; finished ones don't count
 	maxWorkers int
+	nextID     uint64 // Keeps IDs unique when the clock doesn't advance between calls
 }
 
 // JobWorker processes jobs
@@ -80,11 +87,14 @@ func (jq *JobQueue) AddJob(jobType string, payload map[string]interface{}) (*Job
 	jq.mu.Lock()
 	defer jq.mu.Unlock()
 
-	if len(jq.jobs) >= jq.maxJobs {
+	jq.pruneFinishedJobs(time.Now())
+
+	if len(jq.pending)+len(jq.workers) >= jq.maxJobs {
 		return nil, fmt.Errorf("job queue is full")
 	}
 
-	jobID := fmt.Sprintf("%s_%d", jobType, time.Now().UnixNano())
+	jq.nextID++
+	jobID := fmt.Sprintf("%s_%d_%d", jobType, time.Now().UnixNano(), jq.nextID)
 	job := &Job{
 		ID:        jobID,
 		Type:      jobType,
@@ -98,10 +108,21 @@ func (jq *JobQueue) AddJob(jobType string, payload map[string]interface{}) (*Job
 
 	if len(jq.workers) < jq.maxWorkers {
 		worker := jq.createWorker()
-		go worker.processJob(job)
+		go worker.run(job)
+	} else {
+		jq.pending = append(jq.pending, job)
 	}
 
 	return job, nil
+}
+
+// pruneFinishedJobs removes jobs that finished longer ago than the retention. The caller must hold the lock.
+func (jq *JobQueue) pruneFinishedJobs(now time.Time) {
+	for id, job := range jq.jobs {
+		if !job.finishedAt.IsZero() && now.Sub(job.finishedAt) > finishedJobRetention {
+			delete(jq.jobs, id)
+		}
+	}
 }
 
 // GetJob retrieves a job by ID
@@ -125,7 +146,8 @@ func (jq *JobQueue) ListJobs() []*Job {
 
 // createWorker creates a new worker
 func (jq *JobQueue) createWorker() *JobWorker {
-	workerID := fmt.Sprintf("worker_%d", time.Now().UnixNano())
+	jq.nextID++
+	workerID := fmt.Sprintf("worker_%d_%d", time.Now().UnixNano(), jq.nextID)
 	worker := &JobWorker{
 		ID:       workerID,
 		Queue:    jq,
@@ -135,14 +157,30 @@ func (jq *JobQueue) createWorker() *JobWorker {
 	return worker
 }
 
+// run processes the given job and then any pending jobs, until none are left.
+func (w *JobWorker) run(job *Job) {
+	for job != nil {
+		w.processJob(job)
+		job = w.nextJob()
+	}
+}
+
+// nextJob takes the oldest pending job, or retires the worker if there are none.
+func (w *JobWorker) nextJob() *Job {
+	w.Queue.mu.Lock()
+	defer w.Queue.mu.Unlock()
+
+	if len(w.Queue.pending) == 0 {
+		delete(w.Queue.workers, w.ID)
+		return nil
+	}
+	next := w.Queue.pending[0]
+	w.Queue.pending = w.Queue.pending[1:]
+	return next
+}
+
 // processJob processes a single job
 func (w *JobWorker) processJob(job *Job) {
-	defer func() {
-		w.Queue.mu.Lock()
-		delete(w.Queue.workers, w.ID)
-		w.Queue.mu.Unlock()
-	}()
-
 	w.updateJobStatus(job.ID, JobStatusRunning, 0, "")
 
 	var err error
@@ -348,6 +386,9 @@ func (w *JobWorker) updateJobStatus(jobID, status string, progress float64, erro
 		job.Status = status
 		job.Progress = progress
 		job.Error = errorMsg
+		if status == JobStatusCompleted || status == JobStatusFailed {
+			job.finishedAt = time.Now()
+		}
 	}
 }
 
@@ -361,6 +402,7 @@ func (jq *JobQueue) Stop() {
 	}
 
 	jq.jobs = make(map[string]*Job)
+	jq.pending = nil
 	jq.workers = make(map[string]*JobWorker)
 }
 

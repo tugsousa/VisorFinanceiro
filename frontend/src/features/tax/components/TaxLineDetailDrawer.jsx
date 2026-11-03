@@ -6,6 +6,7 @@ import {
 } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
 import { formatBroker } from 'features/analytics/logic/cashFlowCalculations';
+import { formatQuantity } from 'lib/utils/formatUtils';
 import { getOptionNetIncome, sumDividendTransactions } from '../logic/taxTransformers';
 
 const formatEUR = (value) => (value || 0).toFixed(2);
@@ -57,7 +58,7 @@ const LINE_DETAILS = {
       { label: 'Corretora', render: (sale) => formatBrokers(sale.SaleSource, sale.BuySource, 'compra') },
       { label: 'Produto', render: (sale) => sale.ProductName },
       { label: 'ISIN', render: (sale) => sale.ISIN },
-      { label: 'Qtd', align: 'right', render: (sale) => sale.Quantity, total: (rows) => sumBy(rows, (sale) => sale.Quantity) },
+      { label: 'Qtd', align: 'right', render: (sale) => sale.Quantity, total: (rows) => formatQuantity(sumBy(rows, (sale) => sale.Quantity)) },
       { label: 'Preço venda', align: 'right', render: (sale) => sale.SalePrice },
       { label: 'Valor venda', align: 'right', render: (sale) => formatAmount(sale.SaleAmount, sale.SaleCurrency) },
       { label: 'Câmbio venda', align: 'right', render: (sale) => formatRate(sale.SaleExchangeRate) },

@@ -49,7 +49,7 @@ const (
 type aggregatedHolding struct {
 	ISIN              string
 	ProductName       string
-	TotalQuantity     int
+	TotalQuantity     float64
 	TotalCostBasisEUR float64
 }
 
@@ -160,16 +160,18 @@ func (s *uploadServiceImpl) GetDividendMetrics(userID int64, portfolioID int64) 
 			exchangeRate := 1.0
 			if currency != "EUR" && currency != "" {
 				rate, err := processors.GetExchangeRate(currency, now)
-				if err == nil && rate > 0 {
-					exchangeRate = rate
+				if err != nil || rate <= 0 {
+					logger.L.Warn("Skipping dividend projection without an exchange rate", "ticker", ticker, "currency", currency, "error", err)
+					return
 				}
+				exchangeRate = rate
 			}
 
 			mu.Lock()
 			for month, amountPerShare := range pastDividends {
 				monthIndex := int(month) - 1
 
-				totalDivNative := amountPerShare * float64(holding.Quantity)
+				totalDivNative := amountPerShare * holding.Quantity
 				totalDivEUR := totalDivNative
 				if exchangeRate != 1.0 && exchangeRate > 0 {
 					totalDivEUR = totalDivNative / exchangeRate
@@ -326,10 +328,7 @@ func (s *uploadServiceImpl) RefreshDailySnapshot(userID int64, portfolioID int64
 		return fmt.Errorf("failed to calculate current holdings: %w", err)
 	}
 
-	var totalEquity float64 = 0
-	for _, h := range holdings {
-		totalEquity += h.MarketValueEUR
-	}
+	totalEquity := holdingsValueEUR(holdings)
 
 	var cashBalance, cumulativeNetCashflow float64
 	err = database.DB.QueryRow(`
@@ -391,7 +390,11 @@ func (s *uploadServiceImpl) ProcessUpload(fileReader io.Reader, userID int64, po
 	}
 
 	websocket.BroadcastUploadProgress(userID, portfolioID, 30, 100, "processing", "Processando transações")
-	newlyProcessedTxs := s.transactionProcessor.Process(canonicalTxs)
+	newlyProcessedTxs, err := s.transactionProcessor.Process(canonicalTxs)
+	if err != nil {
+		websocket.BroadcastUploadProgress(userID, portfolioID, 0, 100, "error", err.Error())
+		return nil, err
+	}
 	if len(newlyProcessedTxs) == 0 {
 		websocket.BroadcastUploadProgress(userID, portfolioID, 100, 100, "completed", "Nenhuma nova transação encontrada")
 		return s.GetLatestUploadResult(userID, portfolioID)
@@ -527,6 +530,9 @@ func (s *uploadServiceImpl) ProcessUpload(fileReader io.Reader, userID int64, po
 	}
 
 	if insertedCount > 0 {
+		// Done here too because reports read this cache right away and the jobs below may have to wait.
+		s.InvalidateUserCache(userID, portfolioID)
+
 		websocket.BroadcastUploadProgress(userID, portfolioID, 50, 100, "processing", "Salvando transações no banco de dados")
 
 		go func(uid int64) {
@@ -605,6 +611,41 @@ func (s *uploadServiceImpl) RebuildUserHistory(userID int64, portfolioID int64) 
 // RebuildUserHistoryFrom rebuilds from a specific date (used after incremental uploads).
 func (s *uploadServiceImpl) RebuildUserHistoryFrom(userID int64, portfolioID int64, fromDateStr string) error {
 	return s.rebuildUserHistoryFrom(userID, portfolioID, fromDateStr)
+}
+
+// cashBalances tracks the cash of each broker of a portfolio in EUR. They're tracked separately
+// because a balance reported by one broker says nothing about the cash at another.
+type cashBalances map[string]float64
+
+// apply updates the balances with a transaction. Transactions must be applied in date order.
+func (c cashBalances) apply(tx models.ProcessedTransaction) {
+	isTrade := tx.TransactionType == "STOCK" || tx.TransactionType == "OPTION" || tx.TransactionType == "ETF" || tx.TransactionType == "WARRANT"
+
+	// DeGiro has separate rows for its commissions. Other sources store them on the trade itself.
+	if tx.Source != "degiro" && isTrade {
+		tradeValue := math.Abs(tx.AmountEUR)
+		commission := math.Abs(tx.Commission)
+		if tx.BuySell == "BUY" {
+			c[tx.Source] += -tradeValue - commission
+		} else {
+			c[tx.Source] += tradeValue - commission
+		}
+	} else {
+		c[tx.Source] += tx.AmountEUR
+	}
+
+	shouldTrustBalance := tx.Source != "degiro" || tx.TransactionType == "CASH"
+	if shouldTrustBalance && tx.BalanceCurrency == "EUR" && tx.CashBalance != 0 {
+		c[tx.Source] = tx.CashBalance
+	}
+}
+
+func (c cashBalances) total() float64 {
+	total := 0.0
+	for _, balance := range c {
+		total += balance
+	}
+	return total
 }
 
 func (s *uploadServiceImpl) rebuildUserHistoryFrom(userID int64, portfolioID int64, fromDateStr string) error {
@@ -703,7 +744,8 @@ func (s *uploadServiceImpl) rebuildUserHistoryFrom(userID int64, portfolioID int
 			sem <- struct{}{}
 			defer func() { <-sem }()
 
-			ticker := fmt.Sprintf("%sEUR=X", c)
+			major, _ := processors.MajorCurrency(c)
+			ticker := fmt.Sprintf("%sEUR=X", major)
 			rates, _, err := s.priceService.GetHistoricalPrices(ticker)
 			if err == nil {
 				dataMu.Lock()
@@ -747,7 +789,7 @@ func (s *uploadServiceImpl) rebuildUserHistoryFrom(userID int64, portfolioID int
 
 	holdings := make(map[string]AssetInfo)
 	cumulativeNetInvested := 0.0
-	currentCash := 0.0
+	cash := cashBalances{}
 	lastKnownPrices := make(map[string]float64)
 
 	type Snapshot struct {
@@ -757,22 +799,20 @@ func (s *uploadServiceImpl) rebuildUserHistoryFrom(userID int64, portfolioID int
 		Cash        float64
 	}
 
-	// FIX #7: For incremental rebuilds, seed the cash balance from the snapshot
-	// just before the startDate so we don't recalculate the entire history.
+	// FIX #7: Incremental rebuilds need a snapshot from just before the startDate to build on.
 	if !fullRebuild {
 		prevDateStr := startDate.AddDate(0, 0, -1).Format("2006-01-02")
-		var prevCash float64
+		var hasPreviousSnapshot int
 		err := database.DB.QueryRow(`
-			SELECT cash_balance
+			SELECT 1
 			FROM portfolio_snapshots
 			WHERE user_id = ? AND portfolio_id = ? AND date <= ?
 			ORDER BY date DESC LIMIT 1`,
 			userID, portfolioID, prevDateStr,
-		).Scan(&prevCash)
+		).Scan(&hasPreviousSnapshot)
 
 		if err == nil {
-			currentCash = prevCash
-			// Reconstruct net invested and holdings up to (but not including) startDate
+			// Reconstruct cash, net invested and holdings up to (but not including) startDate
 			// by re-playing all transactions before that date.
 			for _, tx := range txs {
 				txDate, e := time.Parse("02-01-2006", tx.Date)
@@ -782,18 +822,19 @@ func (s *uploadServiceImpl) rebuildUserHistoryFrom(userID int64, portfolioID int
 				if tx.TransactionType == "CASH" {
 					cumulativeNetInvested += tx.AmountEUR
 				}
+				cash.apply(tx)
 				if tx.TransactionType == "STOCK" || tx.TransactionType == "ETF" {
 					info := holdings[tx.ISIN]
 					info.Name = tx.ProductName
 					if tx.BuySell == "BUY" {
-						info.Quantity += float64(tx.Quantity)
+						info.Quantity += tx.Quantity
 						info.TotalCostBasis += math.Abs(tx.AmountEUR)
 					} else if tx.BuySell == "SELL" {
 						if info.Quantity > 0 {
-							ratio := float64(tx.Quantity) / info.Quantity
+							ratio := tx.Quantity / info.Quantity
 							info.TotalCostBasis -= info.TotalCostBasis * ratio
 						}
-						info.Quantity -= float64(tx.Quantity)
+						info.Quantity -= tx.Quantity
 					}
 					holdings[tx.ISIN] = info
 				}
@@ -804,7 +845,7 @@ func (s *uploadServiceImpl) rebuildUserHistoryFrom(userID int64, portfolioID int
 			startDate, _ = time.Parse("02-01-2006", txs[0].Date)
 			holdings = make(map[string]AssetInfo)
 			cumulativeNetInvested = 0.0
-			currentCash = 0.0
+			cash = cashBalances{}
 		}
 	}
 
@@ -835,44 +876,20 @@ func (s *uploadServiceImpl) rebuildUserHistoryFrom(userID int64, portfolioID int
 				cumulativeNetInvested += tx.AmountEUR
 			}
 
-			var cashImpact float64
-			if tx.Source == "ibkr" && (tx.TransactionType == "STOCK" || tx.TransactionType == "OPTION" || tx.TransactionType == "ETF" || tx.TransactionType == "WARRANT") {
-				tradeVal := math.Abs(tx.AmountEUR)
-				cost := math.Abs(tx.Commission)
-				if tx.BuySell == "BUY" {
-					cashImpact = -tradeVal - cost
-				} else {
-					cashImpact = tradeVal - cost
-				}
-			} else {
-				cashImpact = tx.AmountEUR
-			}
-
-			currentCash += cashImpact
-
-			shouldTrustBalance := true
-			if tx.Source == "degiro" {
-				if tx.TransactionType != "CASH" {
-					shouldTrustBalance = false
-				}
-			}
-
-			if shouldTrustBalance && tx.BalanceCurrency == "EUR" && tx.CashBalance != 0 {
-				currentCash = tx.CashBalance
-			}
+			cash.apply(tx)
 
 			if tx.TransactionType == "STOCK" || tx.TransactionType == "ETF" {
 				info := holdings[tx.ISIN]
 				info.Name = tx.ProductName
 				if tx.BuySell == "BUY" {
-					info.Quantity += float64(tx.Quantity)
+					info.Quantity += tx.Quantity
 					info.TotalCostBasis += math.Abs(tx.AmountEUR)
 				} else if tx.BuySell == "SELL" {
 					if info.Quantity > 0 {
-						ratio := float64(tx.Quantity) / info.Quantity
+						ratio := tx.Quantity / info.Quantity
 						info.TotalCostBasis -= (info.TotalCostBasis * ratio)
 					}
-					info.Quantity -= float64(tx.Quantity)
+					info.Quantity -= tx.Quantity
 				}
 				holdings[tx.ISIN] = info
 			}
@@ -901,17 +918,10 @@ func (s *uploadServiceImpl) rebuildUserHistoryFrom(userID int64, portfolioID int
 				pricingCurrency = realCur
 			}
 
-			rate := 1.0
-			if pricingCurrency != "EUR" {
-				if rMap, ok := currencyRates[pricingCurrency]; ok {
-					if r, ok := rMap[dateStr]; ok {
-						rate = r
-					}
-				}
-			}
+			rate, hasRate := eurRateForDate(pricingCurrency, dateStr, currencyRates)
 
 			var assetValue float64
-			if price > 0 {
+			if price > 0 && hasRate {
 				assetValue = (info.Quantity * price) * rate
 			} else {
 				assetValue = info.TotalCostBasis
@@ -919,6 +929,7 @@ func (s *uploadServiceImpl) rebuildUserHistoryFrom(userID int64, portfolioID int
 			marketValueAssets += assetValue
 		}
 
+		currentCash := cash.total()
 		snapshots = append(snapshots, Snapshot{
 			Date:        dateStr,
 			Equity:      marketValueAssets + currentCash,
@@ -965,6 +976,35 @@ func (s *uploadServiceImpl) rebuildUserHistoryFrom(userID int64, portfolioID int
 
 	logger.L.Info("History rebuild complete", "days", len(snapshots))
 	return nil
+}
+
+// holdingsValueEUR adds up the value of holdings. One without a price counts at cost, as in the
+// rebuilt history: counting it as zero would show up as a loss of the whole position.
+func holdingsValueEUR(holdings []models.HoldingWithValue) float64 {
+	total := 0.0
+	for _, h := range holdings {
+		if h.Status == "OK" {
+			total += h.MarketValueEUR
+		} else {
+			total += math.Abs(h.TotalCostBasisEUR)
+		}
+	}
+	return total
+}
+
+// eurRateForDate returns how many EUR one unit of the currency was worth on a date, from rates
+// quoted against EUR. It returns false if there is no rate: treating the value as EUR would be
+// wrong by the whole exchange rate.
+func eurRateForDate(currency, date string, currencyRates map[string]PriceMap) (float64, bool) {
+	if currency == "EUR" {
+		return 1, true
+	}
+	rate, ok := currencyRates[currency][date]
+	if !ok || rate <= 0 {
+		return 0, false
+	}
+	_, unitsPerMajor := processors.MajorCurrency(currency)
+	return rate / unitsPerMajor, true
 }
 
 // GetCurrentHoldingsWithValue fetches current holdings with live prices.
@@ -1033,7 +1073,7 @@ func (s *uploadServiceImpl) GetCurrentHoldingsWithValue(userID int64, portfolioI
 			if found && priceInfo.Status == "OK" {
 				status = "OK"
 				currentPrice = priceInfo.Price
-				marketValue = priceInfo.Price * float64(holding.TotalQuantity)
+				marketValue = priceInfo.Price * holding.TotalQuantity
 			}
 		}
 
@@ -1048,7 +1088,7 @@ func (s *uploadServiceImpl) GetCurrentHoldingsWithValue(userID int64, portfolioI
 		response = append(response, models.HoldingWithValue{
 			ISIN:              holding.ISIN,
 			ProductName:       holding.ProductName,
-			Quantity:          holding.TotalQuantity,
+			Quantity:          utils.RoundQuantity(holding.TotalQuantity),
 			TotalCostBasisEUR: math.Abs(holding.TotalCostBasisEUR),
 			CurrentPriceEUR:   currentPrice,
 			MarketValueEUR:    marketValue,
@@ -1076,6 +1116,19 @@ func (s *uploadServiceImpl) GetCurrentHoldingsWithValue(userID int64, portfolioI
 	// Cache the result so concurrent background jobs don't repeat this work.
 	s.reportCache.Set(cacheKey, response, holdingsValueTTL)
 	return response, nil
+}
+
+// GetCurrentCashBalance returns the portfolio's cash in EUR, calculated the same way as its history.
+func (s *uploadServiceImpl) GetCurrentCashBalance(userID int64, portfolioID int64) (float64, error) {
+	txs, err := fetchUserProcessedTransactions(userID, portfolioID)
+	if err != nil {
+		return 0, err
+	}
+	cash := cashBalances{}
+	for _, tx := range txs {
+		cash.apply(tx)
+	}
+	return cash.total(), nil
 }
 
 func (s *uploadServiceImpl) UpdateUserPortfolioMetrics(userID int64, portfolioID int64) error {
@@ -1249,6 +1302,14 @@ func (s *uploadServiceImpl) GetStockHoldings(userID int64, portfolioID int64) (m
 	return holdingsByYear, err
 }
 
+func (s *uploadServiceImpl) GetUnmatchedStockSales(userID int64, portfolioID int64) ([]models.UnmatchedSale, error) {
+	allUserTransactions, err := fetchUserProcessedTransactions(userID, portfolioID)
+	if err != nil {
+		return nil, err
+	}
+	return s.stockProcessor.FindUnmatchedSales(allUserTransactions), nil
+}
+
 func (s *uploadServiceImpl) GetDividendTaxSummary(userID int64, portfolioID int64) (models.DividendTaxResult, error) {
 	cacheKey := fmt.Sprintf(ckDividendSummary, userID, portfolioID)
 	if data, found := s.reportCache.Get(cacheKey); found {
@@ -1394,7 +1455,7 @@ func fetchUserProcessedTransactions(userID int64, portfolioID int64) ([]models.P
 		SELECT id, date, source, product_name, isin, quantity, original_quantity, price, 
 		       transaction_type, transaction_subtype, buy_sell, description, amount, 
 		       currency, commission, order_id, exchange_rate, amount_eur, country_code, 
-		       input_string, hash_id, cash_balance, balance_currency 
+		       input_string, hash_id, COALESCE(cash_balance, 0), COALESCE(balance_currency, '') 
 		FROM processed_transactions 
 		WHERE user_id = ? AND portfolio_id = ?
 		ORDER BY 

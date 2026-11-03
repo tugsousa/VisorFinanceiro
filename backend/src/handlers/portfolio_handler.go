@@ -82,6 +82,46 @@ func (h *PortfolioHandler) HandleGetStockSales(w http.ResponseWriter, r *http.Re
 	json.NewEncoder(w).Encode(stockSales)
 }
 
+func (h *PortfolioHandler) HandleGetUnmatchedStockSales(w http.ResponseWriter, r *http.Request) {
+	userID, ok := GetUserIDFromContext(r.Context())
+	if !ok {
+		utils.SendJSONError(w, "authentication required", http.StatusUnauthorized)
+		return
+	}
+	portfolioID, err := getPortfolioID(r)
+	if err != nil {
+		utils.SendJSONError(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	unmatchedSales, err := h.uploadService.GetUnmatchedStockSales(userID, portfolioID)
+	if err != nil {
+		utils.SendJSONError(w, fmt.Sprintf("Error retrieving unmatched stock sales: %v", err), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(unmatchedSales)
+}
+
+func (h *PortfolioHandler) HandleGetCashBalance(w http.ResponseWriter, r *http.Request) {
+	userID, ok := GetUserIDFromContext(r.Context())
+	if !ok {
+		utils.SendJSONError(w, "authentication required", http.StatusUnauthorized)
+		return
+	}
+	portfolioID, err := getPortfolioID(r)
+	if err != nil {
+		utils.SendJSONError(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	cashBalance, err := h.uploadService.GetCurrentCashBalance(userID, portfolioID)
+	if err != nil {
+		utils.SendJSONError(w, fmt.Sprintf("Error retrieving cash balance: %v", err), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]float64{"cash_balance": cashBalance})
+}
+
 func (h *PortfolioHandler) HandleGetHistoricalChartData(w http.ResponseWriter, r *http.Request) {
 	userID, ok := GetUserIDFromContext(r.Context())
 	if !ok {

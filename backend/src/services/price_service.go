@@ -57,7 +57,8 @@ type yahooHistoryResponse struct {
 	Chart struct {
 		Result []struct {
 			Meta struct {
-				Currency string `json:"currency"`
+				Currency             string `json:"currency"`
+				ExchangeTimezoneName string `json:"exchangeTimezoneName"`
 			} `json:"meta"`
 			Timestamp  []int64 `json:"timestamp"`
 			Indicators struct {
@@ -1202,6 +1203,7 @@ func (s *priceServiceImpl) GetHistoricalPrices(ticker string) (PriceMap, string,
 		return nil, "", fmt.Errorf("no price data points found")
 	}
 
+	location := utils.ExchangeLocation(result.Meta.ExchangeTimezoneName)
 	priceMap := make(PriceMap)
 	var sortedDates []string
 	validCount := 0
@@ -1217,7 +1219,7 @@ func (s *priceServiceImpl) GetHistoricalPrices(ticker string) (PriceMap, string,
 		}
 
 		currentDate := time.Unix(ts, 0)
-		dateStr := currentDate.Format("2006-01-02")
+		dateStr := currentDate.In(location).Format("2006-01-02")
 
 		if len(splits) > 0 {
 			for _, split := range splits {

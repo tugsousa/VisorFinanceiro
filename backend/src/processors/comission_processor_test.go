@@ -4,6 +4,7 @@ import (
 	"math"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/username/taxfolio/backend/src/logger"
 	"github.com/username/taxfolio/backend/src/models"
@@ -81,6 +82,7 @@ func sumFees(fees []models.FeeDetail) float64 {
 }
 
 func TestEURCommissionOnForeignCurrencyTradeIsNotConverted(t *testing.T) {
+	seedRate("USD", time.Date(2026, 7, 20, 0, 0, 0, 0, time.UTC), 1.1386)
 	txs := processDegiroCSV(t, usdStockWithEURCommissionCSV)
 
 	details, _ := NewStockProcessor().Process(txs)
@@ -141,7 +143,11 @@ func processDegiroCSV(t *testing.T, csv string) []models.ProcessedTransaction {
 	if err != nil {
 		t.Fatalf("Parse returned error: %v", err)
 	}
-	return NewTransactionProcessor().Process(canonical)
+	processed, err := NewTransactionProcessor().Process(canonical)
+	if err != nil {
+		t.Fatalf("Process returned error: %v", err)
+	}
+	return processed
 }
 
 func sumOptionCommissions(details []models.OptionSaleDetail) float64 {

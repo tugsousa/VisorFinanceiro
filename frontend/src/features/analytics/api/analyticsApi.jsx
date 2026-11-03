@@ -7,11 +7,17 @@ export const apiFetchStockHoldings = (portfolioId) =>
 export const apiFetchCurrentHoldingsValue = (portfolioId) => 
     apiClient.get(API_ENDPOINTS.CURRENT_HOLDINGS_VALUE, { params: { portfolio_id: portfolioId } });
 
+export const apiFetchCashBalance = (portfolioId) =>
+    apiClient.get(API_ENDPOINTS.CASH_BALANCE, { params: { portfolio_id: portfolioId } });
+
 export const apiFetchOptionHoldings = (portfolioId) => 
     apiClient.get(API_ENDPOINTS.OPTION_HOLDINGS, { params: { portfolio_id: portfolioId } });
 
 export const apiFetchStockSales = (portfolioId) => 
     apiClient.get(API_ENDPOINTS.STOCK_SALES, { params: { portfolio_id: portfolioId } });
+
+export const apiFetchUnmatchedStockSales = (portfolioId) =>
+    apiClient.get(API_ENDPOINTS.UNMATCHED_STOCK_SALES, { params: { portfolio_id: portfolioId } });
 
 export const apiFetchOptionSales = (portfolioId) => 
     apiClient.get(API_ENDPOINTS.OPTION_SALES, { params: { portfolio_id: portfolioId } });

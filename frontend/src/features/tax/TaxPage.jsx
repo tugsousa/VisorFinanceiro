@@ -3,11 +3,12 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   Typography, Box, FormControl, InputLabel, Select, MenuItem, Table,
   TableBody, TableCell, TableContainer, TableHead, TableRow, Paper,
-  styled, CircularProgress, Alert
+  styled, CircularProgress, Alert, AlertTitle
 } from '@mui/material';
 import { useQuery } from '@tanstack/react-query';
 import {
   apiFetchStockSales,
+  apiFetchUnmatchedStockSales,
   apiFetchOptionSales,
   apiFetchDividendTaxSummary,
   apiFetchDividendTransactions
@@ -16,6 +17,7 @@ import { useAuth } from '../auth/AuthContext';
 import { usePortfolio } from '../portfolio/PortfolioContext';
 import { UI_TEXT, NO_YEAR_SELECTED, ALL_YEARS_OPTION } from '../../constants';
 import { getYear, getMonth, getDay, extractYearsFromData } from '../../lib/utils/dateUtils';
+import { formatQuantity } from '../../lib/utils/formatUtils';
 import {
   filterAndGroupStockSales,
   transformDividendsForTable,
@@ -53,16 +55,18 @@ const SelectableTableRow = styled(TableRow)(({ theme }) => ({
 }));
 
 const fetchTaxReportData = async (portfolioId) => {
-  if (!portfolioId) return { stockSales: [], optionSales: [], dividendSummary: {}, dividendTransactions: [] };
+  if (!portfolioId) return { stockSales: [], unmatchedSales: [], optionSales: [], dividendSummary: {}, dividendTransactions: [] };
 
-  const [stockRes, optionRes, dividendRes, dividendTransactionsRes] = await Promise.all([
+  const [stockRes, unmatchedRes, optionRes, dividendRes, dividendTransactionsRes] = await Promise.all([
     apiFetchStockSales(portfolioId),
+    apiFetchUnmatchedStockSales(portfolioId),
     apiFetchOptionSales(portfolioId),
     apiFetchDividendTaxSummary(portfolioId),
     apiFetchDividendTransactions(portfolioId),
   ]);
   return {
     stockSales: stockRes.data || [],
+    unmatchedSales: unmatchedRes.data || [],
     optionSales: optionRes.data?.OptionSaleDetails || [],
     dividendSummary: dividendRes.data || {},
     dividendTransactions: dividendTransactionsRes.data || [],
@@ -94,11 +98,13 @@ export default function TaxPage() {
     if (!taxApiData) return [];
     const dateAccessors = {
       stockSales: 'SaleDate',
+      unmatchedSales: 'sale_date',
       optionSales: 'close_date',
       DividendTaxResult: null,
     };
     const dataForYearExtraction = {
       stockSales: taxApiData.stockSales || [],
+      unmatchedSales: taxApiData.unmatchedSales || [],
       optionSales: taxApiData.optionSales || [],
       DividendTaxResult: taxApiData.dividendSummary || {},
     };
@@ -135,6 +141,11 @@ export default function TaxPage() {
       groupedOptionData: groupOptionsByCountry(taxApiData.optionSales, year),
     };
   }, [selectedYear, taxApiData]);
+
+  const unmatchedSalesOfYear = useMemo(
+    () => (taxApiData?.unmatchedSales || []).filter(sale => getYear(sale.sale_date) === Number(selectedYear)),
+    [selectedYear, taxApiData]
+  );
 
   const [selectedLine, setSelectedLine] = useState(null);
   const closeLineDetail = useCallback(() => setSelectedLine(null), []);
@@ -230,6 +241,19 @@ export default function TaxPage() {
         <Typography sx={{textAlign: 'center', my:2}}>Por favor, selecione um ano para visualizar os dados.</Typography>
       ) : (
         <>
+          {unmatchedSalesOfYear.length > 0 && (
+            <Alert severity="warning" sx={{ mb: 2 }}>
+              <AlertTitle>Vendas sem compra correspondente</AlertTitle>
+              Estas vendas não estão incluídas no relatório porque o histórico carregado não tem as compras correspondentes. Carregue o histórico completo da corretora para as incluir.
+              <Box component="ul" sx={{ m: 0, mt: 1, pl: 2 }}>
+                {unmatchedSalesOfYear.map((sale, index) => (
+                  <li key={`${sale.isin}-${sale.sale_date}-${index}`}>
+                    {sale.sale_date}: {sale.product_name} ({sale.isin}), {formatQuantity(sale.quantity)} unid., {sale.sale_amount_eur.toFixed(2)} €
+                  </li>
+                ))}
+              </Box>
+            </Alert>
+          )}
           <Typography variant="body2" color="text.secondary">
             Clique numa linha para ver as transações usadas no cálculo.
           </Typography>

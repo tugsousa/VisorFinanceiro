@@ -1,8 +1,8 @@
 // src/features/analytics/components/StockHoldingsSection.js
 import React, { useState, useMemo } from 'react';
 import { 
-    Paper, Box, ToggleButtonGroup, ToggleButton, IconButton, 
-    Popover, FormControlLabel, Checkbox, Typography 
+    Paper, Box, ToggleButtonGroup, ToggleButton, IconButton,
+    Popover, FormControlLabel, Checkbox, Typography, Alert
 } from '@mui/material';
 import { DataGrid } from '@mui/x-data-grid';
 import { ptPT } from '@mui/x-data-grid/locales';
@@ -78,6 +78,12 @@ export default function StockHoldingsSection({ groupedData, detailedData, isGrou
                 </Box>
             </Box>
             
+            {!isGroupedFetching && !isDetailedFetching && rows.some(row => row.priceUnavailable) && (
+                <Alert severity="warning" sx={{ mb: 2 }}>
+                    Alguns ativos não têm preço de mercado disponível. O valor atual mostra o custo como referência e o P/L em aberto não inclui esses ativos.
+                </Alert>
+            )}
+
             <Popover
                 open={isSettingsOpen}
                 anchorEl={anchorEl}
