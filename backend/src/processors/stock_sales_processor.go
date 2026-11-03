@@ -21,6 +21,7 @@ func (p *stockProcessorImpl) Process(transactions []models.ProcessedTransaction)
 	if len(stockTransactions) == 0 {
 		return []models.SaleDetail{}, make(map[string][]models.PurchaseLot)
 	}
+	allocateDegiroOrderCommissions(stockTransactions, transactions)
 	return calculateSalesAndYearlyHoldings(stockTransactions)
 }
 
