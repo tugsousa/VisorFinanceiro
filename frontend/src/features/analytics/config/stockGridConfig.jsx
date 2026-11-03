@@ -1,6 +1,7 @@
 // src/features/analytics/config/stockGridConfig.js
 import React from 'react';
 import { Box, Typography, CircularProgress, Tooltip, Divider, styled, tooltipClasses } from '@mui/material';
+import { gridNumberComparator, gridStringOrNumberComparator } from '@mui/x-data-grid';
 import { formatCurrency } from 'lib/utils/formatUtils';
 import { parseDateRobust } from 'lib/utils/dateUtils';
 import { ALL_YEARS_OPTION } from 'constants';
@@ -236,11 +237,17 @@ const renderOriginalCostCell = (params) => {
     );
 };
 
+// Purchases are stored as negative amounts, so the rate is calculated from absolute values
+const getExchangeRate = (row) => {
+    const buyAmountOriginal = Math.abs(row.buy_amount || 0);
+    if ((row.buy_currency || 'EUR') === 'EUR' || buyAmountOriginal === 0) return 1;
+    return Math.abs(row.buy_amount_eur || 0) / buyAmountOriginal;
+};
+
 const renderExchangeRateCell = (params) => {
     const buyAmountOriginal = params.row.buy_amount || 0;
-    const buyAmountEUR = params.row.buy_amount_eur || 0;
     const currency = params.row.buy_currency || 'EUR';
-    
+
     if (currency === 'EUR' || buyAmountOriginal === 0) {
         return (
             <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', justifyContent: 'center', height: '100%', width: '100%' }}>
@@ -249,7 +256,7 @@ const renderExchangeRateCell = (params) => {
             </Box>
         );
     }
-    const exchangeRate = buyAmountEUR / buyAmountOriginal;
+    const exchangeRate = getExchangeRate(params.row);
     return (
         <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', justifyContent: 'center', height: '100%', width: '100%' }}>
             <Typography variant="body2" sx={{ fontWeight: '500' }}>{exchangeRate.toFixed(4)}</Typography>
@@ -312,23 +319,39 @@ const renderDetailedPerformance = (params) => {
 
 // --- COLUMN DEFINITIONS ---
 
+// Sorts the column normally but keeps the total row last, in both directions
+const keepTotalRowLast = (column) => {
+    const comparator = column.type === 'number' ? gridNumberComparator : gridStringOrNumberComparator;
+    const isTotalRow = (params) => params.api.getRow(params.id)?.isTotalRow;
+
+    return {
+        ...column,
+        getSortComparator: (sortDirection) => (value1, value2, params1, params2) => {
+            if (isTotalRow(params1)) return 1;
+            if (isTotalRow(params2)) return -1;
+            const result = comparator(value1, value2, params1, params2);
+            return sortDirection === 'desc' ? -result : result;
+        },
+    };
+};
+
 export const getGroupedColumns = (hiddenCols, isHistorical) => {
     if (isHistorical) {
         return [
-            { field: 'product_name_ticker', headerName: 'Nome / Ticker', flex: 1.5, minWidth: 200, renderCell: renderNameTickerCell },
+            { field: 'product_name_ticker', headerName: 'Nome / Ticker', flex: 1.5, minWidth: 200, valueGetter: (value, row) => row.product_name, renderCell: renderNameTickerCell },
             { field: 'quantity', headerName: 'Qtd', type: 'number', width: 110, align: 'right', headerAlign: 'right', valueFormatter: (val, row) => row.isTotalRow ? '' : val },
             { field: 'total_cost_basis_eur', headerName: 'Custo Total (€)', type: 'number', width: 140, align: 'right', headerAlign: 'right', valueFormatter: (value) => formatCurrency(value), renderCell: (params) => params.row.isTotalRow ? <Box sx={{fontWeight: 'bold'}}>{formatCurrency(params.value)}</Box> : formatCurrency(params.value) },
             { field: 'totalDividends', headerName: 'Dividendos (Hist.)', type: 'number', width: 160, align: 'right', headerAlign: 'right', renderCell: renderLifetimeMetricCell },
             { field: 'totalRealizedStockPL', headerName: 'L/P Ações (Hist.)', type: 'number', width: 160, align: 'right', headerAlign: 'right', renderCell: renderLifetimeMetricCell },
             { field: 'totalCommissions', headerName: 'Comissões (Hist.)', type: 'number', width: 160, align: 'right', headerAlign: 'right', renderCell: renderCommissionCell },
-        ];
+        ].map(keepTotalRowLast);
     }
 
     let columns = [
-        { field: 'product_name_ticker', headerName: 'Nome / ISIN', flex: 1.5, minWidth: 200, renderCell: renderNameTickerCell },
+        { field: 'product_name_ticker', headerName: 'Nome / ISIN', flex: 1.5, minWidth: 200, valueGetter: (value, row) => row.product_name, renderCell: renderNameTickerCell },
         { field: 'quantity', headerName: 'Qtd', type: 'number', width: 80, align: 'right', headerAlign: 'right', valueFormatter: (val, row) => row.isTotalRow ? '' : val },
-        { field: 'cost_basis_combined', headerName: 'Custo Médio', type: 'number', width: 120, align: 'right', headerAlign: 'right', renderCell: renderCostBasisCombinedCell },
-        { field: 'marketValueEUR_combined', headerName: 'Valor Atual', type: 'number', width: 120, align: 'right', headerAlign: 'right', renderCell: renderCurrentValueCombinedCell },
+        { field: 'total_cost_basis_eur', headerName: 'Custo Médio', type: 'number', width: 120, align: 'right', headerAlign: 'right', renderCell: renderCostBasisCombinedCell },
+        { field: 'marketValueEUR', headerName: 'Valor Atual', type: 'number', width: 120, align: 'right', headerAlign: 'right', renderCell: renderCurrentValueCombinedCell },
     ];
 
     if (!hiddenCols.dividends) columns.push({ field: 'totalDividends', headerName: 'Dividendos Rec.', type: 'number', width: 140, align: 'right', headerAlign: 'right', renderCell: renderLifetimeMetricCell });
@@ -338,22 +361,22 @@ export const getGroupedColumns = (hiddenCols, isHistorical) => {
     columns.push(
         { field: 'unrealizedPL', headerName: 'Ganhos Não Realizados', type: 'number', width: 140, align: 'right', headerAlign: 'right', renderCell: renderUnrealizedGainsCell },
         { field: 'realizedGains', headerName: 'Ganhos Realizados', type: 'number', width: 140, align: 'right', headerAlign: 'right', renderCell: renderRealizedGainsCell },
-        { field: 'totalProfit', headerName: 'Lucro Total', type: 'number', width: 130, align: 'right', headerAlign: 'right', renderCell: renderTotalProfitCell },
+        { field: 'totalProfitAmount', headerName: 'Lucro Total', type: 'number', width: 130, align: 'right', headerAlign: 'right', renderCell: renderTotalProfitCell },
     );
 
-    return columns;
+    return columns.map(keepTotalRowLast);
 };
 
 export const getDetailedColumns = (hiddenCols, selectedYear) => {
     let columns = [
-        { field: 'product_name_ticker', headerName: 'Nome / ISIN', flex: 1, minWidth: 180, renderCell: renderNameTickerCellDetailed },
+        { field: 'product_name_ticker', headerName: 'Nome / ISIN', flex: 1, minWidth: 180, valueGetter: (value, row) => row.product_name, renderCell: renderNameTickerCellDetailed },
         { field: 'buy_date', headerName: 'Data Compra', width: 100, type: 'date', valueGetter: (value) => parseDateRobust(value) },
         { field: 'daysHeld', headerName: 'Dias', width: 70, type: 'number', align: 'right', headerAlign: 'right', renderCell: renderDaysHeldCell },
         { field: 'quantity', headerName: 'Qtd', type: 'number', width: 70, align: 'right', headerAlign: 'right' },
     ];
 
-    if (!hiddenCols.originalCost) columns.push({ field: 'buy_amount', headerName: 'Custo Orig.', type: 'number', width: 120, align: 'right', headerAlign: 'right', renderCell: renderOriginalCostCell });
-    if (!hiddenCols.exchangeRate) columns.push({ field: 'exchangeRate', headerName: 'Câmbio', type: 'number', width: 100, align: 'right', headerAlign: 'right', renderCell: renderExchangeRateCell });
+    if (!hiddenCols.originalCost) columns.push({ field: 'buy_amount', headerName: 'Custo Orig.', type: 'number', width: 120, align: 'right', headerAlign: 'right', valueGetter: (value) => Math.abs(value || 0), renderCell: renderOriginalCostCell });
+    if (!hiddenCols.exchangeRate) columns.push({ field: 'exchangeRate', headerName: 'Câmbio', type: 'number', width: 100, align: 'right', headerAlign: 'right', valueGetter: (value, row) => getExchangeRate(row), renderCell: renderExchangeRateCell });
 
     columns.push({ field: 'buy_amount_eur', headerName: 'Custo (€)', type: 'number', width: 120, align: 'right', headerAlign: 'right', renderCell: renderCostEURCell });
 
@@ -364,7 +387,7 @@ export const getDetailedColumns = (hiddenCols, selectedYear) => {
         columns.push(
             { field: 'marketValueEUR', headerName: 'Valor Atual', type: 'number', width: 130, align: 'right', headerAlign: 'right', renderCell: renderDetailedCurrentValue },
             { field: 'unrealizedPLTotal', headerName: 'P/L (€)', type: 'number', width: 110, align: 'right', headerAlign: 'right', renderCell: renderUnrealizedGainsDetailedCell },
-            { field: 'performance', headerName: 'Rentabilidade', type: 'number', width: 140, align: 'right', headerAlign: 'right', renderCell: renderDetailedPerformance }
+            { field: 'returnPercentage', headerName: 'Rentabilidade', type: 'number', width: 140, align: 'right', headerAlign: 'right', renderCell: renderDetailedPerformance }
         );
     }
 

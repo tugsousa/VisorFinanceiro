@@ -105,6 +105,7 @@ export default function StockHoldingsSection({ groupedData, detailedData, isGrou
 
             <Box sx={{ width: '100%' }}>
                 <DataGrid
+                    key={viewMode}
                     rows={rows}
                     columns={columns}
                     loading={viewMode === 'grouped' ? isGroupedFetching : isDetailedFetching}
@@ -112,7 +113,7 @@ export default function StockHoldingsSection({ groupedData, detailedData, isGrou
                     pageSizeOptions={[10, 25, 50]}
                     initialState={{ 
                         pagination: { paginationModel: { pageSize: 25 } }, 
-                        sorting: { sortModel: viewMode === 'grouped' ? [{ field: 'marketValueEUR_combined', sort: 'desc' }] : [{ field: 'buy_date', sort: 'desc' }] } 
+                        sorting: { sortModel: viewMode === 'grouped' ? [{ field: 'marketValueEUR', sort: 'desc' }] : [{ field: 'buy_date', sort: 'desc' }] } 
                     }}
                     disableRowSelectionOnClick
                     localeText={ptPT.components.MuiDataGrid.defaultProps.localeText}
