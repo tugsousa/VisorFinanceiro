@@ -148,6 +148,7 @@ export default function Layout({ children }) {
                                             <MenuItem component={RouterLink} to="/analytics/options" onClick={handleAnalyticsMenuClose}>Vendas de Opções</MenuItem>
                                             <MenuItem component={RouterLink} to="/analytics/dividends" onClick={handleAnalyticsMenuClose}>Dividendos</MenuItem>
                                             <MenuItem component={RouterLink} to="/analytics/fees" onClick={handleAnalyticsMenuClose}>Taxas e Comissões</MenuItem>
+                                            <MenuItem component={RouterLink} to="/analytics/cash-flows" onClick={handleAnalyticsMenuClose}>Depósitos e Levantamentos</MenuItem>
                                         </Menu>
                                     </Box>
 
