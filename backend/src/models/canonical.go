@@ -15,6 +15,7 @@ type CanonicalTransaction struct {
 	Quantity           float64   `json:"quantity"`
 	Price              float64   `json:"price"`
 	Commission         float64   `json:"commission"`
+	CommissionCurrency string    `json:"commission_currency"` // The currency of Commission, when it can differ from Currency
 	Currency           string    `json:"currency"`
 	OrderID            string    `json:"order_id"`
 	RawText            string    `json:"raw_text"`

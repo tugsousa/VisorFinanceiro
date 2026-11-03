@@ -85,6 +85,8 @@ func (p *IBKRParser) Parse(file io.Reader) ([]models.CanonicalTransaction, error
 	var canonicalTxs []models.CanonicalTransaction
 
 	for _, stmt := range response.FlexStatements {
+		statementStart := len(canonicalTxs)
+
 		// Process Trades (Stocks and Options)
 		for _, trade := range stmt.Trades {
 			// As requested, ignore internal currency exchange transactions
@@ -116,6 +118,17 @@ func (p *IBKRParser) Parse(file io.Reader) ([]models.CanonicalTransaction, error
 					continue
 				}
 				canonicalTxs = append(canonicalTxs, tx)
+			case "Withholding Tax":
+				// Withholding on other income, such as credit interest, is not dividend tax.
+				if !strings.Contains(strings.ToUpper(cashTx.Description), "DIVIDEND") {
+					continue
+				}
+				tx, err := p.processDividendTax(cashTx)
+				if err != nil {
+					logger.L.Warn("IBKR Parser: Skipping dividend tax due to processing error", "description", cashTx.Description, "error", err)
+					continue
+				}
+				canonicalTxs = append(canonicalTxs, tx)
 			case "Deposits/Withdrawals":
 				tx, err := p.processCashMovement(cashTx)
 				if err != nil {
@@ -125,9 +138,24 @@ func (p *IBKRParser) Parse(file io.Reader) ([]models.CanonicalTransaction, error
 				canonicalTxs = append(canonicalTxs, tx)
 			}
 		}
+
+		numberRepeatedRows(canonicalTxs[statementStart:])
 	}
 
 	return canonicalTxs, nil
+}
+
+// numberRepeatedRows appends an occurrence number to rows of a statement with identical raw text,
+// such as fills of an order in the same second at the same price and quantity. These are separate
+// transactions, but the database would discard them as duplicates because the hash uses the raw text.
+func numberRepeatedRows(txs []models.CanonicalTransaction) {
+	occurrences := make(map[string]int)
+	for i := range txs {
+		occurrences[txs[i].RawText]++
+		if n := occurrences[txs[i].RawText]; n > 1 {
+			txs[i].RawText = fmt.Sprintf("%s|%d", txs[i].RawText, n)
+		}
+	}
 }
 
 // processTrade converts an IBKR Trade record to a CanonicalTransaction.
@@ -145,25 +173,27 @@ func (p *IBKRParser) processTrade(trade Trade) (models.CanonicalTransaction, err
 	}
 
 	// Construct a comprehensive raw text string for hashing and reference.
-	rawText := fmt.Sprintf("Trade|%s|%s|%s|%s|%s|%f|%f|%f|%s|%f|%s",
+	// The commission is left out: a trade must keep its hash if the report's commission fields change.
+	rawText := fmt.Sprintf("Trade|%s|%s|%s|%s|%s|%f|%f|%f|%s|%s",
 		trade.AssetCategory, trade.IBOrderID, trade.DateTime, trade.Description, trade.BuySell,
-		trade.Quantity, trade.TradePrice, trade.TradeMoney, trade.Currency, trade.IBCommission, trade.Symbol,
+		trade.Quantity, trade.TradePrice, trade.TradeMoney, trade.Currency, trade.Symbol,
 	)
 
 	tx := models.CanonicalTransaction{
-		Source:          "ibkr",
-		TransactionDate: date,
-		ProductName:     trade.Description,
-		ISIN:            finalISIN,
-		Quantity:        math.Abs(trade.Quantity),
-		Price:           trade.TradePrice,
-		Commission:      math.Abs(trade.IBCommission),
-		Currency:        trade.Currency,
-		OrderID:         fmt.Sprintf("%s", trade.IBOrderID),
-		RawText:         rawText,
-		SourceAmount:    trade.TradeMoney,
-		Amount:          -trade.TradeMoney, // IBKR tradeMoney is positive for BUY (cost), negative for SELL (proceeds). We invert for our model.
-		BuySell:         trade.BuySell,
+		Source:             "ibkr",
+		TransactionDate:    date,
+		ProductName:        trade.Description,
+		ISIN:               finalISIN,
+		Quantity:           math.Abs(trade.Quantity),
+		Price:              trade.TradePrice,
+		Commission:         math.Abs(trade.IBCommission),
+		CommissionCurrency: trade.IBCommissionCurrency,
+		Currency:           trade.Currency,
+		OrderID:            fmt.Sprintf("%s", trade.IBOrderID),
+		RawText:            rawText,
+		SourceAmount:       trade.TradeMoney,
+		Amount:             -trade.TradeMoney, // IBKR tradeMoney is positive for BUY (cost), negative for SELL (proceeds). We invert for our model.
+		BuySell:            trade.BuySell,
 	}
 
 	if trade.AssetCategory == "STK" {
@@ -194,9 +224,7 @@ func (p *IBKRParser) processDividend(cashTx CashTransaction) (models.CanonicalTr
 		cashTx.DateTime, cashTx.Description, cashTx.Symbol, cashTx.Amount, cashTx.Currency, cashTx.ISIN,
 	)
 
-	// Note: IBKR reports do not always separate withholding tax into a distinct transaction.
-	// We are treating the dividend amount as the gross amount received. If tax is withheld,
-	// it might be a negative dividend transaction or require manual adjustment based on full statements.
+	// The dividend amount is the gross amount received. IBKR reports the tax withheld in separate rows.
 	tx := models.CanonicalTransaction{
 		Source:          "ibkr",
 		TransactionDate: date,
@@ -207,6 +235,33 @@ func (p *IBKRParser) processDividend(cashTx CashTransaction) (models.CanonicalTr
 		Currency:        cashTx.Currency,
 		RawText:         rawText,
 		TransactionType: "DIVIDEND",
+	}
+	return tx, nil
+}
+
+// processDividendTax converts an IBKR dividend Withholding Tax CashTransaction to a CanonicalTransaction.
+func (p *IBKRParser) processDividendTax(cashTx CashTransaction) (models.CanonicalTransaction, error) {
+	date, err := parseIBKRDateTime(cashTx.DateTime)
+	if err != nil {
+		return models.CanonicalTransaction{}, err
+	}
+
+	// Construct a comprehensive raw text string.
+	rawText := fmt.Sprintf("DividendTax|%s|%s|%s|%f|%s|%s",
+		cashTx.DateTime, cashTx.Description, cashTx.Symbol, cashTx.Amount, cashTx.Currency, cashTx.ISIN,
+	)
+
+	tx := models.CanonicalTransaction{
+		Source:             "ibkr",
+		TransactionDate:    date,
+		ProductName:        cashTx.Symbol,
+		ISIN:               cashTx.ISIN,
+		Amount:             cashTx.Amount, // Keeps its source sign, so a positive reversal cancels the original tax.
+		SourceAmount:       cashTx.Amount,
+		Currency:           cashTx.Currency,
+		RawText:            rawText,
+		TransactionType:    "DIVIDEND",
+		TransactionSubType: "TAX",
 	}
 	return tx, nil
 }
