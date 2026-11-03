@@ -27,7 +27,8 @@ type AppConfig struct {
 	MaxUploadSizeBytes int64
 
 	// Data file paths
-	CountryDataPath string
+	CountryDataPath             string
+	DividendSourceOverridesPath string
 
 	// Email Service settings
 	EmailServiceProvider string
@@ -132,7 +133,8 @@ func LoadConfig() {
 		MaxUploadSizeBytes: maxUploadSizeBytes,
 
 		// Data
-		CountryDataPath: getEnv("COUNTRY_DATA_PATH", "data/country.json"),
+		CountryDataPath:             getEnv("COUNTRY_DATA_PATH", "data/country.json"),
+		DividendSourceOverridesPath: getEnv("DIVIDEND_SOURCE_OVERRIDES_PATH", "data/dividend_source_overrides.json"),
 
 		// Email
 		EmailServiceProvider: getEnv("EMAIL_SERVICE_PROVIDER", "smtp"),

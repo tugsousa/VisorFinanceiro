@@ -155,6 +155,9 @@ func main() {
 	if err := utils.InitCountryData(config.Cfg.CountryDataPath); err != nil {
 		logger.L.Error("Failed to load country data", "error", err)
 	}
+	if err := utils.InitDividendSourceOverrides(config.Cfg.DividendSourceOverridesPath); err != nil {
+		logger.L.Error("Failed to load dividend source overrides", "error", err)
+	}
 
 	logger.L.Info("Initializing database...", "path", config.Cfg.DatabasePath)
 	database.InitDB(config.Cfg.DatabasePath)
