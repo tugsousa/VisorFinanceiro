@@ -20,6 +20,8 @@ type StockProcessor interface {
 	// 1. A complete list of all calculated sale details.
 	// 2. A map of open purchase lots, keyed by year, for historical views.
 	Process(transactions []models.ProcessedTransaction) ([]models.SaleDetail, map[string][]models.PurchaseLot)
+	// FindUnmatchedSales returns the sold quantities that have no purchase to match.
+	FindUnmatchedSales(transactions []models.ProcessedTransaction) []models.UnmatchedSale
 }
 
 // OptionProcessor defines the interface for processing option transactions.

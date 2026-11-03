@@ -1,6 +1,7 @@
 package processors
 
 import (
+	"math"
 	"sort"
 	"strconv"
 
@@ -22,17 +23,25 @@ func (p *stockProcessorImpl) Process(transactions []models.ProcessedTransaction)
 		return []models.SaleDetail{}, make(map[string][]models.PurchaseLot)
 	}
 	allocateDegiroOrderCommissions(stockTransactions, transactions)
-	return calculateSalesAndYearlyHoldings(stockTransactions)
+	saleDetails, holdingsByYear, _ := calculateSalesAndYearlyHoldings(stockTransactions)
+	return saleDetails, holdingsByYear
+}
+
+// FindUnmatchedSales implements the StockProcessor interface.
+func (p *stockProcessorImpl) FindUnmatchedSales(transactions []models.ProcessedTransaction) []models.UnmatchedSale {
+	_, _, unmatchedSales := calculateSalesAndYearlyHoldings(filterAndSortStockTransactions(transactions))
+	return unmatchedSales
 }
 
 // calculateSalesAndYearlyHoldings contains the original, correct FIFO and snapshot logic.
-func calculateSalesAndYearlyHoldings(transactions []models.ProcessedTransaction) ([]models.SaleDetail, map[string][]models.PurchaseLot) {
+func calculateSalesAndYearlyHoldings(transactions []models.ProcessedTransaction) ([]models.SaleDetail, map[string][]models.PurchaseLot, []models.UnmatchedSale) {
 	saleDetails := []models.SaleDetail{}
+	unmatchedSales := []models.UnmatchedSale{}
 	holdingsByYear := make(map[string][]models.PurchaseLot)
 	openPurchasesByISIN := make(map[string][]*models.ProcessedTransaction)
 
 	if len(transactions) == 0 {
-		return saleDetails, holdingsByYear
+		return saleDetails, holdingsByYear, unmatchedSales
 	}
 
 	lastProcessedYear := utils.ParseDate(transactions[0].Date).Year()
@@ -57,20 +66,17 @@ func calculateSalesAndYearlyHoldings(transactions []models.ProcessedTransaction)
 			remainingQty := tx.Quantity
 			purchaseLots := openPurchasesByISIN[tx.ISIN]
 
-			for remainingQty > 0 && len(purchaseLots) > 0 {
+			for remainingQty > utils.QuantityEpsilon && len(purchaseLots) > 0 {
 				currentPurchase := purchaseLots[0]
-				matchedQty := utils.MinInt(remainingQty, currentPurchase.Quantity)
+				matchedQty := math.Min(remainingQty, currentPurchase.Quantity)
 
-				saleRatio := float64(matchedQty) / float64(tx.Quantity)
+				saleRatio := matchedQty / tx.Quantity
 				var purchaseRatio float64
 				if currentPurchase.OriginalQuantity > 0 {
-					purchaseRatio = float64(matchedQty) / float64(currentPurchase.OriginalQuantity)
+					purchaseRatio = matchedQty / currentPurchase.OriginalQuantity
 				}
-				buyCommissionToAdd := 0.0
-				if currentPurchase.Commission > 0 {
-					buyCommissionToAdd = currentPurchase.Commission
-					currentPurchase.Commission = 0
-				}
+				// A partly sold lot only uses the commission of the part sold, as with options.
+				buyCommissionToAdd := currentPurchase.Commission * purchaseRatio
 				saleCommission := tx.Commission * saleRatio
 				totalDetailCommission := utils.RoundFloat(saleCommission+buyCommissionToAdd, 2)
 				roundedSaleCommission := utils.RoundFloat(saleCommission, 2)
@@ -84,7 +90,7 @@ func calculateSalesAndYearlyHoldings(transactions []models.ProcessedTransaction)
 					BuySource:        currentPurchase.Source,
 					ProductName:      tx.ProductName,
 					ISIN:             tx.ISIN,
-					Quantity:         matchedQty,
+					Quantity:         utils.RoundQuantity(matchedQty),
 					SaleAmount:       tx.Amount * saleRatio,
 					SaleCurrency:     tx.Currency,
 					SaleAmountEUR:    saleAmountEUR,
@@ -104,10 +110,21 @@ func calculateSalesAndYearlyHoldings(transactions []models.ProcessedTransaction)
 
 				remainingQty -= matchedQty
 				currentPurchase.Quantity -= matchedQty
-				if currentPurchase.Quantity == 0 {
+				if currentPurchase.Quantity <= utils.QuantityEpsilon {
 					purchaseLots = purchaseLots[1:]
 				}
 				openPurchasesByISIN[tx.ISIN] = purchaseLots
+			}
+
+			if remainingQty > utils.QuantityEpsilon {
+				unmatchedSales = append(unmatchedSales, models.UnmatchedSale{
+					SaleDate:      tx.Date,
+					Source:        tx.Source,
+					ProductName:   tx.ProductName,
+					ISIN:          tx.ISIN,
+					Quantity:      utils.RoundQuantity(remainingQty),
+					SaleAmountEUR: utils.RoundFloat(tx.AmountEUR*remainingQty/tx.Quantity, 2),
+				})
 			}
 		}
 
@@ -118,7 +135,7 @@ func calculateSalesAndYearlyHoldings(transactions []models.ProcessedTransaction)
 	finalSnapshot := collectAndCopyHoldings(openPurchasesByISIN)
 	holdingsByYear[strconv.Itoa(lastProcessedYear)] = finalSnapshot
 
-	return saleDetails, holdingsByYear
+	return saleDetails, holdingsByYear, unmatchedSales
 }
 
 // collectAndCopyHoldings is a helper to create the PurchaseLot view model from the internal state.
@@ -126,10 +143,10 @@ func collectAndCopyHoldings(holdingsMap map[string][]*models.ProcessedTransactio
 	var snapshot []models.PurchaseLot
 	for _, lots := range holdingsMap {
 		for _, lot := range lots {
-			if lot.Quantity > 0 {
+			if lot.Quantity > utils.QuantityEpsilon {
 				var lotAmount, lotAmountEUR float64
 				if lot.OriginalQuantity > 0 {
-					ratio := float64(lot.Quantity) / float64(lot.OriginalQuantity)
+					ratio := lot.Quantity / lot.OriginalQuantity
 					lotAmount = lot.Amount * ratio
 					lotAmountEUR = lot.AmountEUR * ratio
 				}
@@ -138,7 +155,7 @@ func collectAndCopyHoldings(holdingsMap map[string][]*models.ProcessedTransactio
 					BuyDate:      lot.Date,
 					ProductName:  lot.ProductName,
 					ISIN:         lot.ISIN,
-					Quantity:     lot.Quantity,
+					Quantity:     utils.RoundQuantity(lot.Quantity),
 					BuyAmount:    lotAmount,
 					BuyCurrency:  lot.Currency,
 					BuyAmountEUR: utils.RoundFloat(lotAmountEUR, 2),

@@ -2,6 +2,7 @@
 import React, { useState, useMemo } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiAddManualTransaction } from 'features/portfolio/api/portfolioApi';
+import { usePortfolio } from '../PortfolioContext';
 import {
   Button, Dialog, DialogActions, DialogContent, DialogTitle, TextField,
   Grid, CircularProgress, Alert, FormControl, InputLabel, Select, MenuItem
@@ -9,6 +10,7 @@ import {
 
 const AddTransactionModal = ({ open, onClose }) => {
   const queryClient = useQueryClient();
+  const { activePortfolio } = usePortfolio();
   const initialFormState = {
     date: '',
     source: 'Manual',
@@ -30,7 +32,8 @@ const AddTransactionModal = ({ open, onClose }) => {
   const mutation = useMutation({
     mutationFn: (data) => apiAddManualTransaction(data),
     onSuccess: () => {
-      queryClient.invalidateQueries(); 
+      queryClient.invalidateQueries();
+      setFormData(initialFormState);
       onClose(); 
     },
   });
@@ -109,6 +112,7 @@ const AddTransactionModal = ({ open, onClose }) => {
     
     const payload = {
         ...formData,
+        portfolio_id: activePortfolio?.id,
         quantity: parseFloat(formData.quantity) || 0,
         price: parseFloat(formData.price) || 0,
         commission: parseFloat(formData.commission) || 0,
@@ -151,6 +155,7 @@ const AddTransactionModal = ({ open, onClose }) => {
               </Select>
             </FormControl>
           </Grid>
+          {(formData.transaction_type === 'STOCK' || formData.transaction_type === 'OPTION') && (
           <Grid item xs={12} sm={4}>
              <FormControl fullWidth required error={!!errors.buy_sell}>
               <InputLabel>Ação</InputLabel>
@@ -160,6 +165,7 @@ const AddTransactionModal = ({ open, onClose }) => {
               </Select>
             </FormControl>
           </Grid>
+          )}
            {subtypeOptions.length > 0 && (
             <Grid item xs={12} sm={4}>
               <FormControl fullWidth>

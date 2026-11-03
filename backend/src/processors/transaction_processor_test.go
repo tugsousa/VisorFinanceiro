@@ -33,10 +33,13 @@ func TestTransactionProcessor_ConvertsCommissionFromItsOwnCurrency(t *testing.T)
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			processed := NewTransactionProcessor().Process([]models.CanonicalTransaction{{
+			processed, err := NewTransactionProcessor().Process([]models.CanonicalTransaction{{
 				Source: "ibkr", TransactionDate: date, Currency: "PLN", Amount: -400,
 				Commission: 12, CommissionCurrency: tt.commissionCurrency,
 			}})
+			if err != nil {
+				t.Fatalf("Process returned error: %v", err)
+			}
 
 			assertAmount(t, "commission", tt.want, processed[0].Commission)
 			assertAmount(t, "amount", -100, processed[0].AmountEUR)

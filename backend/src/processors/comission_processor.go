@@ -61,7 +61,7 @@ func degiroOrderCommissionsEUR(txs []models.ProcessedTransaction) map[string]flo
 func allocateDegiroOrderCommissions(fills, allTxs []models.ProcessedTransaction) {
 	orderCommissions := degiroOrderCommissionsEUR(allTxs)
 
-	orderQuantities := make(map[string]int)
+	orderQuantities := make(map[string]float64)
 	for _, tx := range fills {
 		if tx.Source == "degiro" && tx.OrderID != "" {
 			orderQuantities[tx.OrderID] += tx.Quantity
@@ -77,6 +77,6 @@ func allocateDegiroOrderCommissions(fills, allTxs []models.ProcessedTransaction)
 		if !found {
 			orderCommission = tx.Commission
 		}
-		tx.Commission = orderCommission * float64(tx.Quantity) / float64(orderQuantities[tx.OrderID])
+		tx.Commission = orderCommission * tx.Quantity / orderQuantities[tx.OrderID]
 	}
 }

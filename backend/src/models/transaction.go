@@ -21,8 +21,8 @@ type ProcessedTransaction struct {
 	Source             string  `json:"source"` // e.g., DEGIRO, IBKR
 	ProductName        string  `json:"product_name"`
 	ISIN               string  `json:"isin"`
-	Quantity           int     `json:"quantity"`
-	OriginalQuantity   int     `json:"original_quantity"` // Original quantity of the purchase lot before any sales
+	Quantity           float64 `json:"quantity"`
+	OriginalQuantity   float64 `json:"original_quantity"` // Original quantity of the purchase lot before any sales
 	Price              float64 `json:"price"`
 	TransactionType    string  `json:"transaction_type"`    // e.g., "STOCK", "OPTION", "DIVIDEND", "FEE", "CASH"
 	TransactionSubType string  `json:"transaction_subtype"` // e.g., "CALL", "PUT", "TAX", "DEPOSIT"

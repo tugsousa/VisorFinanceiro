@@ -2,6 +2,18 @@
 import { calculateAnnualizedReturn } from 'lib/utils/formatUtils';
 import { calculateDaysHeld } from 'lib/utils/dateUtils';
 
+export const hasMarketPrice = (holding) => holding.status === 'OK';
+
+/**
+ * Returns the value of a current holding in EUR. One without a price counts at cost, as in the
+ * portfolio history: counting it as zero would show up as a loss of the whole position.
+ * @param {object} holding - A holding from the current holdings endpoint.
+ * @returns {number} The value in EUR.
+ */
+export const getHoldingValueEUR = (holding) => (
+    hasMarketPrice(holding) ? (holding.market_value_eur || 0) : Math.abs(holding.total_cost_basis_eur || 0)
+);
+
 /**
  * Transforms grouped holding data into grid rows, including calculating totals.
  * @param {Array} groupedData - The array of grouped holding objects.
@@ -15,14 +27,20 @@ export const transformGroupedHoldings = (groupedData, isGroupedFetching, isHisto
    const standardRows = groupedData.map(item => {
         const costPerShare = item.quantity > 0 ? item.total_cost_basis_eur / item.quantity : 0;
         const realizedGains = (item.totalDividends || 0) + (item.totalRealizedStockPL || 0) - Math.abs(item.totalCommissions || 0);
-        const unrealizedPL = !isHistorical ? ((item.marketValueEUR || 0) - (item.total_cost_basis_eur || 0)) : 0;
-        
+        const priceUnavailable = !isHistorical && !hasMarketPrice(item);
+        let unrealizedPL = 0;
+        if (priceUnavailable) {
+            unrealizedPL = undefined;
+        } else if (!isHistorical) {
+            unrealizedPL = (item.marketValueEUR || 0) - (item.total_cost_basis_eur || 0);
+        }
+
         let unrealizedPLPercentage = 0;
-        if (unrealizedPL !== 0 && item.total_cost_basis_eur > 0) {
+        if (unrealizedPL && item.total_cost_basis_eur > 0) {
             unrealizedPLPercentage = (unrealizedPL / item.total_cost_basis_eur) * 100;
         }
 
-        const totalProfitAmount = unrealizedPL + realizedGains;
+        const totalProfitAmount = (unrealizedPL || 0) + realizedGains;
         const totalProfitPercentage = (item.total_cost_basis_eur > 0) ? (totalProfitAmount / item.total_cost_basis_eur) * 100 : 0;
 
         return {
@@ -34,6 +52,7 @@ export const transformGroupedHoldings = (groupedData, isGroupedFetching, isHisto
             totalProfitPercentage,
             unrealizedPL,
             unrealizedPLPercentage,
+            priceUnavailable,
             isFetching: isGroupedFetching,
             isTotalRow: false,
         };
@@ -97,11 +116,12 @@ export const transformDetailedHoldings = (detailedData) => {
             const buyAmountEUR = Math.abs(holding.buy_amount_eur || 0);
             const buyPricePerShareEUR = quantity > 0 ? (buyAmountEUR / quantity) : 0;
             
-            const marketValueEUR = quantity * currentPriceEUR;
-            const unrealizedPLPerShare = currentPriceEUR - buyPricePerShareEUR;
-            const unrealizedPLTotal = marketValueEUR - buyAmountEUR;
+            const priceUnavailable = currentPriceEUR <= 0;
+            const marketValueEUR = priceUnavailable ? buyAmountEUR : quantity * currentPriceEUR;
+            const unrealizedPLPerShare = priceUnavailable ? undefined : currentPriceEUR - buyPricePerShareEUR;
+            const unrealizedPLTotal = priceUnavailable ? undefined : marketValueEUR - buyAmountEUR;
 
-            const returnPercentage = buyAmountEUR > 0 ? (unrealizedPLTotal / buyAmountEUR) * 100 : 0;
+            const returnPercentage = !priceUnavailable && buyAmountEUR > 0 ? (unrealizedPLTotal / buyAmountEUR) * 100 : undefined;
             const annualizedReturnStr = calculateAnnualizedReturn(unrealizedPLTotal, buyAmountEUR, daysHeld);
 
             return {
@@ -113,6 +133,7 @@ export const transformDetailedHoldings = (detailedData) => {
                 currentPriceEUR,
                 unrealizedPLTotal,
                 unrealizedPLPerShare,
+                priceUnavailable,
                 returnPercentage,
                 annualizedReturnStr
             };

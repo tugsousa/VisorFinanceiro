@@ -4,6 +4,8 @@ package processors
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"fmt"
+	"time"
 
 	"github.com/username/taxfolio/backend/src/logger"
 	"github.com/username/taxfolio/backend/src/models"
@@ -17,7 +19,9 @@ func NewTransactionProcessor() *TransactionProcessor { return &TransactionProces
 
 // Process iterates through canonical transactions and enriches them.
 // It no longer calculates the amount, trusting the value provided by the specific parser.
-func (p *TransactionProcessor) Process(txs []models.CanonicalTransaction) []models.ProcessedTransaction {
+// It fails if a rate is missing for a row with a value, so that no wrong EUR amount gets stored:
+// a later upload of the same file would skip those rows as duplicates and never correct them.
+func (p *TransactionProcessor) Process(txs []models.CanonicalTransaction) ([]models.ProcessedTransaction, error) {
 	var processedTxs []models.ProcessedTransaction
 	for _, tx := range txs {
 		// --- Enrichment Stage ---
@@ -25,11 +29,13 @@ func (p *TransactionProcessor) Process(txs []models.CanonicalTransaction) []mode
 		// 1. Enrich with Exchange Rate.
 		rate, err := GetExchangeRate(tx.Currency, tx.TransactionDate)
 		if err != nil {
-			logger.L.Warn("Could not find exchange rate, defaulting to 1.0", "currency", tx.Currency, "date", tx.TransactionDate, "orderID", tx.OrderID, "error", err)
-			tx.ExchangeRate = 1.0
-		} else {
-			tx.ExchangeRate = rate
+			if tx.Amount != 0 || tx.Commission != 0 {
+				return nil, missingRateError(tx.Currency, tx.TransactionDate, err)
+			}
+			// Nothing on this row needs converting, and some rows have no currency at all.
+			rate = 1.0
 		}
+		tx.ExchangeRate = rate
 
 		// 2. Enrich with Amount in EUR.
 		// This now uses the pre-calculated, signed `Amount` from the canonical transaction.
@@ -43,11 +49,10 @@ func (p *TransactionProcessor) Process(txs []models.CanonicalTransaction) []mode
 		// O campo tx.Commission (Canonical) tem o valor na moeda original.
 		// A comissão pode ser cobrada numa moeda diferente da transação.
 		commissionRate := tx.ExchangeRate
-		if tx.CommissionCurrency != "" && tx.CommissionCurrency != tx.Currency {
+		if tx.Commission != 0 && tx.CommissionCurrency != "" && tx.CommissionCurrency != tx.Currency {
 			commissionRate, err = GetExchangeRate(tx.CommissionCurrency, tx.TransactionDate)
 			if err != nil {
-				logger.L.Warn("Could not find commission exchange rate, defaulting to 1.0", "currency", tx.CommissionCurrency, "date", tx.TransactionDate, "orderID", tx.OrderID, "error", err)
-				commissionRate = 1.0
+				return nil, missingRateError(tx.CommissionCurrency, tx.TransactionDate, err)
 			}
 		}
 
@@ -71,8 +76,8 @@ func (p *TransactionProcessor) Process(txs []models.CanonicalTransaction) []mode
 			Source:             tx.Source,
 			ProductName:        tx.ProductName,
 			ISIN:               tx.ISIN,
-			Quantity:           int(tx.Quantity),
-			OriginalQuantity:   int(tx.Quantity),
+			Quantity:           tx.Quantity,
+			OriginalQuantity:   tx.Quantity,
 			Price:              tx.Price,
 			TransactionType:    tx.TransactionType,
 			TransactionSubType: tx.TransactionSubType,
@@ -92,7 +97,13 @@ func (p *TransactionProcessor) Process(txs []models.CanonicalTransaction) []mode
 		}
 		processedTxs = append(processedTxs, processed)
 	}
-	return processedTxs
+	return processedTxs, nil
+}
+
+// missingRateError logs the cause and returns the message shown to the user.
+func missingRateError(currency string, date time.Time, cause error) error {
+	logger.L.Warn("Could not find exchange rate", "currency", currency, "date", date, "error", cause)
+	return fmt.Errorf("não foi possível obter a taxa de câmbio de %s para %s; nenhuma transação foi importada, tente novamente mais tarde", currency, date.Format("2006-01-02"))
 }
 
 // generateHash creates a unique hash for the transaction based on key source data.

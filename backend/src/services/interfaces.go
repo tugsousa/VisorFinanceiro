@@ -35,11 +35,13 @@ type UploadService interface {
 	GetStockHoldings(userID int64, portfolioID int64) (map[string][]models.PurchaseLot, error)
 	GetOptionHoldings(userID int64, portfolioID int64) ([]models.OptionHolding, error)
 	GetStockSaleDetails(userID int64, portfolioID int64) ([]models.SaleDetail, error)
+	GetUnmatchedStockSales(userID int64, portfolioID int64) ([]models.UnmatchedSale, error)
 	GetOptionSaleDetails(userID int64, portfolioID int64) ([]models.OptionSaleDetail, error)
 	GetFeeDetails(userID int64, portfolioID int64) ([]models.FeeDetail, error)
 	InvalidateUserCache(userID int64, portfolioID int64)
 	UpdateUserPortfolioMetrics(userID int64, portfolioID int64) error
 	GetCurrentHoldingsWithValue(userID int64, portfolioID int64) ([]models.HoldingWithValue, error)
+	GetCurrentCashBalance(userID int64, portfolioID int64) (float64, error)
 	GetHistoricalChartData(userID int64, portfolioID int64) ([]models.HistoricalDataPoint, error)
 
 	GetDividendMetrics(userID int64, portfolioID int64) (*models.DividendMetricsResult, error)

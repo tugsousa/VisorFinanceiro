@@ -6,20 +6,13 @@ import (
 	"time"
 )
 
-// MinInt returns the smaller of two integers.
-func MinInt(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}
+// QuantityEpsilon is the smallest share quantity treated as non-zero. Fractional quantities are
+// floats, so a fully sold lot can leave a tiny remainder.
+const QuantityEpsilon = 1e-6
 
-// AbsInt returns the absolute value of an integer.
-func AbsInt(x int) int {
-	if x < 0 {
-		return -x
-	}
-	return x
+// RoundQuantity removes float noise from a calculated share quantity.
+func RoundQuantity(quantity float64) float64 {
+	return RoundFloat(quantity, 6)
 }
 
 // RoundFloat rounds a float64 to a specified number of decimal places.

@@ -56,7 +56,7 @@ func (h *TransactionHandler) HandleGetProcessedTransactions(w http.ResponseWrite
 		SELECT id, date, source, product_name, isin, quantity, original_quantity, price, 
 		       transaction_type, transaction_subtype, buy_sell, description, amount, currency, commission, 
 		       order_id, exchange_rate, amount_eur, country_code, input_string, hash_id,
-		       cash_balance, balance_currency
+		       COALESCE(cash_balance, 0), COALESCE(balance_currency, '')
 		FROM processed_transactions
 		WHERE user_id = ? AND portfolio_id = ?
 		ORDER BY date DESC, id DESC`, userID, portfolioID)
@@ -224,6 +224,25 @@ type ManualTransactionRequest struct {
 	OrderID            string  `json:"order_id"`
 }
 
+// manualTransactionAmount returns the signed amount in the original currency. Only trades have a
+// direction: a dividend is income, while its withholding tax and fees are costs.
+func manualTransactionAmount(req ManualTransactionRequest) float64 {
+	value := req.Quantity * req.Price
+	switch req.TransactionType {
+	case "DIVIDEND":
+		if req.TransactionSubType == "TAX" {
+			return -value
+		}
+		return value
+	case "FEE":
+		return -value
+	}
+	if req.BuySell == "BUY" {
+		return -value
+	}
+	return value
+}
+
 func (h *TransactionHandler) HandleAddManualTransaction(w http.ResponseWriter, r *http.Request) {
 	userID, ok := GetUserIDFromContext(r.Context())
 	if !ok {
@@ -274,14 +293,15 @@ func (h *TransactionHandler) HandleAddManualTransaction(w http.ResponseWriter, r
 
 	exchangeRate, err := processors.GetExchangeRate(req.Currency, transactionDate)
 	if err != nil {
-		logger.L.Warn("Manual TX: Could not get exchange rate", "error", err)
-		exchangeRate = 1.0
+		logger.L.Warn("Manual TX: Could not get exchange rate", "currency", req.Currency, "error", err)
+		utils.SendJSONError(w, "Não foi possível obter a taxa de câmbio. Tente novamente mais tarde.", http.StatusServiceUnavailable)
+		return
 	}
 
-	amount := req.Quantity * req.Price
-	if req.BuySell == "BUY" {
-		amount = -amount
+	if req.TransactionType != "STOCK" && req.TransactionType != "OPTION" {
+		req.BuySell = ""
 	}
+	amount := manualTransactionAmount(req)
 
 	amountEUR := amount
 	if req.Currency != "EUR" && exchangeRate != 0 {
@@ -300,8 +320,9 @@ func (h *TransactionHandler) HandleAddManualTransaction(w http.ResponseWriter, r
         INSERT INTO processed_transactions 
         (user_id, portfolio_id, date, source, product_name, isin, quantity, original_quantity, price, 
         transaction_type, transaction_subtype, buy_sell, description, amount, currency, 
-        commission, order_id, exchange_rate, amount_eur, country_code, input_string, hash_id) 
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        commission, order_id, exchange_rate, amount_eur, country_code, input_string, hash_id,
+        cash_balance, balance_currency) 
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `)
 	if err != nil {
 		logger.L.Error("Failed to prepare statement", "error", err)
@@ -317,8 +338,8 @@ func (h *TransactionHandler) HandleAddManualTransaction(w http.ResponseWriter, r
 		req.Source,
 		req.ProductName,
 		req.ISIN,
-		int(req.Quantity),
-		int(req.Quantity),
+		req.Quantity,
+		req.Quantity,
 		req.Price,
 		req.TransactionType,
 		req.TransactionSubType,
@@ -326,13 +347,15 @@ func (h *TransactionHandler) HandleAddManualTransaction(w http.ResponseWriter, r
 		sanitizedDescription,
 		amount,
 		req.Currency,
-		req.Commission,
+		req.Commission/exchangeRate, // Stored commissions are in EUR
 		req.OrderID,
 		exchangeRate,
 		amountEUR,
 		countryCode,
 		sanitizedDescription,
 		hashId,
+		0.0, // A manual transaction doesn't report a broker balance
+		"",
 	)
 
 	if err != nil {
@@ -342,6 +365,10 @@ func (h *TransactionHandler) HandleAddManualTransaction(w http.ResponseWriter, r
 	}
 
 	h.uploadService.InvalidateUserCache(userID, req.PortfolioID)
+	fromDate := transactionDate.Format("02-01-2006")
+	if _, err := h.uploadService.GetJobManager().RebuildHistoryAsync(h.uploadService, userID, req.PortfolioID, fromDate); err != nil {
+		logger.L.Error("Failed to start history rebuild after manual transaction", "userID", userID, "error", err)
+	}
 	logger.L.Info("Manual transaction added", "userID", userID, "portfolioID", req.PortfolioID)
 
 	w.WriteHeader(http.StatusCreated)
