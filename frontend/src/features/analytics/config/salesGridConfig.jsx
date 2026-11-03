@@ -11,6 +11,19 @@ const dateFormatter = (value) => {
     return `${day}-${month}-${year}`;
 };
 
+const renderSignedValueCell = (params) => (
+    <Box sx={{ color: params.value >= 0 ? 'success.main' : 'error.main' }}>
+        {params.value?.toFixed(2)}
+    </Box>
+);
+
+// Opening amounts are signed (negative when buying, positive when opening a short), so the return is calculated from the absolute value
+const getReturnPercentageColumn = (plField, openAmountField) => ({
+    field: 'returnPercentage', headerName: 'Rentabilidade (%)', type: 'number', width: 130, headerAlign: 'right', align: 'right',
+    valueGetter: (_, row) => row[openAmountField] ? (row[plField] / Math.abs(row[openAmountField])) * 100 : null,
+    renderCell: renderSignedValueCell,
+});
+
 export const stockSalesColumns = [
     {
       field: 'BuyDate', headerName: 'Dt. abertura', width: 110, type: 'date',
@@ -30,13 +43,8 @@ export const stockSalesColumns = [
     { field: 'Quantity', headerName: 'Qtd', type: 'number', width: 80 },
     { field: 'BuyAmountEUR', headerName: 'Mont. abertura (€)', type: 'number', width: 130, valueFormatter: (value) => typeof value === 'number' ? value.toFixed(2) : '' },
     { field: 'SaleAmountEUR', headerName: 'Mont. fecho (€)', type: 'number', width: 130, valueFormatter: (value) => typeof value === 'number' ? value.toFixed(2) : '' },
-    { field: 'Delta', headerName: 'L/P (€)', type: 'number', width: 120, headerAlign: 'right', align: 'right',
-        renderCell: (params) => (
-            <Box sx={{ color: params.value >= 0 ? 'success.main' : 'error.main' }}>
-                {params.value?.toFixed(2)}
-            </Box>
-        ),
-    },
+    { field: 'Delta', headerName: 'L/P (€)', type: 'number', width: 120, headerAlign: 'right', align: 'right', renderCell: renderSignedValueCell },
+    getReturnPercentageColumn('Delta', 'BuyAmountEUR'),
 ];
 
 export const optionSalesColumns = [
@@ -58,11 +66,6 @@ export const optionSalesColumns = [
     { field: 'quantity', headerName: 'Qtd', type: 'number', width: 80 },
     { field: 'open_amount_eur', headerName: 'Mont. abertura (€)', type: 'number', width: 130, valueFormatter: (value) => typeof value === 'number' ? value.toFixed(2) : '' },
     { field: 'close_amount_eur', headerName: 'Mont. fecho (€)', type: 'number', width: 130, valueFormatter: (value) => typeof value === 'number' ? value.toFixed(2) : '' },
-    { field: 'delta', headerName: 'L/P (€)', type: 'number', width: 120, headerAlign: 'right', align: 'right',
-        renderCell: (params) => (
-            <Box sx={{ color: params.value >= 0 ? 'success.main' : 'error.main' }}>
-                {params.value?.toFixed(2)}
-            </Box>
-        ),
-    },
+    { field: 'delta', headerName: 'L/P (€)', type: 'number', width: 120, headerAlign: 'right', align: 'right', renderCell: renderSignedValueCell },
+    getReturnPercentageColumn('delta', 'open_amount_eur'),
 ];

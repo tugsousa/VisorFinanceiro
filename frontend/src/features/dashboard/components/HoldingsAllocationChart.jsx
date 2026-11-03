@@ -71,13 +71,20 @@ export default function HoldingsAllocationChart({ data, title }) {
     const [showPurchaseValue, setShowPurchaseValue] = useState(false);
 
     // 1. Process Data based on Toggle
-    const { chartData, totalValue, sortedItems } = useMemo(() => {
-        if (!data || data.length === 0) return { chartData: null, totalValue: 0, sortedItems: [] };
+    const { chartData, totalValue, sortedItems, baseColors } = useMemo(() => {
+        if (!data || data.length === 0) return { chartData: null, totalValue: 0, sortedItems: [], baseColors: [] };
+
+        // Colors follow market value rank so an item keeps its color when the toggle reorders the list
+        const palette = generateColorPalette(data.length + 1);
+        const colorByName = new Map(
+            [...data].sort((a, b) => b.marketValue - a.marketValue).map((item, i) => [item.name, palette[i]])
+        );
 
         // Map to active value (Cost vs Market)
         const processedItems = data.map(item => ({
             name: item.name,
-            value: showPurchaseValue ? item.costBasis : item.marketValue
+            value: showPurchaseValue ? item.costBasis : item.marketValue,
+            color: colorByName.get(item.name)
         }));
 
         const total = processedItems.reduce((sum, item) => sum + item.value, 0);
@@ -96,13 +103,15 @@ export default function HoldingsAllocationChart({ data, title }) {
         if (others.length > 0) {
             chartItems.push({
                 name: 'Outros',
-                value: others.reduce((s, i) => s + i.value, 0)
+                value: others.reduce((s, i) => s + i.value, 0),
+                color: palette[data.length]
             });
         }
 
         return {
             totalValue: total,
             sortedItems: sorted, // For the table
+            baseColors: chartItems.map(i => i.color),
             chartData: {
                 labels: chartItems.map(i => i.name),
                 datasets: [{
@@ -114,11 +123,6 @@ export default function HoldingsAllocationChart({ data, title }) {
     }, [data, showPurchaseValue]);
 
     // 2. Colors (Restored Logic)
-    const baseColors = useMemo(() => {
-        const len = chartData?.datasets[0]?.data.length || 0;
-        return generateColorPalette(len);
-    }, [chartData]);
-
     const dynamicBackgroundColors = useMemo(() => {
         if (hoveredIndex === null) return baseColors;
         return baseColors.map((color, index) =>
@@ -221,7 +225,7 @@ export default function HoldingsAllocationChart({ data, title }) {
                                 <TableCell component="th" scope="row" sx={{ fontSize: '0.75rem', py: 0.5, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 100 }}>
                                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                                         {idx < 5 && (
-                                            <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: baseColors[idx], flexShrink: 0 }} />
+                                            <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: item.color, flexShrink: 0 }} />
                                         )}
                                         {item.name}
                                     </Box>
