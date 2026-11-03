@@ -36,7 +36,7 @@ func (p *dividendProcessorImpl) CalculateTaxSummary(transactions []models.Proces
 		if len(t.ISIN) < 2 {
 			continue // Skip invalid ISINs
 		}
-		countryFormattedString := utils.GetCountryCodeString(t.ISIN)
+		countryFormattedString := utils.GetDividendSourceCountry(t.ISIN)
 
 		// PRECISION UPDATE: Use AmountEUR directly without rounding.
 		// The frontend will handle formatting (2 decimal places usually, but precise for calcs).

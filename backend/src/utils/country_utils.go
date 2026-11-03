@@ -22,6 +22,8 @@ var (
 	loadOnce   sync.Once
 	loadError  error
 	dataLoaded bool = false
+
+	dividendSourceOverrides map[string]string // ISIN -> alpha2 country code
 )
 
 // InitCountryData loads country data from the given file path.
@@ -68,7 +70,10 @@ func GetCountryCodeString(isin string) string {
 		return "Invalid ISIN (Too Short)"
 	}
 
-	alpha2Code := strings.ToUpper(isin[:2])
+	return formatCountryString(strings.ToUpper(isin[:2]))
+}
+
+func formatCountryString(alpha2Code string) string {
 	countryInfo, found := countryMap[alpha2Code]
 	if !found {
 		return "Unknown Code: " + alpha2Code
@@ -79,4 +84,64 @@ func GetCountryCodeString(isin string) string {
 		numericCode = "N/A"
 	}
 	return fmt.Sprintf("%s - %s", numericCode, countryInfo.Country)
+}
+
+// DividendSourceOverride sets the source country of a product's dividends when it
+// differs from its ISIN prefix. Note and Source record why the entry exists.
+type DividendSourceOverride struct {
+	ISIN   string `json:"isin"`
+	Alpha2 string `json:"alpha2"`
+	Note   string `json:"note"`
+	Source string `json:"source"`
+}
+
+// InitDividendSourceOverrides loads the overrides from the given file path.
+// Country data must be loaded first, as entries are validated against it.
+// If the file is invalid, no overrides are applied and an error is returned.
+func InitDividendSourceOverrides(filePath string) error {
+	fileData, err := os.ReadFile(filePath)
+	if err != nil {
+		dividendSourceOverrides = nil
+		return fmt.Errorf("failed to read dividend source overrides file '%s': %w", filePath, err)
+	}
+
+	var entries []DividendSourceOverride
+	if err := json.Unmarshal(fileData, &entries); err != nil {
+		dividendSourceOverrides = nil
+		return fmt.Errorf("failed to unmarshal dividend source overrides from '%s': %w", filePath, err)
+	}
+
+	overrides := make(map[string]string, len(entries))
+	for _, entry := range entries {
+		isin := strings.ToUpper(strings.TrimSpace(entry.ISIN))
+		alpha2Code := strings.ToUpper(strings.TrimSpace(entry.Alpha2))
+
+		if len(isin) != 12 {
+			dividendSourceOverrides = nil
+			return fmt.Errorf("invalid ISIN '%s' in dividend source overrides", entry.ISIN)
+		}
+		if _, found := countryMap[alpha2Code]; !found {
+			dividendSourceOverrides = nil
+			return fmt.Errorf("unknown country '%s' for ISIN %s in dividend source overrides", entry.Alpha2, isin)
+		}
+		if _, duplicate := overrides[isin]; duplicate {
+			dividendSourceOverrides = nil
+			return fmt.Errorf("duplicate ISIN %s in dividend source overrides", isin)
+		}
+		overrides[isin] = alpha2Code
+	}
+
+	dividendSourceOverrides = overrides
+	logger.L.Info("Dividend source overrides loaded successfully.", "path", filePath, "overrideCount", len(overrides))
+	return nil
+}
+
+// GetDividendSourceCountry returns the source country of a product's dividends:
+// its override if it has one, otherwise the country from its ISIN prefix.
+func GetDividendSourceCountry(isin string) string {
+	normalizedISIN := strings.ToUpper(strings.TrimSpace(isin))
+	if alpha2Code, found := dividendSourceOverrides[normalizedISIN]; found {
+		return formatCountryString(alpha2Code)
+	}
+	return GetCountryCodeString(isin)
 }
