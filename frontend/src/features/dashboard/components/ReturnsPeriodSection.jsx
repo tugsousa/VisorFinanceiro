@@ -1,6 +1,8 @@
 import React, { useMemo } from 'react';
 import { Box, Paper, Typography, Grid, Skeleton, Tooltip, IconButton, Divider } from '@mui/material';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
+import { format } from 'date-fns';
+import { MIN_TWR_BALANCE, calculateDailyTWRReturn } from '../../../lib/utils/chartUtils';
 
 const PeriodCard = ({ label, value, isLoading, type }) => {
     let color = 'text.secondary';
@@ -66,9 +68,8 @@ export default function ReturnsPeriodSection({ historicalData, currentMetrics, i
         // Replica a lógica do gráfico de evolução (Performance da Estratégia)
         const twrSeries = [];
         let currentIndex = 1.0;
-        const MIN_BALANCE = 50; 
-        
-        let startIndex = sortedData.findIndex(d => d.portfolio_value > MIN_BALANCE);
+
+        let startIndex = sortedData.findIndex(d => d.portfolio_value > MIN_TWR_BALANCE);
         if (startIndex === -1) startIndex = 0;
 
         for (let i = 0; i < sortedData.length; i++) {
@@ -79,30 +80,20 @@ export default function ReturnsPeriodSection({ historicalData, currentMetrics, i
                 continue;
             }
 
-            const prev = sortedData[i-1];
-            
-            if (prev.portfolio_value < MIN_BALANCE) {
-                 twrSeries.push({ date: curr.date, index: currentIndex });
-                 continue;
-            }
-
-            const dailyFlow = curr.cumulative_cash_flow - prev.cumulative_cash_flow;
-            let dailyReturn = (curr.portfolio_value - dailyFlow) / prev.portfolio_value - 1;
-            
-            if (dailyReturn > 5 || dailyReturn < -0.9) dailyReturn = 0;
-
-            currentIndex *= (1 + dailyReturn);
+            currentIndex *= (1 + calculateDailyTWRReturn(curr, sortedData[i-1]));
             twrSeries.push({ date: curr.date, index: currentIndex });
         }
 
-        const calculateTWR = (startDate) => {
+        const calculateTWR = (startDate, fromPreviousClose = false) => {
             if (twrSeries.length === 0) return 0;
             const endPoint = twrSeries[twrSeries.length - 1]; 
             
             if (!startDate) return 0; 
 
-            const startIso = startDate.toISOString().split('T')[0];
-            const startPoint = twrSeries.find(p => p.date >= startIso) || twrSeries[0];
+            const startIso = format(startDate, 'yyyy-MM-dd');
+            const startPoint = (fromPreviousClose
+                ? twrSeries.filter(p => p.date < startIso).at(-1)
+                : twrSeries.find(p => p.date >= startIso)) || twrSeries[0];
 
             if (!startPoint || startPoint.index === 0) return 0;
             return ((endPoint.index / startPoint.index) - 1) * 100;
@@ -135,7 +126,8 @@ export default function ReturnsPeriodSection({ historicalData, currentMetrics, i
             m1: { val: calculateTWR(oneMonthAgo), type: 'TWR' },
             m3: { val: calculateTWR(threeMonthsAgo), type: 'TWR' },
             m6: { val: calculateTWR(sixMonthsAgo), type: 'TWR' },
-            ytd: { val: calculateTWR(startOfYear), type: 'TWR' },
+            // Base no fecho do ano anterior, igual ao gráfico de evolução
+            ytd: { val: calculateTWR(startOfYear, true), type: 'TWR' },
             y1: { val: calculateTWR(oneYearAgo), type: 'TWR' },
             y5: { val: calculateTWR(fiveYearsAgo), type: 'TWR' },
             all: { val: calculateTotalROI(), type: 'ROI' } 

@@ -1,9 +1,10 @@
 import React, { useMemo, useState, useRef, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Line } from 'react-chartjs-2';
-import { Box, CircularProgress, ToggleButton, ToggleButtonGroup, Switch, FormControlLabel, Typography } from '@mui/material';
+import { Box, CircularProgress, ToggleButton, ToggleButtonGroup, Switch, FormControlLabel, Typography, Select, MenuItem } from '@mui/material';
 import { apiFetchHistoricalChartData } from 'features/analytics/api/analyticsApi';
 import { formatCurrency } from '../../../lib/utils/formatUtils';
+import { calculateDailyTWRReturn } from '../../../lib/utils/chartUtils';
 import { usePortfolio } from '../../portfolio/PortfolioContext';
 import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip as ChartTooltip, Legend, Filler, TimeScale } from 'chart.js';
 import 'chartjs-adapter-date-fns'; // Garante que tens este import para as escalas de tempo
@@ -11,6 +12,8 @@ import 'chartjs-adapter-date-fns'; // Garante que tens este import para as escal
 ChartJS.register(
   CategoryScale, LinearScale, PointElement, LineElement, Title, ChartTooltip, Legend, Filler, TimeScale
 );
+
+const isYearRange = (range) => /^\d{4}$/.test(range);
 
 export default function HistoricalPerformanceChart() {
   const chartRef = useRef(null);
@@ -30,6 +33,14 @@ export default function HistoricalPerformanceChart() {
     },
     enabled: !!portfolioId,
   });
+
+  // Anos com dados, do mais recente para o mais antigo
+  const availableYears = useMemo(() => (
+    [...new Set((rawData || []).map(p => p.date.slice(0, 4)))].sort().reverse()
+  ), [rawData]);
+
+  // Volta a "Tudo" se o ano selecionado não existir na carteira ativa
+  const effectiveRange = isYearRange(timeRange) && !availableYears.includes(timeRange) ? 'ALL' : timeRange;
 
   // Configurar o gradiente do gráfico
   useEffect(() => {
@@ -51,28 +62,40 @@ export default function HistoricalPerformanceChart() {
     now.setHours(23, 59, 59, 999);
     let startDate = new Date(rawData[0].date);
 
-    if (timeRange !== 'ALL') {
+    // YTD é o ano atual, por isso usa a mesma base
+    const rangeToShow = effectiveRange === 'YTD' ? String(now.getFullYear()) : effectiveRange;
+
+    if (rangeToShow !== 'ALL' && !isYearRange(rangeToShow)) {
       const tempStart = new Date();
-      switch (timeRange) {
+      switch (effectiveRange) {
         case '1W': tempStart.setDate(now.getDate() - 7); break;
         case '1M': tempStart.setMonth(now.getMonth() - 1); break;
         case '3M': tempStart.setMonth(now.getMonth() - 3); break;
-        case 'YTD': tempStart.setFullYear(now.getFullYear(), 0, 1); break;
         case '1Y': tempStart.setFullYear(now.getFullYear() - 1); break;
         case '5Y': tempStart.setFullYear(now.getFullYear() - 5); break;
         default: break;
       }
+      // Comparar apenas o dia: as datas dos dados são lidas como meia-noite UTC
+      const startDay = new Date(Date.UTC(tempStart.getFullYear(), tempStart.getMonth(), tempStart.getDate()));
       // Garantir que a data não é anterior ao primeiro dado disponível
       const firstDataDate = new Date(rawData[0].date);
-      startDate = tempStart < firstDataDate ? firstDataDate : tempStart;
+      startDate = startDay < firstDataDate ? firstDataDate : startDay;
     }
 
     // Filtrar array
-    const filtered = rawData.filter(p => new Date(p.date) >= startDate);
+    let filtered;
+    if (isYearRange(rangeToShow)) {
+      // O último ponto do ano anterior serve de base para o retorno do ano
+      const priorPoint = rawData.filter(p => p.date < `${rangeToShow}-01-01`).at(-1);
+      const yearPoints = rawData.filter(p => p.date.startsWith(rangeToShow));
+      filtered = priorPoint ? [priorPoint, ...yearPoints] : yearPoints;
+    } else {
+      filtered = rawData.filter(p => new Date(p.date) >= startDate);
+    }
     if (filtered.length === 0) return [];
 
     // CASO 1: "ALL" -> Lógica Original (Acumulado desde o início)
-    if (timeRange === 'ALL') {
+    if (effectiveRange === 'ALL') {
       return filtered.map(point => {
         const invested = point.cumulative_cash_flow; 
         const value = point.portfolio_value || 0;
@@ -149,14 +172,7 @@ export default function HistoricalPerformanceChart() {
 
         // --- A. TWR do Portfolio ---
         const dailyFlow = curr.cumulative_cash_flow - prev.cumulative_cash_flow;
-        const prevVal = prev.portfolio_value;
-        let dailyReturn = 0;
-        
-        // Fórmula TWR: remove o efeito do fluxo de caixa do retorno do dia
-        if (prevVal > 0) { 
-            dailyReturn = ((curr.portfolio_value - dailyFlow) / prevVal) - 1;
-        }
-        cumulativeMult *= (1 + dailyReturn);
+        cumulativeMult *= (1 + calculateDailyTWRReturn(curr, prev));
 
         // --- B. Benchmark Simulado (SPY) ---
         const currentSpyPrice = curr.spy_price || lastKnownSpyPrice; // Usar lastKnown se 0
@@ -198,7 +214,7 @@ export default function HistoricalPerformanceChart() {
 
     return result;
 
-  }, [rawData, timeRange]);
+  }, [rawData, effectiveRange]);
 
   const chartData = useMemo(() => {
     if (!processedData || processedData.length === 0) return null;
@@ -355,7 +371,7 @@ export default function HistoricalPerformanceChart() {
           </ToggleButtonGroup>
 
           <ToggleButtonGroup
-            value={timeRange}
+            value={effectiveRange}
             exclusive
             onChange={(e, newRange) => newRange && setTimeRange(newRange)}
             size="small"
@@ -369,6 +385,18 @@ export default function HistoricalPerformanceChart() {
             <ToggleButton value="5Y">5A</ToggleButton>
             <ToggleButton value="ALL">Tudo</ToggleButton>
           </ToggleButtonGroup>
+
+          <Select
+            size="small"
+            displayEmpty
+            value={isYearRange(effectiveRange) ? effectiveRange : ''}
+            onChange={(e) => setTimeRange(e.target.value)}
+            inputProps={{ 'aria-label': 'Selecionar ano' }}
+            sx={{ height: 32, fontSize: '0.75rem', fontWeight: 600 }}
+          >
+            <MenuItem value="" disabled>Ano</MenuItem>
+            {availableYears.map(year => <MenuItem key={year} value={year}>{year}</MenuItem>)}
+          </Select>
 
           <FormControlLabel
             control={<Switch size="small" checked={showBenchmark} onChange={(e) => setShowBenchmark(e.target.checked)} />}

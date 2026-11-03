@@ -8,6 +8,24 @@ export const CHART_CONSTANTS = {
   BASE_LIGHTNESS_MAX: 75,
 };
 
+export const MIN_TWR_BALANCE = 50; // Below this balance, daily returns are not meaningful
+
+/**
+ * Calculates a day's time-weighted return, excluding that day's cash flow.
+ * Ignores days with a very small previous balance and extreme outliers.
+ * @param {object} curr - The current history point.
+ * @param {object} prev - The previous history point.
+ * @returns {number} The daily return as a fraction (0.01 = 1%).
+ */
+export const calculateDailyTWRReturn = (curr, prev) => {
+  if (prev.portfolio_value < MIN_TWR_BALANCE) return 0;
+
+  const dailyFlow = curr.cumulative_cash_flow - prev.cumulative_cash_flow;
+  const dailyReturn = (curr.portfolio_value - dailyFlow) / prev.portfolio_value - 1;
+
+  return dailyReturn > 5 || dailyReturn < -0.9 ? 0 : dailyReturn;
+};
+
 /**
  * Generates a distinct color using the golden angle for hue distribution.
  * @param {number} index - The index of the item.
