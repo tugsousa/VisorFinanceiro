@@ -494,9 +494,7 @@ func (s *uploadServiceImpl) ProcessUpload(fileReader io.Reader, userID int64, po
 		insertedCount++
 
 		// FIX #7: track earliest inserted date for partial rebuild.
-		if insertedCount == 1 || tx.Date < earliestNewTxDate {
-			earliestNewTxDate = tx.Date
-		}
+		earliestNewTxDate = earliestTxDate(earliestNewTxDate, tx.Date)
 	}
 
 	if insertedCount > 0 {
@@ -583,6 +581,20 @@ func (s *uploadServiceImpl) ProcessUpload(fileReader io.Reader, userID int64, po
 	return s.GetLatestUploadResult(userID, portfolioID)
 }
 
+// earliestTxDate returns the earlier of two DD-MM-YYYY dates, which can't be compared as strings.
+// current can be empty, and an invalid candidate is ignored.
+func earliestTxDate(current, candidate string) string {
+	candidateDate, err := time.Parse("02-01-2006", candidate)
+	if err != nil {
+		return current
+	}
+	currentDate, err := time.Parse("02-01-2006", current)
+	if err != nil || candidateDate.Before(currentDate) {
+		return candidate
+	}
+	return current
+}
+
 // RebuildUserHistory rebuilds portfolio snapshots.
 // FIX #7: When fromDateStr is non-empty only snapshots on/after that date are
 // deleted and recalculated, making re-uploads of incremental CSVs much faster.
@@ -660,6 +672,14 @@ func (s *uploadServiceImpl) rebuildUserHistoryFrom(userID int64, portfolioID int
 			defer func() { <-sem }()
 
 			prices, realCurrency, err := s.priceService.GetHistoricalPrices(t)
+			if err != nil {
+				// Without history the holding would be valued at cost, so try its other listings.
+				var newTicker string
+				newTicker, prices, realCurrency, err = s.priceService.FindTickerWithHistory(i, t)
+				if err == nil {
+					logger.L.Info("Remapped ISIN to a listing with price history", "isin", i, "from", t, "to", newTicker)
+				}
+			}
 			if err == nil {
 				dataMu.Lock()
 				tickerPrices[i] = prices
@@ -737,23 +757,22 @@ func (s *uploadServiceImpl) rebuildUserHistoryFrom(userID int64, portfolioID int
 		Cash        float64
 	}
 
-	// FIX #7: For incremental rebuilds, seed the running state from the snapshot
+	// FIX #7: For incremental rebuilds, seed the cash balance from the snapshot
 	// just before the startDate so we don't recalculate the entire history.
 	if !fullRebuild {
 		prevDateStr := startDate.AddDate(0, 0, -1).Format("2006-01-02")
-		var prevEquity, prevNetInvested, prevCash float64
+		var prevCash float64
 		err := database.DB.QueryRow(`
-			SELECT total_equity, cumulative_net_cashflow, cash_balance
+			SELECT cash_balance
 			FROM portfolio_snapshots
 			WHERE user_id = ? AND portfolio_id = ? AND date <= ?
 			ORDER BY date DESC LIMIT 1`,
 			userID, portfolioID, prevDateStr,
-		).Scan(&prevEquity, &prevNetInvested, &prevCash)
+		).Scan(&prevCash)
 
 		if err == nil {
-			cumulativeNetInvested = prevNetInvested
 			currentCash = prevCash
-			// Reconstruct holdings state up to (but not including) startDate
+			// Reconstruct net invested and holdings up to (but not including) startDate
 			// by re-playing all transactions before that date.
 			for _, tx := range txs {
 				txDate, e := time.Parse("02-01-2006", tx.Date)
@@ -1278,7 +1297,7 @@ func (s *uploadServiceImpl) GetDividendTransactions(userID int64, portfolioID in
 
 func (s *uploadServiceImpl) GetHistoricalChartData(userID int64, portfolioID int64) ([]models.HistoricalDataPoint, error) {
 	rows, err := database.DB.Query(`
-        SELECT date, total_equity, cumulative_net_cashflow
+        SELECT date, total_equity, cumulative_net_cashflow, cash_balance
         FROM portfolio_snapshots
         WHERE user_id = ? AND portfolio_id = ?
         ORDER BY date ASC`, userID, portfolioID)
@@ -1289,7 +1308,7 @@ func (s *uploadServiceImpl) GetHistoricalChartData(userID int64, portfolioID int
 	var snapshots []models.HistoricalDataPoint
 	for rows.Next() {
 		var p models.HistoricalDataPoint
-		rows.Scan(&p.Date, &p.PortfolioValue, &p.CumulativeCashFlow)
+		rows.Scan(&p.Date, &p.PortfolioValue, &p.CumulativeCashFlow, &p.CashBalance)
 		snapshots = append(snapshots, p)
 	}
 	if len(snapshots) == 0 {

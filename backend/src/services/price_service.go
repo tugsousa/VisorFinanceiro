@@ -952,6 +952,54 @@ func (s *priceServiceImpl) FetchTickerForISIN(isin string) (string, string, stri
 	return quote.Symbol, quote.Exchange, quote.Currency, nil
 }
 
+// FindTickerWithHistory remaps an ISIN to the first of its other listings that has price history.
+// Some listings only report a current price, which leaves the portfolio history without a value for them.
+func (s *priceServiceImpl) FindTickerWithHistory(isin, currentTicker string) (string, PriceMap, string, error) {
+	s.ensureSession()
+	s.throttler.Wait()
+
+	searchURL := fmt.Sprintf("https://query1.finance.yahoo.com/v1/finance/search?q=%s&quotesCount=10&lang=en-US", isin)
+	req, err := http.NewRequest("GET", searchURL, nil)
+	if err != nil {
+		return "", nil, "", err
+	}
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
+
+	resp, err := s.httpClient.Do(req)
+	if err != nil {
+		return "", nil, "", fmt.Errorf("failed to call Yahoo search API: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return "", nil, "", fmt.Errorf("yahoo search API returned non-OK status %d", resp.StatusCode)
+	}
+
+	var searchData yahooSearchResponse
+	if err := json.NewDecoder(resp.Body).Decode(&searchData); err != nil {
+		return "", nil, "", fmt.Errorf("failed to decode Yahoo search response: %w", err)
+	}
+
+	for _, quote := range searchData.Quotes {
+		if quote.Symbol == "" || quote.Symbol == currentTicker {
+			continue
+		}
+		prices, currency, err := s.GetHistoricalPrices(quote.Symbol)
+		if err != nil {
+			continue
+		}
+		if err := models.UpdateMappingTicker(database.DB, isin, quote.Symbol, quote.Exchange, currency); err != nil {
+			return "", nil, "", fmt.Errorf("failed to update ticker mapping: %w", err)
+		}
+		s.cacheMu.Lock()
+		s.successCache[isin] = quote.Symbol
+		s.cacheMu.Unlock()
+		return quote.Symbol, prices, currency, nil
+	}
+
+	return "", nil, "", fmt.Errorf("no listing with price history found for ISIN %s", isin)
+}
+
 func (s *priceServiceImpl) getPriceForTicker(ticker string) (float64, string, error) {
 	quoteURL := fmt.Sprintf("https://query1.finance.yahoo.com/v8/finance/chart/%s?crumb=%s", ticker, s.crumb)
 	req, err := http.NewRequest("GET", quoteURL, nil)
