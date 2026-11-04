@@ -67,11 +67,18 @@ type CashTransaction struct {
 // --- IBKR Parser Implementation ---
 
 // IBKRParser implements the parsers.Parser interface for IBKR Flex Query XML files.
-type IBKRParser struct{}
+type IBKRParser struct {
+	skipped models.SkippedRows
+}
 
 // NewParser creates a new instance of the IBKRParser.
 func NewParser() *IBKRParser {
 	return &IBKRParser{}
+}
+
+// SkippedRows describes the rows of the parsed file that weren't imported.
+func (p *IBKRParser) SkippedRows() []string {
+	return p.skipped.Messages()
 }
 
 // Parse reads an IBKR XML file and converts its rows into a slice of CanonicalTransaction.
@@ -97,6 +104,7 @@ func (p *IBKRParser) Parse(file io.Reader) ([]models.CanonicalTransaction, error
 			tx, err := p.processTrade(trade)
 			if err != nil {
 				logger.L.Warn("IBKR Parser: Skipping trade due to processing error", "ibOrderID", trade.IBOrderID, "error", err)
+				p.skipped.Add("Operação com data inválida")
 				continue
 			}
 			canonicalTxs = append(canonicalTxs, tx)
@@ -111,21 +119,24 @@ func (p *IBKRParser) Parse(file io.Reader) ([]models.CanonicalTransaction, error
 
 			// Check transaction type
 			switch cashTx.Type {
-			case "Dividends":
+			case "Dividends", "Payment In Lieu Of Dividends":
 				tx, err := p.processDividend(cashTx)
 				if err != nil {
 					logger.L.Warn("IBKR Parser: Skipping dividend due to processing error", "description", cashTx.Description, "error", err)
+					p.skipped.Add(cashTx.Type + " com data inválida")
 					continue
 				}
 				canonicalTxs = append(canonicalTxs, tx)
 			case "Withholding Tax":
 				// Withholding on other income, such as credit interest, is not dividend tax.
 				if !strings.Contains(strings.ToUpper(cashTx.Description), "DIVIDEND") {
+					p.skipped.Add("Withholding Tax sobre outros rendimentos")
 					continue
 				}
 				tx, err := p.processDividendTax(cashTx)
 				if err != nil {
 					logger.L.Warn("IBKR Parser: Skipping dividend tax due to processing error", "description", cashTx.Description, "error", err)
+					p.skipped.Add(cashTx.Type + " com data inválida")
 					continue
 				}
 				canonicalTxs = append(canonicalTxs, tx)
@@ -133,9 +144,21 @@ func (p *IBKRParser) Parse(file io.Reader) ([]models.CanonicalTransaction, error
 				tx, err := p.processCashMovement(cashTx)
 				if err != nil {
 					logger.L.Warn("IBKR Parser: Skipping cash movement due to processing error", "description", cashTx.Description, "error", err)
+					p.skipped.Add(cashTx.Type + " com data inválida")
 					continue
 				}
 				canonicalTxs = append(canonicalTxs, tx)
+			case "Broker Interest Paid", "Broker Fees", "Other Fees", "Advisor Fees", "Commission Adjustments":
+				tx, err := p.processFee(cashTx)
+				if err != nil {
+					logger.L.Warn("IBKR Parser: Skipping fee due to processing error", "description", cashTx.Description, "error", err)
+					p.skipped.Add(cashTx.Type + " com data inválida")
+					continue
+				}
+				canonicalTxs = append(canonicalTxs, tx)
+			default:
+				// Such as interest received, which the reports have no place for yet.
+				p.skipped.Add(cashTx.Type)
 			}
 		}
 
@@ -293,6 +316,33 @@ func (p *IBKRParser) processCashMovement(cashTx CashTransaction) (models.Canonic
 		tx.TransactionSubType = "DEPOSIT"
 	} else {
 		tx.TransactionSubType = "WITHDRAWAL"
+	}
+	return tx, nil
+}
+
+// processFee converts a fee or interest paid to a CanonicalTransaction.
+func (p *IBKRParser) processFee(cashTx CashTransaction) (models.CanonicalTransaction, error) {
+	date, err := parseIBKRDateTime(cashTx.DateTime)
+	if err != nil {
+		return models.CanonicalTransaction{}, err
+	}
+
+	rawText := fmt.Sprintf("Fee|%s|%s|%s|%f|%s",
+		cashTx.Type, cashTx.DateTime, cashTx.Description, cashTx.Amount, cashTx.Currency,
+	)
+
+	tx := models.CanonicalTransaction{
+		Source:          "ibkr",
+		TransactionDate: date,
+		ProductName:     cashTx.Description,
+		Amount:          cashTx.Amount, // Keeps its source sign, so a positive reversal cancels the original fee.
+		SourceAmount:    cashTx.Amount,
+		Currency:        cashTx.Currency,
+		RawText:         rawText,
+		TransactionType: "FEE",
+	}
+	if cashTx.Type == "Broker Interest Paid" {
+		tx.TransactionSubType = "INTEREST"
 	}
 	return tx, nil
 }

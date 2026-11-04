@@ -44,7 +44,7 @@ func (h *UserHandler) RequestPasswordResetHandler(w http.ResponseWriter, r *http
 	}
 
 	if !user.IsEmailVerified {
-		logger.L.Info("Password reset requested for unverified email, sending generic response", "email", req.Email, "userID", user.ID)
+		logger.L.Info("Password reset requested for unverified email, sending generic response", "userID", user.ID)
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]string{"message": "Se existir uma conta associada a este e-mail e a mesma estiver verificada, foi enviado um link de reposição de palavra-passe."})
 		return
@@ -67,10 +67,10 @@ func (h *UserHandler) RequestPasswordResetHandler(w http.ResponseWriter, r *http
 
 	err = h.emailService.SendPasswordResetEmail(user.Email, user.Username, resetToken)
 	if err != nil {
-		logger.L.Error("Failed to send password reset email", "userEmail", user.Email, "error", err)
+		logger.L.Error("Failed to send password reset email", "userID", user.ID, "error", err)
 	}
 
-	logger.L.Info("Password reset email process initiated successfully", "email", req.Email, "userID", user.ID)
+	logger.L.Info("Password reset email process initiated successfully", "userID", user.ID)
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"message": "Se existir uma conta associada a este e-mail e a mesma estiver verificada, foi enviado um link de reposição de palavra-passe."})
 }
@@ -94,14 +94,14 @@ func (h *UserHandler) ResetPasswordHandler(w http.ResponseWriter, r *http.Reques
 		sendJSONError(w, "Passwords do not match", http.StatusBadRequest)
 		return
 	}
-	if !passwordRegex.MatchString(req.Password) {
-		sendJSONError(w, "Password must be at least 6 characters long", http.StatusBadRequest)
+	if err := validatePasswordComplexity(req.Password); err != nil {
+		sendJSONError(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
 	user, err := models.GetUserByPasswordResetToken(database.DB, req.Token)
 	if err != nil {
-		logger.L.Warn("Password reset token lookup failed or token expired", "tokenPrefix", req.Token[:min(10, len(req.Token))], "error", err)
+		logger.L.Warn("Password reset token lookup failed or token expired", "error", err)
 		sendJSONError(w, "Invalid or expired password reset token.", http.StatusBadRequest)
 		return
 	}
@@ -115,6 +115,13 @@ func (h *UserHandler) ResetPasswordHandler(w http.ResponseWriter, r *http.Reques
 
 	if err := user.UpdatePassword(database.DB, hashedPassword); err != nil {
 		logger.L.Error("Failed to update password in DB", "userID", user.ID, "error", err)
+		sendJSONError(w, "Failed to reset password", http.StatusInternalServerError)
+		return
+	}
+
+	// Whoever had access before the reset must lose it.
+	if err := models.DeleteUserSessions(database.DB, user.ID, ""); err != nil {
+		logger.L.Error("Failed to end sessions after password reset", "userID", user.ID, "error", err)
 		sendJSONError(w, "Failed to reset password", http.StatusInternalServerError)
 		return
 	}
@@ -141,8 +148,8 @@ func (h *UserHandler) ChangePasswordHandler(w http.ResponseWriter, r *http.Reque
 		sendJSONError(w, "New passwords do not match", http.StatusBadRequest)
 		return
 	}
-	if !passwordRegex.MatchString(req.NewPassword) {
-		sendJSONError(w, "New password must be at least 6 characters long", http.StatusBadRequest)
+	if err := validatePasswordComplexity(req.NewPassword); err != nil {
+		sendJSONError(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
@@ -175,6 +182,13 @@ func (h *UserHandler) ChangePasswordHandler(w http.ResponseWriter, r *http.Reque
 
 	if err := user.UpdatePassword(database.DB, hashedNewPassword); err != nil {
 		logger.L.Error("Failed to update password in DB", "userID", userID, "error", err)
+		sendJSONError(w, "Failed to change password", http.StatusInternalServerError)
+		return
+	}
+
+	// Other sessions end, as they may be someone else's. This one stays, as it just proved the password.
+	if err := models.DeleteUserSessions(database.DB, userID, bearerToken(r)); err != nil {
+		logger.L.Error("Failed to end other sessions after password change", "userID", userID, "error", err)
 		sendJSONError(w, "Failed to change password", http.StatusInternalServerError)
 		return
 	}

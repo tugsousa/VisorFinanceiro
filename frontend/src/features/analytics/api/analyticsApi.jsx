@@ -7,6 +7,8 @@ export const apiFetchStockHoldings = (portfolioId) =>
 export const apiFetchCurrentHoldingsValue = (portfolioId) => 
     apiClient.get(API_ENDPOINTS.CURRENT_HOLDINGS_VALUE, { params: { portfolio_id: portfolioId } });
 
+export const apiFetchJobs = () => apiClient.get(API_ENDPOINTS.JOBS);
+
 export const apiFetchCashBalance = (portfolioId) =>
     apiClient.get(API_ENDPOINTS.CASH_BALANCE, { params: { portfolio_id: portfolioId } });
 

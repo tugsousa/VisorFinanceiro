@@ -2,11 +2,14 @@
 package handlers
 
 import (
-	"context"
+	"crypto/rand"
+	"crypto/subtle"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 
 	"golang.org/x/oauth2"
@@ -36,27 +39,63 @@ func InitializeGoogleOAuthConfig() {
 	}
 }
 
+// oauthStateCookie ties a Google callback to the browser that started the login.
+const oauthStateCookie = "oauth_state"
+
+func setOAuthStateCookie(w http.ResponseWriter, state string, maxAge int) {
+	http.SetCookie(w, &http.Cookie{
+		Name:     oauthStateCookie,
+		Value:    state,
+		Path:     "/api/auth/google",
+		HttpOnly: true,
+		Secure:   secureCookies(),
+		SameSite: http.SameSiteLaxMode, // Lax, because the callback arrives as a redirect from Google.
+		MaxAge:   maxAge,
+	})
+}
+
+// validOAuthState tells whether the state of a callback is the one given to this browser.
+func validOAuthState(r *http.Request) bool {
+	cookie, err := r.Cookie(oauthStateCookie)
+	if err != nil || cookie.Value == "" {
+		return false
+	}
+	return subtle.ConstantTimeCompare([]byte(cookie.Value), []byte(r.FormValue("state"))) == 1
+}
+
 func (h *UserHandler) HandleGoogleLogin(w http.ResponseWriter, r *http.Request) {
-	url := googleOauthConfig.AuthCodeURL(config.Cfg.OAuthStateString)
+	stateBytes := make([]byte, 32)
+	if _, err := rand.Read(stateBytes); err != nil {
+		logger.L.Error("Failed to generate OAuth state", "error", err)
+		http.Redirect(w, r, frontendSignInError("token_generation_failed"), http.StatusTemporaryRedirect)
+		return
+	}
+	state := hex.EncodeToString(stateBytes)
+	setOAuthStateCookie(w, state, 600)
+
+	url := googleOauthConfig.AuthCodeURL(state)
 	http.Redirect(w, r, url, http.StatusTemporaryRedirect)
 }
 
 func (h *UserHandler) HandleGoogleCallback(w http.ResponseWriter, r *http.Request) {
-	if r.FormValue("state") != config.Cfg.OAuthStateString {
+	stateIsValid := validOAuthState(r)
+	setOAuthStateCookie(w, "", -1) // A state can only be used once.
+	if !stateIsValid {
 		logger.L.Warn("Invalid OAuth state from Google callback")
 		http.Redirect(w, r, frontendSignInError("invalid_state"), http.StatusTemporaryRedirect)
 		return
 	}
 
 	code := r.FormValue("code")
-	token, err := googleOauthConfig.Exchange(context.Background(), code)
+	token, err := googleOauthConfig.Exchange(r.Context(), code)
 	if err != nil {
 		logger.L.Error("Failed to exchange code for token", "error", err)
 		http.Redirect(w, r, frontendSignInError("token_exchange_failed"), http.StatusTemporaryRedirect)
 		return
 	}
 
-	response, err := http.Get("https://www.googleapis.com/oauth2/v2/userinfo?access_token=" + token.AccessToken)
+	// The token goes in a header: in the URL, it would end up in the error logged below.
+	response, err := googleOauthConfig.Client(r.Context(), token).Get("https://www.googleapis.com/oauth2/v2/userinfo")
 	if err != nil {
 		logger.L.Error("Failed to get user info from Google", "error", err)
 		http.Redirect(w, r, frontendSignInError("userinfo_failed"), http.StatusTemporaryRedirect)
@@ -82,6 +121,8 @@ func (h *UserHandler) HandleGoogleCallback(w http.ResponseWriter, r *http.Reques
 		http.Redirect(w, r, frontendSignInError("userinfo_parse_failed"), http.StatusTemporaryRedirect)
 		return
 	}
+
+	googleUser.Email = strings.ToLower(strings.TrimSpace(googleUser.Email))
 
 	if !googleUser.Verified {
 		http.Redirect(w, r, frontendSignInError("email_not_verified_by_google"), http.StatusTemporaryRedirect)

@@ -4,6 +4,7 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	stdlog "log"
+	"net"
 	"net/http"
 	"os"
 	"strings"
@@ -85,29 +86,36 @@ func (i *IPRateLimiter) cleanupLoop() {
 	}
 }
 
-// Global instance: 5 requests per second (r), burst of 10 (b) per IP.
-// Adjust these values based on your frontend's needs.
-var ipLimiter = NewIPRateLimiter(rate.Every(200*time.Millisecond), 10)
+// Global instance: 10 requests per second (r), burst of 50 (b) per IP.
+// The burst has to fit loading a page: the dashboard alone makes about 15 requests at once.
+var ipLimiter = NewIPRateLimiter(rate.Every(100*time.Millisecond), 50)
 
-func rateLimitMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Determine the client IP.
-		ip := r.RemoteAddr
-		if forwarded := r.Header.Get("X-Forwarded-For"); forwarded != "" {
-			parts := strings.Split(forwarded, ",")
-			// Get the last IP in the list
-			ip = strings.TrimSpace(parts[len(parts)-1])
-		}
+// credentialLimiter is for endpoints that check a secret: 10 attempts per minute per IP.
+var credentialLimiter = NewIPRateLimiter(rate.Every(6*time.Second), 10)
 
-		limiter := ipLimiter.GetLimiter(ip)
-		if !limiter.Allow() {
-			http.Error(w, http.StatusText(http.StatusTooManyRequests), http.StatusTooManyRequests)
-			logger.L.Warn("Rate limit exceeded", "ip", ip, "path", r.URL.Path)
-			return
-		}
+func rateLimitMiddleware(limiter *IPRateLimiter) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// Determine the client IP. Without the port, which is different for each connection.
+			ip, _, err := net.SplitHostPort(r.RemoteAddr)
+			if err != nil {
+				ip = r.RemoteAddr
+			}
+			if forwarded := r.Header.Get("X-Forwarded-For"); forwarded != "" {
+				parts := strings.Split(forwarded, ",")
+				// Get the last IP in the list
+				ip = strings.TrimSpace(parts[len(parts)-1])
+			}
 
-		next.ServeHTTP(w, r)
-	})
+			if !limiter.GetLimiter(ip).Allow() {
+				http.Error(w, http.StatusText(http.StatusTooManyRequests), http.StatusTooManyRequests)
+				logger.L.Warn("Rate limit exceeded", "ip", ip, "path", r.URL.Path)
+				return
+			}
+
+			next.ServeHTTP(w, r)
+		})
+	}
 }
 
 func enableCORS(next http.Handler) http.Handler {
@@ -207,7 +215,9 @@ func main() {
 	r.Use(handlers.ContextualLoggerMiddleware)
 	r.Use(proxyHeadersMiddleware)
 	r.Use(enableCORS)
-	r.Use(rateLimitMiddleware)
+	r.Use(rateLimitMiddleware(ipLimiter))
+
+	credentialRateLimit := rateLimitMiddleware(credentialLimiter)
 
 	r.Get("/", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -226,11 +236,11 @@ func main() {
 		// Rotas de Autenticação (Protegidas por CSRF)
 		r.Group(func(r chi.Router) {
 			r.Use(handlers.CSRFMiddleware(config.Cfg.CSRFAuthKey))
-			r.Post("/auth/login", userHandler.LoginUserHandler)
-			r.Post("/auth/register", userHandler.RegisterUserHandler)
+			r.With(credentialRateLimit).Post("/auth/login", userHandler.LoginUserHandler)
+			r.With(credentialRateLimit).Post("/auth/register", userHandler.RegisterUserHandler)
 			r.With(userHandler.AuthMiddleware).Post("/auth/logout", userHandler.LogoutUserHandler)
-			r.Post("/auth/request-password-reset", userHandler.RequestPasswordResetHandler)
-			r.Post("/auth/reset-password", userHandler.ResetPasswordHandler)
+			r.With(credentialRateLimit).Post("/auth/request-password-reset", userHandler.RequestPasswordResetHandler)
+			r.With(credentialRateLimit).Post("/auth/reset-password", userHandler.ResetPasswordHandler)
 		})
 
 		// Refresh endpoint (exempt from CSRF for OAuth flows)
@@ -263,8 +273,8 @@ func main() {
 			r.Get("/fees", feeHandler.HandleGetFeeDetails)
 			r.Delete("/transactions/all", txHandler.HandleDeleteAllProcessedTransactions)
 			r.Get("/user/has-data", userHandler.HandleCheckUserData)
-			r.Post("/user/change-password", userHandler.ChangePasswordHandler)
-			r.Post("/user/delete-account", userHandler.DeleteAccountHandler)
+			r.With(credentialRateLimit).Post("/user/change-password", userHandler.ChangePasswordHandler)
+			r.With(credentialRateLimit).Post("/user/delete-account", userHandler.DeleteAccountHandler)
 			r.Get("/history/chart", portfolioHandler.HandleGetHistoricalChartData)
 
 			// Job Management Routes
@@ -285,11 +295,11 @@ func main() {
 				r.Post("/admin/stats/clear-cache", userHandler.HandleAdminClearStatsCache)
 
 				r.Post("/admin/mfa/setup", userHandler.HandleSetupMFA)
-				r.Post("/admin/mfa/activate", userHandler.HandleActivateMFA)
-				r.Post("/admin/mfa/disable", userHandler.HandleDisableMFA)
+				r.With(credentialRateLimit).Post("/admin/mfa/activate", userHandler.HandleActivateMFA)
+				r.With(credentialRateLimit).Post("/admin/mfa/disable", userHandler.HandleDisableMFA)
 
 				// Impersonation protegida
-				r.Post("/admin/users/{userID}/impersonate", userHandler.HandleImpersonateUser)
+				r.With(credentialRateLimit).Post("/admin/users/{userID}/impersonate", userHandler.HandleImpersonateUser)
 			})
 		})
 	})

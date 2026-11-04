@@ -19,6 +19,7 @@
       STOCK_HOLDINGS: `${API_BASE_PATH}/holdings/stocks`,
       CURRENT_HOLDINGS_VALUE: `${API_BASE_PATH}/holdings/current-value`,
       CASH_BALANCE: `${API_BASE_PATH}/cash-balance`,
+      JOBS: `${API_BASE_PATH}/jobs`,
       OPTION_HOLDINGS: `${API_BASE_PATH}/holdings/options`,
       STOCK_SALES: `${API_BASE_PATH}/stock-sales`,
       UNMATCHED_STOCK_SALES: `${API_BASE_PATH}/stock-sales/unmatched`,

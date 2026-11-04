@@ -3,10 +3,12 @@ package handlers
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/username/taxfolio/backend/src/config"
 	"github.com/username/taxfolio/backend/src/database"
@@ -15,6 +17,15 @@ import (
 	"github.com/username/taxfolio/backend/src/security/validation"
 	"github.com/username/taxfolio/backend/src/services"
 	"github.com/username/taxfolio/backend/src/utils"
+)
+
+const (
+	// uploadTimeout replaces the server's short timeouts: a large file on a slow connection, or
+	// processing that has to look up many exchange rates, can take longer.
+	uploadTimeout = 5 * time.Minute
+
+	// multipartOverheadBytes leaves room for the form around the file in the request body limit.
+	multipartOverheadBytes = 1024 * 1024
 )
 
 type UploadHandler struct {
@@ -45,12 +56,31 @@ func (h *UploadHandler) HandleUpload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	deadline := time.Now().Add(uploadTimeout)
+	controller := http.NewResponseController(w)
+	if err := controller.SetReadDeadline(deadline); err != nil {
+		logger.L.Warn("Failed to extend upload read deadline", "error", err)
+	}
+	if err := controller.SetWriteDeadline(deadline); err != nil {
+		logger.L.Warn("Failed to extend upload write deadline", "error", err)
+	}
+
+	tooLargeMsg := fmt.Sprintf("O ficheiro excede o limite de %d MB.", config.Cfg.MaxUploadSizeBytes/(1024*1024))
+
+	// ParseMultipartForm's argument only limits what stays in memory, the rest goes to disk.
+	// This is what limits the size of the request.
+	r.Body = http.MaxBytesReader(w, r.Body, config.Cfg.MaxUploadSizeBytes+multipartOverheadBytes)
+
 	// Parsing multipart form first to fail fast on size
 	if err := r.ParseMultipartForm(config.Cfg.MaxUploadSizeBytes); err != nil {
-		errMsg := fmt.Sprintf("Error parsing file (max %d MB)", config.Cfg.MaxUploadSizeBytes/(1024*1024))
 		logger.L.Warn("Failed to parse multipart form", "userID", userID, "error", err)
 		go logUploadFailure(userID, r.FormValue("source"), "", err.Error())
-		utils.SendJSONError(w, errMsg, http.StatusBadRequest)
+		var tooLarge *http.MaxBytesError
+		if errors.As(err, &tooLarge) {
+			utils.SendJSONError(w, tooLargeMsg, http.StatusRequestEntityTooLarge)
+			return
+		}
+		utils.SendJSONError(w, "Error parsing file", http.StatusBadRequest)
 		return
 	}
 
@@ -111,6 +141,11 @@ func (h *UploadHandler) HandleUpload(w http.ResponseWriter, r *http.Request) {
 	}
 	defer file.Close()
 
+	if fileHeader.Size > config.Cfg.MaxUploadSizeBytes {
+		utils.SendJSONError(w, tooLargeMsg, http.StatusRequestEntityTooLarge)
+		return
+	}
+
 	// (Validate Content-Type and Magic Bytes here - existing code)
 	detectedContentType, err := validation.ValidateFileContentByMagicBytes(file)
 	if err != nil {
@@ -122,6 +157,11 @@ func (h *UploadHandler) HandleUpload(w http.ResponseWriter, r *http.Request) {
 	result, err := h.uploadService.ProcessUpload(file, userID, portfolioID, source, fileHeader.Filename, fileHeader.Size)
 	if err != nil {
 		go logUploadFailure(userID, source, fileHeader.Filename, err.Error())
+		var fileErr models.FileError
+		if errors.As(err, &fileErr) {
+			utils.SendJSONError(w, fileErr.Error(), http.StatusBadRequest)
+			return
+		}
 		utils.SendJSONError(w, err.Error(), http.StatusInternalServerError)
 		return
 	}

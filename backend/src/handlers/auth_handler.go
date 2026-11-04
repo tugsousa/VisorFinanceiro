@@ -28,6 +28,16 @@ func isAdmin(email string) bool {
 	return false
 }
 
+// refreshReuseWindow is how long a refresh token keeps working after being replaced. Tabs refresh
+// independently, so one can send the old token while another is already using its replacement.
+const refreshReuseWindow = 30 * time.Second
+
+// secureCookies tells whether cookies must be HTTPS only. It can't depend on the backend's port or
+// on the request, because in production the backend listens on plain HTTP behind the proxy.
+func secureCookies() bool {
+	return strings.HasPrefix(config.Cfg.FrontendBaseURL, "https://")
+}
+
 // Helper to set the Refresh Token Cookie
 func setRefreshTokenCookie(w http.ResponseWriter, refreshToken string, duration time.Duration) {
 	cookie := &http.Cookie{
@@ -35,7 +45,7 @@ func setRefreshTokenCookie(w http.ResponseWriter, refreshToken string, duration 
 		Value:    refreshToken,
 		Path:     "/", // Make cookie available to all API paths
 		HttpOnly: true,
-		Secure:   config.Cfg.Port != "8080", // Use HTTPS in production (not localhost)
+		Secure:   secureCookies(),
 		SameSite: http.SameSiteLaxMode,
 		MaxAge:   int(duration.Seconds()),
 	}
@@ -105,7 +115,6 @@ func (h *UserHandler) RegisterUserHandler(w http.ResponseWriter, r *http.Request
 	// Sanitization
 	credentials.Username = validation.SanitizeText(strings.TrimSpace(credentials.Username))
 	credentials.Email = strings.ToLower(validation.SanitizeText(strings.TrimSpace(credentials.Email)))
-	credentials.Password = strings.TrimSpace(credentials.Password)
 
 	// Derive username if empty
 	if credentials.Username == "" && strings.Contains(credentials.Email, "@") {
@@ -267,7 +276,7 @@ func (h *UserHandler) LoginUserHandler(w http.ResponseWriter, r *http.Request) {
 	user, err := models.GetUserByEmail(database.DB, credentials.Email)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			logger.L.Warn("User lookup by email failed for login: user not found", "email", credentials.Email)
+			logger.L.Warn("User lookup by email failed for login: user not found")
 			sendJSONError(w, "Invalid email or password", http.StatusUnauthorized)
 			return
 		}
@@ -404,9 +413,16 @@ func (h *UserHandler) RefreshTokenHandler(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	// Delete old session
-	if err := models.DeleteSessionByRefreshToken(database.DB, refreshTokenStr); err != nil {
-		logger.L.Error("Failed to delete old session during refresh", "error", err)
+	// End the old session shortly, rather than now, so that a tab refreshing at the same time still succeeds.
+	// It's never extended, or reusing the old token would keep it alive.
+	reuseDeadline := time.Now().Add(refreshReuseWindow)
+	if oldSession.ExpiresAt.After(reuseDeadline) {
+		if err := models.SetSessionExpiry(database.DB, oldSession.ID, reuseDeadline); err != nil {
+			logger.L.Error("Failed to expire old session during refresh", "error", err)
+		}
+	}
+	if err := models.DeleteExpiredSessions(database.DB, oldSession.UserID); err != nil {
+		logger.L.Error("Failed to delete expired sessions during refresh", "error", err)
 	}
 
 	userIDStr := fmt.Sprintf("%d", oldSession.UserID)
@@ -472,15 +488,7 @@ func (h *UserHandler) LogoutUserHandler(w http.ResponseWriter, r *http.Request) 
 		w.Header().Set("Access-Control-Allow-Credentials", "true")
 	}
 
-	authHeader := r.Header.Get("Authorization")
-	tokenString := ""
-	if strings.HasPrefix(authHeader, "Bearer ") {
-		tokenString = strings.TrimPrefix(authHeader, "Bearer ")
-	} else {
-		tokenString = authHeader
-	}
-
-	if tokenString != "" {
+	if tokenString := bearerToken(r); tokenString != "" {
 		err := models.DeleteSessionByToken(database.DB, tokenString)
 		if err != nil {
 			logger.L.Warn("Failed to delete session on logout", "error", err)
@@ -493,7 +501,7 @@ func (h *UserHandler) LogoutUserHandler(w http.ResponseWriter, r *http.Request) 
 		Value:    "",
 		Path:     "/", // Clear cookie for all paths
 		HttpOnly: true,
-		Secure:   config.Cfg.Port != "8080", // Use HTTPS in production (not localhost)
+		Secure:   secureCookies(),
 		MaxAge:   -1,
 	})
 

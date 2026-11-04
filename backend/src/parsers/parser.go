@@ -10,3 +10,8 @@ import (
 type Parser interface {
 	Parse(file io.Reader) ([]models.CanonicalTransaction, error)
 }
+
+// SkippedRowsReporter is implemented by parsers that can tell which rows of a file they left out.
+type SkippedRowsReporter interface {
+	SkippedRows() []string
+}

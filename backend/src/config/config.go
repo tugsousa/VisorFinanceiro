@@ -21,7 +21,6 @@ type AppConfig struct {
 	// Security settings
 	JWTSecret          string
 	CSRFAuthKey        []byte
-	OAuthStateString   string
 	AccessTokenExpiry  time.Duration
 	RefreshTokenExpiry time.Duration
 	MaxUploadSizeBytes int64
@@ -89,11 +88,6 @@ func LoadConfig() {
 	jwtSecret := getRequiredEnv("JWT_SECRET")
 	csrfAuthKeyStr := getRequiredEnv("CSRF_AUTH_KEY")
 
-	oauthStateString := getEnv("OAUTH_STATE_STRING", "secure-random-state-string-for-dev-only")
-	if oauthStateString == "secure-random-state-string-for-dev-only" {
-		log.Println("WARNING: Using default OAUTH_STATE_STRING. Set this in production.")
-	}
-
 	// --- Token Expiry Durations ---
 	accessTokenExpiry := getEnvAsDuration("ACCESS_TOKEN_EXPIRY", 60*time.Minute)
 	refreshTokenExpiry := getEnvAsDuration("REFRESH_TOKEN_EXPIRY", 168*time.Hour) // 7 days
@@ -127,7 +121,6 @@ func LoadConfig() {
 		// Security
 		JWTSecret:          jwtSecret,
 		CSRFAuthKey:        []byte(csrfAuthKeyStr),
-		OAuthStateString:   oauthStateString,
 		AccessTokenExpiry:  accessTokenExpiry,
 		RefreshTokenExpiry: refreshTokenExpiry,
 		MaxUploadSizeBytes: maxUploadSizeBytes,

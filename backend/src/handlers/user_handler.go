@@ -30,7 +30,6 @@ type contextKey string
 const userIDContextKey contextKey = "userID"
 
 var emailRegex = regexp.MustCompile(`^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$`)
-var passwordRegex = regexp.MustCompile(`^.{6,}$`)
 
 var (
 	googleOauthConfig *oauth2.Config
@@ -88,6 +87,7 @@ func NewUserHandler(authService *security.AuthService, emailService services.Ema
 		emailService:  emailService,
 		uploadService: uploadService,
 		cache:         reportCache,
+		mfaService:    services.NewMFAService(),
 	}
 }
 
@@ -107,7 +107,7 @@ func (h *UserHandler) VerifyEmailHandler(w http.ResponseWriter, r *http.Request)
 
 	user, err := models.GetUserByVerificationToken(database.DB, token)
 	if err != nil {
-		logger.L.Warn("Verification token lookup failed", "tokenPrefix", token[:min(10, len(token))], "error", err)
+		logger.L.Warn("Verification token lookup failed", "error", err)
 		sendJSONError(w, "Invalid or expired verification token.", http.StatusBadRequest)
 		return
 	}
@@ -311,20 +311,18 @@ func (h *UserHandler) HandleGetAdminStats(w http.ResponseWriter, r *http.Request
 
 	// Helper to handle queries safely without repeating code
 	// We pass the 'interval' as a parameter (?) to the query
-	var usersWithUploads int
-	database.DB.QueryRow("SELECT COUNT(*) FROM users WHERE total_upload_count > 0").Scan(&usersWithUploads)
-
-	if stats.TotalUsers > 0 {
-		stats.ActivationRate = (float64(usersWithUploads) / float64(stats.TotalUsers)) * 100
-	} else {
-		stats.ActivationRate = 0
-	}
-
 	// 2. Total Transactions
 	database.DB.QueryRow("SELECT COUNT(*) FROM processed_transactions").Scan(&stats.TotalTransactions)
 
 	// 1. General Metrics
 	database.DB.QueryRow("SELECT COUNT(*) FROM users").Scan(&stats.TotalUsers)
+
+	var usersWithUploads int
+	database.DB.QueryRow("SELECT COUNT(*) FROM users WHERE total_upload_count > 0").Scan(&usersWithUploads)
+	if stats.TotalUsers > 0 {
+		stats.ActivationRate = (float64(usersWithUploads) / float64(stats.TotalUsers)) * 100
+	}
+
 	database.DB.QueryRow("SELECT COALESCE(SUM(portfolio_value_eur), 0) FROM users").Scan(&stats.TotalPortfolioValue)
 	database.DB.QueryRow("SELECT metric_value FROM system_metrics WHERE metric_name = 'deleted_user_count'").Scan(&stats.DeletedUserCount)
 	database.DB.QueryRow("SELECT COUNT(*) FROM uploads_history").Scan(&stats.TotalUploads)
@@ -830,20 +828,9 @@ func (h *UserHandler) HandleImpersonateUser(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	// --- DEBUG LOGGING ---
-	logger.L.Info("MFA Debug: Impersonation Attempt",
-		"adminID", adminID,
-		"adminUsername", adminUser.Username,
-		"secret_exists", len(adminUser.MfaSecret) > 0,
-		"secret_len", len(adminUser.MfaSecret),
-		"input_code_received", req.MfaCode,
-	)
-
 	// 6. Validar o código MFA
 	if !h.mfaService.ValidateToken(adminUser.MfaSecret, req.MfaCode) {
-		logger.L.Warn("Failed MFA attempt for impersonation: Invalid Code",
-			"adminID", adminID,
-			"input_code", req.MfaCode)
+		logger.L.Warn("Failed MFA attempt for impersonation: Invalid Code", "adminID", adminID)
 		sendJSONError(w, "Código MFA inválido", http.StatusUnauthorized)
 		return
 	}
@@ -920,6 +907,12 @@ func (h *UserHandler) HandleSetupMFA(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Replacing an active secret would let a stolen session take over the second factor.
+	if user.MfaEnabled {
+		sendJSONError(w, "MFA is already active. Disable it first.", http.StatusConflict)
+		return
+	}
+
 	secret, qrCode, err := h.mfaService.GenerateMFASecret(user.Username)
 	if err != nil {
 		sendJSONError(w, "Failed to generate MFA", http.StatusInternalServerError)
@@ -946,17 +939,27 @@ func (h *UserHandler) HandleActivateMFA(w http.ResponseWriter, r *http.Request) 
 	var req struct {
 		Code string `json:"code"`
 	}
-	json.NewDecoder(r.Body).Decode(&req)
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		sendJSONError(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
 
-	user, _ := models.GetUserByID(database.DB, userID)
+	user, err := models.GetUserByID(database.DB, userID)
+	if err != nil {
+		sendJSONError(w, "User not found", http.StatusNotFound)
+		return
+	}
 
 	if !h.mfaService.ValidateToken(user.MfaSecret, req.Code) {
 		sendJSONError(w, "Código inválido", http.StatusUnauthorized)
 		return
 	}
 
-	// Ativar na BD. Criar método UpdateMfaEnabled(userID, true)
-	user.UpdateMfaEnabled(database.DB, true)
+	if err := user.UpdateMfaEnabled(database.DB, true); err != nil {
+		logger.L.Error("Failed to enable MFA", "userID", userID, "error", err)
+		sendJSONError(w, "Failed to enable MFA", http.StatusInternalServerError)
+		return
+	}
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"message": "MFA Ativado com sucesso"})

@@ -15,7 +15,6 @@ import (
 func GetCSRFToken(w http.ResponseWriter, r *http.Request) {
 	logger.L.Debug("Generating CSRF token", "remoteAddr", r.RemoteAddr)
 	token := generateRandomToken()
-	logger.L.Debug("Generated CSRF token value (first 5 chars for brevity)", "tokenPrefix", token[:5])
 
 	http.SetCookie(w, &http.Cookie{
 		Name:     "_gorilla_csrf",
@@ -78,13 +77,6 @@ func CSRFMiddleware(csrfKey []byte) func(http.Handler) http.Handler {
 				return
 			}
 
-			var cookieValForLog string
-			if errCookie == nil {
-				cookieValForLog = cookie.Value
-			} else {
-				cookieValForLog = "N/A"
-			}
-
 			var cookieErrorForLog interface{}
 			if errCookie != nil {
 				cookieErrorForLog = errCookie.Error()
@@ -92,9 +84,8 @@ func CSRFMiddleware(csrfKey []byte) func(http.Handler) http.Handler {
 
 			logger.L.Warn("CSRF Validation Failed",
 				slog.String("method", r.Method),
-				slog.String("url", r.URL.String()),
-				slog.String("headerToken", headerToken),
-				slog.String("cookieValue", cookieValForLog),
+				slog.String("path", r.URL.Path),
+				slog.Bool("headerTokenExists", headerToken != ""),
 				slog.Any("cookieError", cookieErrorForLog),
 				slog.String("origin", r.Header.Get("Origin")),
 				slog.String("referer", r.Header.Get("Referer")),

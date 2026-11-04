@@ -11,98 +11,10 @@ import {
 } from 'features/analytics/api/analyticsApi';
 import { apiFetchProcessedTransactions } from 'features/portfolio/api/portfolioApi';
 import { usePortfolio } from '../../portfolio/PortfolioContext';
-import { useState, useEffect, useRef } from 'react';
 
 export const useDashboardData = (token) => {
     const { activePortfolio } = usePortfolio();
     const portfolioId = activePortfolio?.id;
-    
-    // WebSocket state
-    const [uploadProgress, setUploadProgress] = useState(null);
-    const [isWebSocketConnected, setIsWebSocketConnected] = useState(false);
-    const wsRef = useRef(null);
-    const reconnectAttempts = useRef(0);
-    const maxReconnectAttempts = 5;
-    const reconnectDelay = 1000;
-
-    // WebSocket connection management
-    useEffect(() => {
-        if (!token || !portfolioId) {
-            if (wsRef.current) {
-                wsRef.current.close();
-                wsRef.current = null;
-            }
-            setUploadProgress(null);
-            setIsWebSocketConnected(false);
-            return;
-        }
-
-        const connectWebSocket = () => {
-            try {
-                // Use wss:// for production, ws:// for development
-                const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-                const wsUrl = `${protocol}//${window.location.host}/api/ws`;
-                
-                wsRef.current = new WebSocket(wsUrl);
-                
-                wsRef.current.onopen = () => {
-                    console.log('WebSocket connected');
-                    setIsWebSocketConnected(true);
-                    reconnectAttempts.current = 0;
-                };
-
-                wsRef.current.onmessage = (event) => {
-                    try {
-                        const message = JSON.parse(event.data);
-                        console.log('WebSocket message received:', message);
-                        
-                        if (message.type === 'upload_progress') {
-                            setUploadProgress(message.data);
-                        } else if (message.type === 'dashboard_update') {
-                            // Handle dashboard updates
-                            console.log('Dashboard update received:', message.data);
-                        }
-                    } catch (error) {
-                        console.error('Error parsing WebSocket message:', error);
-                    }
-                };
-
-                wsRef.current.onclose = (event) => {
-                    console.log('WebSocket disconnected:', event.code, event.reason);
-                    setIsWebSocketConnected(false);
-                    
-                    // Attempt to reconnect if not manually closed
-                    if (event.code !== 1000 && reconnectAttempts.current < maxReconnectAttempts) {
-                        reconnectAttempts.current++;
-                        console.log(`Reconnecting WebSocket (attempt ${reconnectAttempts.current})...`);
-                        setTimeout(connectWebSocket, reconnectDelay * reconnectAttempts.current);
-                    }
-                };
-
-                wsRef.current.onerror = (error) => {
-                    console.error('WebSocket error:', error);
-                    setIsWebSocketConnected(false);
-                };
-
-            } catch (error) {
-                console.error('Failed to create WebSocket connection:', error);
-            }
-        };
-
-        connectWebSocket();
-
-        return () => {
-            if (wsRef.current) {
-                wsRef.current.close(1000, 'Component unmounting');
-                wsRef.current = null;
-            }
-        };
-    }, [token, portfolioId]);
-
-    // Clear progress when portfolio changes
-    useEffect(() => {
-        setUploadProgress(null);
-    }, [portfolioId]);
 
     const results = useQueries({
         queries: [
@@ -189,9 +101,6 @@ export const useDashboardData = (token) => {
         isHoldingsValueFetching: results[6].isFetching,
         isLoading,
         isError,
-        error,
-        // WebSocket data
-        uploadProgress,
-        isWebSocketConnected
+        error
     };
 };

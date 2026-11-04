@@ -22,11 +22,26 @@ type RawTransaction struct {
 }
 
 // DeGiroParser implements the parsers.Parser interface for DeGiro files.
-type DeGiroParser struct{}
+type DeGiroParser struct {
+	skipped models.SkippedRows
+}
 
 // NewParser creates a new instance of the DeGiroParser.
 func NewParser() *DeGiroParser {
 	return &DeGiroParser{}
+}
+
+// SkippedRows describes the rows of the parsed file that weren't imported.
+func (p *DeGiroParser) SkippedRows() []string {
+	return p.skipped.Messages()
+}
+
+// isPortugueseHeader tells whether a file was exported in Portuguese, the only language the
+// descriptions are recognized in. Other languages use other words for the first two columns.
+func isPortugueseHeader(header []string) bool {
+	return len(header) >= 2 &&
+		strings.EqualFold(strings.TrimSpace(strings.TrimPrefix(header[0], "\uFEFF")), "data") &&
+		strings.EqualFold(strings.TrimSpace(header[1]), "hora")
 }
 
 func normalizeDecimalString(s string) string {
@@ -46,9 +61,12 @@ func (p *DeGiroParser) Parse(file io.Reader) ([]models.CanonicalTransaction, err
 	reader := csv.NewReader(file)
 	reader.FieldsPerRecord = -1 // Allow variable number of fields per record
 
-	// Read and discard the header row
-	if _, err := reader.Read(); err != nil {
+	header, err := reader.Read()
+	if err != nil {
 		return nil, fmt.Errorf("degiro parser: failed to read CSV header: %w", err)
+	}
+	if !isPortugueseHeader(header) {
+		return nil, models.FileError("O ficheiro da DEGIRO tem de estar em português. Muda o idioma da conta para português, exporta o ficheiro de novo e volta a carregá-lo.")
 	}
 
 	records, err := reader.ReadAll() // Read all records at once
@@ -75,6 +93,8 @@ func (p *DeGiroParser) Parse(file io.Reader) ([]models.CanonicalTransaction, err
 				OrderID:         record[11],
 				RawLine:         strings.Join(record, ","),
 			})
+		} else {
+			p.skipped.Add("Linha com colunas em falta")
 		}
 	}
 
@@ -92,6 +112,7 @@ func (p *DeGiroParser) Parse(file io.Reader) ([]models.CanonicalTransaction, err
 		date, err := time.Parse("02-01-2006", raw.OrderDate)
 		if err != nil {
 			log.Printf("DeGiro Parser: Skipping row due to invalid date: %s (OrderID: %s)", raw.OrderDate, raw.OrderID)
+			p.skipped.Add("Linha com data inválida")
 			continue
 		}
 
@@ -103,6 +124,7 @@ func (p *DeGiroParser) Parse(file io.Reader) ([]models.CanonicalTransaction, err
 		*/
 		if txType == "UNKNOWN" {
 			log.Printf("DeGiro Parser: Skipping unknown transaction type for description: '%s'", raw.Description)
+			p.skipped.Add(strings.TrimSpace(raw.Description))
 			continue
 		}
 
