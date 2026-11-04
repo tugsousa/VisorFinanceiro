@@ -149,6 +149,8 @@ func enableCORS(next http.Handler) http.Handler {
 }
 
 func main() {
+	prepareRuntime()
+
 	config.LoadConfig()
 	logger.InitLogger(config.Cfg.LogLevel)
 
@@ -320,7 +322,7 @@ func main() {
 	}
 
 	logger.L.Info("Server starting", "address", serverAddr)
-	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+	if err := runServer(server, authService); err != nil && err != http.ErrServerClosed {
 		stdlog.Fatalf("Failed to start server: %v", err)
 	}
 }

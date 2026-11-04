@@ -42,6 +42,7 @@
   "scripts": {
     "start": "vite",
     "build": "vite build",
+    "build:desktop": "vite build --mode desktop --outDir ../backend/desktop_web --emptyOutDir",
     "serve": "vite preview"
   },
   "eslintConfig": {

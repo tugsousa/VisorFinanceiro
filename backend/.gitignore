@@ -4,3 +4,6 @@
 .env
 *.db-shm
 *.db-wal
+
+# Desktop build: frontend copy embedded in the executable
+desktop_web/

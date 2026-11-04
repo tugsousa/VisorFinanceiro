@@ -5,18 +5,24 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"io/fs"
 	stdlog "log"
 	"os"
 	"path/filepath"
 
 	"github.com/golang-migrate/migrate/v4"
+	migratedb "github.com/golang-migrate/migrate/v4/database"
 	"github.com/golang-migrate/migrate/v4/database/sqlite"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
+	"github.com/golang-migrate/migrate/v4/source/iofs"
 	"github.com/username/taxfolio/backend/src/logger"
 	_ "modernc.org/sqlite"
 )
 
 var DB *sql.DB
+
+// MigrationsFS, if set, holds the migrations instead of the migrations folder on disk.
+var MigrationsFS fs.FS
 
 func InitDB(databasePath string) {
 	dsn := fmt.Sprintf("%s?_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)&_pragma=foreign_keys(on)", databasePath)
@@ -48,6 +54,37 @@ func RunMigrations(databasePath string) {
 		stdlog.Fatalf("could not create sqlite migration driver: %v", err)
 	}
 
+	m, source, err := newMigrator(databasePath, driver)
+	if err != nil {
+		logger.L.Error("Migration instance creation failed", "source", source, "error", err)
+		stdlog.Fatalf("migration instance creation failed: %v", err)
+	}
+
+	logger.L.Info("Applying database migrations...", "source", source)
+	err = m.Up()
+	if err != nil {
+		if errors.Is(err, migrate.ErrNoChange) {
+			logger.L.Info("No new database migrations to apply.")
+		} else {
+			logger.L.Error("Failed to apply migrations", "error", err)
+			stdlog.Fatalf("failed to apply migrations: %v", err)
+		}
+	} else {
+		logger.L.Info("Database migrations applied successfully.")
+	}
+}
+
+// newMigrator returns the migrator and a description of where its migrations come from.
+func newMigrator(databasePath string, driver migratedb.Driver) (*migrate.Migrate, string, error) {
+	if MigrationsFS != nil {
+		source, err := iofs.New(MigrationsFS, ".")
+		if err != nil {
+			return nil, "embedded", err
+		}
+		m, err := migrate.NewWithInstance("iofs", source, databasePath, driver)
+		return m, "embedded", err
+	}
+
 	var migrationsSourceURL string
 
 	if os.Getenv("GO_ENV") == "PRO" {
@@ -61,26 +98,6 @@ func RunMigrations(databasePath string) {
 		migrationsSourceURL = fmt.Sprintf("file://%s", filepath.ToSlash(localMigrationsPath))
 	}
 
-	m, err := migrate.NewWithDatabaseInstance(
-		migrationsSourceURL,
-		databasePath,
-		driver,
-	)
-	if err != nil {
-		logger.L.Error("Migration instance creation failed", "source", migrationsSourceURL, "error", err)
-		stdlog.Fatalf("migration instance creation failed: %v", err)
-	}
-
-	logger.L.Info("Applying database migrations...", "source", migrationsSourceURL)
-	err = m.Up()
-	if err != nil {
-		if errors.Is(err, migrate.ErrNoChange) {
-			logger.L.Info("No new database migrations to apply.")
-		} else {
-			logger.L.Error("Failed to apply migrations", "error", err)
-			stdlog.Fatalf("failed to apply migrations: %v", err)
-		}
-	} else {
-		logger.L.Info("Database migrations applied successfully.")
-	}
+	m, err := migrate.NewWithDatabaseInstance(migrationsSourceURL, databasePath, driver)
+	return m, migrationsSourceURL, err
 }

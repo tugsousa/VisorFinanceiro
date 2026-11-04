@@ -11,6 +11,9 @@ export default defineConfig(({ mode }) => {
   // Carrega as variáveis da pasta raiz
   const env = loadEnv(mode, envDir, '');
 
+  // The desktop build is served by the backend itself, and never gets the values of the .env file.
+  const isDesktop = mode === 'desktop';
+
   return {
     // --- ADICIONA ESTA LINHA ---
     envDir: envDir, 
@@ -46,10 +49,12 @@ export default defineConfig(({ mode }) => {
     },
     build: {
       outDir: 'build',
-      sourcemap: true,
+      sourcemap: !isDesktop,
     },
     define: {
-      'process.env': env
+      'process.env': isDesktop
+        ? { REACT_APP_API_BASE_URL: '/', NODE_ENV: 'production' }
+        : env
     }
   };
 });
