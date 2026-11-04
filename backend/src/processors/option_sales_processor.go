@@ -280,8 +280,11 @@ func createOptionSaleDetail(openTx, closeTx *models.ProcessedTransaction, quanti
 
 // Creates an OptionHolding from an open transaction.
 func createOptionHolding(tx *models.ProcessedTransaction, quantity float64) models.OptionHolding {
-	// Ensure the holding reflects the remaining quantity if partially closed
-	originalQty := tx.Quantity
+	// Amount is for the whole transaction, while Quantity is what remains of it after partial closes
+	originalQty := tx.OriginalQuantity
+	if originalQty == 0 {
+		originalQty = tx.Quantity
+	}
 	if originalQty == 0 {
 		originalQty = 1
 	} // Avoid division by zero if something went wrong

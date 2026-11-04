@@ -37,6 +37,11 @@ func ContextualLoggerMiddleware(next http.Handler) http.Handler {
 	})
 }
 
+// bearerToken returns the access token of a request, which may or may not have the Bearer prefix.
+func bearerToken(r *http.Request) string {
+	return strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
+}
+
 // AuthMiddleware foi atualizado para propagar o UserID para o logger.
 func (h *UserHandler) AuthMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -44,20 +49,13 @@ func (h *UserHandler) AuthMiddleware(next http.Handler) http.Handler {
 		// 1. Obter o logger contextual
 		ctxLogger := logger.FromContext(r.Context())
 
-		authHeader := r.Header.Get("Authorization")
-		if authHeader == "" {
+		if r.Header.Get("Authorization") == "" {
 			ctxLogger.Debug("AuthMiddleware: Authorization header missing", "path", r.URL.Path)
 			sendJSONError(w, "Authorization header required", http.StatusUnauthorized)
 			return
 		}
 
-		tokenString := ""
-		if strings.HasPrefix(authHeader, "Bearer ") {
-			tokenString = strings.TrimPrefix(authHeader, "Bearer ")
-		} else {
-			tokenString = authHeader
-		}
-
+		tokenString := bearerToken(r)
 		if tokenString == "" {
 			ctxLogger.Debug("AuthMiddleware: Token string empty", "path", r.URL.Path)
 			sendJSONError(w, "Malformed token", http.StatusUnauthorized)
@@ -71,20 +69,11 @@ func (h *UserHandler) AuthMiddleware(next http.Handler) http.Handler {
 			return
 		}
 
-		_, err = models.GetSessionByToken(database.DB, tokenString)
-		if err != nil {
-			userIDIntCheck, _ := strconv.ParseInt(userIDStr, 10, 64)
-			user, userErr := models.GetUserByID(database.DB, userIDIntCheck)
-			if userErr != nil {
-				ctxLogger.Warn("AuthMiddleware: User not found for token after session check failed", "userID", userIDStr, "error", userErr)
-				sendJSONError(w, "Invalid session or user", http.StatusUnauthorized)
-				return
-			}
-			if user.AuthProvider == "local" {
-				ctxLogger.Warn("AuthMiddleware: Session validation failed for local user's access token", "path", r.URL.Path, "error", err)
-				sendJSONError(w, "Invalid or expired session", http.StatusUnauthorized)
-				return
-			}
+		// Every login creates a session, so a token without one belongs to a session that was ended.
+		if _, err := models.GetSessionByToken(database.DB, tokenString); err != nil {
+			ctxLogger.Warn("AuthMiddleware: Session validation failed", "path", r.URL.Path, "error", err)
+			sendJSONError(w, "Invalid or expired session", http.StatusUnauthorized)
+			return
 		}
 
 		userIDInt, err := strconv.ParseInt(userIDStr, 10, 64)

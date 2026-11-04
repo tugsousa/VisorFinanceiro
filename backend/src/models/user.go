@@ -573,25 +573,22 @@ func DeleteSessionByToken(db *sql.DB, token string) error {
 	return err
 }
 
-func DeleteSessionByRefreshToken(db *sql.DB, refreshToken string) error {
-	query := `DELETE FROM sessions WHERE refresh_token = ?`
-	stmt, err := db.Prepare(query)
-	if err != nil {
-		return err
-	}
-	defer stmt.Close()
-	result, err := stmt.Exec(refreshToken)
-	if err != nil {
-		return err
-	}
-	rowsAffected, err := result.RowsAffected()
-	if err != nil {
-		log.Printf("Error getting rows affected after deleting refresh token: %v (Rows: %d)", err, rowsAffected)
-	}
-	if rowsAffected == 0 {
-		// Not necessarily an error
-	}
-	return nil
+// DeleteUserSessions ends every session of a user, except the one using exceptToken if it isn't empty.
+func DeleteUserSessions(db *sql.DB, userID int64, exceptToken string) error {
+	_, err := db.Exec(`DELETE FROM sessions WHERE user_id = ? AND token != ?`, userID, exceptToken)
+	return err
+}
+
+// SetSessionExpiry changes when a session ends.
+func SetSessionExpiry(db *sql.DB, sessionID int, expiresAt time.Time) error {
+	_, err := db.Exec(`UPDATE sessions SET expires_at = ? WHERE id = ?`, expiresAt, sessionID)
+	return err
+}
+
+// DeleteExpiredSessions removes the sessions of a user that can no longer be used.
+func DeleteExpiredSessions(db *sql.DB, userID int64) error {
+	_, err := db.Exec(`DELETE FROM sessions WHERE user_id = ? AND expires_at <= ?`, userID, time.Now())
+	return err
 }
 
 // UpdateMfaSecret guarda o segredo TOTP temporariamente (ou permanentemente)

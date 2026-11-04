@@ -130,7 +130,12 @@ func (jq *JobQueue) GetJob(jobID string) (*Job, bool) {
 	jq.mu.RLock()
 	defer jq.mu.RUnlock()
 	job, exists := jq.jobs[jobID]
-	return job, exists
+	if !exists {
+		return nil, false
+	}
+	// A copy, as workers keep updating the job while the caller reads it.
+	jobCopy := *job
+	return &jobCopy, true
 }
 
 // ListJobs returns all jobs
@@ -139,7 +144,9 @@ func (jq *JobQueue) ListJobs() []*Job {
 	defer jq.mu.RUnlock()
 	jobs := make([]*Job, 0, len(jq.jobs))
 	for _, job := range jq.jobs {
-		jobs = append(jobs, job)
+		// A copy, as workers keep updating the job while the caller reads it.
+		jobCopy := *job
+		jobs = append(jobs, &jobCopy)
 	}
 	return jobs
 }
@@ -427,6 +434,19 @@ func NewOptimizedJobManager() *JobManager {
 	return &JobManager{
 		queue: NewOptimizedJobQueue(),
 	}
+}
+
+// HasUnfinishedRebuild tells whether a history rebuild of a portfolio is waiting or running.
+func (jm *JobManager) HasUnfinishedRebuild(userID, portfolioID int64) bool {
+	for _, job := range jm.queue.ListJobs() {
+		if job.Type == JobTypeRebuildHistory &&
+			(job.Status == JobStatusPending || job.Status == JobStatusRunning) &&
+			job.Payload["user_id"] == float64(userID) &&
+			job.Payload["portfolio_id"] == float64(portfolioID) {
+			return true
+		}
+	}
+	return false
 }
 
 // RebuildHistoryAsync starts an asynchronous history rebuild.

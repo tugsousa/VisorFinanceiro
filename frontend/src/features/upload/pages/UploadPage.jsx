@@ -63,6 +63,7 @@ const UploadPage = () => {
     const [uploadProgress, setUploadProgress] = useState(0);
     const [uploadStatus, setUploadStatus] = useState('idle');
     const [fileError, setFileError] = useState(null);
+    const [skippedRows, setSkippedRows] = useState([]);
     
     const [guideModal, setGuideModal] = useState(null);
     const handleOpenGuide = (broker) => setGuideModal(broker);
@@ -73,6 +74,7 @@ const UploadPage = () => {
         setUploadProgress(0);
         setUploadStatus('idle');
         setFileError(null);
+        setSkippedRows([]);
     };
     
     const handleFileSelected = useCallback(async (file) => {
@@ -114,7 +116,7 @@ const UploadPage = () => {
             setUploadStatus('uploading');
             setFileError(null);
 
-            await uploadWithRetry(formData, (progressEvent) => {
+            const response = await uploadWithRetry(formData, (progressEvent) => {
                 if (progressEvent.total) {
                     const progress = Math.round((progressEvent.loaded * 100) / progressEvent.total);
                     setUploadProgress(progress);
@@ -124,6 +126,7 @@ const UploadPage = () => {
                 }
             });
 
+            setSkippedRows(response.data?.SkippedRows || []);
             setUploadStatus('success');
             await queryClient.invalidateQueries();
             await refreshUserDataCheck();
@@ -191,6 +194,14 @@ const UploadPage = () => {
                         <CheckCircleIcon color="success" sx={{ fontSize: 60, mb: 2 }} />
                         <Typography variant="h6" color="success.main">Carregamento com sucesso</Typography>
                         <Typography sx={{ mb: 3 }}>As tuas transações foram processadas no portfólio <strong>{activePortfolio?.name}</strong>.</Typography>
+                        {skippedRows.length > 0 && (
+                            <Alert severity="warning" sx={{ mb: 3, textAlign: 'left' }}>
+                                Estas linhas do ficheiro não foram importadas. Confirma se alguma afeta a tua declaração de IRS:
+                                <ul style={{ margin: '8px 0 0', paddingLeft: 20 }}>
+                                    {skippedRows.map(row => <li key={row}>{row}</li>)}
+                                </ul>
+                            </Alert>
+                        )}
                         <Button variant="outlined" onClick={resetState}>Carregar outro ficheiro</Button>
                     </Box>
                 )}

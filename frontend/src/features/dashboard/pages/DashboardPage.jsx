@@ -1,6 +1,6 @@
 // frontend/src/features/dashboard/pages/DashboardPage.js
-import React, { useMemo, useEffect, useState } from 'react';
-import { Box, Typography, Card, Alert, Button, CircularProgress, Grid, Tooltip, LinearProgress, Snackbar, Alert as MuiAlert } from '@mui/material';
+import React, { useMemo, useEffect } from 'react';
+import { Box, Typography, Card, Alert, Button, CircularProgress, Grid, Tooltip, Snackbar, Alert as MuiAlert } from '@mui/material';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import ShowChartIcon from '@mui/icons-material/ShowChart';
 import CompareArrowsIcon from '@mui/icons-material/CompareArrows';
@@ -8,6 +8,8 @@ import { Link as RouterLink } from 'react-router-dom';
 import { useAuth } from '../../auth/AuthContext';
 import { usePortfolio } from '../../portfolio/PortfolioContext';
 import { useDashboardData } from '../hooks/useDashboardData';
+import { useHistoryRebuildRefresh } from '../hooks/useHistoryRebuildRefresh';
+import { format } from 'date-fns';
 
 // --- FIXED IMPORT: Added useQueryClient ---
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -63,7 +65,9 @@ const DashboardPage = () => {
     const queryClient = useQueryClient();
 
     // Data Hooks
-    const { currentHoldingsValueData, allTransactionsData, isLoading: isDataLoading, isError, uploadProgress, isWebSocketConnected } = useDashboardData(token);
+    const { currentHoldingsValueData, allTransactionsData, isLoading: isDataLoading, isError } = useDashboardData(token);
+
+    useHistoryRebuildRefresh(activePortfolio?.id);
 
     // Historical Data Hook (useQuery)
     const { data: historicalData, isLoading: isHistoryLoading } = useQuery({
@@ -81,9 +85,6 @@ const DashboardPage = () => {
         queryFn: async () => (await apiFetchCashBalance(activePortfolio.id)).data,
         enabled: !!token && !!activePortfolio?.id,
     });
-
-    // Upload Progress State
-    const [showUploadProgress, setShowUploadProgress] = useState(false);
 
     // Combined Loading State
     const isLoading = isDataLoading || isHistoryLoading || isCashLoading || isPortfolioLoading;
@@ -111,7 +112,8 @@ const DashboardPage = () => {
                     // 3. Refetch the data to show the new values immediately
                     queryClient.invalidateQueries({ queryKey: ['historicalChartData'] });
                     queryClient.invalidateQueries({ queryKey: ['currentHoldingsValue'] });
-                    
+                    queryClient.invalidateQueries({ queryKey: ['historyRebuildRunning'] });
+
                     // Optional: Invalidate others if KPIs depend on them directly
                     // queryClient.invalidateQueries({ queryKey: ['dashboardKPIs'] }); 
 
@@ -147,21 +149,6 @@ const DashboardPage = () => {
         return () => clearInterval(interval);
     }, [activePortfolio?.id, queryClient]);
 
-    // Handle upload progress updates
-    useEffect(() => {
-        if (uploadProgress) {
-            setShowUploadProgress(true);
-            if (uploadProgress.Status === 'completed' || uploadProgress.Status === 'error') {
-                // Refresh data after upload completes
-                setTimeout(() => {
-                    queryClient.invalidateQueries({ queryKey: ['historicalChartData'] });
-                    queryClient.invalidateQueries({ queryKey: ['currentHoldingsValue'] });
-                    setShowUploadProgress(false);
-                }, 2000);
-            }
-        }
-    }, [uploadProgress, queryClient]);
-
 
     // 3. Calcular Métricas
     const metrics = useMemo(() => {
@@ -190,7 +177,7 @@ const DashboardPage = () => {
         let netFlowsToday = 0;
         const xirrFlows = [];
         const now = new Date();
-        const todayStr = now.toISOString().split('T')[0];
+        const todayStr = format(now, 'yyyy-MM-dd'); // Local dates: toISOString gives yesterday's during the first hours of a summer day
 
         allTransactionsData.forEach(tx => {
             const txDate = parseDateRobust(tx.date);
@@ -202,7 +189,7 @@ const DashboardPage = () => {
                 if (tx.transaction_subtype === 'DEPOSIT') sumDeposits += amt;
                 if (tx.transaction_subtype === 'WITHDRAWAL') sumWithdrawals += amt;
 
-                if (txDate && txDate.toISOString().split('T')[0] === todayStr) {
+                if (txDate && format(txDate, 'yyyy-MM-dd') === todayStr) {
                     netFlowsToday += amt;
                 }
             }
@@ -337,41 +324,6 @@ const DashboardPage = () => {
 
     if (isError) return <Alert severity="error">Erro ao carregar dados do dashboard.</Alert>;
 
-    // Upload Progress Component
-    const UploadProgressComponent = () => {
-        if (!showUploadProgress || !uploadProgress) return null;
-
-        return (
-            <Box sx={{ mb: 3 }}>
-                <Card sx={{ p: 2, borderLeft: '4px solid', borderColor: 'primary.main' }}>
-                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
-                        <Typography variant="subtitle2" sx={{ fontWeight: 'bold' }}>
-                            Upload em Progresso
-                        </Typography>
-                        <Typography variant="caption" color="text.secondary">
-                            {uploadProgress.Status}
-                        </Typography>
-                    </Box>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                        <Box sx={{ flexGrow: 1 }}>
-                            <LinearProgress 
-                                variant="determinate" 
-                                value={uploadProgress.Progress} 
-                                sx={{ height: 8, borderRadius: 4 }}
-                            />
-                        </Box>
-                        <Typography variant="body2" sx={{ minWidth: 40, textAlign: 'right' }}>
-                            {Math.round(uploadProgress.Progress)}%
-                        </Typography>
-                    </Box>
-                    <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-                        {uploadProgress.Message}
-                    </Typography>
-                </Card>
-            </Box>
-        );
-    };
-
     return (
         <Box sx={{ p: { xs: 2, sm: 3 } }}>
             {/* Header */}
@@ -385,7 +337,6 @@ const DashboardPage = () => {
             </Box>
 
             {/* Upload Progress */}
-            <UploadProgressComponent />
 
             {currentHoldingsValueData?.some(h => !hasMarketPrice(h)) && (
                 <Alert severity="warning" sx={{ mb: 3 }}>

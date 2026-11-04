@@ -18,6 +18,7 @@ type UploadResult struct {
 	CashMovements            []models.CashMovement           `json:"CashMovements"`
 	DividendTransactionsList []models.ProcessedTransaction   `json:"DividendTransactionsList"`
 	FeeDetails               []models.FeeDetail              `json:"FeeDetails"`
+	SkippedRows              []string                        `json:"SkippedRows,omitempty"` // Rows of the uploaded file that weren't imported
 }
 
 var (

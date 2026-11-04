@@ -4,6 +4,7 @@ package services
 import (
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"math"
@@ -63,7 +64,7 @@ type uploadServiceImpl struct {
 	priceService          PriceService
 	reportCache           *cache.Cache
 	jobManager            *JobManager
-	rebuildRunning        sync.Map // key: "userID:portfolioID", value: struct{}{}
+	rebuildLocks          sync.Map // key: "userID:portfolioID", value: *sync.Mutex
 	isinResolutionCache   *ISINResolutionCache
 }
 
@@ -304,15 +305,15 @@ func (s *uploadServiceImpl) RefreshDailySnapshot(userID int64, portfolioID int64
 	}
 
 	if shouldRebuild {
-		key := fmt.Sprintf("%d:%d", userID, portfolioID)
-		if _, loaded := s.rebuildRunning.LoadOrStore(key, struct{}{}); loaded {
+		if s.jobManager.HasUnfinishedRebuild(userID, portfolioID) {
 			logger.L.Info("History rebuild already in progress, skipping duplicate",
 				"userID", userID,
 				"portfolioID", portfolioID)
 			return nil
 		}
-		defer s.rebuildRunning.Delete(key)
-		return s.RebuildUserHistory(userID, portfolioID)
+		// A job, because it can take far longer than the server allows for a request.
+		_, err := s.jobManager.RebuildHistoryAsync(s, userID, portfolioID, "")
+		return err
 	}
 
 	if time.Since(lastUpdateAt) < SnapshotThrottleMinutes*time.Minute {
@@ -386,7 +387,16 @@ func (s *uploadServiceImpl) ProcessUpload(fileReader io.Reader, userID int64, po
 	canonicalTxs, err := parser.Parse(fileReader)
 	if err != nil {
 		websocket.BroadcastUploadProgress(userID, portfolioID, 0, 100, "error", fmt.Sprintf("Erro ao analisar CSV: %v", err))
+		var fileErr models.FileError
+		if errors.As(err, &fileErr) {
+			return nil, fileErr
+		}
 		return nil, fmt.Errorf("%w: %v", ErrParsingFailed, err)
+	}
+
+	var skippedRows []string
+	if reporter, ok := parser.(parsers.SkippedRowsReporter); ok {
+		skippedRows = reporter.SkippedRows()
 	}
 
 	websocket.BroadcastUploadProgress(userID, portfolioID, 30, 100, "processing", "Processando transações")
@@ -397,7 +407,7 @@ func (s *uploadServiceImpl) ProcessUpload(fileReader io.Reader, userID int64, po
 	}
 	if len(newlyProcessedTxs) == 0 {
 		websocket.BroadcastUploadProgress(userID, portfolioID, 100, 100, "completed", "Nenhuma nova transação encontrada")
-		return s.GetLatestUploadResult(userID, portfolioID)
+		return s.uploadResultWithSkippedRows(userID, portfolioID, skippedRows)
 	}
 
 	// Extract unique ISINs for background resolution
@@ -584,7 +594,18 @@ func (s *uploadServiceImpl) ProcessUpload(fileReader io.Reader, userID int64, po
 	}
 
 	logger.L.Info("ProcessUpload END (async jobs started)", "userID", userID, "duration", time.Since(overallStartTime))
-	return s.GetLatestUploadResult(userID, portfolioID)
+	return s.uploadResultWithSkippedRows(userID, portfolioID, skippedRows)
+}
+
+// uploadResultWithSkippedRows adds what an upload left out to the portfolio's data, in a copy because the data is cached.
+func (s *uploadServiceImpl) uploadResultWithSkippedRows(userID int64, portfolioID int64, skippedRows []string) (*UploadResult, error) {
+	latest, err := s.GetLatestUploadResult(userID, portfolioID)
+	if err != nil {
+		return nil, err
+	}
+	result := *latest
+	result.SkippedRows = skippedRows
+	return &result, nil
 }
 
 // earliestTxDate returns the earlier of two DD-MM-YYYY dates, which can't be compared as strings.
@@ -649,6 +670,11 @@ func (c cashBalances) total() float64 {
 }
 
 func (s *uploadServiceImpl) rebuildUserHistoryFrom(userID int64, portfolioID int64, fromDateStr string) error {
+	// Rebuilds of a portfolio run one at a time. None is skipped: each may have to include newer transactions.
+	lock, _ := s.rebuildLocks.LoadOrStore(fmt.Sprintf("%d:%d", userID, portfolioID), &sync.Mutex{})
+	lock.(*sync.Mutex).Lock()
+	defer lock.(*sync.Mutex).Unlock()
+
 	logger.L.Info("Starting history rebuild (True Currency Mode)", "userID", userID, "portfolioID", portfolioID)
 
 	if err := s.priceService.EnsureBenchmarkData(); err != nil {
@@ -939,16 +965,26 @@ func (s *uploadServiceImpl) rebuildUserHistoryFrom(userID int64, portfolioID int
 	}
 
 	if len(snapshots) > 0 {
+		// In a transaction, so that a failure can't leave the chart without its history.
+		dbTx, err := database.DB.Begin()
+		if err != nil {
+			return fmt.Errorf("failed to begin history rebuild transaction: %w", err)
+		}
+		defer dbTx.Rollback()
+
 		// FIX #7: Only delete the snapshots we're about to rewrite.
 		if fullRebuild {
-			_, _ = database.DB.Exec("DELETE FROM portfolio_snapshots WHERE user_id = ? AND portfolio_id = ?", userID, portfolioID)
+			_, err = dbTx.Exec("DELETE FROM portfolio_snapshots WHERE user_id = ? AND portfolio_id = ?", userID, portfolioID)
 		} else {
 			rebuildFromStr := startDate.Format("2006-01-02")
-			_, _ = database.DB.Exec(
+			_, err = dbTx.Exec(
 				"DELETE FROM portfolio_snapshots WHERE user_id = ? AND portfolio_id = ? AND date >= ?",
 				userID, portfolioID, rebuildFromStr,
 			)
 			logger.L.Info("Incremental snapshot rebuild", "userID", userID, "portfolioID", portfolioID, "from", rebuildFromStr, "days", len(snapshots))
+		}
+		if err != nil {
+			return fmt.Errorf("failed to delete old snapshots: %w", err)
 		}
 
 		chunkSize := 500
@@ -967,10 +1003,14 @@ func (s *uploadServiceImpl) rebuildUserHistoryFrom(userID int64, portfolioID int
 			}
 			query = query[:len(query)-1]
 
-			if _, err := database.DB.Exec(query, vals...); err != nil {
+			if _, err := dbTx.Exec(query, vals...); err != nil {
 				logger.L.Error("Batch insert failed", "error", err)
 				return err
 			}
+		}
+
+		if err := dbTx.Commit(); err != nil {
+			return fmt.Errorf("failed to commit history rebuild: %w", err)
 		}
 	}
 

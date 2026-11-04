@@ -114,3 +114,64 @@ func TestParse_DividendTaxReversalKeepsSign(t *testing.T) {
 		t.Errorf("expected tax to net to 0, got %v", sum)
 	}
 }
+
+func TestParse_PaymentInLieuCountsAsDividend(t *testing.T) {
+	txs := parseReport(t, "", `<CashTransaction type="Payment In Lieu Of Dividends" description="ACME PAYMENT IN LIEU OF DIVIDEND" dateTime="20260216" amount="12.5" currency="USD" levelOfDetail="DETAIL" isin="US0378331005" symbol="ACME"/>
+<CashTransaction type="Withholding Tax" description="ACME PAYMENT IN LIEU OF DIVIDEND - US TAX" dateTime="20260216" amount="-1.5" currency="USD" levelOfDetail="DETAIL" isin="US0378331005" symbol="ACME"/>`)
+
+	if len(txs) != 2 {
+		t.Fatalf("expected 2 transactions, got %d", len(txs))
+	}
+	if txs[0].TransactionType != "DIVIDEND" || txs[0].TransactionSubType != "" || txs[0].Amount != 12.5 {
+		t.Errorf("unexpected payment: %+v", txs[0])
+	}
+	if txs[1].TransactionSubType != "TAX" {
+		t.Errorf("expected the tax on the payment to count as dividend tax: %+v", txs[1])
+	}
+}
+
+func TestParse_ImportsFeesWithTheirSign(t *testing.T) {
+	txs := parseReport(t, "", `<CashTransaction type="Broker Interest Paid" description="USD DEBIT INT" dateTime="20260216" amount="-3" currency="USD" levelOfDetail="DETAIL"/>
+<CashTransaction type="Other Fees" description="DATA FEE" dateTime="20260217" amount="-2" currency="USD" levelOfDetail="DETAIL"/>
+<CashTransaction type="Other Fees" description="DATA FEE REVERSAL" dateTime="20260218" amount="2" currency="USD" levelOfDetail="DETAIL"/>`)
+
+	if len(txs) != 3 {
+		t.Fatalf("expected 3 transactions, got %d", len(txs))
+	}
+	if txs[0].TransactionType != "FEE" || txs[0].TransactionSubType != "INTEREST" || txs[0].Amount != -3 {
+		t.Errorf("unexpected interest: %+v", txs[0])
+	}
+	if txs[1].TransactionType != "FEE" || txs[1].TransactionSubType != "" {
+		t.Errorf("unexpected fee: %+v", txs[1])
+	}
+	if txs[1].RawText == txs[2].RawText {
+		t.Error("a fee and its reversal must not look like duplicates")
+	}
+	if txs[2].Amount != 2 {
+		t.Errorf("expected a reversal to stay positive, got %v", txs[2].Amount)
+	}
+}
+
+// There's no place for interest received in the reports, so it must at least be reported.
+func TestParse_ReportsCashTypesItDoesNotImport(t *testing.T) {
+	const report = `<FlexQueryResponse><FlexStatements><FlexStatement accountId="U1"><CashTransactions>
+<CashTransaction type="Broker Interest Received" description="USD CREDIT INT" dateTime="20260216" amount="3" currency="USD" levelOfDetail="DETAIL"/>
+<CashTransaction type="Broker Interest Received" description="EUR CREDIT INT" dateTime="20260217" amount="1" currency="EUR" levelOfDetail="DETAIL"/>
+<CashTransaction type="Withholding Tax" description="USD CREDIT INT - TAX" dateTime="20260216" amount="-1" currency="USD" levelOfDetail="DETAIL"/>
+<CashTransaction type="Broker Interest Received" description="SUMMARY" dateTime="20260216" amount="4" currency="USD" levelOfDetail="SUMMARY"/>
+</CashTransactions></FlexStatement></FlexStatements></FlexQueryResponse>`
+
+	logger.InitLogger("error")
+	parser := NewParser()
+	txs, err := parser.Parse(strings.NewReader(report))
+	if err != nil {
+		t.Fatalf("Parse returned error: %v", err)
+	}
+	if len(txs) != 0 {
+		t.Errorf("expected nothing to be imported, got %+v", txs)
+	}
+	skipped := parser.SkippedRows()
+	if len(skipped) != 2 || skipped[0] != "Broker Interest Received (2)" || skipped[1] != "Withholding Tax sobre outros rendimentos (1)" {
+		t.Errorf("unexpected skipped rows: %q", skipped)
+	}
+}
