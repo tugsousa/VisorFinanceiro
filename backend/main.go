@@ -148,18 +148,11 @@ func enableCORS(next http.Handler) http.Handler {
 	})
 }
 
-func main() {
-	prepareRuntime()
-
+// initCore loads the configuration, the data files and the database, which both the server and the
+// MCP mode need.
+func initCore() {
 	config.LoadConfig()
 	logger.InitLogger(config.Cfg.LogLevel)
-
-	logger.L.Info("VisorFinanceiro backend server starting...")
-
-	if config.Cfg.JWTSecret == "" || len(config.Cfg.JWTSecret) < 32 {
-		logger.L.Error("JWT_SECRET configuration invalid.")
-		os.Exit(1)
-	}
 
 	logger.L.Info("Initializing data loaders...")
 	if err := utils.InitCountryData(config.Cfg.CountryDataPath); err != nil {
@@ -172,6 +165,36 @@ func main() {
 	logger.L.Info("Initializing database...", "path", config.Cfg.DatabasePath)
 	database.InitDB(config.Cfg.DatabasePath)
 	database.RunMigrations(config.Cfg.DatabasePath)
+}
+
+func newUploadService(priceService services.PriceService, reportCache *cache.Cache) services.UploadService {
+	return services.NewUploadService(
+		processors.NewTransactionProcessor(),
+		processors.NewDividendProcessor(),
+		processors.NewStockProcessor(),
+		processors.NewOptionProcessor(),
+		processors.NewCashMovementProcessor(),
+		processors.NewFeeProcessor(),
+		priceService,
+		reportCache,
+	)
+}
+
+func main() {
+	if len(os.Args) > 1 && os.Args[1] == "mcp" {
+		runMCP()
+		return
+	}
+
+	prepareRuntime()
+	initCore()
+
+	logger.L.Info("VisorFinanceiro backend server starting...")
+
+	if config.Cfg.JWTSecret == "" || len(config.Cfg.JWTSecret) < 32 {
+		logger.L.Error("JWT_SECRET configuration invalid.")
+		os.Exit(1)
+	}
 
 	// Initialize WebSocket hub
 	websocket.InitializeHub()
@@ -184,23 +207,7 @@ func main() {
 	emailService := services.NewEmailService()
 	priceService := services.NewPriceService()
 
-	transactionProcessor := processors.NewTransactionProcessor()
-	dividendProcessor := processors.NewDividendProcessor()
-	stockProcessor := processors.NewStockProcessor()
-	optionProcessor := processors.NewOptionProcessor()
-	cashMovementProcessor := processors.NewCashMovementProcessor()
-	feeProcessor := processors.NewFeeProcessor()
-
-	uploadService := services.NewUploadService(
-		transactionProcessor,
-		dividendProcessor,
-		stockProcessor,
-		optionProcessor,
-		cashMovementProcessor,
-		feeProcessor,
-		priceService,
-		reportCache,
-	)
+	uploadService := newUploadService(priceService, reportCache)
 
 	userHandler := handlers.NewUserHandler(authService, emailService, uploadService, reportCache)
 	uploadHandler := handlers.NewUploadHandler(uploadService)

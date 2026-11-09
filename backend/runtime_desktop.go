@@ -57,6 +57,7 @@ var (
 	desktopListener net.Listener
 	desktopConsole  = os.Stdout
 	desktopLogPath  string
+	mcpMode         bool
 )
 
 // prepareRuntime runs before anything else, so that the configuration, the logs and any relative path
@@ -72,13 +73,7 @@ func prepareRuntime() {
 	}
 	desktopListener = listener
 
-	dataDir, err := desktopDataDir()
-	if err != nil {
-		desktopFail(err)
-	}
-	if err := os.Chdir(dataDir); err != nil {
-		desktopFail(err)
-	}
+	dataDir := enterDataDir()
 
 	// The app only logs to these, so the window stays readable. Failures to start are in this file.
 	desktopLogPath = filepath.Join(dataDir, "visorfinanceiro.log")
@@ -90,6 +85,37 @@ func prepareRuntime() {
 	os.Stderr = logFile
 	stdlog.SetOutput(logFile)
 
+	configureDesktop(dataDir)
+}
+
+// prepareMCPRuntime is prepareRuntime for the MCP mode, which Claude Desktop starts in the background:
+// it uses the same data, but doesn't open the port, and leaves standard output to the MCP protocol.
+func prepareMCPRuntime() {
+	mcpMode = true
+	// Claude Desktop keeps what's written to standard error in its own log of this server.
+	os.Stdout = os.Stderr
+	configureDesktop(enterDataDir())
+}
+
+// mcpUserID returns the account whose data the MCP mode shows: the local account of this PC.
+func mcpUserID(auth *security.AuthService) (int64, error) {
+	return ensureLocalUser(auth)
+}
+
+// enterDataDir creates the data folder if needed and makes it the working directory.
+func enterDataDir() string {
+	dataDir, err := desktopDataDir()
+	if err != nil {
+		desktopFail(err)
+	}
+	if err := os.Chdir(dataDir); err != nil {
+		desktopFail(err)
+	}
+	return dataDir
+}
+
+// configureDesktop sets the configuration that the desktop build uses instead of a .env file.
+func configureDesktop(dataDir string) {
 	dataFiles, err := extractDataFiles(dataDir)
 	if err != nil {
 		desktopFail(err)
@@ -419,7 +445,12 @@ func openBrowser(url string) {
 }
 
 // desktopFail shows why the app can't start, and waits, because the window closes when the app exits.
+// In the MCP mode there's no window, and standard input belongs to the protocol, so it just exits.
 func desktopFail(err error) {
+	if mcpMode {
+		fmt.Fprintf(os.Stderr, "VisorFinanceiro could not start: %v\n", err)
+		os.Exit(1)
+	}
 	fmt.Fprintf(desktopConsole, "VisorFinanceiro could not start: %v\n\nPress Enter to close this window.\n", err)
 	bufio.NewReader(os.Stdin).ReadString('\n')
 	os.Exit(1)
