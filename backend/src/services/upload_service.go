@@ -1421,22 +1421,32 @@ func (s *uploadServiceImpl) GetHistoricalChartData(userID int64, portfolioID int
 	if err != nil {
 		return snapshots, nil
 	}
-
-	logger.L.Info("Benchmark Debug: Starting calculation", "snapshot_count", len(snapshots))
+	// SPY is quoted in USD and the portfolio in EUR, so the benchmark is converted to EUR day by
+	// day. Without this the benchmark would leave out EUR/USD moves that the portfolio includes.
+	usdEurRates, _, err := s.priceService.GetHistoricalPrices("USDEUR=X")
+	if err != nil || len(usdEurRates) == 0 {
+		logger.L.Warn("No USD/EUR history for the benchmark, leaving it out", "error", err)
+		return snapshots, nil
+	}
 
 	currentBenchmarkUnits := 0.0
 	previousCashFlow := 0.0
-	lastKnownPrice := 0.0
+	lastKnownUSDPrice := 0.0
+	lastKnownRate := 0.0
 	pendingCashToInvest := 0.0
 
 	for i := range snapshots {
 		date := snapshots[i].Date
-		price := bmPrices[date]
 
-		if price > 0 {
-			lastKnownPrice = price
-		} else if lastKnownPrice > 0 {
-			price = lastKnownPrice
+		if p := bmPrices[date]; p > 0 {
+			lastKnownUSDPrice = p
+		}
+		if r := usdEurRates[date]; r > 0 {
+			lastKnownRate = r
+		}
+		price := 0.0
+		if lastKnownUSDPrice > 0 && lastKnownRate > 0 {
+			price = lastKnownUSDPrice * lastKnownRate
 		}
 
 		dailyNetFlow := snapshots[i].CumulativeCashFlow - previousCashFlow
@@ -1445,21 +1455,6 @@ func (s *uploadServiceImpl) GetHistoricalChartData(userID int64, portfolioID int
 		if price > 0 {
 			unitsTrade := pendingCashToInvest / price
 			currentBenchmarkUnits += unitsTrade
-
-			if strings.Contains(date, "2025-04") || strings.Contains(date, "2025-05") {
-				if dailyNetFlow != 0 || pendingCashToInvest != 0 {
-					if i%10 == 0 {
-						logger.L.Debug("Benchmark Loop Debug",
-							"date", date,
-							"dailyNetFlow", dailyNetFlow,
-							"pendingCash", pendingCashToInvest,
-							"price", price,
-							"unitsTrade", unitsTrade,
-							"totalUnits", currentBenchmarkUnits)
-					}
-				}
-			}
-
 			pendingCashToInvest = 0
 		}
 
