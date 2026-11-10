@@ -2,6 +2,7 @@ package models
 
 import (
 	"database/sql"
+	"encoding/json"
 	"strings"
 	"time"
 
@@ -66,15 +67,40 @@ func CleanExpiredFailedISINs(db *sql.DB, ttl time.Duration) error {
 // ISINTickerMap represents a row in the isin_ticker_map table.
 // It caches the mapping from an ISIN to a specific stock ticker.
 type ISINTickerMap struct {
-	ISIN          string
-	TickerSymbol  string
-	Exchange      sql.NullString // Use sql.NullString for nullable TEXT fields
-	Currency      string
-	Sector        sql.NullString // New field
-	Industry      sql.NullString // New field
-	QuoteType     sql.NullString // New field
-	CreatedAt     time.Time
-	LastCheckedAt sql.NullTime // Use sql.NullTime for nullable TIMESTAMP fields
+	ISIN         string
+	TickerSymbol string
+	Exchange     sql.NullString // Use sql.NullString for nullable TEXT fields
+	Currency     string
+	Sector       sql.NullString // New field
+	Industry     sql.NullString // New field
+	QuoteType    sql.NullString // New field
+	// SectorWeights is a fund's sector breakdown as JSON; see AssetMetadata.SectorWeights.
+	SectorWeights     sql.NullString
+	MetadataUpdatedAt sql.NullTime
+	CreatedAt         time.Time
+	LastCheckedAt     sql.NullTime // Use sql.NullTime for nullable TIMESTAMP fields
+}
+
+// AssetMetadata is what Yahoo Finance tells us about a listing.
+type AssetMetadata struct {
+	Sector    string
+	Industry  string
+	QuoteType string
+	// SectorWeights is the share of a fund's value in each sector (0-1), with "Bonds" for its
+	// bond part. Empty for a single stock. The shares can add up to less than 1 (the fund's cash).
+	SectorWeights map[string]float64
+}
+
+// ParsedSectorWeights returns the stored sector breakdown, or nil when there is none.
+func (m ISINTickerMap) ParsedSectorWeights() map[string]float64 {
+	if !m.SectorWeights.Valid || m.SectorWeights.String == "" {
+		return nil
+	}
+	var weights map[string]float64
+	if err := json.Unmarshal([]byte(m.SectorWeights.String), &weights); err != nil || len(weights) == 0 {
+		return nil
+	}
+	return weights
 }
 
 // DailyPrice represents a cached price for a ticker on a specific day.
@@ -95,7 +121,7 @@ func GetMappingsByISINs(db *sql.DB, isins []string) (map[string]ISINTickerMap, e
 	}
 	// Using `IN` clause is efficient for batch lookups.
 	// Updated query to select new metadata columns
-	query := `SELECT isin, ticker_symbol, exchange, currency, sector, industry, quote_type, created_at, last_checked_at FROM isin_ticker_map WHERE isin IN (?` + strings.Repeat(",?", len(isins)-1) + `)`
+	query := `SELECT isin, ticker_symbol, exchange, currency, sector, industry, quote_type, sector_weights, metadata_updated_at, created_at, last_checked_at FROM isin_ticker_map WHERE isin IN (?` + strings.Repeat(",?", len(isins)-1) + `)`
 	// Convert the slice of strings to a slice of interfaces for the query arguments.
 	args := make([]interface{}, len(isins))
 	for i, isin := range isins {
@@ -116,6 +142,8 @@ func GetMappingsByISINs(db *sql.DB, isins []string) (map[string]ISINTickerMap, e
 			&mapping.Sector,
 			&mapping.Industry,
 			&mapping.QuoteType,
+			&mapping.SectorWeights,
+			&mapping.MetadataUpdatedAt,
 			&mapping.CreatedAt,
 			&mapping.LastCheckedAt,
 		); err != nil {
@@ -183,10 +211,18 @@ func BatchInsertMappings(db *sql.DB, mappings []ISINTickerMap) error {
 	return tx.Commit()
 }
 
-// UpdateMappingMetadata updates the sector, industry, and quote_type for a mapping.
-func UpdateMappingMetadata(db *sql.DB, isin, sector, industry, quoteType string) error {
-	query := `UPDATE isin_ticker_map SET sector=?, industry=?, quote_type=? WHERE isin=?`
-	_, err := db.Exec(query, sector, industry, quoteType, isin)
+// UpdateMappingMetadata stores the metadata of a mapping and when it was fetched.
+func UpdateMappingMetadata(db *sql.DB, isin string, meta AssetMetadata) error {
+	var weights sql.NullString
+	if len(meta.SectorWeights) > 0 {
+		b, err := json.Marshal(meta.SectorWeights)
+		if err != nil {
+			return err
+		}
+		weights = sql.NullString{String: string(b), Valid: true}
+	}
+	query := `UPDATE isin_ticker_map SET sector=?, industry=?, quote_type=?, sector_weights=?, metadata_updated_at=? WHERE isin=?`
+	_, err := db.Exec(query, meta.Sector, meta.Industry, meta.QuoteType, weights, time.Now(), isin)
 	return err
 }
 

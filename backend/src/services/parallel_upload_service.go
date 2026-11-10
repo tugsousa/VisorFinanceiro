@@ -332,7 +332,7 @@ func (pus *ParallelUploadService) metadataWorker(
 		}
 		ticker := mapping.TickerSymbol
 
-		sector, industry, quoteType, err := pus.priceService.FetchMetadata(ticker)
+		meta, err := pus.priceService.FetchMetadata(ticker)
 		if err != nil {
 			mu.Lock()
 			result.MetadataErrors[ticker] = err
@@ -340,7 +340,7 @@ func (pus *ParallelUploadService) metadataWorker(
 			continue
 		}
 
-		err = models.UpdateMappingMetadata(database.DB, isin, sector, industry, quoteType)
+		err = models.UpdateMappingMetadata(database.DB, isin, meta)
 		if err != nil {
 			mu.Lock()
 			result.MetadataErrors[ticker] = fmt.Errorf("failed to update metadata: %w", err)

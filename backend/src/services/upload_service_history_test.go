@@ -131,7 +131,8 @@ func TestRebuildUserHistory_ValuesHoldingFromListingWithHistory(t *testing.T) {
 	_, err := database.DB.Exec(`
 		CREATE TABLE isin_ticker_map (
 			isin TEXT PRIMARY KEY, ticker_symbol TEXT, exchange TEXT, currency TEXT, company_name TEXT,
-			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, last_checked_at TIMESTAMP, sector TEXT, industry TEXT, quote_type TEXT
+			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, last_checked_at TIMESTAMP, sector TEXT, industry TEXT, quote_type TEXT,
+			sector_weights TEXT, metadata_updated_at TIMESTAMP
 		);
 		INSERT INTO isin_ticker_map (isin, ticker_symbol, currency) VALUES ('NL0011683594', 'BAD.SG', 'EUR');
 		INSERT INTO processed_transactions

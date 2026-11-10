@@ -68,6 +68,6 @@ type PriceService interface {
 	GetLastYearDividends(ticker string) (map[time.Month]float64, string, error)
 	// Métodos adicionados para paralelização
 	FetchTickerForISIN(isin string) (string, string, string, error)
-	FetchMetadata(ticker string) (string, string, string, error)
+	FetchMetadata(ticker string) (models.AssetMetadata, error)
 	FindTickerWithHistory(isin, currentTicker string) (string, PriceMap, string, error)
 }

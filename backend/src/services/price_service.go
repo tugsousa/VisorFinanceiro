@@ -104,9 +104,85 @@ type yahooQuoteSummaryResponse struct {
 				Sector   string `json:"sector"`
 				Industry string `json:"industry"`
 			} `json:"summaryProfile"`
+			TopHoldings struct {
+				StockPosition    yahooRawValue              `json:"stockPosition"`
+				BondPosition     yahooRawValue              `json:"bondPosition"`
+				SectorWeightings []map[string]yahooRawValue `json:"sectorWeightings"`
+			} `json:"topHoldings"`
 		} `json:"result"`
 		Error interface{} `json:"error"`
 	} `json:"quoteSummary"`
+}
+
+type yahooRawValue struct {
+	Raw float64 `json:"raw"`
+}
+
+// fundSectorNames turns the sector keys of a fund's sectorWeightings into the sector names
+// Yahoo gives single stocks, so funds and stocks add up under the same sector.
+var fundSectorNames = map[string]string{
+	"realestate":             "Real Estate",
+	"consumer_cyclical":      "Consumer Cyclical",
+	"basic_materials":        "Basic Materials",
+	"consumer_defensive":     "Consumer Defensive",
+	"technology":             "Technology",
+	"communication_services": "Communication Services",
+	"financial_services":     "Financial Services",
+	"utilities":              "Utilities",
+	"industrials":            "Industrials",
+	"energy":                 "Energy",
+	"healthcare":             "Healthcare",
+}
+
+// fundBondsSector is the name under which the bond part of a fund is shown.
+const fundBondsSector = "Obrigações"
+
+// metadataRefreshAge is how old a listing's metadata can get before it is fetched again.
+const metadataRefreshAge = 30 * 24 * time.Hour
+
+// fundSectorWeights returns the share of a fund's whole value in each sector. Yahoo gives the
+// sectors as shares of the fund's stocks, so they are scaled by the stock part of the fund,
+// and the bond part gets its own entry. Whatever is left (cash, other) isn't in the result.
+func fundSectorWeights(stockPosition, bondPosition float64, weightings []map[string]yahooRawValue) map[string]float64 {
+	sectors := make(map[string]float64)
+	var sectorTotal float64
+	for _, entry := range weightings {
+		for key, v := range entry {
+			if v.Raw <= 0 {
+				continue
+			}
+			name, ok := fundSectorNames[key]
+			if !ok {
+				name = key
+			}
+			sectors[name] += v.Raw
+			sectorTotal += v.Raw
+		}
+	}
+
+	weights := make(map[string]float64)
+	if sectorTotal > 0 {
+		// Without a stock position the sectors are taken as the whole fund.
+		stockShare := stockPosition
+		if stockShare <= 0 || stockShare > 1 {
+			stockShare = 1
+		}
+		// Yahoo's shares sometimes add up to a little over 1 from rounding.
+		scale := stockShare
+		if sectorTotal > 1 {
+			scale = stockShare / sectorTotal
+		}
+		for name, w := range sectors {
+			weights[name] = w * scale
+		}
+	}
+	if bondPosition > 0 && bondPosition <= 1 {
+		weights[fundBondsSector] += bondPosition
+	}
+	if len(weights) == 0 {
+		return nil
+	}
+	return weights
 }
 
 type yahooEventsResponse struct {
@@ -758,7 +834,7 @@ func (s *priceServiceImpl) getIsinToTickerMap(isins []string) (map[string]string
 	for _, isin := range isins {
 		if mapping, ok := dbMappings[isin]; ok {
 			isinToTickerMap[isin] = mapping.TickerSymbol
-			if !mapping.Sector.Valid || mapping.Sector.String == "" {
+			if !mapping.MetadataUpdatedAt.Valid || time.Since(mapping.MetadataUpdatedAt.Time) > metadataRefreshAge {
 				metadataToUpdate[isin] = mapping.TickerSymbol
 			}
 		} else {
@@ -1530,11 +1606,15 @@ func (s *priceServiceImpl) updateMetadataParallel(metadataToUpdate map[string]st
 			s.throttler.Wait()
 			time.Sleep(delayBetweenRequests)
 
-			sector, industry, qType, err := s.FetchMetadata(ticker)
-			if err == nil {
-				// Update all ISINs for this ticker
-				for _, isin := range isins {
-					models.UpdateMappingMetadata(database.DB, isin, sector, industry, qType)
+			meta, err := s.FetchMetadata(ticker)
+			if err != nil {
+				logger.L.Warn("Could not fetch metadata", "ticker", ticker, "error", err)
+				return
+			}
+			// Update all ISINs for this ticker
+			for _, isin := range isins {
+				if err := models.UpdateMappingMetadata(database.DB, isin, meta); err != nil {
+					logger.L.Error("Failed to store metadata", "isin", isin, "error", err)
 				}
 			}
 		}(ticker, isins)
@@ -1543,33 +1623,33 @@ func (s *priceServiceImpl) updateMetadataParallel(metadataToUpdate map[string]st
 	wg.Wait()
 }
 
-func (s *priceServiceImpl) FetchMetadata(ticker string) (string, string, string, error) {
-	url := fmt.Sprintf("https://query1.finance.yahoo.com/v10/finance/quoteSummary/%s?modules=assetProfile,quoteType,fundProfile,summaryProfile&crumb=%s", ticker, s.crumb)
+func (s *priceServiceImpl) FetchMetadata(ticker string) (models.AssetMetadata, error) {
+	url := fmt.Sprintf("https://query1.finance.yahoo.com/v10/finance/quoteSummary/%s?modules=assetProfile,quoteType,fundProfile,summaryProfile,topHoldings&crumb=%s", ticker, s.crumb)
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
-		return "", "", "", err
+		return models.AssetMetadata{}, err
 	}
 	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
 	resp, err := s.httpClient.Do(req)
 	if err != nil {
-		return "", "", "", err
+		return models.AssetMetadata{}, err
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode == 401 {
 		s.mu.Lock()
 		s.isInitialized = false
 		s.mu.Unlock()
-		return "", "", "", fmt.Errorf("status 401 (Unauthorized) - Crumb invalid")
+		return models.AssetMetadata{}, fmt.Errorf("status 401 (Unauthorized) - Crumb invalid")
 	}
 	if resp.StatusCode != http.StatusOK {
-		return "", "", "", fmt.Errorf("status %d", resp.StatusCode)
+		return models.AssetMetadata{}, fmt.Errorf("status %d", resp.StatusCode)
 	}
 	var data yahooQuoteSummaryResponse
 	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
-		return "", "", "", err
+		return models.AssetMetadata{}, err
 	}
 	if len(data.QuoteSummary.Result) == 0 {
-		return "", "", "", fmt.Errorf("no result")
+		return models.AssetMetadata{}, fmt.Errorf("no result")
 	}
 	res := data.QuoteSummary.Result[0]
 	qType := strings.ToUpper(res.QuoteType.QuoteType)
@@ -1583,6 +1663,12 @@ func (s *priceServiceImpl) FetchMetadata(ticker string) (string, string, string,
 		sector = res.SummaryProfile.Sector
 		industry = res.SummaryProfile.Industry
 	}
-	logger.L.Info("Metadata fetched", "ticker", ticker, "sector", sector, "type", qType)
-	return sector, industry, qType, nil
+	// A single stock has no sector breakdown; a fund (ETF, mutual fund) does.
+	var weights map[string]float64
+	if qType != "EQUITY" {
+		th := res.TopHoldings
+		weights = fundSectorWeights(th.StockPosition.Raw, th.BondPosition.Raw, th.SectorWeightings)
+	}
+	logger.L.Info("Metadata fetched", "ticker", ticker, "sector", sector, "type", qType, "sectorWeights", len(weights))
+	return models.AssetMetadata{Sector: sector, Industry: industry, QuoteType: qType, SectorWeights: weights}, nil
 }

@@ -96,7 +96,7 @@ The tools are in `src/mcpserver`:
 | Tool | What it returns |
 |---|---|
 | `list_portfolios` | The portfolios. The others use the default one unless given a `portfolio_id`. |
-| `get_portfolio_overview` | Holdings with cost, market value, unrealised gain, weight, sector and country; cash; totals. |
+| `get_portfolio_overview` | Holdings with cost, market value, unrealised gain, weight, sector and country (and each ETF's sector breakdown); cash; totals; the portfolio's sector exposure with ETFs split across their sectors. |
 | `get_open_lots` | The purchase lots still held (FIFO), with their date and cost. |
 | `get_option_positions` | Open option positions. |
 | `get_realized_gains` | Stock sales and closed options with their gain, totals per year, and sales without a purchase. |

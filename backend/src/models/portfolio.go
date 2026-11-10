@@ -15,6 +15,8 @@ type HoldingWithValue struct {
 	Industry          string  `json:"industry"`
 	AssetType         string  `json:"asset_type"`
 	CountryCode       string  `json:"country_code"`
+	// SectorWeights is a fund's share in each sector (0-1); empty for a single stock.
+	SectorWeights map[string]float64 `json:"sector_weights,omitempty"`
 }
 
 // SaleDetail represents the details of a completed stock sale, matching a purchase.

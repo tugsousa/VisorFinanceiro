@@ -1118,10 +1118,12 @@ func (s *uploadServiceImpl) GetCurrentHoldingsWithValue(userID int64, portfolioI
 		}
 
 		var sector, industry, assetType string
+		var sectorWeights map[string]float64
 		if m, ok := mappings[isin]; ok {
 			sector = m.Sector.String
 			industry = m.Industry.String
 			assetType = m.QuoteType.String
+			sectorWeights = m.ParsedSectorWeights()
 		}
 		countryCode := utils.GetCountryCodeString(isin)
 
@@ -1137,6 +1139,7 @@ func (s *uploadServiceImpl) GetCurrentHoldingsWithValue(userID int64, portfolioI
 			Industry:          industry,
 			AssetType:         assetType,
 			CountryCode:       countryCode,
+			SectorWeights:     sectorWeights,
 		})
 	}
 

@@ -35,7 +35,8 @@ func (s *Server) addTools(server *mcp.Server) {
 		Name:  "get_portfolio_overview",
 		Title: "Portfolio overview",
 		Description: "Current stock and ETF holdings with quantity, cost, market value, unrealised gain, weight, sector, " +
-			"industry and country, plus the cash balance and totals. The best starting point for most questions.",
+			"industry and country (and each ETF's sector breakdown), plus the cash balance, totals and the portfolio's " +
+			"sector exposure with ETFs split across their sectors. The best starting point for most questions.",
 		Annotations: readOnlyOnline,
 	}, s.getPortfolioOverview)
 
@@ -201,7 +202,16 @@ func (s *Server) getPortfolioOverview(_ context.Context, _ *mcp.CallToolRequest,
 		UnrealizedGainPct float64 `json:"unrealized_gain_pct,omitempty"`
 		WeightPct         float64 `json:"weight_pct,omitempty"`
 		PriceStatus       string  `json:"price_status"`
+		// SectorWeightsPct is a fund's breakdown by sector, in % of the fund.
+		SectorWeightsPct map[string]float64 `json:"sector_weights_pct,omitempty"`
 	}
+	type sectorExposure struct {
+		Sector         string  `json:"sector"`
+		MarketValueEUR float64 `json:"market_value_eur"`
+		WeightPct      float64 `json:"weight_pct"`
+	}
+	// The sector exposure of the priced holdings, with each fund split across its sectors.
+	exposure := map[string]float64{}
 
 	var totalValue, pricedCost, unpricedCost float64
 	for _, h := range holdings {
@@ -235,9 +245,39 @@ func (s *Server) getPortfolioOverview(_ context.Context, _ *mcp.CallToolRequest,
 			item.UnrealizedGainEUR = round2(h.MarketValueEUR - h.TotalCostBasisEUR)
 			item.UnrealizedGainPct = percent(h.MarketValueEUR-h.TotalCostBasisEUR, h.TotalCostBasisEUR)
 			item.WeightPct = percent(h.MarketValueEUR, totalValue)
+
+			if len(h.SectorWeights) > 0 {
+				var covered float64
+				for sector, w := range h.SectorWeights {
+					exposure[sector] += h.MarketValueEUR * w
+					covered += w
+				}
+				if covered < 1 {
+					exposure["Other / cash"] += h.MarketValueEUR * (1 - covered)
+				}
+			} else if h.Sector != "" {
+				exposure[h.Sector] += h.MarketValueEUR
+			} else {
+				exposure["Unknown"] += h.MarketValueEUR
+			}
+		}
+		if len(h.SectorWeights) > 0 {
+			item.SectorWeightsPct = make(map[string]float64, len(h.SectorWeights))
+			for sector, w := range h.SectorWeights {
+				item.SectorWeightsPct[sector] = round2(w * 100)
+			}
 		}
 		result = append(result, item)
 	}
+
+	sectors := make([]sectorExposure, 0, len(exposure))
+	for sector, value := range exposure {
+		if value < 0.005 {
+			continue
+		}
+		sectors = append(sectors, sectorExposure{Sector: sector, MarketValueEUR: round2(value), WeightPct: percent(value, totalValue)})
+	}
+	sort.Slice(sectors, func(i, j int) bool { return sectors[i].MarketValueEUR > sectors[j].MarketValueEUR })
 	sort.Slice(result, func(i, j int) bool {
 		if result[i].MarketValueEUR != result[j].MarketValueEUR {
 			return result[i].MarketValueEUR > result[j].MarketValueEUR
@@ -258,7 +298,8 @@ func (s *Server) getPortfolioOverview(_ context.Context, _ *mcp.CallToolRequest,
 			"total_value_eur":               round2(totalValue + cash),
 			"open_option_positions":         len(options),
 		},
-		"holdings": result,
+		"holdings":        result,
+		"sector_exposure": sectors,
 	}, nil
 }
 

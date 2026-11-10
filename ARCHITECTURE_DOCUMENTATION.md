@@ -38,7 +38,7 @@ users                    - User accounts and authentication
 portfolios              - User portfolio management (multi-portfolio support)
 processed_transactions  - Transaction history with portfolio association
 portfolio_snapshots     - Daily portfolio valuations
-isin_ticker_map         - ISIN to ticker symbol mappings
+isin_ticker_map         - ISIN to ticker symbol mappings, with sector/industry/type and ETF sector weights
 daily_prices           - Cached stock prices
 
 -- Supporting Tables  
@@ -188,6 +188,7 @@ Each feature has dedicated page components that:
 - **Chart.js Integration**: Custom financial charts with date adapters
 - **Heatmap Charts**: Portfolio allocation visualization
 - **TreeMap Charts**: Asset distribution visualization
+- **Asset Allocation** (dashboard "Alocação de Ativos"): by company, sector and asset type. "Por Setor" splits each ETF's value and cost across its sector weights; an ETF without weights, and the cash part of a fund, go to "Outros"
 - **Interactive Charts**: Zoom, pan, and drill-down capabilities
 
 ##### 3. File Upload System
@@ -283,6 +284,8 @@ The system handles various transaction types:
 - **ECB Exchange Rates** - Automatic EUR conversion using European Central Bank rates
 - **Stock Price Caching** - Local caching of stock prices to reduce API calls
 - **ISIN Resolution** - Automatic mapping of ISIN codes to stock tickers via Yahoo Finance API with local database caching
+- **Asset Metadata** - Sector, industry and asset type of each listing, from Yahoo Finance's `quoteSummary`, stored in `isin_ticker_map` and refreshed when older than 30 days (`metadata_updated_at`)
+- **ETF Sector Weights** - A fund has no sector of its own, so its sector breakdown (the `topHoldings` module) is stored as JSON in `sector_weights`. Yahoo gives the sectors as shares of the fund's stocks; they are scaled by the fund's stock share, the bond share becomes an "Obrigações" entry, and the rest (cash) is left out. Sector keys are renamed to the names Yahoo uses for single stocks (e.g. `financial_services` → "Financial Services") so funds and stocks add up under the same sector. The weights come from Morningstar and can lag the fund's actual holdings by a few weeks
 
 ### Database Optimization
 

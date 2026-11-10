@@ -30,13 +30,48 @@ const processData = (holdings, keySelector, labelFormatter) => {
     return Object.values(groups);
 };
 
+// By sector, a fund (ETF) with a known sector breakdown is split across its sectors;
+// the part of it outside those sectors (its cash) goes to 'Outros'.
+const processSectorData = (holdings) => {
+    if (!holdings) return [];
+    const groups = {};
+    const add = (key, marketVal, costVal) => {
+        if (!groups[key]) groups[key] = { name: key, marketValue: 0, costBasis: 0 };
+        groups[key].marketValue += marketVal;
+        groups[key].costBasis += costVal;
+    };
+
+    holdings.forEach(h => {
+        const marketVal = h.marketValueEUR || 0;
+        const costVal = Math.abs(h.total_cost_basis_eur || 0);
+        const weights = h.sector_weights;
+
+        if (weights && Object.keys(weights).length > 0) {
+            let covered = 0;
+            Object.entries(weights).forEach(([sector, w]) => {
+                add(sector, marketVal * w, costVal * w);
+                covered += w;
+            });
+            if (covered < 0.9999) {
+                add('Outros', marketVal * (1 - covered), costVal * (1 - covered));
+            }
+            return;
+        }
+
+        const key = h.sector && h.sector !== 'Unknown' ? h.sector : 'Outros';
+        add(key, marketVal, costVal);
+    });
+
+    return Object.values(groups).filter(g => g.marketValue > 0.005 || g.costBasis > 0.005);
+};
+
 export default function AllocationSection({ holdings }) {
     const allocationData = useMemo(() => {
         if (!holdings || holdings.length === 0) return {};
 
         return {
             byCompany: processData(holdings, h => h.product_name),
-            bySector: processData(holdings, h => h.sector),
+            bySector: processSectorData(holdings),
             // Removed byCountry as requested
             byAsset: processData(holdings, h => h.asset_type, (type) => {
                 if (!type) return 'Outros';
