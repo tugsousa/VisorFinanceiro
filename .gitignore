@@ -1,0 +1,24 @@
+.git
+.gitignore
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+
+# Environment files (secrets) - in any folder
+.env
+.env.*
+!.env.example
+
+# Keys and certificates
+*.pem
+*.key
+*.p12
+*.pfx
+
+# Desktop build output
+dist/
+
+# Local MCP server config (machine-specific path)
+.mcp.json
