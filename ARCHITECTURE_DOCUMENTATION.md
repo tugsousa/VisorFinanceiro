@@ -433,9 +433,21 @@ go run github.com/golang-migrate/migrate/v4/cmd/migrate -path db/migrations -dat
    go test ./src/...
    ```
 
+### Setting Up on a New PC
+
+`setup.bat` (Windows) prepares a PC with nothing installed. Get the project (`git clone`, or **Code → Download ZIP** on GitHub, which needs no git) and double-click `setup.bat`. It runs `setup.ps1`, which:
+
+1. Installs Go and Node.js with winget if they're missing or older than needed (Go 1.24, Node.js 18)
+2. Builds `dist\VisorFinanceiro.exe` with `build-desktop.bat`, closing a running copy first so it can be replaced
+3. Installs Claude Desktop with winget if it's missing, and adds VisorFinanceiro to its `claude_desktop_config.json` as an MCP server. It writes to the Microsoft Store version's folder (`%LOCALAPPDATA%\Packages\Claude_*\LocalCache\Roaming\Claude`) and/or `%APPDATA%\Claude`, keeps the rest of the file, saves the previous version as `.bak`, and leaves a file that isn't valid JSON untouched
+
+`setup.bat -SkipClaude` skips step 3. The script can be run again at any time, for example after pulling changes, to rebuild the app.
+
+SQLite doesn't need to be installed: the driver is pure Go and built into the executable, which creates the database on first run. The data isn't part of the project, so a new PC starts empty; upload the broker exports in the app.
+
 ### Desktop Build
 
-`build-desktop.bat` (Windows) builds `dist\VisorFinanceiro.exe`, a single file that runs the whole app on one PC:
+`build-desktop.bat` (Windows) builds `dist\VisorFinanceiro.exe`, a single file that runs the whole app on one PC. It needs Go and Node.js only to build; the executable runs without them:
 
 - It runs `npm run build:desktop`, which builds the frontend into `backend/desktop_web`, then `go build -tags desktop`
 - The executable embeds the frontend, the migrations and the `data/*.json` files, and serves the frontend next to the API on `http://127.0.0.1:38471`, accepting connections from this PC only

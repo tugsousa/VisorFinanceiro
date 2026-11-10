@@ -10,7 +10,7 @@ See [ARCHITECTURE_DOCUMENTATION.md](../ARCHITECTURE_DOCUMENTATION.md) for the ar
 - [Setup](#setup)
 - [Running the Backend](#running-the-backend)
 - [Tests](#tests)
-- [Desktop Build](#desktop-build)
+- [Desktop Build](#desktop-build) (and setting up a new PC)
 - [Asking Claude about the portfolio (MCP)](#asking-claude-about-the-portfolio-mcp)
 
 ## Prerequisites
@@ -51,12 +51,16 @@ go test ./src/...
 
 ## Desktop Build
 
-`build-desktop.bat` in the project root builds `dist\VisorFinanceiro.exe`: one file that runs the whole app on this PC, with the frontend embedded and served next to the API on `http://127.0.0.1:38471`. It needs no configuration or login, and keeps its data in `%LOCALAPPDATA%\VisorFinanceiro`. The desktop code is in `runtime_desktop.go`, behind the `desktop` build tag.
+On a new Windows PC, double-click `setup.bat` in the project root: it installs Go and Node.js if needed, builds the app, and adds it to Claude Desktop (installing Claude Desktop if needed). See [Setting Up on a New PC](../ARCHITECTURE_DOCUMENTATION.md#setting-up-on-a-new-pc).
+
+`build-desktop.bat` in the project root only builds `dist\VisorFinanceiro.exe`: one file that runs the whole app on this PC, with the frontend embedded and served next to the API on `http://127.0.0.1:38471`. It needs no configuration or login, and keeps its data in `%LOCALAPPDATA%\VisorFinanceiro`. The desktop code is in `runtime_desktop.go`, behind the `desktop` build tag.
 
 ---
 ## Asking Claude about the portfolio (MCP)
 
 The desktop build (`build-desktop.bat`) can also run as an [MCP](https://modelcontextprotocol.io) server, which lets Claude Desktop read the portfolio and answer questions about it, such as "what's my biggest position?" or "how much did I get in dividends in 2025?". It works with a normal Claude subscription and needs no API key.
+
+`setup.bat` does steps 1 and 2 by itself. By hand:
 
 1. Build `dist\VisorFinanceiro.exe` with `build-desktop.bat`.
 2. Add the app to Claude Desktop's `claude_desktop_config.json` (use the path of your executable, with doubled backslashes). The file is in `%APPDATA%\Claude`, or, when Claude Desktop is installed as a packaged app, in `%LOCALAPPDATA%\Packages\Claude_<id>\LocalCache\Roaming\Claude`. Create it if it doesn't exist yet. Claude Desktop also opens it from **Settings → Developer → Edit Config**, once the developer settings are shown:
