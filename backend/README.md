@@ -1,72 +1,57 @@
-# Taxfolio - Backend
+# VisorFinanceiro - Backend
 
-This is the backend server for Taxfolio, a portfolio tracker and tax helper application. It handles data processing, storage, user authentication, and provides an API for the frontend.
+This is the Go backend of VisorFinanceiro, a portfolio tracker and tax helper. It parses broker exports (DEGIRO, Interactive Brokers), stores the transactions, values the holdings with Yahoo Finance prices, calculates realized gains, dividends and fees, and serves the API used by the frontend.
+
+See [ARCHITECTURE_DOCUMENTATION.md](../ARCHITECTURE_DOCUMENTATION.md) for the architecture, the full list of environment variables and API endpoints, and deployment.
 
 ## Table of Contents
 
 - [Prerequisites](#prerequisites)
 - [Setup](#setup)
-  - [Environment Variables](#environment-variables)
-  - [Database](#database)
-  - [Dependencies](#dependencies)
 - [Running the Backend](#running-the-backend)
-- [API Endpoint Overview](#api-endpoint-overview)
+- [Tests](#tests)
+- [Desktop Build](#desktop-build)
+- [Asking Claude about the portfolio (MCP)](#asking-claude-about-the-portfolio-mcp)
 
 ## Prerequisites
 
-- [Go](https://golang.org/dl/) version 1.23.0 or higher.
+- [Go](https://golang.org/dl/) 1.24 or higher. No SQLite install or C compiler is needed: the SQLite driver is pure Go.
 
 ## Setup
 
-1.  **Clone the repository:**
+1.  **Environment variables:** `JWT_SECRET` and `CSRF_AUTH_KEY` are required. In development they are read from a `.env` file in the current folder or, failing that, the one above it (the project root, which the frontend also reads), for example:
     ```bash
-    git clone <your-repository-url>
-    cd <your-repository-url>/backend
+    JWT_SECRET=some-long-random-string
+    CSRF_AUTH_KEY=another-32-byte-random-string
     ```
+    Everything else has a default; see [Environment Variables](../ARCHITECTURE_DOCUMENTATION.md#environment-variables).
 
-3.  **Database:**
-    The application uses SQLite. The database file (`taxfolio.db`) will be automatically created in the `backend` directory when the server starts for the first time, if it doesn't already exist. The schema is also initialized automatically.
+2.  **Database:** SQLite. The database file (`visorfinanceiro.db`, or `DATABASE_PATH`) is created in the `backend` directory the first time the server starts, and the migrations in `db/migrations` are applied automatically on every start.
 
-4.  **Dependencies:**
-    Fetch the Go module dependencies:
+3.  **Dependencies:**
     ```bash
-    go mod tidy
-    # or
     go mod download
     ```
 
 ## Running the Backend
 
- **Start the server:**
-    From the `backend` directory, run:
-    ```bash
-    go run main.go
-    ```
-    The server will start, typically on `http://localhost:8080` (or the port specified by `PORT`).
+From the `backend` directory:
 
-## API Endpoint Overview
+```bash
+go run .
+```
 
-All API endpoints are prefixed with `/api`.
+(`go run main.go` doesn't work: the `main` package is split across several files.) The server starts on `http://localhost:8080`, or the port in `PORT`. All API endpoints are under `/api`; the routes are in `main.go`.
 
-### Authentication (`/api/auth/`)
+## Tests
 
-*   `GET /csrf`: Provides a CSRF token.
-*   `POST /login`: Authenticates a user and returns JWT access and refresh tokens.
-*   `POST /register`: Registers a new user.
-*   `POST /logout`: Invalidates the user's current session.
-*   `POST /refresh`: Refreshes an expired access token using a valid refresh token.
+```bash
+go test ./src/...
+```
 
-### Data Management (Authenticated & CSRF Protected)
+## Desktop Build
 
-*   `POST /upload`: Uploads a CSV file for transaction processing.
-*   `GET /dashboard-data`: Retrieves consolidated data for the user's dashboard.
-*   `GET /transactions/processed`: Retrieves all processed transactions for the authenticated user.
-*   `GET /holdings/stocks`: Retrieves current stock holdings.
-*   `GET /holdings/options`: Retrieves current option holdings.
-*   `GET /stock-sales`: Retrieves details of all stock sales.
-*   `GET /option-sales`: Retrieves details of all option sales.
-*   `GET /dividend-tax-summary`: Retrieves a summary of dividends and taxes paid.
-*   `GET /dividend-transactions`: Retrieves individual dividend and dividend tax transactions.
+`build-desktop.bat` in the project root builds `dist\VisorFinanceiro.exe`: one file that runs the whole app on this PC, with the frontend embedded and served next to the API on `http://127.0.0.1:38471`. It needs no configuration or login, and keeps its data in `%LOCALAPPDATA%\VisorFinanceiro`. The desktop code is in `runtime_desktop.go`, behind the `desktop` build tag.
 
 ---
 ## Asking Claude about the portfolio (MCP)

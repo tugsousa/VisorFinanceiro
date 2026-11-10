@@ -11,15 +11,23 @@ VisorFinanceiro is a portfolio management and tax reporting application built wi
 The backend is built using Go with the following key components:
 
 #### Core Services
-- **Price Service** (`backend/src/services/price_service.go`) - Handles stock price fetching and caching
-- **Upload Service** (`backend/src/services/upload_service.go`) - Manages file uploads and transaction processing
+- **Price Service** (`backend/src/services/price_service.go`) - Handles stock price fetching and caching, ISIN resolution and asset metadata
+- **Upload Service** (`backend/src/services/upload_service.go`) - Manages file uploads, transaction processing, holdings valuation and portfolio history
+- **Parallel Upload Service** (`backend/src/services/parallel_upload_service.go`) - Resolves ISINs, fetches prices and metadata in parallel during an upload
+- **Job Queue** (`backend/src/services/job_queue.go`) - Background jobs: history rebuild, metrics update, dividend calculation
 - **Email Service** (`backend/src/services/email_service.go`) - Handles email notifications
 - **MFA Service** (`backend/src/services/mfa_service.go`) - Manages two-factor authentication
+
+#### Run Modes
+`backend/main.go` is the entry point of three modes:
+- **Server** (`runtime_server.go`) - The normal API server, used in development and in the Docker deployment
+- **Desktop** (`runtime_desktop.go`, build tag `desktop`) - A single executable built by `build-desktop.bat` (see [Desktop Build](#desktop-build))
+- **MCP** (`mcp_mode.go`, `src/mcpserver`) - `VisorFinanceiro.exe mcp` runs a read-only MCP server so Claude Desktop can answer questions about the portfolio (see `backend/README.md`)
 
 #### Data Processing Pipeline
 1. **File Upload** - Users upload CSV files containing transaction data
 2. **Parser Factory** - Routes files to appropriate parsers based on broker type
-3. **Transaction Processing** - Processes transactions through specialized processors:
+3. **Transaction Processing** - The Transaction Processor turns each broker's transactions into processed transactions, which then go through specialized processors:
    - Stock Sales Processor
    - Option Sales Processor  
    - Dividend Processor
@@ -40,6 +48,7 @@ processed_transactions  - Transaction history with portfolio association
 portfolio_snapshots     - Daily portfolio valuations
 isin_ticker_map         - ISIN to ticker symbol mappings, with sector/industry/type and ETF sector weights
 daily_prices           - Cached stock prices
+failed_isins           - ISINs that couldn't be resolved to a ticker, so they aren't retried every time
 
 -- Supporting Tables  
 sessions               - Authentication sessions
@@ -66,11 +75,13 @@ The frontend is built with React 18 using Vite as the build tool, Material-UI (M
 
 #### Key Features
 - **Multi-Portfolio Support** - Users can manage multiple portfolios with seamless switching
-- **Analytics Dashboard** - Comprehensive portfolio performance metrics with interactive charts
-- **Tax Reporting** - Automated tax calculation and reporting with detailed breakdowns
+- **Analytics Dashboard** - Portfolio value, returns (including XIRR), evolution against an S&P 500 benchmark converted to EUR, asset allocation and a heatmap
+- **Analytics Pages** - Performance, stock sales, option sales, dividends, fees, and deposits and withdrawals (`/analytics/cash-flows`)
+- **Tax Reporting** - Automated tax calculation and reporting; each line opens a drawer with the transactions behind it
+- **Transactions** - The processed transactions, plus transactions added by hand
 - **File Upload Interface** - Streamlined CSV upload process with drag-and-drop support
 - **Admin Dashboard** - System administration and user management with detailed metrics
-- **Live-updating Dashboard (polling)** - Data is refreshed every 60 seconds via TanStack Query polling for portfolio updates and performance tracking
+- **Dashboard Refresh** - Prices are refreshed when the dashboard opens and every 5 minutes while it stays open (`DASHBOARD_REFRESH_INTERVAL_MS`); while a history rebuild job runs, the dashboard polls every 3 seconds and reloads when it finishes
 - **Responsive Design** - Mobile-first responsive design for all devices
 
 #### Architecture Patterns
@@ -94,25 +105,29 @@ frontend/src/
 │   │   ├── hooks/     - Data fetching and processing hooks
 │   │   ├── logic/     - Business logic for analytics
 │   │   └── pages/     - Analytics pages
-│   ├── auth/          - Authentication components
+│   ├── auth/          - Authentication components (AuthContext.jsx)
 │   │   ├── api/       - Authentication API calls
-│   │   ├── components/ - Auth modals and guards
+│   │   ├── components/ - Auth modals and route guards
 │   │   └── pages/     - Auth pages (login, register, etc.)
+│   ├── common/        - Shared pages (not found) and components
 │   ├── dashboard/     - Main dashboard
 │   │   ├── components/ - Dashboard widgets and charts
 │   │   ├── hooks/     - Dashboard data fetching
 │   │   └── pages/     - Dashboard page
-│   ├── portfolio/     - Portfolio management
+│   ├── landing/       - Public landing page
+│   ├── legal/         - Privacy policy, terms of service, contact
+│   ├── portfolio/     - Portfolio management (PortfolioContext.jsx)
 │   │   ├── api/       - Portfolio API integration
 │   │   ├── components/ - Portfolio UI components
 │   │   ├── hooks/     - Portfolio data management
 │   │   └── pages/     - Portfolio pages
+│   ├── settings/      - Account settings page
 │   ├── upload/        - File upload functionality
 │   │   ├── components/ - Upload interface components
 │   │   └── pages/     - Upload and guide pages
-│   └── tax/           - Tax reporting
-│       ├── logic/     - Tax calculation logic
-│       └── pages/     - Tax reporting pages
+│   └── tax/           - Tax reporting (TaxPage.jsx)
+│       ├── components/ - Tax line detail drawer
+│       └── logic/     - Tax calculation logic
 ├── components/        - Shared UI components
 │   └── ui/           - Reusable UI components
 ├── layouts/          - Page layouts and wrappers
@@ -120,7 +135,7 @@ frontend/src/
 │   ├── api.js        - Centralized API client
 │   ├── theme.js      - MUI theme configuration
 │   └── utils/        - Utility functions
-└── hooks/            - Custom React hooks (if any)
+└── constants.js      - Shared constants (e.g. refresh intervals)
 ```
 
 ##### 2. State Management Architecture
@@ -179,7 +194,7 @@ Each feature has dedicated page components that:
 
 ##### 1. Authentication Flow
 - JWT-based authentication with automatic token refresh
-- **JWT Storage**: JWTs are stored in HttpOnly, Secure, SameSite=Lax cookies, with CSRF tokens required for all POST/PUT/DELETE operations
+- **Token Storage**: The access token is kept in `localStorage` and sent as an `Authorization: Bearer` header; the refresh token is an HttpOnly, SameSite=Lax cookie (Secure over HTTPS). CSRF tokens are required for all POST/PUT/DELETE operations
 - CSRF protection for all state-changing operations
 - Protected routes with role-based access control
 - OAuth integration with Google for social login
@@ -216,8 +231,8 @@ Each feature has dedicated page components that:
 # Install dependencies
 npm install
 
-# Start development server
-npm run dev
+# Start development server (Vite, http://localhost:3000, proxies /api to the backend)
+npm start
 
 # Build for production
 npm run build
@@ -233,10 +248,8 @@ npm run serve
 - Comprehensive error boundaries and loading states
 
 ##### 3. Testing Strategy
-- Jest for unit testing
-- React Testing Library for component testing
-- Integration testing for API interactions
-- End-to-end testing for critical user flows
+- The frontend has no test runner configured yet (`package.json` has no `test` script); React Testing Library is installed for when one is added
+- Changes are checked with ESLint (`npx eslint src`) and by running the app
 
 #### Integration with Backend
 
@@ -244,7 +257,7 @@ npm run serve
 - RESTful API integration with the Go backend
 - Automatic JWT token management
 - CSRF token synchronization
-- Real-time data updates through polling
+- Data updates through periodic price refreshes and job polling
 
 ##### 2. Data Synchronization
 - Optimistic updates for better UX
@@ -278,10 +291,19 @@ The system handles various transaction types:
 3. **Dividends** - Automatic dividend processing and tax reporting
 4. **Fees and Commissions** - Transaction cost tracking
 5. **Cash Movements** - Deposits and withdrawals
+6. **Manual Transactions** - Transactions added by hand (`POST /api/transactions/manual`)
+
+Sales with no earlier purchase to match (for example when the uploaded history is incomplete) have no cost basis; they are left out of the realized gains and listed separately (`GET /api/stock-sales/unmatched`).
+
+Dividend source countries can be corrected per ISIN in `backend/data/dividend_source_overrides.json`.
+
+### Portfolio History and Benchmark
+
+The portfolio's daily value is stored in `portfolio_snapshots` and rebuilt by a background job after an upload. It is compared against an S&P 500 benchmark that buys SPY with the same EUR deposits; each day's SPY price is converted to EUR with that day's `USDEUR=X` rate, so the benchmark includes EUR/USD moves as the portfolio does.
 
 ### Price Caching System
 
-- **ECB Exchange Rates** - Automatic EUR conversion using European Central Bank rates
+- **Exchange Rates** - Automatic EUR conversion using Yahoo Finance daily rates (`EUR{CUR}=X`), with the European Central Bank API as a fallback
 - **Stock Price Caching** - Local caching of stock prices to reduce API calls
 - **ISIN Resolution** - Automatic mapping of ISIN codes to stock tickers via Yahoo Finance API with local database caching
 - **Asset Metadata** - Sector, industry and asset type of each listing, from Yahoo Finance's `quoteSummary`, stored in `isin_ticker_map` and refreshed when older than 30 days (`metadata_updated_at`)
@@ -289,16 +311,15 @@ The system handles various transaction types:
 
 ### Database Optimization
 
-To handle concurrent web requests efficiently with SQLite, the database is initialized with optimized settings:
+To handle concurrent web requests efficiently with SQLite, the database is opened (`src/database/database.go`, pure-Go `modernc.org/sqlite` driver, so no CGO or SQLite install is needed) with:
 
 ```sql
 PRAGMA journal_mode=WAL;      -- Write-Ahead Logging for concurrent reads/writes
-PRAGMA synchronous=NORMAL;    -- Balanced performance and durability
-PRAGMA cache_size=10000;      -- 10MB cache for improved performance
-PRAGMA temp_store=memory;     -- Store temporary tables in memory
+PRAGMA busy_timeout=5000;     -- Wait up to 5 seconds for a lock instead of failing
+PRAGMA foreign_keys=ON;       -- Enforce foreign key relationships
 ```
 
-**Concurrency Management**: The Go backend utilizes an internal connection pool with a configurable "Busy Timeout" (default: 5 seconds) to manage SQLite's file-locking during concurrent writes. The backend is designed as a singleton service to maintain a single writer connection to the SQLite database, preventing database corruption and "Database is Locked" errors that would occur with horizontal scaling.
+**Concurrency Management**: The busy timeout (5 seconds, fixed in the connection string) manages SQLite's file-locking during concurrent writes. The backend is designed as a singleton service to maintain a single writer connection to the SQLite database, preventing database corruption and "Database is Locked" errors that would occur with horizontal scaling.
 
 **Backup Strategy**: Since the database is a single file, automated backups can be performed using SQLite's `VACUUM INTO` command to create consistent backups without downtime:
 
@@ -311,7 +332,8 @@ sqlite3 /app/db/visorfinanceiro.db "VACUUM INTO '/backup/visorfinanceiro_$(date 
 
 - **JWT Authentication** - Secure token-based authentication
 - **CSRF Protection** - Cross-site request forgery protection
-- **MFA Support** - Two-factor authentication using TOTP
+- **MFA Support** - Two-factor authentication using TOTP for admin accounts
+- **Rate Limiting** - Per-IP rate limiting, with a stricter limit on login, registration, password and MFA endpoints
 - **Password Reset** - Secure password reset with email verification
 - **Email Verification** - Account verification via email
 
@@ -321,98 +343,165 @@ sqlite3 /app/db/visorfinanceiro.db "VACUUM INTO '/backup/visorfinanceiro_$(date 
 
 The application uses environment-based configuration:
 
+The variables are read from the environment by `backend/src/config/config.go`, which first loads a `.env` file from the current folder or its parent (in development, the project root's `.env`, which the frontend also reads). Only `JWT_SECRET` and `CSRF_AUTH_KEY` are required; the others have the defaults shown.
+
 ```bash
-# Database
+# Server
+PORT=8080
+LOG_LEVEL=info
 DATABASE_PATH=./visorfinanceiro.db
 
-# Security
+# Security (required)
 JWT_SECRET=your-secret-key
 CSRF_AUTH_KEY=your-csrf-key
+ACCESS_TOKEN_EXPIRY=60m
+REFRESH_TOKEN_EXPIRY=168h
+VERIFICATION_TOKEN_EXPIRY=24h
+PASSWORD_RESET_TOKEN_EXPIRY=1h
+ADMIN_EMAILS=admin@example.com   # comma-separated
+
+# URLs
+APP_BASE_URL=http://localhost:3000             # the frontend
+REACT_APP_API_BASE_URL=http://localhost:8080   # the backend; also used by the frontend build
+VERIFICATION_EMAIL_BASE_URL=                   # default: APP_BASE_URL/verify-email
+PASSWORD_RESET_BASE_URL=                       # default: APP_BASE_URL/reset-password
 
 # Email
 EMAIL_SERVICE_PROVIDER=smtp
 SENDER_EMAIL=noreply@example.com
+SENDER_NAME=VisorFinanceiro
 SMTP_SERVER=smtp.example.com
 SMTP_PORT=587
+SMTP_USER=
+SMTP_PASSWORD=
 
 # OAuth
 GOOGLE_CLIENT_ID=your-google-client-id
 GOOGLE_CLIENT_SECRET=your-google-client-secret
+GOOGLE_REDIRECT_URL=                           # default: REACT_APP_API_BASE_URL/api/auth/google/callback
 
 # File Upload
 MAX_UPLOAD_SIZE_BYTES=10485760  # 10MB
 
-# Database Configuration
-SQLITE_BUSY_TIMEOUT=5000  # Busy timeout in milliseconds (default: 5000)
+# Data files
+COUNTRY_DATA_PATH=data/country.json
+DIVIDEND_SOURCE_OVERRIDES_PATH=data/dividend_source_overrides.json
 ```
 
 ### Database Migrations
 
-The system uses golang-migrate for database schema management:
+The system uses golang-migrate for database schema management. Pending migrations in `backend/db/migrations` are applied automatically when the backend starts (the desktop build embeds them). To run them by hand:
 
 ```bash
-# Run migrations
 go run github.com/golang-migrate/migrate/v4/cmd/migrate -path db/migrations -database sqlite://visorfinanceiro.db up
 ```
 
 ## Development Setup
 
 ### Backend Requirements
-- Go 1.22+
-- SQLite3
-- Node.js (for frontend)
+- Go 1.24+
+- No SQLite install is needed (pure-Go driver)
 
 ### Frontend Requirements
 - Node.js 18+
-- npm or yarn
+- npm
 
 ### Running the Application
 
-1. **Backend Setup**:
+1. **Backend Setup** (needs `JWT_SECRET` and `CSRF_AUTH_KEY`, e.g. in the root `.env`):
    ```bash
    cd backend
    go mod download
-   go run main.go
+   go run .
    ```
+   Use `go run .`, not `go run main.go`: the `main` package is split across several files.
 
 2. **Frontend Setup**:
    ```bash
    cd frontend
    npm install
-   npm run dev
+   npm start
    ```
 
 3. **Database Initialization**:
    - The application automatically creates and migrates the database on startup
    - Initial schema includes all necessary tables and relationships
 
+4. **Tests**:
+   ```bash
+   cd backend
+   go test ./src/...
+   ```
+
+### Desktop Build
+
+`build-desktop.bat` (Windows) builds `dist\VisorFinanceiro.exe`, a single file that runs the whole app on one PC:
+
+- It runs `npm run build:desktop`, which builds the frontend into `backend/desktop_web`, then `go build -tags desktop`
+- The executable embeds the frontend, the migrations and the `data/*.json` files, and serves the frontend next to the API on `http://127.0.0.1:38471`, accepting connections from this PC only
+- It creates its own secrets, signs the browser in to a local account and opens it, so there's nothing to configure or log in to
+- Data is kept in `%LOCALAPPDATA%\VisorFinanceiro`
+- `VisorFinanceiro.exe mcp` runs the MCP server instead (see `backend/README.md`)
+
 ## API Endpoints
 
+The routes are defined in `backend/main.go`. Except for the public and auth routes, all need authentication and a CSRF token. Most data routes work on the selected portfolio.
+
 ### Authentication
+- `GET /api/auth/csrf` - CSRF token
 - `POST /api/auth/register` - User registration
 - `POST /api/auth/login` - User login
 - `POST /api/auth/logout` - User logout
 - `POST /api/auth/refresh` - Token refresh
-- `POST /api/auth/verify-email` - Email verification
+- `GET /api/auth/verify-email` - Email verification
+- `POST /api/auth/request-password-reset` - Request a password reset email
 - `POST /api/auth/reset-password` - Password reset
+- `GET /api/auth/google/login`, `GET /api/auth/google/callback` - Google sign-in
+
+### User
+- `GET /api/user/has-data` - Whether the user has uploaded data
+- `POST /api/user/change-password` - Change password
+- `POST /api/user/delete-account` - Delete the account
 
 ### Portfolio Management
 - `GET /api/portfolios` - List user portfolios
 - `POST /api/portfolios` - Create new portfolio
-- `PUT /api/portfolios/{id}` - Update portfolio
 - `DELETE /api/portfolios/{id}` - Delete portfolio
+- `POST /api/portfolios/{id}/refresh-snapshot` - Recalculate today's snapshot
 
-### Transaction Processing
+### Transactions
 - `POST /api/upload` - Upload transaction files
-- `GET /api/transactions` - Get transaction history
-- `GET /api/holdings` - Get current holdings
-- `GET /api/snapshots` - Get portfolio snapshots
+- `GET /api/transactions/processed` - Processed transactions
+- `POST /api/transactions/manual` - Add a transaction by hand
+- `DELETE /api/transactions/all` - Delete all processed transactions
 
-### Analytics and Reporting
-- `GET /api/analytics/overview` - Portfolio overview
-- `GET /api/analytics/holdings` - Holdings analysis
-- `GET /api/analytics/sales` - Sales performance
-- `GET /api/tax` - Tax calculations
+### Holdings and Reporting
+- `GET /api/holdings/current-value` - Current holdings with market value, sector and ETF sector weights
+- `GET /api/holdings/stocks` - Stock holdings (purchase lots) per year
+- `GET /api/holdings/options` - Open option positions
+- `GET /api/cash-balance` - Cash balance
+- `GET /api/realizedgains-data` - Combined realized gains data
+- `GET /api/stock-sales` - Stock sales matched to purchases (FIFO)
+- `GET /api/stock-sales/unmatched` - Sales without a matching purchase
+- `GET /api/option-sales` - Closed option positions
+- `GET /api/dividend-tax-summary` - Dividends and tax withheld per year and country
+- `GET /api/dividend-transactions` - Individual dividend transactions
+- `GET /api/dividend-metrics` - Dividend metrics
+- `GET /api/fees` - Fees
+- `GET /api/history/chart` - Portfolio history and benchmark
+
+### Background Jobs
+- `GET /api/jobs`, `GET /api/job` - Job status
+- `POST /api/jobs/rebuild-history` - Rebuild the portfolio history
+- `POST /api/jobs/update-metrics` - Update metrics
+- `POST /api/jobs/calculate-dividends` - Recalculate dividends
+
+### Admin (admin accounts only)
+- `GET /api/admin/stats`, `POST /api/admin/stats/clear-cache` - System statistics
+- `GET /api/admin/users`, `GET /api/admin/users/{userID}` - Users
+- `POST /api/admin/users/{userID}/refresh-metrics`, `POST /api/admin/users/refresh-metrics-batch` - Refresh user metrics
+- `POST /api/admin/users/{userID}/impersonate` - Sign in as a user
+- `POST /api/admin/mfa/setup`, `/activate`, `/disable` - Admin two-factor authentication
 
 ## Error Handling
 
@@ -435,14 +524,11 @@ The application uses structured logging with the following levels:
 ## Testing
 
 ### Backend Testing
-- Unit tests for individual components
-- Integration tests for API endpoints
-- Database migration testing
+- Go unit tests next to the code (`*_test.go` in `handlers`, `mcpserver`, `parsers`, `processors`, `security`, `services`, `utils`), run with `go test ./src/...`
+- Service tests use an in-memory SQLite database
 
 ### Frontend Testing
-- Component testing with Jest
-- Integration testing for user flows
-- End-to-end testing for critical paths
+- No test runner is configured yet; see [Testing Strategy](#3-testing-strategy)
 
 ## Deployment Architecture
 
@@ -525,7 +611,7 @@ EMAIL_SERVICE_PROVIDER=smtp
 SENDER_EMAIL=noreply@yourdomain.com
 SMTP_SERVER=smtp.yourdomain.com
 SMTP_PORT=587
-SMTP_USERNAME=your-smtp-username
+SMTP_USER=your-smtp-username
 SMTP_PASSWORD=your-smtp-password
 
 # OAuth Configuration (Production)
@@ -690,7 +776,7 @@ This comprehensive deployment architecture ensures reliable, secure, and scalabl
 ## Future Enhancements
 
 ### Planned Features
-- **Websocket Integration** - Live price updates and portfolio valuation via websockets
+- **Websocket Integration** - Live price updates and portfolio valuation via websockets (`src/websocket` already broadcasts upload progress, but no route serves it and the frontend doesn't connect yet)
 - **Advanced Analytics** - More sophisticated performance metrics and benchmarks
 - **Mobile Application** - Native mobile apps for iOS and Android
 - **Multi-currency Support** - Enhanced support for international portfolios
@@ -699,7 +785,6 @@ This comprehensive deployment architecture ensures reliable, secure, and scalabl
 
 ### Technical Improvements
 - **Caching Layer** - Redis-based caching for improved performance
-- **Background Jobs** - Asynchronous processing for long-running tasks
 - **Microservices Architecture** - Service decomposition for scalability
 - **Database Optimization** - Query optimization and indexing strategies
 

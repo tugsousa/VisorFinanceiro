@@ -1,66 +1,44 @@
-# Taxfolio - Frontend
+# VisorFinanceiro - Frontend
 
-This is the React-based frontend for the Taxfolio application. It provides the user interface for interacting with the Taxfolio backend, allowing users to upload documents, view their portfolio, and generate tax-related information.
+This is the React frontend of VisorFinanceiro. It lets users upload their broker exports and see their portfolio, analytics and tax information, using the API of the [backend](../backend/README.md).
 
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
-
-## Table of Contents
-
-- [Prerequisites](#prerequisites)
-- [Setup](#setup)
-  - [Environment Variables](#environment-variables)
-- [Running the Frontend](#running-the-frontend)
-- [Project Structure](#project-structure)
-- [Backend Dependency](#backend-dependency)
-- [Original Create React App Information](#original-create-react-app-information)
-  - [Available Scripts](#available-scripts)
-  - [Learn More](#learn-more)
+It is built with [Vite](https://vitejs.dev/), React 18, Material-UI, TanStack Query and Chart.js. See [ARCHITECTURE_DOCUMENTATION.md](../ARCHITECTURE_DOCUMENTATION.md) for the architecture.
 
 ## Prerequisites
 
-- [Node.js](https://nodejs.org/) (which includes npm) - Version 16.x or higher recommended.
-- The Taxfolio backend server must be running.
+- [Node.js](https://nodejs.org/) 18 or higher (with npm).
+- The backend running, by default on `http://localhost:8080`.
 
 ## Setup
 
-1.  **Clone the repository (if not already done):**
-    ```bash
-    git clone <your-repository-url>
-    cd <your-repository-url>/frontend
-    ```
+```bash
+cd frontend
+npm install
+```
 
-2.  **Install Dependencies:**
-    ```bash
-    npm install
-    # or
-    # yarn install
-    ```
+The frontend reads its environment variables from the `.env` file in the project root (one folder above `frontend`). `REACT_APP_API_BASE_URL` is the backend's URL (default `http://localhost:8080`).
 
-## Running the Frontend
+## Scripts
 
-1.  **Ensure the Backend is Running:** The backend API (default: `http://localhost:8080`) must be running.
-2.  **Start the frontend development server:**
-    ```bash
-    npm start
-    # or
-    # yarn start
-    ```
-    This runs the app in development mode. Open [http://localhost:3000](http://localhost:3000) to view it in your browser. The page will reload when you make changes.
+| Command | What it does |
+|---|---|
+| `npm start` | Starts the development server on [http://localhost:3000](http://localhost:3000). Requests to `/api` are proxied to the backend. |
+| `npm run build` | Builds the production version into `build/`. |
+| `npm run serve` | Serves the production build locally to check it. |
+| `npm run build:desktop` | Builds the version embedded in the desktop executable into `../backend/desktop_web` (used by `build-desktop.bat`). |
 
-    **Note:** The `start` script in `package.json` (`set NODE_OPTIONS=--openssl-legacy-provider && react-scripts start`) includes `NODE_OPTIONS=--openssl-legacy-provider`. This is a workaround for potential SSL provider issues with newer Node.js versions and Webpack.
+There is no test runner configured yet. Check changes with `npx eslint src` and by running the app.
 
 ## Project Structure
 
-The `src` folder contains the main application code:
+The code is in `src`, organized by feature:
 
--   `components/`: Reusable UI components.
-    -   `dashboardSections/`: Specific components used within the Dashboard page.
--   `context/`: React Context API for global state management (e.g., `AuthContext.js` for authentication).
--   `layouts/`: Components that define the overall structure of the application (e.g., `Layout.js` which includes the sidebar and app bar).
--   `pages/`: Top-level components that correspond to different routes/views of the application (e.g., `UploadPage.js`, `DashboardPage.js`).
--   `App.js`: The main application component where routing is set up.
--   `index.js`: The entry point of the React application.
+- `features/`: one folder per area (`admin`, `analytics`, `auth`, `common`, `dashboard`, `landing`, `legal`, `portfolio`, `settings`, `tax`, `upload`), each with its own `pages/`, `components/`, `hooks/`, `api/` and `logic/` as needed.
+  - `auth/AuthContext.jsx` holds the signed-in user; `portfolio/PortfolioContext.jsx` the selected portfolio.
+- `components/ui/`: shared UI components.
+- `layouts/Layout.jsx`: the sidebar and app bar around the pages.
+- `lib/api.js`: the API client (tokens, CSRF, token refresh); `lib/theme.js`: the MUI theme; `lib/utils/`: helpers.
+- `constants.js`: shared constants, such as the dashboard refresh interval.
+- `App.jsx`: the routes. `index.jsx`: the entry point.
 
-## Backend Dependency
-
-This frontend application relies heavily on the Taxfolio backend API. Ensure the backend server is running and accessible (typically at `http://localhost:8080`) for the frontend to function correctly (e.g., user authentication, data uploads, fetching portfolio details).
+Path aliases (`features`, `lib`, `components`, `layouts`, `constants`) are defined in `vite.config.js`.
