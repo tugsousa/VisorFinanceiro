@@ -51,6 +51,8 @@ type UploadService interface {
 	RebuildUserHistory(userID int64, portfolioID int64) error
 	RebuildUserHistoryFrom(userID int64, portfolioID int64, fromDate string) error
 	RefreshDailySnapshot(userID int64, portfolioID int64) error
+
+	NetWorthService // net_worth.go
 }
 
 type PriceInfo struct {

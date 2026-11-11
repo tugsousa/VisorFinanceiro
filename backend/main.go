@@ -229,6 +229,7 @@ func main() {
 	feeHandler := handlers.NewFeeHandler(uploadService)
 	pfManagerHandler := handlers.NewPortfolioManagerHandler()
 	jobHandler := handlers.NewJobHandler(uploadService, uploadService.GetJobManager())
+	netWorthHandler := handlers.NewNetWorthHandler(uploadService)
 
 	r := chi.NewRouter()
 
@@ -299,6 +300,15 @@ func main() {
 			r.With(credentialRateLimit).Post("/user/change-password", userHandler.ChangePasswordHandler)
 			r.With(credentialRateLimit).Post("/user/delete-account", userHandler.DeleteAccountHandler)
 			r.Get("/history/chart", portfolioHandler.HandleGetHistoricalChartData)
+
+			// Net worth: savings outside the brokers, owned by the user rather than a portfolio
+			r.Get("/net-worth", netWorthHandler.HandleGetNetWorth)
+			r.Get("/other-assets", netWorthHandler.HandleListOtherAssets)
+			r.Post("/other-assets", netWorthHandler.HandleCreateOtherAsset)
+			r.Put("/other-assets/{id}", netWorthHandler.HandleUpdateOtherAsset)
+			r.Delete("/other-assets/{id}", netWorthHandler.HandleDeleteOtherAsset)
+			r.Post("/other-assets/{id}/entries", netWorthHandler.HandleAddOtherAssetEntry)
+			r.Delete("/other-assets/{id}/entries/{entryId}", netWorthHandler.HandleDeleteOtherAssetEntry)
 
 			// Job Management Routes
 			r.Get("/jobs", jobHandler.GetJobsHandler)
