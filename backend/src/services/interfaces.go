@@ -6,6 +6,7 @@ import (
 	"io"
 	"time" // Adicionado para time.Month
 
+	"github.com/username/taxfolio/backend/src/dividends"
 	"github.com/username/taxfolio/backend/src/models"
 )
 
@@ -46,6 +47,7 @@ type UploadService interface {
 	GetHistoricalChartData(userID int64, portfolioID int64) ([]models.HistoricalDataPoint, error)
 
 	GetDividendMetrics(userID int64, portfolioID int64) (*models.DividendMetricsResult, error)
+	GetDividendCalendar(userID int64, portfolioID int64) (*DividendCalendar, error)
 	SimulateStockSale(userID int64, portfolioID int64, req SaleSimulationRequest) (*SaleSimulation, error)
 	GetTaxYearStatus(userID int64, portfolioID int64) (*TaxYearStatus, error)
 	RebuildUserHistory(userID int64, portfolioID int64) error
@@ -61,13 +63,29 @@ type PriceInfo struct {
 
 type PriceMap map[string]float64
 
+// DividendEvent is one dividend of a listing: its ex-dividend date and the amount per share.
+type DividendEvent = dividends.Event
+
+// AnnouncedDividend is the next dividend a company has announced. PayDate is zero when not announced;
+// DividendRate is the yearly rate per share (0 when unknown), in Currency.
+type AnnouncedDividend struct {
+	ExDate       time.Time
+	PayDate      time.Time
+	DividendRate float64
+	Currency     string
+}
+
 // PriceService interface atualizada
 type PriceService interface {
 	GetCurrentPrices(isins []string) (map[string]PriceInfo, error)
 	GetHistoricalPrices(ticker string) (PriceMap, string, error)
 	EnsureBenchmarkData() error
-	// NOVO MÉTODO ADICIONADO AQUI
+	// GetLastYearDividends sums the last 12 months of dividends per share by month of the ex-date.
 	GetLastYearDividends(ticker string) (map[time.Month]float64, string, error)
+	// GetDividendEvents returns each dividend (ex-date, amount per share) between from and to, and the currency.
+	GetDividendEvents(ticker string, from, to time.Time) ([]DividendEvent, string, error)
+	// GetAnnouncedDividend returns the next announced dividend, or nil when none is announced.
+	GetAnnouncedDividend(ticker string) (*AnnouncedDividend, error)
 	// Métodos adicionados para paralelização
 	FetchTickerForISIN(isin string) (string, string, string, error)
 	FetchMetadata(ticker string) (models.AssetMetadata, error)

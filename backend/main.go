@@ -293,6 +293,7 @@ func main() {
 			r.Get("/dividend-tax-summary", dividendHandler.HandleGetDividendTaxSummary)
 			r.Get("/dividend-transactions", dividendHandler.HandleGetDividendTransactions)
 			r.Get("/dividend-metrics", dividendHandler.HandleGetDividendMetrics)
+			r.Get("/dividends/calendar", dividendHandler.HandleGetDividendCalendar)
 			r.Get("/fees", feeHandler.HandleGetFeeDetails)
 			r.Delete("/transactions/all", txHandler.HandleDeleteAllProcessedTransactions)
 			r.Get("/user/has-data", userHandler.HandleCheckUserData)

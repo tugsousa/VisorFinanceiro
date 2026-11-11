@@ -90,6 +90,7 @@ The tools are in `src/mcpserver`:
 | `get_option_positions` | Open option positions. |
 | `get_realized_gains` | Stock sales and closed options with their gain, totals per year, and sales without a purchase. |
 | `get_dividends` | Dividends per year and country, tax withheld, yield, the projection, and optionally each payment. |
+| `get_dividend_calendar` | The next dividends of each position held (up to 12 months): ex-date, payment date, amount per share, gross and net in EUR, and whether announced, estimated or received; optionally the last 3 months. |
 | `get_fees` | Fees per year and category, and the fees themselves. |
 | `get_performance_history` | Daily, weekly or monthly value, net deposits, cash and the S&P 500 benchmark. |
 | `get_transactions` | The transactions, filtered by year, type, ISIN or text. |
