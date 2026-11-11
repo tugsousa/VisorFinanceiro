@@ -93,5 +93,7 @@ The tools are in `src/mcpserver`:
 | `get_fees` | Fees per year and category, and the fees themselves. |
 | `get_performance_history` | Daily, weekly or monthly value, net deposits, cash and the S&P 500 benchmark. |
 | `get_transactions` | The transactions, filtered by year, type, ISIN or text. |
+| `simulate_sale` | What selling shares today would give: the FIFO lots used, the gain and the change in this year's tax. Nothing is stored. |
+| `get_tax_year_status` | This year's capital gains balance and estimated tax, and each position's unrealised result, tax effect if sold and lots. |
 
 To try the MCP mode against a development database instead, run `go run . mcp` with `MCP_USER_EMAIL` set to the email of the account to use. The [MCP Inspector](https://github.com/modelcontextprotocol/inspector) (`npx @modelcontextprotocol/inspector go run . mcp`) shows the tools and lets you call them.

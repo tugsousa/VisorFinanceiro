@@ -19,6 +19,7 @@ import DividendsPage from './features/analytics/pages/DividendsPage';
 import FeesPage from './features/analytics/pages/FeesPage';
 import CashFlowsPage from './features/analytics/pages/CashFlowsPage';
 import TaxPage from './features/tax/TaxPage';
+import TaxSimulatorPage from './features/tax/pages/TaxSimulatorPage';
 import UploadPage from './features/upload/pages/UploadPage';
 import SettingsPage from './features/settings/pages/SettingsPage';
 
@@ -64,6 +65,7 @@ function App() {
 
                             {/* Other Features */}
                             <Route path="/tax" element={<ProtectedRoute><TaxPage /></ProtectedRoute>} />
+                            <Route path="/tax/simulator" element={<ProtectedRoute><TaxSimulatorPage /></ProtectedRoute>} />
                             <Route path="/upload" element={<ProtectedRoute><UploadPage /></ProtectedRoute>} />
                             <Route path="/transactions" element={<ProtectedRoute><TransactionsList /></ProtectedRoute>} />
                             <Route path="/settings" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />

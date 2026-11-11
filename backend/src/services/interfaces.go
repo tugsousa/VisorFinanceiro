@@ -46,6 +46,8 @@ type UploadService interface {
 	GetHistoricalChartData(userID int64, portfolioID int64) ([]models.HistoricalDataPoint, error)
 
 	GetDividendMetrics(userID int64, portfolioID int64) (*models.DividendMetricsResult, error)
+	SimulateStockSale(userID int64, portfolioID int64, req SaleSimulationRequest) (*SaleSimulation, error)
+	GetTaxYearStatus(userID int64, portfolioID int64) (*TaxYearStatus, error)
 	RebuildUserHistory(userID int64, portfolioID int64) error
 	RebuildUserHistoryFrom(userID int64, portfolioID int64, fromDate string) error
 	RefreshDailySnapshot(userID int64, portfolioID int64) error

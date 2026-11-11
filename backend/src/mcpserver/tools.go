@@ -93,6 +93,8 @@ func (s *Server) addTools(server *mcp.Server) {
 			"Use the other tools for totals; this one is for looking up specific operations.",
 		Annotations: readOnly,
 	}, s.getTransactions)
+
+	s.addTaxTools(server, readOnlyOnline)
 }
 
 // --- Inputs ---

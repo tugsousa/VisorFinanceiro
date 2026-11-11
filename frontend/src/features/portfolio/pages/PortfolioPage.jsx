@@ -1,13 +1,17 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Box, Typography, Grid, CircularProgress, Alert, Paper } from '@mui/material';
 import { useAuth } from '../../auth/AuthContext';
 import { usePortfolioData } from '../hooks/usePortfolioData';
 import StockHoldingsSection from '../../analytics/components/StockHoldingsSection';
 import OptionHoldingsSection from '../../analytics/components/OptionHoldingsSection';
 import { formatCurrency } from '../../../lib/utils/formatUtils';
+import SaleSimulatorDrawer from '../../tax/components/SaleSimulatorDrawer';
+import { usePortfolio } from '../PortfolioContext';
 
 const PortfolioPage = () => {
     const { token } = useAuth();
+    const { activePortfolio } = usePortfolio();
+    const [positionToSimulate, setPositionToSimulate] = useState(null);
     const { 
         holdingsForGroupedView,
         detailedHoldingsForView,
@@ -38,6 +42,7 @@ const PortfolioPage = () => {
                         isDetailedFetching={false}
                         selectedYear="all"
                         NoRowsOverlay={() => <Box sx={{p:2, textAlign:'center'}}>Sem posições abertas.</Box>}
+                        onSimulateSale={setPositionToSimulate}
                     />
                 </Grid>
 
@@ -51,6 +56,12 @@ const PortfolioPage = () => {
                     </Grid>
                 )}
             </Grid>
+
+            <SaleSimulatorDrawer
+                portfolioId={activePortfolio?.id}
+                position={positionToSimulate}
+                onClose={() => setPositionToSimulate(null)}
+            />
         </Box>
     );
 };

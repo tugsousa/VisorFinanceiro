@@ -22,7 +22,8 @@ import {
     PieChart as PieChartIcon,
     ReceiptLong as TaxIcon,
     TableChart as DataIcon,
-    TrendingUp as TrendingUpIcon
+    TrendingUp as TrendingUpIcon,
+    Calculate as CalculateIcon
 } from '@mui/icons-material';
 
 import logger from '../lib/utils/logger';
@@ -164,6 +165,20 @@ export default function Layout({ children }) {
                                         }}
                                     >
                                         IRS
+                                    </Button>
+
+                                    <Button 
+                                        component={RouterLink} 
+                                        to="/tax/simulator" 
+                                        startIcon={<CalculateIcon />}
+                                        sx={{ 
+                                            color: isActive('/tax/simulator') ? 'primary.main' : 'text.secondary',
+                                            backgroundColor: isActive('/tax/simulator') ? 'rgba(25, 118, 210, 0.08)' : 'transparent',
+                                            textTransform: 'none',
+                                            fontWeight: isActive('/tax/simulator') ? 600 : 500
+                                        }}
+                                    >
+                                        Simulador
                                     </Button>
 
                                     <Button 

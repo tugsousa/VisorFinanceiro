@@ -2,7 +2,7 @@
 import React, { useState, useMemo } from 'react';
 import { 
     Paper, Box, ToggleButtonGroup, ToggleButton, IconButton,
-    Popover, FormControlLabel, Checkbox, Typography, Alert
+    Popover, FormControlLabel, Checkbox, Typography, Alert, Button
 } from '@mui/material';
 import { DataGrid } from '@mui/x-data-grid';
 import { ptPT } from '@mui/x-data-grid/locales';
@@ -12,7 +12,7 @@ import SettingsIcon from '@mui/icons-material/Settings';
 import { getGroupedColumns, getDetailedColumns } from '../config/stockGridConfig';
 import { transformGroupedHoldings, transformDetailedHoldings } from '../logic/holdingsCalculations';
 
-export default function StockHoldingsSection({ groupedData, detailedData, isGroupedFetching, isDetailedFetching, selectedYear, NoRowsOverlay }) {
+export default function StockHoldingsSection({ groupedData, detailedData, isGroupedFetching, isDetailedFetching, selectedYear, NoRowsOverlay, onSimulateSale }) {
     const [viewMode, setViewMode] = useState('grouped');
     
     // Default state: Original Cost and Exchange Rate are hidden (true)
@@ -35,10 +35,22 @@ export default function StockHoldingsSection({ groupedData, detailedData, isGrou
     const isGroupedDataHistorical = groupedData?.[0]?.isHistorical === true;
 
     const columns = useMemo(() => {
-        return viewMode === 'grouped' 
-            ? getGroupedColumns(hiddenColumns, isGroupedDataHistorical)
-            : getDetailedColumns(hiddenColumns, selectedYear);
-    }, [viewMode, hiddenColumns, isGroupedDataHistorical, selectedYear]);
+        if (viewMode !== 'grouped') return getDetailedColumns(hiddenColumns, selectedYear);
+        const grouped = getGroupedColumns(hiddenColumns, isGroupedDataHistorical);
+        // Only pages that pass onSimulateSale get the button, and only for open positions.
+        if (!onSimulateSale || isGroupedDataHistorical) return grouped;
+        return [...grouped, {
+            field: 'simulateSale',
+            headerName: '',
+            width: 130,
+            sortable: false,
+            filterable: false,
+            disableColumnMenu: true,
+            renderCell: (params) => (params.row.isTotalRow ? null : (
+                <Button size="small" onClick={() => onSimulateSale(params.row)}>Simular venda</Button>
+            )),
+        }];
+    }, [viewMode, hiddenColumns, isGroupedDataHistorical, selectedYear, onSimulateSale]);
 
     const rows = useMemo(() => {
         if (viewMode === 'grouped') {

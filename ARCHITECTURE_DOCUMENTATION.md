@@ -78,6 +78,7 @@ The frontend is built with React 18 using Vite as the build tool, Material-UI (M
 - **Analytics Dashboard** - Portfolio value, returns (including XIRR), evolution against an S&P 500 benchmark converted to EUR, asset allocation and a heatmap
 - **Analytics Pages** - Performance, stock sales, option sales, dividends, fees, and deposits and withdrawals (`/analytics/cash-flows`)
 - **Tax Reporting** - Automated tax calculation and reporting; each line opens a drawer with the transactions behind it
+- **Tax Simulator** - What selling today would give and cost in IRS (`/tax/simulator`, and "Simular venda" on the portfolio page); see [Tax Simulator](#tax-simulator)
 - **Transactions** - The processed transactions, plus transactions added by hand
 - **File Upload Interface** - Streamlined CSV upload process with drag-and-drop support
 - **Admin Dashboard** - System administration and user management with detailed metrics
@@ -296,6 +297,15 @@ The system handles various transaction types:
 Sales with no earlier purchase to match (for example when the uploaded history is incomplete) have no cost basis; they are left out of the realized gains and listed separately (`GET /api/stock-sales/unmatched`).
 
 Dividend source countries can be corrected per ISIN in `backend/data/dividend_source_overrides.json`.
+
+### Tax Simulator
+
+The tax rules are all in `backend/src/tax` (with tests): the gain of a sale is its result minus the commissions of the sale and of the part of the purchase sold; the year's stock and option results add up into one balance; a positive balance pays the autonomous rate of 28%. Results from lots held under 365 days are reported apart, since they must be added to the other income (englobamento) when the taxable income reaches the top bracket, which the app can't know. Losses of earlier years and englobamento aren't applied.
+
+- `GET /api/tax/simulate-sale?portfolio_id=&isin=&quantity=&price=&commission=` adds a sale dated today to a copy of the transactions and runs the same FIFO as the real sales, so nothing is stored. It returns the lots used, the gain, the year's balance before and after, and the extra tax. An empty `price` uses the current price.
+- `GET /api/tax/year-status?portfolio_id=` returns the year's balance and, for each position, its unrealised result, the tax effect of selling it all and its lots with the date each reaches 365 days.
+
+The simulator only reads the FIFO; it doesn't change the IRS page. To check that a change leaves the IRS page as it was, run `VisorFinanceiro.exe tax-snapshot before.json` before it and `tax-snapshot after.json` after it, and compare the two files. It writes everything the IRS page gets from the backend, for every portfolio; the order of the option sales can change between runs, so compare the lists as sets.
 
 ### Portfolio History and Benchmark
 

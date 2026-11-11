@@ -3,6 +3,7 @@ package main
 import (
 	"crypto/tls"
 	"encoding/json"
+	"fmt"
 	stdlog "log"
 	"net"
 	"net/http"
@@ -185,6 +186,17 @@ func main() {
 		runMCP()
 		return
 	}
+	if len(os.Args) > 1 && os.Args[1] == "tax-snapshot" {
+		if len(os.Args) < 3 {
+			fmt.Fprintln(os.Stderr, "usage: VisorFinanceiro.exe tax-snapshot <file.json>")
+			os.Exit(2)
+		}
+		if err := runTaxSnapshot(os.Args[2]); err != nil {
+			fmt.Fprintln(os.Stderr, "tax-snapshot failed:", err)
+			os.Exit(1)
+		}
+		return
+	}
 
 	prepareRuntime()
 	initCore()
@@ -276,6 +288,8 @@ func main() {
 			r.Get("/stock-sales", portfolioHandler.HandleGetStockSales)
 			r.Get("/stock-sales/unmatched", portfolioHandler.HandleGetUnmatchedStockSales)
 			r.Get("/option-sales", portfolioHandler.HandleGetOptionSales)
+			r.Get("/tax/simulate-sale", portfolioHandler.HandleSimulateSale)
+			r.Get("/tax/year-status", portfolioHandler.HandleGetTaxYearStatus)
 			r.Get("/dividend-tax-summary", dividendHandler.HandleGetDividendTaxSummary)
 			r.Get("/dividend-transactions", dividendHandler.HandleGetDividendTransactions)
 			r.Get("/dividend-metrics", dividendHandler.HandleGetDividendMetrics)
