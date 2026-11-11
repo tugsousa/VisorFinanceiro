@@ -49,12 +49,28 @@ const (
 )
 
 // OtherAssetDetails is what a type needs beyond the common fields, stored as JSON in other_assets.details.
-// A term deposit uses all four fields; its start date is the asset's opened_at.
+// A term deposit uses the first four fields; its start date is the asset's opened_at. Property uses the rest,
+// all optional; its purchase date is the asset's opened_at, and its market value comes from the valuations.
 type OtherAssetDetails struct {
 	Principal      float64 `json:"principal,omitempty"`
 	RatePct        float64 `json:"rate_pct,omitempty"` // TANB, in %
 	Maturity       string  `json:"maturity,omitempty"` // YYYY-MM-DD
 	Capitalisation string  `json:"capitalisation,omitempty"`
+
+	Usage               string  `json:"usage,omitempty"` // own_home, rented, holiday, land, other
+	PurchasePrice       float64 `json:"purchase_price,omitempty"`
+	PurchaseCosts       float64 `json:"purchase_costs,omitempty"`        // IMT, Imposto do Selo, escritura…
+	MortgageBalance     float64 `json:"mortgage_balance,omitempty"`      // capital em dívida
+	MortgageBalanceDate string  `json:"mortgage_balance_date,omitempty"` // YYYY-MM-DD
+	MortgageRatePct     float64 `json:"mortgage_rate_pct,omitempty"`     // TAN, in %
+	MortgagePayment     float64 `json:"mortgage_payment,omitempty"`      // prestação mensal
+	MonthlyRent         float64 `json:"monthly_rent,omitempty"`
+	AnnualCosts         float64 `json:"annual_costs,omitempty"` // IMI, condomínio, seguros, manutenção
+}
+
+// hasMortgage says whether the property details describe a mortgage.
+func (d *OtherAssetDetails) hasMortgage() bool {
+	return d != nil && (d.MortgageBalance > 0 || d.MortgageBalanceDate != "" || d.MortgagePayment > 0)
 }
 
 // OtherAssetEntry is a contribution, withdrawal, valuation or interest payment of an asset.
@@ -68,8 +84,12 @@ type OtherAssetEntry struct {
 }
 
 // OtherAsset is an asset with its value today. ValueEUR is the value that counts for the net worth: for a term
-// deposit it's net of the tax withheld on the interest, and GrossValueEUR is before it.
+// deposit it's net of the tax withheld on the interest, and GrossValueEUR is before it; for property it's the
+// equity (market value minus the mortgage), and GrossValueEUR is the market value.
 type OtherAsset struct {
+	DebtEUR    float64                     `json:"debt_eur,omitempty"`
+	RealEstate *networth.RealEstateMetrics `json:"real_estate,omitempty"`
+
 	ID                int64              `json:"id"`
 	Type              string             `json:"type"`
 	Name              string             `json:"name"`
@@ -124,6 +144,7 @@ type NetWorth struct {
 	TotalEUR       float64                 `json:"total_eur"`
 	PortfoliosEUR  float64                 `json:"portfolios_eur"`
 	OtherAssetsEUR float64                 `json:"other_assets_eur"`
+	DebtEUR        float64                 `json:"debt_eur"` // mortgages, already deducted from OtherAssetsEUR
 	MonthChangeEUR *float64                `json:"month_change_eur"`
 	ByType         []networth.TypeTotal    `json:"by_type"`
 	Portfolios     []NetWorthPortfolio     `json:"portfolios"`
@@ -239,6 +260,13 @@ func toValuationAsset(a OtherAsset) (networth.Asset, error) {
 		v.Deposit = &deposit
 		return v, nil
 	}
+	if a.Type == networth.TypeRealEstate && a.Details.hasMortgage() {
+		mortgage, err := mortgageOf(a.Details)
+		if err != nil {
+			return v, fmt.Errorf("asset %d: %w", a.ID, err)
+		}
+		v.Mortgage = &mortgage
+	}
 	for _, e := range a.Entries {
 		date, err := networth.ParseDate(e.Date)
 		if err != nil {
@@ -280,9 +308,48 @@ func termDepositOf(openedAt string, details *OtherAssetDetails) (networth.TermDe
 	return deposit, nil
 }
 
+func mortgageOf(details *OtherAssetDetails) (networth.Mortgage, error) {
+	if details.MortgageBalanceDate == "" {
+		return networth.Mortgage{}, inputErrorf("indique a data do capital em dívida")
+	}
+	date, err := networth.ParseDate(details.MortgageBalanceDate)
+	if err != nil {
+		return networth.Mortgage{}, otherAssetInputError(err.Error())
+	}
+	m := networth.Mortgage{
+		Balance:        details.MortgageBalance,
+		BalanceDate:    date,
+		RatePct:        details.MortgageRatePct,
+		MonthlyPayment: details.MortgagePayment,
+	}
+	if err := m.Validate(); err != nil {
+		return m, otherAssetInputError(err.Error())
+	}
+	return m, nil
+}
+
+func realEstateOf(details *OtherAssetDetails) networth.RealEstate {
+	if details == nil {
+		return networth.RealEstate{}
+	}
+	return networth.RealEstate{
+		Usage:          details.Usage,
+		PurchasePrice:  details.PurchasePrice,
+		PurchaseCosts:  details.PurchaseCosts,
+		MonthlyRent:    details.MonthlyRent,
+		AnnualCosts:    details.AnnualCosts,
+		MonthlyPayment: details.MortgagePayment,
+	}
+}
+
 func fillValue(a *OtherAsset, v networth.Value, now time.Time) {
 	a.ValueEUR = round2(v.Net)
 	a.GrossValueEUR = round2(v.Gross)
+	if a.Type == networth.TypeRealEstate && v.Exists {
+		a.DebtEUR = round2(v.Debt)
+		metrics := realEstateOf(a.Details).Metrics(v.Gross, v.Debt)
+		a.RealEstate = &metrics
+	}
 	if a.Type == networth.TypeTermDeposit {
 		a.InterestGrossEUR = round2(v.InterestGross)
 		a.InterestNetEUR = round2(v.InterestNet)
@@ -509,6 +576,44 @@ func validateAssetFields(assetType string, in OtherAssetInput) (assetFields, err
 		}
 		fields.details = string(text)
 	}
+
+	if assetType == networth.TypeRealEstate && in.Details != nil {
+		d := *in.Details
+		details := OtherAssetDetails{
+			Usage:           strings.TrimSpace(d.Usage),
+			PurchasePrice:   d.PurchasePrice,
+			PurchaseCosts:   d.PurchaseCosts,
+			MortgageBalance: d.MortgageBalance,
+			MortgageRatePct: d.MortgageRatePct,
+			MortgagePayment: d.MortgagePayment,
+			MonthlyRent:     d.MonthlyRent,
+			AnnualCosts:     d.AnnualCosts,
+		}
+		details.MortgageBalanceDate = strings.TrimSpace(d.MortgageBalanceDate)
+		if !networth.IsValidUsage(details.Usage) {
+			return fields, inputErrorf("uso do imóvel desconhecido: %q", details.Usage)
+		}
+		for label, amount := range map[string]float64{
+			"o preço de compra": details.PurchasePrice, "os custos de aquisição": details.PurchaseCosts,
+			"a renda": details.MonthlyRent, "as despesas anuais": details.AnnualCosts,
+		} {
+			if amount < 0 || math.IsNaN(amount) || math.IsInf(amount, 0) {
+				return fields, inputErrorf("%s não pode ser negativo", label)
+			}
+		}
+		if details.hasMortgage() {
+			if _, err := mortgageOf(&details); err != nil {
+				return fields, err
+			}
+		}
+		text, err := json.Marshal(details)
+		if err != nil {
+			return fields, err
+		}
+		if string(text) != "{}" {
+			fields.details = string(text)
+		}
+	}
 	return fields, nil
 }
 
@@ -631,6 +736,7 @@ func buildNetWorth(userID int64, valuer portfolioValuer, now time.Time) (*NetWor
 		TotalEUR:       summary.TotalEUR,
 		PortfoliosEUR:  summary.PortfoliosEUR,
 		OtherAssetsEUR: summary.OtherAssetsEUR,
+		DebtEUR:        summary.DebtEUR,
 		MonthChangeEUR: summary.MonthChangeEUR,
 		ByType:         summary.ByType,
 		Portfolios:     portfolioRows,

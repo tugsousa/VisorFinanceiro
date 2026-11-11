@@ -72,12 +72,16 @@ func IsValidKind(kind string) bool {
 
 // Value is what an asset is worth on a date. For a term deposit, Gross ignores the tax withheld on the interest
 // and Net deducts it; for the other types both are the same. The net worth adds up Net.
+//
+// For property, Gross is the market value and Net is the equity: the market value minus what's still owed on
+// the mortgage (Debt), which is what counts for the net worth.
 type Value struct {
 	Gross         float64
 	Net           float64
 	InterestNet   float64 // Term deposits: the interest earned so far, net of the withholding
 	InterestGross float64
-	Exists        bool // false before the asset existed or from its closing date on
+	Debt          float64 // Property: the mortgage balance on that day
+	Exists        bool    // false before the asset existed or from its closing date on
 }
 
 // --- Term deposits ---
@@ -250,6 +254,7 @@ type Asset struct {
 	Name     string
 	ClosedAt *time.Time   // worth nothing from this day on
 	Deposit  *TermDeposit // term deposits only
+	Mortgage *Mortgage    // property with a mortgage only
 	Entries  []Entry
 }
 
@@ -266,6 +271,10 @@ func (a Asset) ValueOn(date time.Time) Value {
 		return a.Deposit.ValueOn(date)
 	}
 	value, exists := ManualValueOn(a.Entries, date)
+	if exists && a.Type == TypeRealEstate && a.Mortgage != nil {
+		debt := a.Mortgage.BalanceOn(date)
+		return Value{Gross: value, Net: value - debt, Debt: debt, Exists: true}
+	}
 	return Value{Gross: value, Net: value, Exists: exists}
 }
 

@@ -21,7 +21,8 @@ import UpdateValueDialog from '../components/UpdateValueDialog';
 import MovementsDialog from '../components/MovementsDialog';
 import { useNetWorth } from '../hooks/useNetWorth';
 import { apiDeleteOtherAsset, netWorthErrorMessage } from '../api/netWorthApi';
-import { TYPE_COLORS, TYPE_GROUP_LABELS, capitalisationLabel, formatISODate, typeLabel } from '../logic/assetTypes';
+import { TYPE_COLORS, TYPE_GROUP_LABELS, capitalisationLabel, formatISODate, typeLabel, usageLabel } from '../logic/assetTypes';
+import PropertySection from '../components/PropertySection';
 import { formatCurrency } from '../../../lib/utils/formatUtils';
 import { MONTH_NAMES_CHART } from '../../../constants';
 
@@ -41,6 +42,13 @@ const assetDetail = (asset) => {
         const rate = `${Number(d.rate_pct).toLocaleString('pt-PT', { maximumFractionDigits: 3 })}% TANB`;
         const maturity = asset.matured ? `venceu a ${formatISODate(d.maturity)}` : `vence a ${formatISODate(d.maturity)}`;
         return `${formatCurrency(d.principal)} a ${rate} · ${capitalisationLabel(d.capitalisation)} · ${maturity}`;
+    }
+    if (asset.type === 'real_estate') {
+        const parts = [usageLabel(asset.details?.usage)];
+        if (asset.debt_eur > 0) parts.push(`valor ${formatCurrency(asset.gross_value_eur)} − dívida ${formatCurrency(asset.debt_eur)}`);
+        if (asset.details?.monthly_rent) parts.push(`renda ${formatCurrency(asset.details.monthly_rent)}/mês`);
+        if (asset.last_valuation_date) parts.push(`valor de ${formatISODate(asset.last_valuation_date)}`);
+        return parts.filter(Boolean).join(' · ');
     }
     if (asset.last_valuation_date) return `Valor atualizado a ${formatISODate(asset.last_valuation_date)}`;
     return asset.entries?.length ? 'Soma dos movimentos' : 'Sem valor';
@@ -163,6 +171,9 @@ const NetWorthPage = () => {
             renderCell: (params) => (
                 <Box sx={{ textAlign: 'right', lineHeight: 1.3, py: 1 }}>
                     <Typography variant="body2" fontWeight={600}>{formatCurrency(params.value)}</Typography>
+                    {params.row.type === 'real_estate' && params.row.debt_eur > 0 && (
+                        <Typography variant="caption" color="text.secondary">capital próprio</Typography>
+                    )}
                     {params.row.type === 'term_deposit' && params.row.interest_net_eur > 0 && (
                         <Typography variant="caption" color="text.secondary">
                             juros líq. {formatCurrency(params.row.interest_net_eur)} (bruto {formatCurrency(params.row.interest_gross_eur)})
@@ -236,7 +247,10 @@ const NetWorthPage = () => {
                 </Grid>
                 <Grid item xs={6} md={3}>
                     <MetricCard title="Outros ativos" value={data.other_assets_eur} colorOverride="text.primary"
-                        tooltipText="Depósitos a prazo líquidos da retenção de 28% sobre os juros; os restantes pelo último valor indicado." />
+                        tooltipText="Depósitos a prazo líquidos da retenção de 28% sobre os juros; imóveis pelo capital próprio (valor menos o crédito em dívida); os restantes pelo último valor indicado."
+                        subValue={data.debt_eur > 0 ? (
+                            <Typography variant="caption" color="text.secondary">já sem {formatCurrency(data.debt_eur)} de crédito</Typography>
+                        ) : null} />
                 </Grid>
                 <Grid item xs={6} md={3}>
                     <MetricCard title="Variação do mês" value={data.month_change_eur ?? null}
@@ -285,6 +299,8 @@ const NetWorthPage = () => {
                     />
                 </Paper>
             )}
+
+            <PropertySection assets={assets} />
 
             <Typography variant="h6" fontWeight="bold" sx={{ mb: 1 }}>Carteiras nas corretoras</Typography>
             <Paper elevation={0} sx={{ border: 1, borderColor: 'divider', borderRadius: 2 }}>

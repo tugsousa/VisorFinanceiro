@@ -42,6 +42,8 @@ type Summary struct {
 	TotalEUR       float64
 	PortfoliosEUR  float64
 	OtherAssetsEUR float64
+	// DebtEUR is what's owed on the property today; OtherAssetsEUR already has it deducted.
+	DebtEUR float64
 	// MonthChangeEUR is the change since the end of last month, deposits and withdrawals included; nil when
 	// there's no value at the end of last month.
 	MonthChangeEUR *float64
@@ -71,6 +73,7 @@ func Summarize(portfolios []Portfolio, assets []Asset, snapshots []Snapshot, tod
 		v := a.ValueOn(today)
 		summary.AssetValues[a.ID] = v
 		summary.OtherAssetsEUR += v.Net
+		summary.DebtEUR += v.Debt
 		byType[a.Type] += v.Net
 	}
 	summary.TotalEUR = summary.PortfoliosEUR + summary.OtherAssetsEUR
@@ -100,6 +103,7 @@ func Summarize(portfolios []Portfolio, assets []Asset, snapshots []Snapshot, tod
 
 	summary.PortfoliosEUR = round2(summary.PortfoliosEUR)
 	summary.OtherAssetsEUR = round2(summary.OtherAssetsEUR)
+	summary.DebtEUR = round2(summary.DebtEUR)
 	summary.TotalEUR = round2(summary.TotalEUR)
 	return summary
 }

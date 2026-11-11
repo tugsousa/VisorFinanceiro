@@ -42,7 +42,21 @@ export const CAPITALISATIONS = [
     { value: 'annual', label: 'Anual' },
 ];
 
-export const capitalisationLabel = (value) => CAPITALISATIONS.find((c) => c.value === value)?.label || value;
+/** Uses of a property. */
+export const PROPERTY_USAGES = [
+    { value: 'own_home', label: 'Habitação própria' },
+    { value: 'rented', label: 'Arrendado' },
+    { value: 'holiday', label: 'Férias / secundária' },
+    { value: 'land', label: 'Terreno' },
+    { value: 'other', label: 'Outro' },
+];
+
+export const usageLabel = (value) => PROPERTY_USAGES.find((u) => u.value === value)?.label || '';
+
+/** Formats a percentage with one decimal, as in "4,8%". */
+export const formatPct = (value) => `${Number(value).toLocaleString('pt-PT', { maximumFractionDigits: 1, minimumFractionDigits: 1 })}%`;
+
+export const capitalisationLabel =(value) => CAPITALISATIONS.find((c) => c.value === value)?.label || value;
 
 /** Kinds of entry the user can add by hand ("valuation" is added with "Atualizar valor"). */
 export const MOVEMENT_KINDS = [

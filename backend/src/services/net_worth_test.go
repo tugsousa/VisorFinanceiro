@@ -1,6 +1,7 @@
 package services
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -128,5 +129,67 @@ func TestBuildNetWorth_AddsEveryPortfolioAndTheOtherAssets(t *testing.T) {
 	database.DB.QueryRow("SELECT COUNT(*) FROM portfolio_snapshots").Scan(&snapshotsAfter)
 	if snapshotsAfter != snapshotsBefore {
 		t.Errorf("the net worth must not write portfolio snapshots")
+	}
+}
+
+func TestOtherAssets_PropertyWithMortgageCountsItsEquity(t *testing.T) {
+	setupNetWorthDB(t)
+	if _, err := database.DB.Exec(`INSERT INTO users (id, username, email, password, auth_provider, created_at, updated_at)
+		VALUES (1, 'one', 'one@example.com', 'x', 'local', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`); err != nil {
+		t.Fatal(err)
+	}
+	service := &uploadServiceImpl{}
+	todayText := today().Format(networth.DateLayout)
+	value := 250000.0
+	details := OtherAssetDetails{
+		Usage: networth.UsageRented, PurchasePrice: 200000, PurchaseCosts: 15000,
+		MortgageBalance: 100000, MortgageBalanceDate: todayText, MortgageRatePct: 3.6, MortgagePayment: 600,
+		MonthlyRent: 1000, AnnualCosts: 2000,
+	}
+
+	asset, err := service.CreateOtherAsset(1, OtherAssetInput{Type: "real_estate", Name: "Apartamento", Details: &details, InitialValue: &value})
+	if err != nil {
+		t.Fatalf("CreateOtherAsset failed: %v", err)
+	}
+	if asset.ValueEUR != 150000 || asset.GrossValueEUR != 250000 || asset.DebtEUR != 100000 {
+		t.Errorf("value %v, market %v, debt %v; want 150000, 250000, 100000", asset.ValueEUR, asset.GrossValueEUR, asset.DebtEUR)
+	}
+	if asset.RealEstate == nil || asset.RealEstate.NetYieldPct == nil || *asset.RealEstate.NetYieldPct != 4 {
+		t.Errorf("expected the property figures, got %+v", asset.RealEstate)
+	}
+	if asset.Details == nil || asset.Details.MonthlyRent != 1000 || asset.Details.Usage != "rented" {
+		t.Errorf("details not stored: %+v", asset.Details)
+	}
+
+	nw, err := buildNetWorth(1, portfolioValuerStub{}, today())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if nw.DebtEUR != 100000 || nw.OtherAssetsEUR != 150000 {
+		t.Errorf("net worth debt %v, other assets %v; want 100000 and 150000", nw.DebtEUR, nw.OtherAssetsEUR)
+	}
+
+	// Paying the loan off is an edit of the balance.
+	details.MortgageBalance = 0
+	details.MortgagePayment = 0
+	updated, err := service.UpdateOtherAsset(1, asset.ID, OtherAssetInput{Name: "Apartamento", Details: &details})
+	if err != nil {
+		t.Fatalf("UpdateOtherAsset failed: %v", err)
+	}
+	if updated.ValueEUR != 250000 || updated.DebtEUR != 0 {
+		t.Errorf("after paying off: value %v, debt %v", updated.ValueEUR, updated.DebtEUR)
+	}
+
+	bad := []OtherAssetDetails{
+		{Usage: "castle"},
+		{MortgageBalance: 100000, MortgageBalanceDate: todayText, MortgageRatePct: 3.6, MortgagePayment: 100}, // below the interest
+		{MortgageBalance: 100000}, // no date
+		{MonthlyRent: -1},
+	}
+	for _, d := range bad {
+		d := d
+		if _, err := service.CreateOtherAsset(1, OtherAssetInput{Type: "real_estate", Name: "X", Details: &d, InitialValue: &value}); !errors.Is(err, ErrOtherAssetInput) {
+			t.Errorf("%+v: expected an input error, got %v", d, err)
+		}
 	}
 }
