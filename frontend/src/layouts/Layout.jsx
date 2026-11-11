@@ -26,6 +26,7 @@ import {
     Calculate as CalculateIcon
 } from '@mui/icons-material';
 
+import AccountBalanceIcon from '@mui/icons-material/AccountBalance';
 import logger from '../lib/utils/logger';
 
 export default function Layout({ children }) {
@@ -121,7 +122,21 @@ export default function Layout({ children }) {
                                     >
                                         Portfólio
                                     </Button>
-                                    
+
+                                    <Button
+                                        component={RouterLink}
+                                        to="/net-worth"
+                                        startIcon={<AccountBalanceIcon />}
+                                        sx={{
+                                            color: isActive('/net-worth') ? 'primary.main' : 'text.secondary',
+                                            backgroundColor: isActive('/net-worth') ? 'rgba(25, 118, 210, 0.08)' : 'transparent',
+                                            textTransform: 'none',
+                                            fontWeight: isActive('/net-worth') ? 600 : 500
+                                        }}
+                                    >
+                                        Património
+                                    </Button>
+
                                     {/* ANALYTICS DROPDOWN */}
                                     <Box>
                                         <Button 

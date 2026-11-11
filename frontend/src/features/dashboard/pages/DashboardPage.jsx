@@ -24,6 +24,7 @@ import HistoricalPerformanceChart from '../components/HistoricalPerformanceChart
 import ReturnsPeriodSection from '../components/ReturnsPeriodSection';
 import AllocationSection from '../components/AllocationSection';
 import HeatmapSection from '../components/HeatmapSection';
+import NetWorthCard from '../../netWorth/components/NetWorthCard';
 
 // Utils & Constants
 import { parseDateRobust } from '../../../lib/utils/dateUtils';
@@ -347,6 +348,7 @@ const DashboardPage = () => {
             {/* SECTION 1: HEADER / KPIs */}
             <Box sx={{ mb: 8 }}>
                 <DashboardKPISection metrics={metrics} isLoading={isLoading} />
+                <NetWorthCard />
             </Box>
 
             {/* SECTION 2: MAIN CHART */}
