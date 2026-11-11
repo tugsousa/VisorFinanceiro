@@ -290,6 +290,12 @@ func main() {
 			r.Get("/option-sales", portfolioHandler.HandleGetOptionSales)
 			r.Get("/tax/simulate-sale", portfolioHandler.HandleSimulateSale)
 			r.Get("/tax/year-status", portfolioHandler.HandleGetTaxYearStatus)
+			// Target allocation
+			r.Get("/allocation", portfolioHandler.HandleGetAllocation)
+			r.Put("/allocation/groups", portfolioHandler.HandleSaveAllocationGroups)
+			r.Put("/allocation/assignments", portfolioHandler.HandleSaveAllocationAssignments)
+			r.Put("/allocation/settings", portfolioHandler.HandleSaveAllocationSettings)
+			r.Get("/allocation/deposit-plan", portfolioHandler.HandleAllocationDepositPlan)
 			r.Get("/dividend-tax-summary", dividendHandler.HandleGetDividendTaxSummary)
 			r.Get("/dividend-transactions", dividendHandler.HandleGetDividendTransactions)
 			r.Get("/dividend-metrics", dividendHandler.HandleGetDividendMetrics)

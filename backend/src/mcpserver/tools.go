@@ -96,6 +96,7 @@ func (s *Server) addTools(server *mcp.Server) {
 
 	s.addTaxTools(server, readOnlyOnline)
 	s.addDividendTools(server, readOnlyOnline)
+	s.addAllocationTools(server, readOnlyOnline)
 }
 
 // --- Inputs ---

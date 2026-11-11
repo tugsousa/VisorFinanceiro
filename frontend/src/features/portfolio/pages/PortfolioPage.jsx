@@ -1,5 +1,8 @@
 import React, { useState } from 'react';
-import { Box, Typography, Grid, CircularProgress, Alert, Paper } from '@mui/material';
+import { Box, Typography, Grid, CircularProgress, Alert, Paper, Tabs, Tab } from '@mui/material';
+import { useSearchParams } from 'react-router-dom';
+import AllocationTab from '../../allocation/pages/AllocationTab';
+import { ALLOCATION_TAB } from '../../allocation/logic/allocationLogic';
 import { useAuth } from '../../auth/AuthContext';
 import { usePortfolioData } from '../hooks/usePortfolioData';
 import StockHoldingsSection from '../../analytics/components/StockHoldingsSection';
@@ -12,7 +15,11 @@ const PortfolioPage = () => {
     const { token } = useAuth();
     const { activePortfolio } = usePortfolio();
     const [positionToSimulate, setPositionToSimulate] = useState(null);
-    const { 
+    // The tab is in the address (/portfolio?tab=alocacao), so the dashboard can link to it.
+    const [searchParams, setSearchParams] = useSearchParams();
+    const tab = searchParams.get('tab') === ALLOCATION_TAB ? ALLOCATION_TAB : 'posicoes';
+    const changeTab = (_, value) => setSearchParams(value === ALLOCATION_TAB ? { tab: ALLOCATION_TAB } : {}, { replace: true });
+    const {
         holdingsForGroupedView,
         detailedHoldingsForView,
         optionHoldings, 
@@ -32,6 +39,14 @@ const PortfolioPage = () => {
                 </Typography>
             </Box>
 
+            <Tabs value={tab} onChange={changeTab} sx={{ mb: 3, borderBottom: 1, borderColor: 'divider' }}>
+                <Tab value="posicoes" label="Posições" sx={{ textTransform: 'none' }} />
+                <Tab value={ALLOCATION_TAB} label="Alocação-alvo" sx={{ textTransform: 'none' }} />
+            </Tabs>
+
+            {tab === ALLOCATION_TAB ? (
+                <AllocationTab portfolioId={activePortfolio?.id} />
+            ) : (
             <Grid container spacing={3}>
                 {/* Stock Holdings Table */}
                 <Grid item xs={12}>
@@ -56,6 +71,7 @@ const PortfolioPage = () => {
                     </Grid>
                 )}
             </Grid>
+            )}
 
             <SaleSimulatorDrawer
                 portfolioId={activePortfolio?.id}

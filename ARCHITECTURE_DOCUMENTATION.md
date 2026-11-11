@@ -49,6 +49,9 @@ portfolio_snapshots     - Daily portfolio valuations
 isin_ticker_map         - ISIN to ticker symbol mappings, with sector/industry/type and ETF sector weights
 daily_prices           - Cached stock prices
 failed_isins           - ISINs that couldn't be resolved to a ticker, so they aren't retried every time
+allocation_groups      - Target allocation groups of a portfolio (name, target %, colour, whether it holds the cash)
+allocation_assignments - The group of each holding (ISIN), and the asset preferred for buying in each group
+allocation_settings    - Per portfolio: the tolerance, in percentage points, before a group is flagged
 
 -- Supporting Tables  
 sessions               - Authentication sessions
@@ -80,6 +83,7 @@ The frontend is built with React 18 using Vite as the build tool, Material-UI (M
 - **Dividend Calendar** - "Próximos dividendos" on `/analytics/dividends` ("Tudo" view): the next dividends of each position held with ex-date, payment date, gross and net amount and whether each is announced, estimated or received; see [Dividend Calendar](#dividend-calendar)
 - **Tax Reporting** - Automated tax calculation and reporting; each line opens a drawer with the transactions behind it
 - **Tax Simulator** - What selling today would give and cost in IRS (`/tax/simulator`, and "Simular venda" on the portfolio page); see [Tax Simulator](#tax-simulator)
+- **Target Allocation** - Groups the user creates with a target % each, how far the portfolio is from them, and how to split the next deposit without selling (tab "Alocação-alvo" of the portfolio page, `/portfolio?tab=alocacao`; a warning on the dashboard when a group is off target); see [Target Allocation](#target-allocation)
 - **Transactions** - The processed transactions, plus transactions added by hand
 - **File Upload Interface** - Streamlined CSV upload process with drag-and-drop support
 - **Admin Dashboard** - System administration and user management with detailed metrics
@@ -100,6 +104,12 @@ frontend/src/
 │   │   ├── config/    - Admin configuration and constants
 │   │   ├── hooks/     - Admin-specific hooks
 │   │   └── pages/     - Admin pages
+│   ├── allocation/    - Target allocation (the "Alocação-alvo" tab of the portfolio page)
+│   │   ├── api/       - Allocation API calls
+│   │   ├── components/ - Groups and assignments editors, drift table, doughnut, deposit calculator, dashboard warning
+│   │   ├── hooks/     - useAllocation
+│   │   ├── logic/     - Pure helpers (suggested groups, formatting)
+│   │   └── pages/     - AllocationTab
 │   ├── analytics/     - Portfolio analytics
 │   │   ├── api/       - Analytics API integration
 │   │   ├── components/ - Chart and data visualization components
@@ -324,6 +334,28 @@ The simulator only reads the FIFO; it doesn't change the IRS page. To check that
 - **Status.** `received` when a dividend transaction of the ISIN came 0–60 days after the ex-date (its real gross and net are shown); `announced` for announced dates, and for a dividend gone ex whose payment is still to come; `missed` when the ex-date and the expected payment passed with no transaction; `estimated` otherwise.
 
 Amounts use the quantity held today and today's exchange rate; the right to a dividend depends on holding the shares on the ex-date. The result is cached for 4 hours (and dropped with the user's other caches after an upload). Positions without a ticker or whose market data failed are listed in `skipped`.
+
+### Target Allocation
+
+The user creates groups ("Ações Mundo", "Emergentes", "Obrigações", "Liquidez"...) with a target % each, and puts each holding in one group; a target for a single asset is a group with one asset. Yahoo's asset type can't tell a bond ETF from a share ETF, so the group is the user's choice. Until a holding is assigned, it gets a suggestion: "Obrigações" when at least half of the fund is bonds (the `Obrigações` sector of its `sector_weights`), "Ações" otherwise.
+
+The rules are in `backend/src/allocation` (with tests):
+
+- **Base:** the percentages are of the holdings in a group, plus the broker cash if a group has `includes_cash`. Holdings in no group are left out (and listed). A holding without a market price counts at cost, as on the dashboard.
+- **Drift:** per group, current %, target %, the difference in points and in EUR (positive when over target). A group more than the tolerance (5 points by default) away is flagged.
+- **Deposit plan (buys only):** with `T` the total after the deposit `D`, a group lacks `max(0, target × T − value)`. If the deposit covers what every group lacks, each gets that and the rest is split by target; otherwise `D` is split in proportion to what each lacks.
+- **Shares:** each group's amount buys whole shares (rounded down) of its preferred asset, or else its largest holding with a price; the rest is left over. A cash group without an asset keeps its amount as cash.
+- **Validation:** targets add up to 100% (±0.01), names are unique (ignoring case and accents), at most one group holds the cash, a holding is in one group at most, and a group has at most one preferred asset.
+
+Endpoints (all check that the portfolio belongs to the user, 404 otherwise):
+
+- `GET /api/allocation?portfolio_id=` - groups, assignments, drift per group, holdings (with their group and suggested group), holdings in no group, cash and tolerance.
+- `PUT /api/allocation/groups?portfolio_id=` with `{"groups": [...]}` - replaces all groups in one transaction. A group sent with its `id` keeps its holdings; a group left out is deleted and its holdings become unassigned.
+- `PUT /api/allocation/assignments?portfolio_id=` with `{"assignments": [{"isin", "group_id", "preferred"}]}` - replaces all assignments.
+- `PUT /api/allocation/settings?portfolio_id=` with `{"tolerance_pp": 5}`.
+- `GET /api/allocation/deposit-plan?portfolio_id=&amount=` - the deposit plan; nothing is stored.
+
+The MCP tools `get_allocation_drift` and `plan_deposit` answer the same questions. Rebalancing by selling (with the tax of each sale from the tax simulator) is not built yet.
 
 ### Portfolio History and Benchmark
 
