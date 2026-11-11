@@ -7,6 +7,7 @@ import { useAnalyticsData } from '../hooks/useAnalyticsData';
 import DividendsSection from '../components/DividendsSection';
 import FutureProjectionChart from '../components/FutureProjectionChart';
 import MetricCard from '../components/MetricCard';
+import DividendCalendarSection from '../../dividends/components/DividendCalendarSection';
 import { ALL_YEARS_OPTION } from '../../../constants';
 import { extractYearsFromData, getYearString, getMonthIndex } from '../../../lib/utils/dateUtils';
 
@@ -188,6 +189,9 @@ const DividendsPage = () => {
                     </Grid>
                 )}
             </Grid>
+
+            {/* Dividend calendar of the positions held (only in the overall view) */}
+            {isGlobalView && <DividendCalendarSection />}
 
             {/* Espaçamento aumentado para mt: 8 */}
             <Typography variant="h5" sx={{ mb: 2, mt: 8 }}>Histórico de Transações</Typography>
