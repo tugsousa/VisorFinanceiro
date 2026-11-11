@@ -6,6 +6,7 @@ export const ASSET_TYPES = [
     { value: 'term_deposit', label: 'Depósito a prazo' },
     { value: 'savings_certificate', label: 'Certificados de Aforro' },
     { value: 'ppr', label: 'PPR' },
+    { value: 'crypto', label: 'Criptomoeda' },
     { value: 'real_estate', label: 'Imobiliário' },
     { value: 'other', label: 'Outro' },
 ];
@@ -42,6 +43,16 @@ export const CAPITALISATIONS = [
     { value: 'annual', label: 'Anual' },
 ];
 
+/**
+ * The series of Certificados de Aforro the app can estimate, with the dates each was subscribed in. The
+ * older ones (A, B, C) stay at the value typed from AforroNet.
+ */
+export const CERTIFICATE_SERIES = [
+    { value: 'F', label: 'Série F (desde junho de 2023)' },
+    { value: 'E', label: 'Série E (outubro de 2017 a junho de 2023)' },
+    { value: 'D', label: 'Série D (fevereiro de 2015 a outubro de 2017)' },
+];
+
 /** Uses of a property. */
 export const PROPERTY_USAGES = [
     { value: 'own_home', label: 'Habitação própria' },
@@ -64,6 +75,14 @@ export const MOVEMENT_KINDS = [
     { value: 'withdrawal', label: 'Levantamento' },
     { value: 'interest', label: 'Juros / rendimento' },
 ];
+
+/** The entries of a crypto asset: a contribution buys a quantity and a withdrawal sells it. */
+export const CRYPTO_MOVEMENT_KINDS = [
+    { value: 'contribution', label: 'Compra' },
+    { value: 'withdrawal', label: 'Venda' },
+];
+
+export const CRYPTO_KIND_LABELS = { contribution: 'Compra', withdrawal: 'Venda' };
 
 export const ENTRY_KIND_LABELS = {
     contribution: 'Entrega / depósito',

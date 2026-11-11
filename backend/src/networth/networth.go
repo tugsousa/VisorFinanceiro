@@ -46,19 +46,20 @@ const (
 	CapitalisationAnnual    = "annual"    // every year
 )
 
-// IsSupportedType says whether an asset of this type can be created now. Crypto comes in a later phase.
+// IsSupportedType says whether an asset of this type can be created.
 func IsSupportedType(assetType string) bool {
 	switch assetType {
-	case TypeTermDeposit, TypeSavingsCertificate, TypeCashAccount, TypePPR, TypeRealEstate, TypeOther:
+	case TypeTermDeposit, TypeSavingsCertificate, TypeCrypto, TypeCashAccount, TypePPR, TypeRealEstate, TypeOther:
 		return true
 	}
 	return false
 }
 
 // IsManualType says whether the value of this type is the last value the user entered (plus the money moved
-// since). Certificados de Aforro are manual until they're computed automatically.
+// since). A term deposit is valued by its formula and crypto by its quantity and price. Certificados de Aforro
+// are manual until they're computed automatically.
 func IsManualType(assetType string) bool {
-	return IsSupportedType(assetType) && assetType != TypeTermDeposit
+	return IsSupportedType(assetType) && assetType != TypeTermDeposit && assetType != TypeCrypto
 }
 
 // IsValidKind says whether kind is an entry kind.
@@ -82,6 +83,14 @@ type Value struct {
 	InterestGross float64
 	Debt          float64 // Property: the mortgage balance on that day
 	Exists        bool    // false before the asset existed or from its closing date on
+
+	// Crypto: the quantity held, what it cost (average cost), the price used and the day it's from. Unpriced
+	// is true when there was no price, and the value is then the cost.
+	Quantity  float64
+	Cost      float64
+	Price     float64
+	PriceDate time.Time
+	Unpriced  bool
 }
 
 // --- Term deposits ---
@@ -191,12 +200,14 @@ func (d TermDeposit) ValueOn(date time.Time) Value {
 
 // --- Manual assets ---
 
-// Entry is money moved in or out of an asset, or a valuation the user entered. Amounts are positive.
+// Entry is money moved in or out of an asset, or a valuation the user entered. Amounts are positive. For
+// crypto, a contribution is a purchase and a withdrawal a sale, of Quantity units for Amount euros.
 type Entry struct {
-	ID     int64
-	Date   time.Time
-	Kind   string
-	Amount float64
+	ID       int64
+	Date     time.Time
+	Kind     string
+	Amount   float64
+	Quantity float64
 }
 
 // ManualValueOn values an asset whose value the user enters, at the end of the given day: the last valuation
@@ -252,9 +263,10 @@ type Asset struct {
 	ID       int64
 	Type     string
 	Name     string
-	ClosedAt *time.Time   // worth nothing from this day on
-	Deposit  *TermDeposit // term deposits only
-	Mortgage *Mortgage    // property with a mortgage only
+	ClosedAt *time.Time    // worth nothing from this day on
+	Deposit  *TermDeposit  // term deposits only
+	Mortgage *Mortgage     // property with a mortgage only
+	Crypto   *CryptoPrices // crypto only: the coin's prices
 	Entries  []Entry
 }
 
@@ -269,6 +281,9 @@ func (a Asset) ValueOn(date time.Time) Value {
 			return Value{}
 		}
 		return a.Deposit.ValueOn(date)
+	}
+	if a.Type == TypeCrypto {
+		return a.cryptoValueOn(date)
 	}
 	value, exists := ManualValueOn(a.Entries, date)
 	if exists && a.Type == TypeRealEstate && a.Mortgage != nil {

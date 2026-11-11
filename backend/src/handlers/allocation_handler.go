@@ -93,19 +93,28 @@ func (h *PortfolioHandler) HandleSaveAllocationGroups(w http.ResponseWriter, r *
 }
 
 // HandleSaveAllocationAssignments answers PUT /api/allocation/assignments?portfolio_id= with
-// {"assignments": [...]}, which replaces all the assignments.
+// {"assignments": [...]}, which replaces all the assignments. With "other_assets": [{"other_asset_id",
+// "group_id"}] it also replaces the assets outside the brokers counted in the groups; without that field
+// they're left as they are.
 func (h *PortfolioHandler) HandleSaveAllocationAssignments(w http.ResponseWriter, r *http.Request) {
 	userID, portfolioID, ok := allocationRequest(w, r)
 	if !ok {
 		return
 	}
 	var body struct {
-		Assignments []services.AllocationAssignment `json:"assignments"`
+		Assignments []services.AllocationAssignment       `json:"assignments"`
+		OtherAssets *[]services.AllocationOtherAssignment `json:"other_assets"`
 	}
 	if !decodeAllocationBody(w, r, &body) {
 		return
 	}
-	if err := h.uploadService.SaveAllocationAssignments(userID, portfolioID, body.Assignments); err != nil {
+	var err error
+	if body.OtherAssets != nil {
+		err = h.uploadService.SaveAllocationAssignmentsAndOtherAssets(userID, portfolioID, body.Assignments, *body.OtherAssets)
+	} else {
+		err = h.uploadService.SaveAllocationAssignments(userID, portfolioID, body.Assignments)
+	}
+	if err != nil {
 		sendAllocationError(w, "saving the assignments", err)
 		return
 	}
@@ -144,6 +153,22 @@ func (h *PortfolioHandler) HandleAllocationDepositPlan(w http.ResponseWriter, r 
 	plan, err := h.uploadService.PlanAllocationDeposit(userID, portfolioID, amount)
 	if err != nil {
 		sendAllocationError(w, "planning the deposit", err)
+		return
+	}
+	sendAllocationJSON(w, plan)
+}
+
+// HandleAllocationRebalancePlan answers GET /api/allocation/rebalance-plan?portfolio_id=: the sales that
+// would bring every group back to its target, with the tax they'd add to this year. It's a GET because it
+// only reads: nothing is sold or stored.
+func (h *PortfolioHandler) HandleAllocationRebalancePlan(w http.ResponseWriter, r *http.Request) {
+	userID, portfolioID, ok := allocationRequest(w, r)
+	if !ok {
+		return
+	}
+	plan, err := h.uploadService.PlanAllocationRebalance(userID, portfolioID)
+	if err != nil {
+		sendAllocationError(w, "planning the rebalancing", err)
 		return
 	}
 	sendAllocationJSON(w, plan)

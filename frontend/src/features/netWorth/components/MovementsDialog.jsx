@@ -6,56 +6,87 @@ import {
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiAddOtherAssetEntry, apiDeleteOtherAssetEntry, netWorthErrorMessage } from '../api/netWorthApi';
-import { ENTRY_KIND_LABELS, MOVEMENT_KINDS, formatISODate, parseAmount, todayISO } from '../logic/assetTypes';
+import {
+    CRYPTO_KIND_LABELS, CRYPTO_MOVEMENT_KINDS, ENTRY_KIND_LABELS, MOVEMENT_KINDS, formatISODate, parseAmount, todayISO,
+} from '../logic/assetTypes';
+import { coinSymbol, formatCoinPrice, formatQuantity, parseQuantity } from '../logic/crypto';
 import { formatCurrency } from '../../../lib/utils/formatUtils';
 
+const emptyForm = () => ({ kind: 'contribution', amount: '', quantity: '', date: todayISO(), note: '' });
+
 /**
- * "Movimentos": the entries of a manual asset, newest first, and a form to add money moved in or out. The value
- * is the last valuation plus the movements after it.
+ * "Movimentos": the entries of an asset, newest first, and a form to add one.
+ *
+ * For a manual asset they're money moved in or out, and the value is the last valuation plus the movements
+ * after it. For a cryptocurrency they're purchases and sales of a quantity of the coin; the amount paid or
+ * received is optional, and the value is the quantity held × the current price.
  */
 const MovementsDialog = ({ open, onClose, asset }) => {
     const queryClient = useQueryClient();
-    const [form, setForm] = useState({ kind: 'contribution', amount: '', date: todayISO(), note: '' });
+    const [form, setForm] = useState(emptyForm);
     const [error, setError] = useState('');
 
     useEffect(() => {
         if (open) {
-            setForm({ kind: 'contribution', amount: '', date: todayISO(), note: '' });
+            setForm(emptyForm());
             setError('');
         }
     }, [open]);
 
-    const refresh = () => queryClient.invalidateQueries({ queryKey: ['netWorth'] });
+    const isCrypto = asset?.type === 'crypto';
+    const symbol = coinSymbol(asset?.details?.ticker);
+
+    const refresh = () => {
+        queryClient.invalidateQueries({ queryKey: ['netWorth'] });
+        queryClient.invalidateQueries({ queryKey: ['allocation'] }); // an asset counted in a group changed
+    };
     const addMutation = useMutation({
         mutationFn: (entry) => apiAddOtherAssetEntry(asset.id, entry),
         onSuccess: () => {
             refresh();
-            setForm((f) => ({ ...f, amount: '', note: '' }));
+            setForm((f) => ({ ...f, amount: '', quantity: '', note: '' }));
         },
         onError: (err) => setError(netWorthErrorMessage(err)),
     });
     const deleteMutation = useMutation({
         mutationFn: (entryId) => apiDeleteOtherAssetEntry(asset.id, entryId),
-        onSuccess: refresh,
+        onSuccess: () => {
+            setError('');
+            refresh();
+        },
         onError: (err) => setError(netWorthErrorMessage(err, 'Não foi possível apagar.')),
     });
 
     const set = (field) => (event) => setForm((f) => ({ ...f, [field]: event.target.value }));
     const handleAdd = () => {
-        const amount = parseAmount(form.amount);
-        if (!(amount > 0)) return setError('Indique um valor maior que zero.');
+        const entry = { kind: form.kind, date: form.date, note: form.note.trim() };
+        if (isCrypto) {
+            entry.quantity = parseQuantity(form.quantity);
+            if (!(entry.quantity > 0)) return setError('Indique a quantidade.');
+            entry.amount = String(form.amount).trim() === '' ? 0 : parseAmount(form.amount);
+            if (!(entry.amount >= 0)) return setError('Valor inválido.');
+        } else {
+            entry.amount = parseAmount(form.amount);
+            if (!(entry.amount > 0)) return setError('Indique um valor maior que zero.');
+        }
         setError('');
-        addMutation.mutate({ kind: form.kind, amount, date: form.date, note: form.note.trim() });
+        addMutation.mutate(entry);
     };
 
     const entries = [...(asset?.entries || [])].reverse();
+    const kindLabel = (kind) => (isCrypto ? CRYPTO_KIND_LABELS[kind] : ENTRY_KIND_LABELS[kind]) || kind;
 
     return (
         <Dialog open={open} onClose={onClose} fullWidth maxWidth="md">
             <DialogTitle>Movimentos — {asset?.name}</DialogTitle>
             <DialogContent>
                 <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                    O valor do ativo é o último valor atualizado, mais as entregas e os juros e menos os levantamentos posteriores.
+                    {isCrypto
+                        ? `O valor é a quantidade de ${symbol} que tem × o preço atual. `
+                            + (asset?.quantity > 0
+                                ? `Tem ${formatQuantity(asset.quantity)} ${symbol}${asset.price_eur ? `, a ${formatCoinPrice(asset.price_eur)} cada` : ''}.`
+                                : 'Neste momento não tem saldo.')
+                        : 'O valor do ativo é o último valor atualizado, mais as entregas e os juros e menos os levantamentos posteriores.'}
                 </Typography>
                 {entries.length === 0 ? (
                     <Typography variant="body2" sx={{ mb: 2 }}>Ainda não há movimentos.</Typography>
@@ -65,6 +96,7 @@ const MovementsDialog = ({ open, onClose, asset }) => {
                             <TableRow>
                                 <TableCell>Data</TableCell>
                                 <TableCell>Tipo</TableCell>
+                                {isCrypto && <TableCell align="right">Quantidade</TableCell>}
                                 <TableCell align="right">Valor</TableCell>
                                 <TableCell>Nota</TableCell>
                                 <TableCell />
@@ -74,9 +106,16 @@ const MovementsDialog = ({ open, onClose, asset }) => {
                             {entries.map((e) => (
                                 <TableRow key={e.id}>
                                     <TableCell>{formatISODate(e.date)}</TableCell>
-                                    <TableCell>{ENTRY_KIND_LABELS[e.kind] || e.kind}</TableCell>
-                                    <TableCell align="right" sx={{ color: e.kind === 'withdrawal' ? 'error.main' : 'text.primary' }}>
-                                        {e.kind === 'withdrawal' ? '−' : ''}{formatCurrency(e.amount)}
+                                    <TableCell>{kindLabel(e.kind)}</TableCell>
+                                    {isCrypto && (
+                                        <TableCell align="right" sx={{ color: e.kind === 'withdrawal' ? 'error.main' : 'text.primary' }}>
+                                            {e.kind === 'withdrawal' ? '−' : ''}{formatQuantity(e.quantity ?? 0)}
+                                        </TableCell>
+                                    )}
+                                    <TableCell align="right" sx={{ color: !isCrypto && e.kind === 'withdrawal' ? 'error.main' : 'text.primary' }}>
+                                        {isCrypto && !(e.amount > 0)
+                                            ? '—'
+                                            : `${!isCrypto && e.kind === 'withdrawal' ? '−' : ''}${formatCurrency(e.amount)}`}
                                     </TableCell>
                                     <TableCell>{e.note}</TableCell>
                                     <TableCell align="right">
@@ -92,21 +131,27 @@ const MovementsDialog = ({ open, onClose, asset }) => {
                     </Table>
                 )}
 
-                <Typography variant="subtitle2" sx={{ mb: 1 }}>Adicionar movimento</Typography>
+                <Typography variant="subtitle2" sx={{ mb: 1 }}>{isCrypto ? 'Adicionar compra ou venda' : 'Adicionar movimento'}</Typography>
                 <Grid container spacing={2}>
-                    <Grid item xs={12} sm={3}>
+                    <Grid item xs={12} sm={isCrypto ? 4 : 3}>
                         <TextField select fullWidth size="small" label="Tipo" value={form.kind} onChange={set('kind')}>
-                            {MOVEMENT_KINDS.map((k) => <MenuItem key={k.value} value={k.value}>{k.label}</MenuItem>)}
+                            {(isCrypto ? CRYPTO_MOVEMENT_KINDS : MOVEMENT_KINDS).map((k) => <MenuItem key={k.value} value={k.value}>{k.label}</MenuItem>)}
                         </TextField>
                     </Grid>
-                    <Grid item xs={12} sm={3}>
-                        <TextField fullWidth size="small" label="Valor (€)" value={form.amount} onChange={set('amount')} inputMode="decimal" />
+                    {isCrypto && (
+                        <Grid item xs={12} sm={4}>
+                            <TextField fullWidth size="small" label={`Quantidade (${symbol})`} value={form.quantity} onChange={set('quantity')} inputMode="decimal" />
+                        </Grid>
+                    )}
+                    <Grid item xs={12} sm={isCrypto ? 4 : 3}>
+                        <TextField fullWidth size="small" value={form.amount} onChange={set('amount')} inputMode="decimal"
+                            label={isCrypto ? (form.kind === 'withdrawal' ? 'Valor recebido (€) (opcional)' : 'Valor pago (€) (opcional)') : 'Valor (€)'} />
                     </Grid>
-                    <Grid item xs={12} sm={3}>
+                    <Grid item xs={12} sm={isCrypto ? 4 : 3}>
                         <TextField fullWidth size="small" type="date" label="Data" value={form.date} onChange={set('date')}
                             InputLabelProps={{ shrink: true }} inputProps={{ max: todayISO() }} />
                     </Grid>
-                    <Grid item xs={12} sm={3}>
+                    <Grid item xs={12} sm={isCrypto ? 8 : 3}>
                         <TextField fullWidth size="small" label="Nota" value={form.note} onChange={set('note')} inputProps={{ maxLength: 200 }} />
                     </Grid>
                 </Grid>

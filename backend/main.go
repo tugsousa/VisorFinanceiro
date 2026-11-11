@@ -162,6 +162,10 @@ func initCore() {
 	if err := utils.InitDividendSourceOverrides(config.Cfg.DividendSourceOverridesPath); err != nil {
 		logger.L.Error("Failed to load dividend source overrides", "error", err)
 	}
+	// Without the rates the Certificados de Aforro simply have no estimate.
+	if err := services.LoadAforroRates(config.Cfg.AforroRatesPath); err != nil {
+		logger.L.Error("Failed to load the Certificados de Aforro rates", "error", err)
+	}
 
 	logger.L.Info("Initializing database...", "path", config.Cfg.DatabasePath)
 	database.InitDB(config.Cfg.DatabasePath)
@@ -297,6 +301,7 @@ func main() {
 			r.Put("/allocation/assignments", portfolioHandler.HandleSaveAllocationAssignments)
 			r.Put("/allocation/settings", portfolioHandler.HandleSaveAllocationSettings)
 			r.Get("/allocation/deposit-plan", portfolioHandler.HandleAllocationDepositPlan)
+			r.Get("/allocation/rebalance-plan", portfolioHandler.HandleAllocationRebalancePlan)
 			r.Get("/dividend-tax-summary", dividendHandler.HandleGetDividendTaxSummary)
 			r.Get("/dividend-transactions", dividendHandler.HandleGetDividendTransactions)
 			r.Get("/dividend-metrics", dividendHandler.HandleGetDividendMetrics)

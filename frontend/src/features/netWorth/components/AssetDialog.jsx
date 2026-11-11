@@ -4,7 +4,8 @@ import {
 } from '@mui/material';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiCreateOtherAsset, apiUpdateOtherAsset, netWorthErrorMessage } from '../api/netWorthApi';
-import { ASSET_TYPES, CAPITALISATIONS, PROPERTY_USAGES, parseAmount, todayISO } from '../logic/assetTypes';
+import { ASSET_TYPES, CAPITALISATIONS, CERTIFICATE_SERIES, PROPERTY_USAGES, parseAmount, todayISO } from '../logic/assetTypes';
+import { coinSymbol, isValidTicker, normalizeTicker, parseQuantity } from '../logic/crypto';
 
 // The property fields, all optional. Empty text means "not given".
 const emptyProperty = () => ({
@@ -72,6 +73,10 @@ const emptyForm = () => ({
     maturity: '',
     capitalisation: 'maturity',
     closedAt: '',
+    ticker: '',
+    quantity: '',
+    series: '',
+    subscribedAt: '',
 });
 
 const formOf = (asset) => ({
@@ -79,6 +84,9 @@ const formOf = (asset) => ({
     ...(asset.type === 'real_estate' ? propertyOf(asset.details) : {}),
     type: asset.type,
     name: asset.name,
+    ticker: coinSymbol(asset.details?.ticker),
+    series: asset.details?.series || '',
+    subscribedAt: asset.type === 'savings_certificate' ? asset.opened_at || '' : '',
     principal: asset.details?.principal ?? '',
     ratePct: asset.details?.rate_pct ?? '',
     openedAt: asset.opened_at || '',
@@ -89,7 +97,8 @@ const formOf = (asset) => ({
 
 /**
  * Adds an asset, or edits one when `asset` is given. The fields change with the type: a term deposit asks for
- * its principal, TANB, dates and capitalisation; the other types ask for their current value when added.
+ * its principal, TANB, dates and capitalisation; a cryptocurrency asks for the coin and, when added, the
+ * quantity bought; the other types ask for their current value when added.
  */
 const AssetDialog = ({ open, onClose, asset }) => {
     const queryClient = useQueryClient();
@@ -107,11 +116,14 @@ const AssetDialog = ({ open, onClose, asset }) => {
     const set = (field) => (event) => setForm((f) => ({ ...f, [field]: event.target.value }));
     const isDeposit = form.type === 'term_deposit';
     const isProperty = form.type === 'real_estate';
+    const isCrypto = form.type === 'crypto';
+    const isCertificate = form.type === 'savings_certificate';
 
     const mutation = useMutation({
         mutationFn: (payload) => (editing ? apiUpdateOtherAsset(asset.id, payload) : apiCreateOtherAsset(payload)),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['netWorth'] });
+            queryClient.invalidateQueries({ queryKey: ['allocation'] }); // an asset counted in a group changed
             onClose();
         },
         onError: (err) => setError(netWorthErrorMessage(err)),
@@ -129,11 +141,33 @@ const AssetDialog = ({ open, onClose, asset }) => {
             if (!form.openedAt || !form.maturity) return setError('Indique as datas de início e de vencimento.');
             payload.opened_at = form.openedAt;
             payload.details = { principal, rate_pct: ratePct, maturity: form.maturity, capitalisation: form.capitalisation };
+        } else if (isCrypto) {
+            // The coin can't change once the asset exists: its movements are quantities of that coin.
+            if (!editing) {
+                const ticker = normalizeTicker(form.ticker);
+                if (!isValidTicker(ticker)) return setError('Indique o símbolo da moeda, por exemplo BTC. Só são suportados preços em EUR.');
+                const quantity = parseQuantity(form.quantity);
+                if (!(quantity > 0)) return setError('Indique a quantidade que tem.');
+                payload.details = { ticker };
+                payload.initial_quantity = quantity;
+                if (String(form.value).trim() !== '') {
+                    const cost = parseAmount(form.value);
+                    if (!(cost >= 0)) return setError('Valor inválido em "Custo total".');
+                    payload.initial_value = cost;
+                }
+                payload.initial_date = form.valueDate || todayISO();
+            }
         } else if (!editing) {
             const value = parseAmount(form.value);
             if (!(value >= 0)) return setError('Indique o valor atual.');
             payload.initial_value = value;
             payload.initial_date = form.valueDate || todayISO();
+        }
+        if (isCertificate && form.series) {
+            // Optional: with the series and the subscription date the app estimates the value between updates.
+            if (!form.subscribedAt) return setError('Indique a data de subscrição do certificado, ou deixe a série em branco.');
+            payload.details = { series: form.series };
+            payload.opened_at = form.subscribedAt;
         }
         if (isProperty) {
             try {
@@ -159,7 +193,7 @@ const AssetDialog = ({ open, onClose, asset }) => {
                     </Grid>
                     <Grid item xs={12} sm={6}>
                         <TextField fullWidth label="Nome" value={form.name} onChange={set('name')} inputProps={{ maxLength: 100 }}
-                            placeholder={isDeposit ? 'Ex.: DP 12 meses Banco X' : isProperty ? 'Ex.: Apartamento Lisboa' : 'Ex.: Conta poupança'} />
+                            placeholder={isDeposit ? 'Ex.: DP 12 meses Banco X' : isProperty ? 'Ex.: Apartamento Lisboa' : isCrypto ? 'Ex.: Bitcoin' : 'Ex.: Conta poupança'} />
                     </Grid>
 
                     {isDeposit && (
@@ -192,7 +226,39 @@ const AssetDialog = ({ open, onClose, asset }) => {
                         </>
                     )}
 
-                    {!isDeposit && !editing && (
+                    {isCrypto && (
+                        <>
+                            <Grid item xs={12} sm={6}>
+                                <TextField fullWidth label="Símbolo da moeda" value={form.ticker} onChange={set('ticker')} disabled={editing}
+                                    inputProps={{ maxLength: 14 }} placeholder="Ex.: BTC, ETH"
+                                    helperText={editing ? 'A moeda não pode ser alterada' : 'O símbolo no Yahoo Finance, com preço em EUR'} />
+                            </Grid>
+                            {!editing && (
+                                <>
+                                    <Grid item xs={12} sm={6}>
+                                        <TextField fullWidth label="Quantidade" value={form.quantity} onChange={set('quantity')} inputMode="decimal"
+                                            helperText="Quantas moedas tem, por exemplo 0,5" />
+                                    </Grid>
+                                    <Grid item xs={12} sm={6}>
+                                        <TextField fullWidth label="Custo total (€) (opcional)" value={form.value} onChange={set('value')} inputMode="decimal"
+                                            helperText="Quanto pagou por essa quantidade" />
+                                    </Grid>
+                                    <Grid item xs={12} sm={6}>
+                                        <TextField fullWidth type="date" label="Data da compra" value={form.valueDate} onChange={set('valueDate')}
+                                            InputLabelProps={{ shrink: true }} inputProps={{ max: todayISO() }} />
+                                    </Grid>
+                                </>
+                            )}
+                            <Grid item xs={12}>
+                                <Typography variant="caption" color="text.secondary">
+                                    O valor é a quantidade × o preço atual no Yahoo Finance. Registe as compras e vendas seguintes em "Movimentos".
+                                    As criptomoedas não entram no IRS nem no simulador de vendas.
+                                </Typography>
+                            </Grid>
+                        </>
+                    )}
+
+                    {!isDeposit && !isCrypto && !editing && (
                         <>
                             <Grid item xs={12} sm={6}>
                                 <TextField fullWidth label={isProperty ? 'Valor de mercado atual (€)' : 'Valor atual (€)'} value={form.value} onChange={set('value')} inputMode="decimal"
@@ -201,6 +267,30 @@ const AssetDialog = ({ open, onClose, asset }) => {
                             <Grid item xs={12} sm={6}>
                                 <TextField fullWidth type="date" label="Data do valor" value={form.valueDate} onChange={set('valueDate')}
                                     InputLabelProps={{ shrink: true }} inputProps={{ max: todayISO() }} />
+                            </Grid>
+                        </>
+                    )}
+
+                    {isCertificate && (
+                        <>
+                            <Grid item xs={12}><Divider textAlign="left"><Typography variant="caption" color="text.secondary">Estimativa entre atualizações (opcional)</Typography></Divider></Grid>
+                            <Grid item xs={12} sm={6}>
+                                <TextField select fullWidth label="Série" value={form.series} onChange={set('series')}
+                                    helperText="Como consta no AforroNet">
+                                    <MenuItem value=""><em>Não indicar</em></MenuItem>
+                                    {CERTIFICATE_SERIES.map((s) => <MenuItem key={s.value} value={s.value}>{s.label}</MenuItem>)}
+                                </TextField>
+                            </Grid>
+                            <Grid item xs={12} sm={6}>
+                                <TextField fullWidth type="date" label="Data de subscrição" value={form.subscribedAt} onChange={set('subscribedAt')}
+                                    InputLabelProps={{ shrink: true }} inputProps={{ max: todayISO() }} disabled={!form.series} />
+                            </Grid>
+                            <Grid item xs={12}>
+                                <Typography variant="caption" color="text.secondary">
+                                    O património conta sempre o valor que indicar do AforroNet. Com a série e a data de subscrição, a
+                                    aplicação mostra ao lado uma estimativa do valor atual, com os juros dos trimestres entretanto
+                                    capitalizados. Registe um ativo por subscrição: cada uma tem as suas datas e o seu prémio de permanência.
+                                </Typography>
                             </Grid>
                         </>
                     )}

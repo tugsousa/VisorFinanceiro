@@ -88,6 +88,62 @@ export const initialAssignments = (holdings) => {
     return result;
 };
 
+/**
+ * The choice of group of each asset kept outside the brokers, by asset id: the saved one, or none. Unlike
+ * the holdings, these start in no group and get no suggestion: counting one in a portfolio is a choice.
+ */
+export const initialOtherChoices = (otherAssets) => {
+    const result = {};
+    (otherAssets || []).forEach(a => { result[a.id] = a.group_id || ''; });
+    return result;
+};
+
+/** Whether the choices differ from what is saved. */
+export const otherChoicesChanged = (otherAssets, choices) =>
+    (otherAssets || []).some(a => (choices[a.id] || null) !== (a.group_id || null));
+
+/** The assets outside the brokers that are in a group, as the API takes them. */
+export const otherAssetsPayload = (otherAssets, choices) => (otherAssets || [])
+    .filter(a => choices[a.id])
+    .map(a => ({ other_asset_id: a.id, group_id: choices[a.id] }));
+
+/** "2 ativos", "1 ativo + 1 fora da corretora", "2 fora da corretora": what a group holds, in words. */
+export const groupContentsLabel = (holdingsCount, otherAssetsCount) => {
+    const holdings = holdingsCount === 1 ? '1 ativo' : `${holdingsCount} ativos`;
+    if (!otherAssetsCount) return holdings;
+    const others = `${otherAssetsCount} fora da corretora`;
+    return holdingsCount > 0 ? `${holdings} + ${others}` : others;
+};
+
+/** Why part of a group's excess can't be sold, in words. */
+export const UNSOLD_REASON_LABELS = {
+    outside_broker: 'está em ativos fora da corretora, que não se vendem aqui',
+    no_price: 'está em ativos sem preço de mercado',
+    under_one_share: 'é menos do que uma unidade',
+};
+
+/**
+ * What the rebalancing plan has to say before its tables: 'on_target' when no group is over its target,
+ * 'nothing_sellable' when there's an excess but nothing of it can be sold, 'plan' otherwise.
+ */
+export const rebalanceOutcome = (plan) => {
+    const lines = plan?.lines || [];
+    if (!lines.some(l => l.excess_eur > 0)) return 'on_target';
+    if ((plan.sales || []).length === 0 && !(plan.cash_used_eur > 0)) return 'nothing_sellable';
+    return 'plan';
+};
+
+/** The groups whose excess couldn't all be sold, with how much is left and why. */
+export const unsoldLines = (plan) => (plan?.lines || [])
+    .filter(l => l.unsold_eur > 0)
+    .map(l => ({ groupId: l.group_id, name: l.name, amount: l.unsold_eur, reason: UNSOLD_REASON_LABELS[l.unsold_reason] || '' }));
+
+/** Whether the tax of the sales together differs from the sum of each sale's own, which needs explaining. */
+export const taxDiffersFromSum = (plan) => {
+    const sum = (plan?.sales || []).reduce((total, s) => total + (s.marginal_tax || 0), 0);
+    return Math.abs(sum - (plan?.total_tax_eur || 0)) > 0.005;
+};
+
 export const groupColor = (groups, groupId) => {
     const index = (groups || []).findIndex(g => g.id === groupId);
     if (index < 0) return '#9e9e9e';

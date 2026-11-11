@@ -58,8 +58,11 @@ type UploadService interface {
 	GetAllocation(userID int64, portfolioID int64) (*AllocationStatus, error)
 	SaveAllocationGroups(userID int64, portfolioID int64, groups []AllocationGroup) ([]AllocationGroup, error)
 	SaveAllocationAssignments(userID int64, portfolioID int64, assignments []AllocationAssignment) error
+	SaveAllocationAssignmentsAndOtherAssets(userID int64, portfolioID int64, assignments []AllocationAssignment, otherAssets []AllocationOtherAssignment) error
 	SaveAllocationSettings(userID int64, portfolioID int64, settings AllocationSettings) error
 	PlanAllocationDeposit(userID int64, portfolioID int64, amountEUR float64) (*DepositPlan, error)
+	// PlanAllocationRebalance simulates the sales that bring the groups back to their targets (allocation_rebalance.go).
+	PlanAllocationRebalance(userID int64, portfolioID int64) (*RebalancePlan, error)
 	NetWorthService // net_worth.go
 }
 
@@ -87,6 +90,8 @@ type AnnouncedDividend struct {
 type PriceService interface {
 	GetCurrentPrices(isins []string) (map[string]PriceInfo, error)
 	GetHistoricalPrices(ticker string) (PriceMap, string, error)
+	// GetTickerPrice returns the current price of a Yahoo ticker and its currency, without storing it.
+	GetTickerPrice(ticker string) (float64, string, error)
 	EnsureBenchmarkData() error
 	// GetLastYearDividends sums the last 12 months of dividends per share by month of the ex-date.
 	GetLastYearDividends(ticker string) (map[time.Month]float64, string, error)

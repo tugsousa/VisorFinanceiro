@@ -1,0 +1,429 @@
+{
+  "note": "Base rates of Certificados de Aforro published by IGCP, gross, in % per year, by the month they are in force. \"official\" rates were read on an IGCP page or table; \"derived\" ones follow by arithmetic from official figures. A month that is not here has no known rate: April 2025 is left out because its rate was found on a news site only, and no official monthly rate was found before December 2024. Add a month by adding its line; the estimate of a certificate stops at the first quarter whose month is missing.",
+  "updated": "2026-11",
+  "series": {
+    "D": {
+      "name": "Série D",
+      "term_years": 10,
+      "from": "2015-02-02",
+      "to": "2017-10-27",
+      "rules_source": "https://www.igcp.pt/en/term-sheet-savings-certificates-series-d",
+      "bonus": [
+        {
+          "from_year": 2,
+          "to_year": 5,
+          "pp": 0.5
+        },
+        {
+          "from_year": 6,
+          "to_year": 10,
+          "pp": 1
+        }
+      ],
+      "base_rates": {
+        "2024-12": {
+          "rate": 3.5,
+          "kind": "derived",
+          "source": "Series F base rate of the month plus 1 point: both come from the same Euribor average (E3 for F, E3 + 1% for this series), capped 1 point apart"
+        },
+        "2025-01": {
+          "rate": 3.5,
+          "kind": "official",
+          "source": "Same base rate as series E: https://www.igcp.pt/sites/default/files/2025-02/Taxa_Anual_E_PP.pdf"
+        },
+        "2025-02": {
+          "rate": 3.5,
+          "kind": "official",
+          "source": "Same base rate as series E: https://www.igcp.pt/sites/default/files/2025-02/Taxa_Anual_E_PP.pdf"
+        },
+        "2025-03": {
+          "rate": 3.5,
+          "kind": "official",
+          "source": "Same base rate as series E: https://www.igcp.pt/sites/default/files/2025-02/Taxa_Anual_E_PP.pdf"
+        },
+        "2025-05": {
+          "rate": 3.216,
+          "kind": "derived",
+          "source": "Series F base rate of the month plus 1 point: both come from the same Euribor average (E3 for F, E3 + 1% for this series), capped 1 point apart"
+        },
+        "2025-06": {
+          "rate": 3.07,
+          "kind": "derived",
+          "source": "Series F base rate of the month plus 1 point: both come from the same Euribor average (E3 for F, E3 + 1% for this series), capped 1 point apart"
+        },
+        "2025-07": {
+          "rate": 3.011,
+          "kind": "derived",
+          "source": "Series F base rate of the month plus 1 point: both come from the same Euribor average (E3 for F, E3 + 1% for this series), capped 1 point apart"
+        },
+        "2025-08": {
+          "rate": 2.987,
+          "kind": "derived",
+          "source": "Series F base rate of the month plus 1 point: both come from the same Euribor average (E3 for F, E3 + 1% for this series), capped 1 point apart"
+        },
+        "2025-09": {
+          "rate": 3.028,
+          "kind": "derived",
+          "source": "Series F base rate of the month plus 1 point: both come from the same Euribor average (E3 for F, E3 + 1% for this series), capped 1 point apart"
+        },
+        "2025-10": {
+          "rate": 3.009,
+          "kind": "derived",
+          "source": "Series F base rate of the month plus 1 point: both come from the same Euribor average (E3 for F, E3 + 1% for this series), capped 1 point apart"
+        },
+        "2025-11": {
+          "rate": 3.044,
+          "kind": "derived",
+          "source": "Series F base rate of the month plus 1 point: both come from the same Euribor average (E3 for F, E3 + 1% for this series), capped 1 point apart"
+        },
+        "2025-12": {
+          "rate": 3.057,
+          "kind": "derived",
+          "source": "Series F base rate of the month plus 1 point: both come from the same Euribor average (E3 for F, E3 + 1% for this series), capped 1 point apart"
+        },
+        "2026-01": {
+          "rate": 3.046,
+          "kind": "derived",
+          "source": "Series F base rate of the month plus 1 point: both come from the same Euribor average (E3 for F, E3 + 1% for this series), capped 1 point apart"
+        },
+        "2026-02": {
+          "rate": 3.031,
+          "kind": "derived",
+          "source": "Series F base rate of the month plus 1 point: both come from the same Euribor average (E3 for F, E3 + 1% for this series), capped 1 point apart"
+        },
+        "2026-03": {
+          "rate": 3.012,
+          "kind": "derived",
+          "source": "Series F base rate of the month plus 1 point: both come from the same Euribor average (E3 for F, E3 + 1% for this series), capped 1 point apart"
+        },
+        "2026-04": {
+          "rate": 3.138,
+          "kind": "derived",
+          "source": "Series F base rate of the month plus 1 point: both come from the same Euribor average (E3 for F, E3 + 1% for this series), capped 1 point apart"
+        },
+        "2026-05": {
+          "rate": 3.195,
+          "kind": "derived",
+          "source": "Series F base rate of the month plus 1 point: both come from the same Euribor average (E3 for F, E3 + 1% for this series), capped 1 point apart"
+        },
+        "2026-06": {
+          "rate": 3.215,
+          "kind": "official",
+          "source": "https://www.igcp.pt/sites/default/files/2026-07/Taxa_Anual_D%2BPP.pdf"
+        },
+        "2026-07": {
+          "rate": 3.356,
+          "kind": "official",
+          "source": "https://www.igcp.pt/sites/default/files/2026-07/Taxa_Anual_D%2BPP.pdf"
+        },
+        "2026-08": {
+          "rate": 3.474,
+          "kind": "official",
+          "source": "https://www.igcp.pt/sites/default/files/2026-07/Taxa_Anual_D%2BPP.pdf"
+        },
+        "2026-09": {
+          "rate": 3.5,
+          "kind": "derived",
+          "source": "Series F base rate of the month plus 1 point: both come from the same Euribor average (E3 for F, E3 + 1% for this series), capped 1 point apart"
+        },
+        "2026-10": {
+          "rate": 3.5,
+          "kind": "derived",
+          "source": "Series F base rate of the month plus 1 point: both come from the same Euribor average (E3 for F, E3 + 1% for this series), capped 1 point apart"
+        },
+        "2026-11": {
+          "rate": 3.5,
+          "kind": "derived",
+          "source": "Series F base rate of the month plus 1 point: both come from the same Euribor average (E3 for F, E3 + 1% for this series), capped 1 point apart"
+        }
+      }
+    },
+    "E": {
+      "name": "Série E",
+      "term_years": 10,
+      "from": "2017-10-30",
+      "to": "2023-06-02",
+      "rules_source": "https://www.igcp.pt/en/term-sheet-savings-certificates-series-e",
+      "bonus": [
+        {
+          "from_year": 2,
+          "to_year": 5,
+          "pp": 0.5
+        },
+        {
+          "from_year": 6,
+          "to_year": 10,
+          "pp": 1
+        }
+      ],
+      "base_rates": {
+        "2024-12": {
+          "rate": 3.5,
+          "kind": "derived",
+          "source": "Series F base rate of the month plus 1 point: both come from the same Euribor average (E3 for F, E3 + 1% for this series), capped 1 point apart"
+        },
+        "2025-01": {
+          "rate": 3.5,
+          "kind": "official",
+          "source": "https://www.igcp.pt/sites/default/files/2025-02/Taxa_Anual_E_PP.pdf"
+        },
+        "2025-02": {
+          "rate": 3.5,
+          "kind": "official",
+          "source": "https://www.igcp.pt/sites/default/files/2025-02/Taxa_Anual_E_PP.pdf"
+        },
+        "2025-03": {
+          "rate": 3.5,
+          "kind": "official",
+          "source": "https://www.igcp.pt/sites/default/files/2025-02/Taxa_Anual_E_PP.pdf"
+        },
+        "2025-05": {
+          "rate": 3.216,
+          "kind": "derived",
+          "source": "Series F base rate of the month plus 1 point: both come from the same Euribor average (E3 for F, E3 + 1% for this series), capped 1 point apart"
+        },
+        "2025-06": {
+          "rate": 3.07,
+          "kind": "derived",
+          "source": "Series F base rate of the month plus 1 point: both come from the same Euribor average (E3 for F, E3 + 1% for this series), capped 1 point apart"
+        },
+        "2025-07": {
+          "rate": 3.011,
+          "kind": "derived",
+          "source": "Series F base rate of the month plus 1 point: both come from the same Euribor average (E3 for F, E3 + 1% for this series), capped 1 point apart"
+        },
+        "2025-08": {
+          "rate": 2.987,
+          "kind": "derived",
+          "source": "Series F base rate of the month plus 1 point: both come from the same Euribor average (E3 for F, E3 + 1% for this series), capped 1 point apart"
+        },
+        "2025-09": {
+          "rate": 3.028,
+          "kind": "derived",
+          "source": "Series F base rate of the month plus 1 point: both come from the same Euribor average (E3 for F, E3 + 1% for this series), capped 1 point apart"
+        },
+        "2025-10": {
+          "rate": 3.009,
+          "kind": "derived",
+          "source": "Series F base rate of the month plus 1 point: both come from the same Euribor average (E3 for F, E3 + 1% for this series), capped 1 point apart"
+        },
+        "2025-11": {
+          "rate": 3.044,
+          "kind": "derived",
+          "source": "Series F base rate of the month plus 1 point: both come from the same Euribor average (E3 for F, E3 + 1% for this series), capped 1 point apart"
+        },
+        "2025-12": {
+          "rate": 3.057,
+          "kind": "derived",
+          "source": "Series F base rate of the month plus 1 point: both come from the same Euribor average (E3 for F, E3 + 1% for this series), capped 1 point apart"
+        },
+        "2026-01": {
+          "rate": 3.046,
+          "kind": "derived",
+          "source": "Series F base rate of the month plus 1 point: both come from the same Euribor average (E3 for F, E3 + 1% for this series), capped 1 point apart"
+        },
+        "2026-02": {
+          "rate": 3.031,
+          "kind": "derived",
+          "source": "Series F base rate of the month plus 1 point: both come from the same Euribor average (E3 for F, E3 + 1% for this series), capped 1 point apart"
+        },
+        "2026-03": {
+          "rate": 3.012,
+          "kind": "derived",
+          "source": "Series F base rate of the month plus 1 point: both come from the same Euribor average (E3 for F, E3 + 1% for this series), capped 1 point apart"
+        },
+        "2026-04": {
+          "rate": 3.138,
+          "kind": "derived",
+          "source": "Series F base rate of the month plus 1 point: both come from the same Euribor average (E3 for F, E3 + 1% for this series), capped 1 point apart"
+        },
+        "2026-05": {
+          "rate": 3.195,
+          "kind": "derived",
+          "source": "Series F base rate of the month plus 1 point: both come from the same Euribor average (E3 for F, E3 + 1% for this series), capped 1 point apart"
+        },
+        "2026-06": {
+          "rate": 3.215,
+          "kind": "official",
+          "source": "https://www.igcp.pt/sites/default/files/2026-07/Taxa_Anual_E%2BPP.pdf"
+        },
+        "2026-07": {
+          "rate": 3.356,
+          "kind": "official",
+          "source": "https://www.igcp.pt/sites/default/files/2026-07/Taxa_Anual_E%2BPP.pdf"
+        },
+        "2026-08": {
+          "rate": 3.474,
+          "kind": "official",
+          "source": "https://www.igcp.pt/sites/default/files/2026-07/Taxa_Anual_E%2BPP.pdf"
+        },
+        "2026-09": {
+          "rate": 3.5,
+          "kind": "derived",
+          "source": "Series F base rate of the month plus 1 point: both come from the same Euribor average (E3 for F, E3 + 1% for this series), capped 1 point apart"
+        },
+        "2026-10": {
+          "rate": 3.5,
+          "kind": "derived",
+          "source": "Series F base rate of the month plus 1 point: both come from the same Euribor average (E3 for F, E3 + 1% for this series), capped 1 point apart"
+        },
+        "2026-11": {
+          "rate": 3.5,
+          "kind": "derived",
+          "source": "Series F base rate of the month plus 1 point: both come from the same Euribor average (E3 for F, E3 + 1% for this series), capped 1 point apart"
+        }
+      }
+    },
+    "F": {
+      "name": "Série F",
+      "term_years": 15,
+      "from": "2023-06-05",
+      "to": "",
+      "rules_source": "Portaria 149-A/2023: https://www.igcp.pt/sites/default/files/2024-11/0000200003.pdf",
+      "bonus": [
+        {
+          "from_year": 2,
+          "to_year": 5,
+          "pp": 0.25
+        },
+        {
+          "from_year": 6,
+          "to_year": 9,
+          "pp": 0.5
+        },
+        {
+          "from_year": 10,
+          "to_year": 11,
+          "pp": 1
+        },
+        {
+          "from_year": 12,
+          "to_year": 13,
+          "pp": 1.5
+        },
+        {
+          "from_year": 14,
+          "to_year": 15,
+          "pp": 1.75
+        }
+      ],
+      "base_rates": {
+        "2024-12": {
+          "rate": 2.5,
+          "kind": "official",
+          "source": "https://www.igcp.pt/en/noticias (monthly notice \"The interest rate saving certificates, series A, B, D, E and F\")"
+        },
+        "2025-01": {
+          "rate": 2.5,
+          "kind": "official",
+          "source": "https://www.igcp.pt/en/noticias (monthly notice \"The interest rate saving certificates, series A, B, D, E and F\")"
+        },
+        "2025-02": {
+          "rate": 2.5,
+          "kind": "derived",
+          "source": "Series E was at its 3.5% cap that month (https://www.igcp.pt/sites/default/files/2025-02/Taxa_Anual_E_PP.pdf), so the three-month Euribor average was at least 2.5%, the cap of series F"
+        },
+        "2025-03": {
+          "rate": 2.5,
+          "kind": "derived",
+          "source": "Series E was at its 3.5% cap that month (https://www.igcp.pt/sites/default/files/2025-02/Taxa_Anual_E_PP.pdf), so the three-month Euribor average was at least 2.5%, the cap of series F"
+        },
+        "2025-05": {
+          "rate": 2.216,
+          "kind": "official",
+          "source": "https://www.igcp.pt/en/noticias (monthly notice \"The interest rate saving certificates, series A, B, D, E and F\")"
+        },
+        "2025-06": {
+          "rate": 2.07,
+          "kind": "official",
+          "source": "https://www.igcp.pt/en/noticias (monthly notice \"The interest rate saving certificates, series A, B, D, E and F\")"
+        },
+        "2025-07": {
+          "rate": 2.011,
+          "kind": "official",
+          "source": "https://www.igcp.pt/en/noticias (monthly notice \"The interest rate saving certificates, series A, B, D, E and F\")"
+        },
+        "2025-08": {
+          "rate": 1.987,
+          "kind": "official",
+          "source": "https://www.igcp.pt/en/noticias (monthly notice \"The interest rate saving certificates, series A, B, D, E and F\")"
+        },
+        "2025-09": {
+          "rate": 2.028,
+          "kind": "official",
+          "source": "https://www.igcp.pt/en/noticias (monthly notice \"The interest rate saving certificates, series A, B, D, E and F\")"
+        },
+        "2025-10": {
+          "rate": 2.009,
+          "kind": "official",
+          "source": "https://www.igcp.pt/en/noticias (monthly notice \"The interest rate saving certificates, series A, B, D, E and F\")"
+        },
+        "2025-11": {
+          "rate": 2.044,
+          "kind": "official",
+          "source": "https://www.igcp.pt/en/noticias (monthly notice \"The interest rate saving certificates, series A, B, D, E and F\")"
+        },
+        "2025-12": {
+          "rate": 2.057,
+          "kind": "official",
+          "source": "https://www.igcp.pt/en/noticias (monthly notice \"The interest rate saving certificates, series A, B, D, E and F\")"
+        },
+        "2026-01": {
+          "rate": 2.046,
+          "kind": "official",
+          "source": "https://www.igcp.pt/en/noticias (monthly notice \"The interest rate saving certificates, series A, B, D, E and F\")"
+        },
+        "2026-02": {
+          "rate": 2.031,
+          "kind": "official",
+          "source": "https://www.igcp.pt/en/noticias (monthly notice \"The interest rate saving certificates, series A, B, D, E and F\")"
+        },
+        "2026-03": {
+          "rate": 2.012,
+          "kind": "official",
+          "source": "https://www.igcp.pt/en/noticias (monthly notice \"The interest rate saving certificates, series A, B, D, E and F\")"
+        },
+        "2026-04": {
+          "rate": 2.138,
+          "kind": "official",
+          "source": "https://www.igcp.pt/en/noticias (monthly notice \"The interest rate saving certificates, series A, B, D, E and F\")"
+        },
+        "2026-05": {
+          "rate": 2.195,
+          "kind": "official",
+          "source": "https://www.igcp.pt/en/noticias (monthly notice \"The interest rate saving certificates, series A, B, D, E and F\")"
+        },
+        "2026-06": {
+          "rate": 2.215,
+          "kind": "official",
+          "source": "https://www.igcp.pt/en/noticias (monthly notice \"The interest rate saving certificates, series A, B, D, E and F\")"
+        },
+        "2026-07": {
+          "rate": 2.356,
+          "kind": "official",
+          "source": "https://www.igcp.pt/en/noticias (monthly notice \"The interest rate saving certificates, series A, B, D, E and F\")"
+        },
+        "2026-08": {
+          "rate": 2.474,
+          "kind": "official",
+          "source": "https://www.igcp.pt/en/noticias (monthly notice \"The interest rate saving certificates, series A, B, D, E and F\")"
+        },
+        "2026-09": {
+          "rate": 2.5,
+          "kind": "official",
+          "source": "https://www.igcp.pt/en/noticias (monthly notice \"The interest rate saving certificates, series A, B, D, E and F\")"
+        },
+        "2026-10": {
+          "rate": 2.5,
+          "kind": "official",
+          "source": "https://www.igcp.pt/en/noticias (monthly notice \"The interest rate saving certificates, series A, B, D, E and F\")"
+        },
+        "2026-11": {
+          "rate": 2.5,
+          "kind": "official",
+          "source": "https://www.igcp.pt/en/noticias (monthly notice \"The interest rate saving certificates, series A, B, D, E and F\")"
+        }
+      }
+    }
+  }
+}

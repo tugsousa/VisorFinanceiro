@@ -11,6 +11,7 @@ import AssignmentsEditor from '../components/AssignmentsEditor';
 import DriftTable from '../components/DriftTable';
 import AllocationDoughnut from '../components/AllocationDoughnut';
 import DepositCalculator from '../components/DepositCalculator';
+import RebalanceCalculator from '../components/RebalanceCalculator';
 import { formatCurrency } from '../../../lib/utils/formatUtils';
 
 /**
@@ -47,7 +48,12 @@ export default function AllocationTab({ portfolioId }) {
                         title="Valor considerado"
                         value={status.total_eur}
                         colorOverride="text.primary"
-                        tooltipText="Soma dos ativos com grupo, mais a liquidez se um grupo a incluir. É a base das percentagens."
+                        tooltipText="Soma dos ativos com grupo, mais a liquidez se um grupo a incluir e os ativos fora da corretora que puseste num grupo. É a base das percentagens."
+                        subValue={status.other_assets_eur > 0 ? (
+                            <Typography variant="caption" color="text.secondary">
+                                {formatCurrency(status.other_assets_eur)} fora da corretora
+                            </Typography>
+                        ) : null}
                     />
                 </Grid>
                 <Grid item xs={6} md={3}>
@@ -101,6 +107,8 @@ export default function AllocationTab({ portfolioId }) {
             </Paper>
 
             <DepositCalculator portfolioId={portfolioId} status={status} />
+
+            <RebalanceCalculator portfolioId={portfolioId} status={status} />
 
             <AssignmentsEditor portfolioId={portfolioId} status={status} />
 

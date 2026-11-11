@@ -138,6 +138,7 @@ func configureDesktop(dataDir string) {
 		"DATABASE_PATH":                  filepath.Join(dataDir, "visorfinanceiro.db"),
 		"COUNTRY_DATA_PATH":              dataFiles["country.json"],
 		"DIVIDEND_SOURCE_OVERRIDES_PATH": dataFiles["dividend_source_overrides.json"],
+		"AFORRO_RATES_PATH":              dataFiles["aforro_rates.json"],
 		"JWT_SECRET":                     randomHex(),
 		"CSRF_AUTH_KEY":                  randomHex(),
 		// An app left open must not end up signed out: there's no sign-in page to go back to.

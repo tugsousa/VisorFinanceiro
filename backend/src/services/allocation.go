@@ -35,6 +35,28 @@ type AllocationAssignment struct {
 	Preferred bool   `json:"preferred"`
 }
 
+// AllocationOtherAssignment counts an asset kept outside the brokers (an other asset of the net worth) in a
+// group of this portfolio.
+type AllocationOtherAssignment struct {
+	OtherAssetID int64 `json:"other_asset_id"`
+	GroupID      int64 `json:"group_id"`
+}
+
+// AllocationOtherAsset is an asset the user keeps outside the brokers, with the group it counts in, if any.
+// The asset is the user's, not the portfolio's: putting it in a group only adds its value to that group's
+// share. ValueEUR is what the net worth counts (net of tax for a term deposit, the equity for property).
+type AllocationOtherAsset struct {
+	ID                int64   `json:"id"`
+	Type              string  `json:"type"`
+	Name              string  `json:"name"`
+	ValueEUR          float64 `json:"value_eur"`
+	GroupID           *int64  `json:"group_id"`
+	LastValuationDate string  `json:"last_valuation_date,omitempty"`
+	// NotCounted says why an asset in a group adds nothing to it: "closed", or "no_value" when its value is
+	// zero or negative (a mortgage above the property's value).
+	NotCounted string `json:"not_counted,omitempty"`
+}
+
 // AllocationSettings are the allocation settings of a portfolio.
 type AllocationSettings struct {
 	TolerancePP float64 `json:"tolerance_pp"`
@@ -67,6 +89,10 @@ type GroupDrift struct {
 	IncludesCash  bool    `json:"includes_cash"`
 	CashEUR       float64 `json:"cash_eur,omitempty"`
 	HoldingsCount int     `json:"holdings_count"`
+	// OtherAssetsEUR is the part of the group's value kept outside the brokers, which can't be bought or sold
+	// there; OtherAssetsCount is how many assets it is.
+	OtherAssetsEUR   float64 `json:"other_assets_eur,omitempty"`
+	OtherAssetsCount int     `json:"other_assets_count,omitempty"`
 }
 
 // AllocationStatus is the target allocation of a portfolio and how far the portfolio is from it.
@@ -81,8 +107,13 @@ type AllocationStatus struct {
 	// Unassigned are the holdings in no group: they aren't part of TotalEUR.
 	Unassigned         []AllocationHolding `json:"unassigned"`
 	UnassignedValueEUR float64             `json:"unassigned_value_eur"`
+	// OtherAssets are the user's assets outside the brokers that can count in a group: those not closed, and
+	// any that is in a group. Counting one is a choice, so those in no group aren't "unassigned".
+	// OtherAssetsEUR is the part of TotalEUR they make up.
+	OtherAssets    []AllocationOtherAsset `json:"other_assets"`
+	OtherAssetsEUR float64                `json:"other_assets_eur"`
 	// TotalEUR is the value the percentages are of: the holdings in a group, plus the cash if a group
-	// includes it.
+	// includes it, plus the other assets in a group.
 	TotalEUR             float64 `json:"total_eur"`
 	CashEUR              float64 `json:"cash_eur"`
 	CashIncluded         bool    `json:"cash_included"`
@@ -108,6 +139,10 @@ type DepositPlanLine struct {
 	CostEUR      float64       `json:"cost_eur"`
 	// LeftoverEUR is the part of the amount that doesn't buy a whole share (all of it, with no asset).
 	LeftoverEUR float64 `json:"leftover_eur"`
+	// OutsideBroker is true when the group has nothing to buy at the broker but holds assets outside it (named
+	// in OutsideBrokerAssets): its amount is to be added to those, and stays in LeftoverEUR.
+	OutsideBroker       bool     `json:"outside_broker,omitempty"`
+	OutsideBrokerAssets []string `json:"outside_broker_assets,omitempty"`
 }
 
 // DepositPlan splits a deposit across the groups, buying only.
@@ -171,6 +206,66 @@ func loadAllocationAssignments(portfolioID int64) ([]AllocationAssignment, error
 		assignments = append(assignments, a)
 	}
 	return assignments, rows.Err()
+}
+
+// loadAllocationOtherAssignments reads the group of each other asset counted in the portfolio, by asset ID.
+func loadAllocationOtherAssignments(portfolioID int64) (map[int64]int64, error) {
+	rows, err := database.DB.Query(`SELECT other_asset_id, group_id FROM allocation_other_assignments
+		WHERE portfolio_id = ?`, portfolioID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read the other assets of the allocation: %w", err)
+	}
+	defer rows.Close()
+	groupOf := map[int64]int64{}
+	for rows.Next() {
+		var assetID, groupID int64
+		if err := rows.Scan(&assetID, &groupID); err != nil {
+			return nil, fmt.Errorf("failed to read the other assets of the allocation: %w", err)
+		}
+		groupOf[assetID] = groupID
+	}
+	return groupOf, rows.Err()
+}
+
+// allocationOtherAssets lists the user's other assets that can count in the portfolio's groups, with the
+// group of those that do. They're valued as on the net worth page (ListOtherAssets), the only place that
+// values them. A closed asset is listed only while it's in a group, so that the user can take it out.
+func (s *uploadServiceImpl) allocationOtherAssets(userID, portfolioID int64) ([]AllocationOtherAsset, error) {
+	groupOf, err := loadAllocationOtherAssignments(portfolioID)
+	if err != nil {
+		return nil, err
+	}
+	var count int
+	if err := database.DB.QueryRow("SELECT COUNT(*) FROM other_assets WHERE user_id = ?", userID).Scan(&count); err != nil {
+		return nil, fmt.Errorf("failed to read the other assets: %w", err)
+	}
+	result := []AllocationOtherAsset{}
+	if count == 0 {
+		return result, nil
+	}
+	assets, err := s.ListOtherAssets(userID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to value the other assets: %w", err)
+	}
+	todayText := today().Format("2006-01-02")
+	for _, a := range assets {
+		item := AllocationOtherAsset{ID: a.ID, Type: a.Type, Name: a.Name, ValueEUR: a.ValueEUR, LastValuationDate: a.LastValuationDate}
+		closed := a.ClosedAt != "" && a.ClosedAt <= todayText
+		if groupID, ok := groupOf[a.ID]; ok {
+			item.GroupID = &groupID
+		} else if closed {
+			continue
+		}
+		switch {
+		case closed:
+			item.NotCounted = "closed"
+		case !(a.ValueEUR > 0):
+			item.NotCounted = "no_value"
+		}
+		result = append(result, item)
+	}
+	sort.SliceStable(result, func(i, j int) bool { return result[i].ValueEUR > result[j].ValueEUR })
+	return result, nil
 }
 
 func loadAllocationTolerance(portfolioID int64) (float64, error) {
@@ -279,9 +374,27 @@ func (s *uploadServiceImpl) GetAllocation(userID, portfolioID int64) (*Allocatio
 	}
 	status.UnassignedValueEUR = allocRound2(status.UnassignedValueEUR)
 
+	// The assets outside the brokers that the user put in a group add their value to it. Those in no group
+	// are simply not part of this portfolio's allocation.
+	if status.OtherAssets, err = s.allocationOtherAssets(userID, portfolioID); err != nil {
+		return nil, err
+	}
+	otherValues, otherCounts := map[int64]float64{}, map[int64]int{}
+	for _, a := range status.OtherAssets {
+		if a.GroupID == nil {
+			continue
+		}
+		otherCounts[*a.GroupID]++
+		if a.NotCounted == "" {
+			otherValues[*a.GroupID] += a.ValueEUR
+			status.OtherAssetsEUR += a.ValueEUR
+		}
+	}
+	status.OtherAssetsEUR = allocRound2(status.OtherAssetsEUR)
+
 	groupValues := make([]allocation.GroupValue, len(groups))
 	for i, g := range groups {
-		value := values[g.ID]
+		value := values[g.ID] + otherValues[g.ID]
 		if g.IncludesCash {
 			value += cash
 			status.CashIncluded = true
@@ -292,7 +405,10 @@ func (s *uploadServiceImpl) GetAllocation(userID, portfolioID int64) (*Allocatio
 
 	for i, d := range allocation.ComputeDrift(groupValues, tolerance) {
 		g := groups[i]
-		item := GroupDrift{Drift: d, Color: g.Color, IncludesCash: g.IncludesCash, HoldingsCount: counts[g.ID]}
+		item := GroupDrift{
+			Drift: d, Color: g.Color, IncludesCash: g.IncludesCash, HoldingsCount: counts[g.ID],
+			OtherAssetsEUR: allocRound2(otherValues[g.ID]), OtherAssetsCount: otherCounts[g.ID],
+		}
 		if g.IncludesCash {
 			item.CashEUR = allocRound2(cash)
 		}
@@ -385,8 +501,24 @@ func (s *uploadServiceImpl) SaveAllocationGroups(userID, portfolioID int64, grou
 	return loadAllocationGroups(portfolioID)
 }
 
-// SaveAllocationAssignments replaces the group of every holding of the portfolio with the ones given.
+// SaveAllocationAssignments replaces the group of every holding of the portfolio with the ones given. The
+// other assets counted in the groups are left as they are.
 func (s *uploadServiceImpl) SaveAllocationAssignments(userID, portfolioID int64, assignments []AllocationAssignment) error {
+	return saveAllocationAssignments(userID, portfolioID, assignments, nil)
+}
+
+// SaveAllocationAssignmentsAndOtherAssets replaces, in one transaction, the group of every holding of the
+// portfolio and the other assets counted in its groups. Every other asset must be the user's.
+func (s *uploadServiceImpl) SaveAllocationAssignmentsAndOtherAssets(userID, portfolioID int64, assignments []AllocationAssignment, otherAssets []AllocationOtherAssignment) error {
+	if otherAssets == nil {
+		otherAssets = []AllocationOtherAssignment{}
+	}
+	return saveAllocationAssignments(userID, portfolioID, assignments, otherAssets)
+}
+
+// saveAllocationAssignments replaces the holdings' groups, and the other assets' groups too unless
+// otherAssets is nil.
+func saveAllocationAssignments(userID, portfolioID int64, assignments []AllocationAssignment, otherAssets []AllocationOtherAssignment) error {
 	if err := checkAllocationPortfolio(database.DB, userID, portfolioID); err != nil {
 		return err
 	}
@@ -406,12 +538,43 @@ func (s *uploadServiceImpl) SaveAllocationAssignments(userID, portfolioID int64,
 	if err := allocation.ValidateAssignments(ruleAssignments, groupIDs); err != nil {
 		return err
 	}
+	if otherAssets != nil {
+		ruleOther := make([]allocation.OtherAssignment, len(otherAssets))
+		for i, a := range otherAssets {
+			ruleOther[i] = allocation.OtherAssignment{AssetID: a.OtherAssetID, GroupID: a.GroupID}
+		}
+		if err := allocation.ValidateOtherAssignments(ruleOther, groupIDs); err != nil {
+			return err
+		}
+	}
 
 	tx, err := database.DB.Begin()
 	if err != nil {
 		return fmt.Errorf("failed to start the transaction: %w", err)
 	}
 	defer tx.Rollback()
+	if otherAssets != nil {
+		// An asset that doesn't exist and one of another user get the same answer.
+		for _, a := range otherAssets {
+			var one int
+			err := tx.QueryRow("SELECT 1 FROM other_assets WHERE id = ? AND user_id = ?", a.OtherAssetID, userID).Scan(&one)
+			if errors.Is(err, sql.ErrNoRows) {
+				return fmt.Errorf("%w: o ativo fora da corretora %d não existe", ErrAllocationInput, a.OtherAssetID)
+			}
+			if err != nil {
+				return fmt.Errorf("failed to check an other asset: %w", err)
+			}
+		}
+		if _, err := tx.Exec("DELETE FROM allocation_other_assignments WHERE portfolio_id = ?", portfolioID); err != nil {
+			return fmt.Errorf("failed to clear the other assets of the allocation: %w", err)
+		}
+		for _, a := range otherAssets {
+			if _, err := tx.Exec(`INSERT INTO allocation_other_assignments (portfolio_id, other_asset_id, group_id) VALUES (?, ?, ?)`,
+				portfolioID, a.OtherAssetID, a.GroupID); err != nil {
+				return fmt.Errorf("failed to save the group of the other asset %d: %w", a.OtherAssetID, err)
+			}
+		}
+	}
 	if _, err := tx.Exec("DELETE FROM allocation_assignments WHERE portfolio_id = ?", portfolioID); err != nil {
 		return fmt.Errorf("failed to clear the assignments: %w", err)
 	}
@@ -474,6 +637,14 @@ func (s *uploadServiceImpl) PlanAllocationDeposit(userID, portfolioID int64, amo
 		})
 	}
 
+	// Other assets are never candidates: they can't be bought at the broker.
+	otherAssetNames := map[int64][]string{}
+	for _, a := range status.OtherAssets {
+		if a.GroupID != nil && a.NotCounted != "closed" {
+			otherAssetNames[*a.GroupID] = append(otherAssetNames[*a.GroupID], a.Name)
+		}
+	}
+
 	plan := &DepositPlan{
 		AmountEUR:          allocRound2(amountEUR),
 		TotalBeforeEUR:     status.TotalEUR,
@@ -489,6 +660,11 @@ func (s *uploadServiceImpl) PlanAllocationDeposit(userID, portfolioID int64, amo
 			h := holdingsByISIN[c.ISIN]
 			line.Asset = &DepositAsset{ISIN: h.ISIN, ProductName: h.ProductName, PriceEUR: allocRound4(h.PriceEUR)}
 			line.Shares, line.CostEUR, line.LeftoverEUR = allocation.SharesToBuy(share.AmountEUR, h.PriceEUR)
+		} else if names := otherAssetNames[g.ID]; len(names) > 0 {
+			// Nothing to buy at the broker: the group's amount is to be added to what it holds outside it.
+			// The split isn't changed to avoid such a group: the amount it needs is the honest answer.
+			line.OutsideBroker = true
+			line.OutsideBrokerAssets = names
 		}
 		plan.SharesCostEUR += line.CostEUR
 		plan.LeftoverEUR += line.LeftoverEUR

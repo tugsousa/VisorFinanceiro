@@ -89,7 +89,7 @@ export default function GroupsEditor({ portfolioId, status, onSaved }) {
     };
 
     const removesGroupsWithHoldings = (status.groups || []).some(g =>
-        !rows.some(r => r.id === g.id) && (status.drift || []).some(d => d.group_id === g.id && d.holdings_count > 0));
+        !rows.some(r => r.id === g.id) && (status.drift || []).some(d => d.group_id === g.id && (d.holdings_count > 0 || d.other_assets_count > 0)));
 
     return (
         <Paper elevation={0} sx={{ p: { xs: 2, sm: 3 }, border: 1, borderColor: 'divider', borderRadius: 3 }}>

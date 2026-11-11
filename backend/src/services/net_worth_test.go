@@ -5,7 +5,9 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
+	"github.com/patrickmn/go-cache"
 	"github.com/username/taxfolio/backend/src/database"
 	"github.com/username/taxfolio/backend/src/logger"
 	"github.com/username/taxfolio/backend/src/models"
@@ -88,7 +90,7 @@ func TestBuildNetWorth_AddsEveryPortfolioAndTheOtherAssets(t *testing.T) {
 	var snapshotsBefore int
 	database.DB.QueryRow("SELECT COUNT(*) FROM portfolio_snapshots").Scan(&snapshotsBefore)
 
-	nw, err := buildNetWorth(1, valuer, now)
+	nw, err := buildNetWorth(1, valuer, nil, now)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -161,7 +163,7 @@ func TestOtherAssets_PropertyWithMortgageCountsItsEquity(t *testing.T) {
 		t.Errorf("details not stored: %+v", asset.Details)
 	}
 
-	nw, err := buildNetWorth(1, portfolioValuerStub{}, today())
+	nw, err := buildNetWorth(1, portfolioValuerStub{}, nil, today())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -190,6 +192,157 @@ func TestOtherAssets_PropertyWithMortgageCountsItsEquity(t *testing.T) {
 		d := d
 		if _, err := service.CreateOtherAsset(1, OtherAssetInput{Type: "real_estate", Name: "X", Details: &d, InitialValue: &value}); !errors.Is(err, ErrOtherAssetInput) {
 			t.Errorf("%+v: expected an input error, got %v", d, err)
+		}
+	}
+}
+
+// cryptoPricerStub answers with fixed prices, or fails, and counts the calls.
+type cryptoPricerStub struct {
+	live     float64
+	daily    PriceMap
+	currency string
+	err      error
+	calls    *int
+}
+
+func (s cryptoPricerStub) GetTickerPrice(string) (float64, string, error) {
+	*s.calls++
+	return s.live, s.currency, s.err
+}
+
+func (s cryptoPricerStub) GetHistoricalPrices(string) (PriceMap, string, error) {
+	*s.calls++
+	return s.daily, s.currency, s.err
+}
+
+func TestBuildNetWorth_CryptoIsQuantityTimesPrice(t *testing.T) {
+	setupNetWorthDB(t)
+	_, err := database.DB.Exec(`
+		INSERT INTO users (id, username, email, password, auth_provider, created_at, updated_at) VALUES
+			(1, 'one', 'one@example.com', 'x', 'local', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+		INSERT INTO other_assets (id, user_id, type, name, details) VALUES (1, 1, 'crypto', 'Bitcoin', '{"ticker":"BTC-EUR"}');
+		INSERT INTO other_asset_entries (asset_id, date, kind, amount, quantity) VALUES
+			(1, '2025-01-10', 'contribution', 80000, 2),
+			(1, '2025-02-20', 'withdrawal', 30000, 0.5);`)
+	if err != nil {
+		t.Fatalf("failed to set up data: %v", err)
+	}
+	now := networth.DateOf(2025, 3, 15)
+	rowCounts := func() [3]int {
+		var counts [3]int
+		for i, table := range []string{"daily_prices", "portfolio_snapshots", "processed_transactions"} {
+			database.DB.QueryRow("SELECT COUNT(*) FROM " + table).Scan(&counts[i])
+		}
+		return counts
+	}
+	before := rowCounts()
+
+	calls := 0
+	pricer := cryptoPricerStub{live: 70000, currency: "EUR", calls: &calls,
+		daily: PriceMap{"2025-01-31": 50000, "2025-02-28": 60000, "2025-03-15": 69000}}
+	prices := func(ticker string) *networth.CryptoPrices {
+		if ticker != "BTC-EUR" {
+			t.Errorf("unexpected ticker %q", ticker)
+		}
+		return loadCryptoPrices(pricer, nil, ticker, now)
+	}
+
+	nw, err := buildNetWorth(1, portfolioValuerStub{}, prices, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if nw.TotalEUR != 105000 || nw.UnpricedAssets != 0 {
+		t.Errorf("total = %v (unpriced %d), want 1.5 × 70000", nw.TotalEUR, nw.UnpricedAssets)
+	}
+	a := nw.Assets[0]
+	if a.Quantity != 1.5 || a.PriceEUR != 70000 || a.PriceStatus != PriceStatusOK || a.CostEUR != 60000 || a.PriceDate != "2025-03-15" {
+		t.Errorf("unexpected asset %+v", a)
+	}
+	if len(nw.History) != 3 || nw.History[0].OtherAssetsEUR != 100000 || nw.History[1].OtherAssetsEUR != 90000 {
+		t.Errorf("unexpected history %+v", nw.History)
+	}
+
+	// The current price fails: the last close is used and the asset says it's stale.
+	stale := cryptoPricerStub{currency: "EUR", calls: &calls, daily: PriceMap{"2025-03-14": 68000}}
+	live := func(p cryptoPricerStub) cryptoPriceFunc {
+		return func(ticker string) *networth.CryptoPrices { return loadCryptoPrices(p, nil, ticker, now) }
+	}
+	nw, err = buildNetWorth(1, portfolioValuerStub{}, live(stale), now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if a := nw.Assets[0]; nw.TotalEUR != 102000 || a.PriceStatus != PriceStatusStale || a.PriceDate != "2025-03-14" {
+		t.Errorf("stale: total %v, asset %+v", nw.TotalEUR, a)
+	}
+
+	// Yahoo is down, or quotes the coin in another currency: no error and no zero, the asset counts at cost.
+	for name, broken := range map[string]cryptoPricerStub{
+		"error":          {err: errors.New("yahoo is down"), calls: &calls},
+		"other currency": {live: 70000, currency: "USD", daily: PriceMap{"2025-03-15": 69000}, calls: &calls},
+	} {
+		nw, err = buildNetWorth(1, portfolioValuerStub{}, live(broken), now)
+		if err != nil {
+			t.Fatalf("%s: a price failure must not fail the net worth: %v", name, err)
+		}
+		if a := nw.Assets[0]; nw.TotalEUR != 60000 || nw.UnpricedAssets != 1 || a.PriceStatus != PriceStatusUnavailable || a.PriceEUR != 0 {
+			t.Errorf("%s: total %v, unpriced %d, asset %+v", name, nw.TotalEUR, nw.UnpricedAssets, a)
+		}
+	}
+
+	if after := rowCounts(); after != before {
+		t.Errorf("valuing crypto must not write prices, snapshots or transactions: %v before, %v after", before, after)
+	}
+}
+
+func TestLoadCryptoPrices_KeepsTheLastCloses(t *testing.T) {
+	logger.InitLogger("error")
+	c := cache.New(time.Minute, time.Minute)
+	now := networth.DateOf(2025, 3, 15)
+	calls := 0
+	good := cryptoPricerStub{live: 70000, currency: "EUR", calls: &calls, daily: PriceMap{"2025-03-14": 68000}}
+
+	first := loadCryptoPrices(good, c, "BTC-EUR", now)
+	if first.Live != 70000 || calls != 2 {
+		t.Fatalf("unexpected prices %+v after %d calls", first, calls)
+	}
+	if again := loadCryptoPrices(good, c, "BTC-EUR", now); again != first || calls != 2 {
+		t.Errorf("the second read should come from the cache, got %d calls", calls)
+	}
+
+	// Once the cached prices expire and Yahoo fails, the closes read before are still there.
+	c.Delete("crypto_prices_BTC-EUR")
+	failed := loadCryptoPrices(cryptoPricerStub{err: errors.New("down"), calls: &calls}, c, "BTC-EUR", now)
+	if failed.Live != 0 || failed.Daily["2025-03-14"] != 68000 {
+		t.Errorf("expected the last closes without a live price, got %+v", failed)
+	}
+}
+
+func TestCryptoAssets_NoPricerIsNeededWithoutCrypto(t *testing.T) {
+	setupNetWorthDB(t)
+	if _, err := database.DB.Exec(`INSERT INTO users (id, username, email, password, auth_provider, created_at, updated_at)
+		VALUES (1, 'one', 'one@example.com', 'x', 'local', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+		INSERT INTO other_assets (id, user_id, type, name) VALUES (1, 1, 'ppr', 'PPR');
+		INSERT INTO other_asset_entries (asset_id, date, kind, amount) VALUES (1, '2025-01-15', 'valuation', 1000);`); err != nil {
+		t.Fatal(err)
+	}
+	prices := func(string) *networth.CryptoPrices {
+		t.Error("no price should be read when the user has no crypto")
+		return &networth.CryptoPrices{}
+	}
+	if _, err := buildNetWorth(1, portfolioValuerStub{}, prices, today()); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestNormalizeCryptoTicker(t *testing.T) {
+	for input, want := range map[string]string{"btc": "BTC-EUR", " eth ": "ETH-EUR", "SOL-EUR": "SOL-EUR", "1inch": "1INCH-EUR"} {
+		if got, err := normalizeCryptoTicker(input); err != nil || got != want {
+			t.Errorf("%q: got %q, %v; want %q", input, got, err, want)
+		}
+	}
+	for _, input := range []string{"", "BTC-USD", "BTC-EUR?x=1", "../x", "BTC EUR", "BTC-EUR-EUR", "AVERYLONGSYMBOL", "BTC/EUR", "ÇTC"} {
+		if got, err := normalizeCryptoTicker(input); !errors.Is(err, ErrOtherAssetInput) {
+			t.Errorf("%q: expected an input error, got %q, %v", input, got, err)
 		}
 	}
 }

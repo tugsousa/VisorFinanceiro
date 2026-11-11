@@ -59,15 +59,23 @@ These assets have no broker transactions; each type has its own way of getting a
 ## Phases
 
 1. Manual types and term deposits, the page, the dashboard card. **Start here and stop for feedback.**
-2. Crypto: entries with quantity; value from Yahoo. `getPriceForTicker` in `price_service.go` is private; add a
+2. **Done.** Crypto: entries with quantity; value from Yahoo. `getPriceForTicker` in `price_service.go` is private; add a
    public method to `PriceService`. History from `GetHistoricalPrices(ticker)`. Portuguese tax on crypto differs
    from shares (gains on crypto held 365 days or more are exempt), so if it ever enters the tax simulator, check
    the current rules first and ask the user.
-3. Certificados de Aforro computed automatically. The rules (series E/F, monthly base rate from Euribor, caps,
+3. **Done as an estimate, not as the value that counts.** Official monthly base rates were only found from
+   December 2024, so a certificate can't be valued from its subscription date, and the result couldn't be
+   confirmed against AforroNet. What was built: with the series (D, E or F) and the subscription date, the app
+   shows next to the value typed from AforroNet an estimate that starts from that value and adds the quarters
+   capitalised since; it only counts if the user accepts it. See "Net Worth" in `ARCHITECTURE_DOCUMENTATION.md`.
+   Still open: compare an estimate with AforroNet (or IGCP's simulator), and add each month's rate to
+   `backend/data/aforro_rates.json`. The original item:
+   Certificados de Aforro computed automatically. The rules (series E/F, monthly base rate from Euribor, caps,
    permanence bonuses) change over time: research them from the official source (IGCP), put the rates in
    `backend/data/aforro_rates.json` (the `data/*.json` files are embedded, see `runtime_desktop.go`), and confirm
    the result against the user's AforroNet values before trusting it. Don't guess the rules.
-4. Other assets in the target allocation groups (for example Certificados de Aforro in "Obrigações / Seguro").
+4. **Done** (with a separate table, `allocation_other_assignments`, instead of changing `allocation_assignments`).
+   Other assets in the target allocation groups (for example Certificados de Aforro in "Obrigações / Seguro").
    Coordinate with [target-allocation.md](target-allocation.md): `allocation_assignments` would need to point at
    an `other_assets.id` as well as an ISIN.
 

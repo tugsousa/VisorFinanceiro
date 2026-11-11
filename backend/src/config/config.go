@@ -28,6 +28,7 @@ type AppConfig struct {
 	// Data file paths
 	CountryDataPath             string
 	DividendSourceOverridesPath string
+	AforroRatesPath             string
 
 	// Email Service settings
 	EmailServiceProvider string
@@ -128,6 +129,7 @@ func LoadConfig() {
 		// Data
 		CountryDataPath:             getEnv("COUNTRY_DATA_PATH", "data/country.json"),
 		DividendSourceOverridesPath: getEnv("DIVIDEND_SOURCE_OVERRIDES_PATH", "data/dividend_source_overrides.json"),
+		AforroRatesPath:             getEnv("AFORRO_RATES_PATH", "data/aforro_rates.json"),
 
 		// Email
 		EmailServiceProvider: getEnv("EMAIL_SERVICE_PROVIDER", "smtp"),

@@ -22,6 +22,8 @@ import MovementsDialog from '../components/MovementsDialog';
 import { useNetWorth } from '../hooks/useNetWorth';
 import { apiDeleteOtherAsset, netWorthErrorMessage } from '../api/netWorthApi';
 import { TYPE_COLORS, TYPE_GROUP_LABELS, capitalisationLabel, formatISODate, typeLabel, usageLabel } from '../logic/assetTypes';
+import { cryptoDetail } from '../logic/crypto';
+import { aforroCaption } from '../logic/aforro';
 import PropertySection from '../components/PropertySection';
 import { formatCurrency } from '../../../lib/utils/formatUtils';
 import { MONTH_NAMES_CHART } from '../../../constants';
@@ -43,6 +45,7 @@ const assetDetail = (asset) => {
         const maturity = asset.matured ? `venceu a ${formatISODate(d.maturity)}` : `vence a ${formatISODate(d.maturity)}`;
         return `${formatCurrency(d.principal)} a ${rate} · ${capitalisationLabel(d.capitalisation)} · ${maturity}`;
     }
+    if (asset.type === 'crypto') return cryptoDetail(asset);
     if (asset.type === 'real_estate') {
         const parts = [usageLabel(asset.details?.usage)];
         if (asset.debt_eur > 0) parts.push(`valor ${formatCurrency(asset.gross_value_eur)} − dívida ${formatCurrency(asset.debt_eur)}`);
@@ -50,7 +53,10 @@ const assetDetail = (asset) => {
         if (asset.last_valuation_date) parts.push(`valor de ${formatISODate(asset.last_valuation_date)}`);
         return parts.filter(Boolean).join(' · ');
     }
-    if (asset.last_valuation_date) return `Valor atualizado a ${formatISODate(asset.last_valuation_date)}`;
+    if (asset.last_valuation_date) {
+        // A Certificado de Aforro with a series also shows the app's estimate, which doesn't count in the value.
+        return [`Valor atualizado a ${formatISODate(asset.last_valuation_date)}`, aforroCaption(asset.aforro_estimate)].filter(Boolean).join(' · ');
+    }
     return asset.entries?.length ? 'Soma dos movimentos' : 'Sem valor';
 };
 
@@ -71,6 +77,7 @@ const NetWorthPage = () => {
         mutationFn: (id) => apiDeleteOtherAsset(id),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['netWorth'] });
+            queryClient.invalidateQueries({ queryKey: ['allocation'] }); // an asset counted in a group changed
             setDeleting(null);
         },
         onError: (err) => setDeleteError(netWorthErrorMessage(err, 'Não foi possível apagar.')),
@@ -185,14 +192,16 @@ const NetWorthPage = () => {
         {
             field: 'actions', headerName: '', sortable: false, filterable: false, flex: 1, minWidth: 280, align: 'right',
             renderCell: (params) => {
-                const manual = params.row.type !== 'term_deposit';
+                // A term deposit is valued by its formula and crypto by its price: neither takes a typed value.
+                const hasMovements = params.row.type !== 'term_deposit';
+                const manual = hasMovements && params.row.type !== 'crypto';
                 return (
                     <Box sx={{ display: 'flex', gap: 0.5, alignItems: 'center', justifyContent: 'flex-end', width: '100%' }}>
                         {manual && (
-                            <>
-                                <Button size="small" sx={{ textTransform: 'none' }} onClick={() => setValueAssetId(params.row.id)}>Atualizar valor</Button>
-                                <Button size="small" sx={{ textTransform: 'none' }} onClick={() => setMovementsAssetId(params.row.id)}>Movimentos</Button>
-                            </>
+                            <Button size="small" sx={{ textTransform: 'none' }} onClick={() => setValueAssetId(params.row.id)}>Atualizar valor</Button>
+                        )}
+                        {hasMovements && (
+                            <Button size="small" sx={{ textTransform: 'none' }} onClick={() => setMovementsAssetId(params.row.id)}>Movimentos</Button>
                         )}
                         <Tooltip title="Editar">
                             <IconButton size="small" onClick={() => setAssetDialog({ open: true, asset: params.row })}><EditOutlinedIcon fontSize="small" /></IconButton>
@@ -236,6 +245,11 @@ const NetWorthPage = () => {
                     {unpriced === 1 ? 'Um ativo das carteiras não tem' : `${unpriced} ativos das carteiras não têm`} preço de mercado e conta{unpriced === 1 ? '' : 'm'} ao custo.
                 </Alert>
             )}
+            {data.unpriced_assets > 0 && (
+                <Alert severity="warning" sx={{ mb: 3 }}>
+                    Não foi possível obter o preço de {data.unpriced_assets === 1 ? 'uma criptomoeda, que conta' : `${data.unpriced_assets} criptomoedas, que contam`} pelo que custou.
+                </Alert>
+            )}
 
             <Grid container spacing={2} sx={{ mb: 4 }}>
                 <Grid item xs={6} md={3}>
@@ -247,7 +261,7 @@ const NetWorthPage = () => {
                 </Grid>
                 <Grid item xs={6} md={3}>
                     <MetricCard title="Outros ativos" value={data.other_assets_eur} colorOverride="text.primary"
-                        tooltipText="Depósitos a prazo líquidos da retenção de 28% sobre os juros; imóveis pelo capital próprio (valor menos o crédito em dívida); os restantes pelo último valor indicado."
+                        tooltipText="Depósitos a prazo líquidos da retenção de 28% sobre os juros; imóveis pelo capital próprio (valor menos o crédito em dívida); criptomoedas pela quantidade × o preço atual; os restantes pelo último valor indicado."
                         subValue={data.debt_eur > 0 ? (
                             <Typography variant="caption" color="text.secondary">já sem {formatCurrency(data.debt_eur)} de crédito</Typography>
                         ) : null} />
@@ -282,7 +296,7 @@ const NetWorthPage = () => {
             <Typography variant="h6" fontWeight="bold" sx={{ mb: 1 }}>Outros ativos</Typography>
             {assets.length === 0 ? (
                 <Alert severity="info" sx={{ mb: 4 }}>
-                    Ainda não há outros ativos. Use "Adicionar ativo" para registar contas, depósitos a prazo, Certificados de Aforro, PPR ou imóveis.
+                    Ainda não há outros ativos. Use "Adicionar ativo" para registar contas, depósitos a prazo, Certificados de Aforro, PPR, criptomoedas ou imóveis.
                 </Alert>
             ) : (
                 <Paper elevation={0} sx={{ border: 1, borderColor: 'divider', borderRadius: 2, mb: 4 }}>

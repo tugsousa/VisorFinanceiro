@@ -140,87 +140,151 @@ func today() time.Time {
 // would use, the gain, and the extra tax for this year. It adds a sale to a copy of the transactions
 // and runs the same FIFO as the real sales, so nothing is stored and no other report changes.
 func (s *uploadServiceImpl) SimulateStockSale(userID, portfolioID int64, req SaleSimulationRequest) (*SaleSimulation, error) {
-	if req.ISIN == "" || req.Quantity <= 0 || req.PriceEUR < 0 || req.Commission < 0 {
-		return nil, fmt.Errorf("%w: indica o ISIN e uma quantidade maior que zero", ErrSimulationInput)
+	batch, err := s.simulateStockSales(userID, portfolioID, []SaleSimulationRequest{req})
+	if err != nil {
+		return nil, err
+	}
+	return &batch.Sales[0], nil
+}
+
+// salesSimulation is the result of simulating several sales made together today.
+type salesSimulation struct {
+	// Sales has each sale in the order asked. Its YearAfter, MarginalTax and NetProceeds are those of that
+	// sale made alone.
+	Sales []SaleSimulation
+	// YearBefore is the year's balance without the sales and YearAfter with all of them; MarginalTax is the
+	// extra tax of all of them together. It isn't the sum of each sale's: the tax is on the year's balance,
+	// which doesn't go below zero, so a sale at a loss lowers the tax of another at a gain.
+	YearBefore  tax.YearBalance
+	YearAfter   tax.YearBalance
+	MarginalTax float64
+}
+
+// simulateStockSales simulates selling several positions today, one sale per ISIN: it adds the sales to a
+// copy of the transactions and runs the same FIFO as the real sales once. Nothing is stored and no cached
+// report changes. With no sales it returns the year's balance as it is.
+func (s *uploadServiceImpl) simulateStockSales(userID, portfolioID int64, requests []SaleSimulationRequest) (*salesSimulation, error) {
+	seen := map[string]bool{}
+	for _, req := range requests {
+		if req.ISIN == "" || req.Quantity <= 0 || req.PriceEUR < 0 || req.Commission < 0 {
+			return nil, fmt.Errorf("%w: indica o ISIN e uma quantidade maior que zero", ErrSimulationInput)
+		}
+		if seen[req.ISIN] {
+			return nil, fmt.Errorf("%w: mais do que uma venda de %s", ErrSimulationInput, req.ISIN)
+		}
+		seen[req.ISIN] = true
 	}
 
 	lotsByISIN, err := s.currentLotsByISIN(userID, portfolioID)
 	if err != nil {
 		return nil, err
 	}
-	lots := lotsByISIN[req.ISIN]
-	held := 0.0
-	for _, lot := range lots {
-		held += lot.Quantity
-	}
-	if held <= utils.QuantityEpsilon {
-		return nil, fmt.Errorf("%w: não tens posição em %s", ErrSimulationInput, req.ISIN)
-	}
-	if req.Quantity > held+utils.QuantityEpsilon {
-		return nil, fmt.Errorf("%w: só tens %v unidades", ErrSimulationInput, utils.RoundQuantity(held))
-	}
-
-	price := req.PriceEUR
-	usedCurrent := false
-	if price == 0 {
-		prices, err := s.currentPrices(userID, portfolioID)
-		if err != nil {
-			return nil, err
-		}
-		h, ok := prices[req.ISIN]
-		if !ok || h.CurrentPriceEUR <= 0 {
-			return nil, fmt.Errorf("%w: não há preço atual para %s; indica um preço", ErrSimulationInput, req.ISIN)
-		}
-		price = h.CurrentPriceEUR
-		usedCurrent = true
-	}
-
+	var prices map[string]models.HoldingWithValue
 	saleDate := today()
 	saleDateText := saleDate.Format(utils.DefaultDateFormat)
-	saleAmount := utils.RoundFloat(price*req.Quantity, 2)
+
+	batch := &salesSimulation{Sales: make([]SaleSimulation, len(requests))}
+	simulated := make([]models.ProcessedTransaction, 0, len(requests))
+	for i, req := range requests {
+		lots := lotsByISIN[req.ISIN]
+		held := 0.0
+		for _, lot := range lots {
+			held += lot.Quantity
+		}
+		if held <= utils.QuantityEpsilon {
+			return nil, fmt.Errorf("%w: não tens posição em %s", ErrSimulationInput, req.ISIN)
+		}
+		if req.Quantity > held+utils.QuantityEpsilon {
+			return nil, fmt.Errorf("%w: só tens %v unidades", ErrSimulationInput, utils.RoundQuantity(held))
+		}
+
+		price := req.PriceEUR
+		usedCurrent := false
+		if price == 0 {
+			if prices == nil {
+				if prices, err = s.currentPrices(userID, portfolioID); err != nil {
+					return nil, err
+				}
+			}
+			h, ok := prices[req.ISIN]
+			if !ok || h.CurrentPriceEUR <= 0 {
+				return nil, fmt.Errorf("%w: não há preço atual para %s; indica um preço", ErrSimulationInput, req.ISIN)
+			}
+			price = h.CurrentPriceEUR
+			usedCurrent = true
+		}
+
+		saleAmount := utils.RoundFloat(price*req.Quantity, 2)
+		productName := lots[0].ProductName
+		simulated = append(simulated, models.ProcessedTransaction{
+			Date:             saleDateText,
+			Source:           simulatedSource,
+			ProductName:      productName,
+			ISIN:             req.ISIN,
+			Quantity:         req.Quantity,
+			OriginalQuantity: req.Quantity,
+			Price:            price,
+			TransactionType:  "STOCK",
+			BuySell:          "SELL",
+			Amount:           saleAmount,
+			Currency:         "EUR",
+			Commission:       req.Commission,
+			// Sorts after the real sales of the same day. Each sale is its own order: the rows of one order
+			// share its commission.
+			OrderID:      "~simulation-" + req.ISIN,
+			ExchangeRate: 1,
+			AmountEUR:    saleAmount,
+		})
+		batch.Sales[i] = SaleSimulation{
+			ISIN:          req.ISIN,
+			ProductName:   productName,
+			HeldQuantity:  utils.RoundQuantity(held),
+			Quantity:      req.Quantity,
+			PriceEUR:      price,
+			UsedCurrent:   usedCurrent,
+			SaleDate:      saleDateText,
+			SaleAmountEUR: saleAmount,
+			Lots:          []SimulatedLot{},
+			TaxRate:       tax.AutonomousRate,
+		}
+	}
+
+	realSales, err := s.GetStockSaleDetails(userID, portfolioID)
+	if err != nil {
+		return nil, err
+	}
+	optionSales, err := s.GetOptionSaleDetails(userID, portfolioID)
+	if err != nil {
+		return nil, err
+	}
+	batch.YearBefore = tax.BalanceForYear(realSales, optionSales, saleDate.Year())
+	batch.YearAfter = batch.YearBefore
+	if len(requests) == 0 {
+		return batch, nil
+	}
 
 	transactions, err := fetchUserProcessedTransactions(userID, portfolioID)
 	if err != nil {
 		return nil, err
 	}
-	productName := lots[0].ProductName
-	withSale := make([]models.ProcessedTransaction, len(transactions), len(transactions)+1)
-	copy(withSale, transactions)
-	withSale = append(withSale, models.ProcessedTransaction{
-		Date:             saleDateText,
-		Source:           simulatedSource,
-		ProductName:      productName,
-		ISIN:             req.ISIN,
-		Quantity:         req.Quantity,
-		OriginalQuantity: req.Quantity,
-		Price:            price,
-		TransactionType:  "STOCK",
-		BuySell:          "SELL",
-		Amount:           saleAmount,
-		Currency:         "EUR",
-		Commission:       req.Commission,
-		OrderID:          "~simulation", // Sorts after the real sales of the same day
-		ExchangeRate:     1,
-		AmountEUR:        saleAmount,
-	})
-	salesWithSimulation, _ := s.stockProcessor.Process(withSale)
+	withSales := make([]models.ProcessedTransaction, len(transactions), len(transactions)+len(simulated))
+	copy(withSales, transactions)
+	withSales = append(withSales, simulated...)
+	salesWithSimulation, _ := s.stockProcessor.Process(withSales)
 
-	result := &SaleSimulation{
-		ISIN:          req.ISIN,
-		ProductName:   productName,
-		HeldQuantity:  utils.RoundQuantity(held),
-		Quantity:      req.Quantity,
-		PriceEUR:      price,
-		UsedCurrent:   usedCurrent,
-		SaleDate:      saleDateText,
-		SaleAmountEUR: saleAmount,
-		Lots:          []SimulatedLot{},
-		TaxRate:       tax.AutonomousRate,
+	index := make(map[string]int, len(requests))
+	for i, req := range requests {
+		index[req.ISIN] = i
 	}
 	for _, sale := range salesWithSimulation {
 		if sale.SaleSource != simulatedSource {
 			continue
 		}
+		i, ok := index[sale.ISIN]
+		if !ok {
+			continue
+		}
+		result := &batch.Sales[i]
 		buyDate := utils.ParseDate(sale.BuyDate)
 		gain := tax.StockSaleGain(sale)
 		lot := SimulatedLot{
@@ -242,23 +306,31 @@ func (s *uploadServiceImpl) SimulateStockSale(userID, portfolioID int64, req Sal
 			result.ShortTermGain += gain
 		}
 	}
-	result.Commission = utils.RoundFloat(result.Commission, 2)
-	result.Gain = utils.RoundFloat(result.Gain, 2)
-	result.ShortTermGain = utils.RoundFloat(result.ShortTermGain, 2)
 
-	realSales, err := s.GetStockSaleDetails(userID, portfolioID)
-	if err != nil {
-		return nil, err
+	batch.YearAfter = tax.BalanceForYear(salesWithSimulation, optionSales, saleDate.Year())
+	batch.MarginalTax = tax.MarginalTax(batch.YearBefore.Balance, batch.YearAfter.Balance-batch.YearBefore.Balance)
+	for i := range batch.Sales {
+		result := &batch.Sales[i]
+		result.Commission = utils.RoundFloat(result.Commission, 2)
+		result.Gain = utils.RoundFloat(result.Gain, 2)
+		result.ShortTermGain = utils.RoundFloat(result.ShortTermGain, 2)
+
+		// The year with this sale alone: the real sales plus only this simulated one.
+		result.YearBefore = batch.YearBefore
+		result.YearAfter = batch.YearAfter
+		if len(requests) > 1 {
+			alone := make([]models.SaleDetail, 0, len(salesWithSimulation))
+			for _, sale := range salesWithSimulation {
+				if sale.SaleSource != simulatedSource || sale.ISIN == result.ISIN {
+					alone = append(alone, sale)
+				}
+			}
+			result.YearAfter = tax.BalanceForYear(alone, optionSales, saleDate.Year())
+		}
+		result.MarginalTax = tax.MarginalTax(result.YearBefore.Balance, result.YearAfter.Balance-result.YearBefore.Balance)
+		result.NetProceeds = utils.RoundFloat(result.SaleAmountEUR-requests[i].Commission-result.MarginalTax, 2)
 	}
-	optionSales, err := s.GetOptionSaleDetails(userID, portfolioID)
-	if err != nil {
-		return nil, err
-	}
-	result.YearBefore = tax.BalanceForYear(realSales, optionSales, saleDate.Year())
-	result.YearAfter = tax.BalanceForYear(salesWithSimulation, optionSales, saleDate.Year())
-	result.MarginalTax = tax.MarginalTax(result.YearBefore.Balance, result.YearAfter.Balance-result.YearBefore.Balance)
-	result.NetProceeds = utils.RoundFloat(saleAmount-req.Commission-result.MarginalTax, 2)
-	return result, nil
+	return batch, nil
 }
 
 // GetTaxYearStatus returns the capital gains balance of the current year so far, and for each

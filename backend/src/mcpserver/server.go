@@ -17,7 +17,7 @@ const instructions = `VisorFinanceiro holds the user's investment portfolio, imp
 All amounts are in EUR unless a field says otherwise. Dates of transactions, sales, lots and fees are DD-MM-YYYY; dates of the performance history are YYYY-MM-DD.
 Each tool works on one portfolio: leave portfolio_id out to use the user's default portfolio, or call list_portfolios to see them all.
 Start with get_portfolio_overview for questions about what the user owns and what it is worth.
-get_net_worth covers every portfolio together, plus the savings outside the brokers (accounts, term deposits, Certificados de Aforro, PPR, property).
+get_net_worth covers every portfolio together, plus the savings outside the brokers (accounts, term deposits, Certificados de Aforro, PPR, crypto, property).
 Market prices come from Yahoo Finance and may be delayed. A holding whose price_status isn't "OK" has no current price, so it isn't part of the market value totals; mention it when it matters.
 The data is only as complete as the files the user uploaded, so say so when an answer depends on history that may be missing.
 This is the user's own data for their own analysis; don't present answers as personalised financial or tax advice.`

@@ -1077,6 +1077,14 @@ func (s *priceServiceImpl) FindTickerWithHistory(isin, currentTicker string) (st
 	return "", nil, "", fmt.Errorf("no listing with price history found for ISIN %s", isin)
 }
 
+// GetTickerPrice reads the current price of a Yahoo ticker and its currency. Unlike GetCurrentPrices, it
+// takes a ticker rather than an ISIN and stores nothing, so it suits what isn't a broker holding (crypto).
+func (s *priceServiceImpl) GetTickerPrice(ticker string) (float64, string, error) {
+	s.ensureSession()
+	s.throttler.Wait()
+	return s.getPriceForTicker(ticker)
+}
+
 func (s *priceServiceImpl) getPriceForTicker(ticker string) (float64, string, error) {
 	quoteURL := fmt.Sprintf("https://query1.finance.yahoo.com/v8/finance/chart/%s?crumb=%s", ticker, s.crumb)
 	req, err := http.NewRequest("GET", quoteURL, nil)

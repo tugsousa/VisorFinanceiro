@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -166,15 +167,19 @@ func TestOtherAssets_CreateUpdateAndEntries(t *testing.T) {
 func TestOtherAssets_RejectsInvalidInput(t *testing.T) {
 	router := setupNetWorthTest(t)
 	bodies := map[string]map[string]any{
-		"unknown type":     {"type": "gold", "name": "x"},
-		"crypto not yet":   {"type": "crypto", "name": "BTC"},
-		"no name":          {"type": "ppr", "name": " "},
-		"other currency":   {"type": "ppr", "name": "PPR", "currency": "USD"},
-		"deposit no rate":  {"type": "term_deposit", "name": "DP", "opened_at": "2025-01-01", "details": map[string]any{"principal": 1000, "maturity": "2024-01-01", "capitalisation": "maturity"}},
-		"deposit no start": {"type": "term_deposit", "name": "DP", "details": map[string]any{"principal": 1000, "rate_pct": 2, "maturity": "2026-01-01", "capitalisation": "maturity"}},
-		"negative value":   {"type": "real_estate", "name": "Casa", "initial_value": -1},
-		"future valuation": {"type": "real_estate", "name": "Casa", "initial_value": 1, "initial_date": "2999-01-01"},
-		"bad date":         {"type": "other", "name": "Arte", "initial_value": 1, "initial_date": "01-01-2025"},
+		"unknown type":      {"type": "gold", "name": "x"},
+		"crypto no ticker":  {"type": "crypto", "name": "BTC"},
+		"crypto in USD":     {"type": "crypto", "name": "BTC", "details": map[string]any{"ticker": "BTC-USD"}},
+		"crypto bad ticker": {"type": "crypto", "name": "BTC", "details": map[string]any{"ticker": "BTC-EUR?x=1"}},
+		"crypto unknown":    {"type": "crypto", "name": "Nope", "details": map[string]any{"ticker": "NOPE"}},
+		"crypto no amount":  {"type": "crypto", "name": "BTC", "details": map[string]any{"ticker": "BTC"}, "initial_quantity": 0},
+		"no name":           {"type": "ppr", "name": " "},
+		"other currency":    {"type": "ppr", "name": "PPR", "currency": "USD"},
+		"deposit no rate":   {"type": "term_deposit", "name": "DP", "opened_at": "2025-01-01", "details": map[string]any{"principal": 1000, "maturity": "2024-01-01", "capitalisation": "maturity"}},
+		"deposit no start":  {"type": "term_deposit", "name": "DP", "details": map[string]any{"principal": 1000, "rate_pct": 2, "maturity": "2026-01-01", "capitalisation": "maturity"}},
+		"negative value":    {"type": "real_estate", "name": "Casa", "initial_value": -1},
+		"future valuation":  {"type": "real_estate", "name": "Casa", "initial_value": 1, "initial_date": "2999-01-01"},
+		"bad date":          {"type": "other", "name": "Arte", "initial_value": 1, "initial_date": "01-01-2025"},
 	}
 	for name, body := range bodies {
 		if rec := netWorthRequest(t, router, 1, http.MethodPost, "/api/other-assets", body); rec.Code != http.StatusBadRequest {
@@ -246,4 +251,110 @@ func TestOtherAssets_OnlyTheOwnerCanSeeOrChangeThem(t *testing.T) {
 func itoa(id int64) string {
 	encoded, _ := json.Marshal(id)
 	return string(encoded)
+}
+
+// GetTickerPrice knows Bitcoin at 50 000 € and nothing else.
+func (netWorthPriceStub) GetTickerPrice(ticker string) (float64, string, error) {
+	if ticker == "BTC-EUR" {
+		return 50000, "EUR", nil
+	}
+	return 0, "", errors.New("no price data found")
+}
+
+func (netWorthPriceStub) GetHistoricalPrices(ticker string) (services.PriceMap, string, error) {
+	if ticker == "BTC-EUR" {
+		return services.PriceMap{"2025-01-31": 40000}, "EUR", nil
+	}
+	return nil, "", errors.New("no history result found")
+}
+
+func TestOtherAssets_Crypto(t *testing.T) {
+	router := setupNetWorthTest(t)
+
+	rec := netWorthRequest(t, router, 1, http.MethodPost, "/api/other-assets", map[string]any{
+		"type": "crypto", "name": "Bitcoin", "details": map[string]any{"ticker": "btc"},
+		"initial_quantity": 2, "initial_value": 60000, "initial_date": "2025-01-10",
+	})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d: %s", rec.Code, rec.Body.String())
+	}
+	var coin services.OtherAsset
+	decodeInto(t, rec, &coin)
+	if coin.Details == nil || coin.Details.Ticker != "BTC-EUR" || coin.Quantity != 2 || coin.ValueEUR != 100000 ||
+		coin.PriceStatus != services.PriceStatusOK || coin.CostEUR != 60000 || len(coin.Entries) != 1 {
+		t.Fatalf("unexpected asset %+v", coin)
+	}
+	entries := "/api/other-assets/" + itoa(coin.ID) + "/entries"
+
+	bad := map[string]map[string]any{
+		"no quantity":       {"date": "2025-02-01", "kind": "contribution", "amount": 100},
+		"zero quantity":     {"date": "2025-02-01", "kind": "contribution", "amount": 100, "quantity": 0},
+		"negative quantity": {"date": "2025-02-01", "kind": "withdrawal", "amount": 100, "quantity": -1},
+		"valuation":         {"date": "2025-02-01", "kind": "valuation", "amount": 100, "quantity": 1},
+		"interest":          {"date": "2025-02-01", "kind": "interest", "amount": 0, "quantity": 1},
+		"sells too much":    {"date": "2025-02-01", "kind": "withdrawal", "amount": 100, "quantity": 2.5},
+		"sells too early":   {"date": "2025-01-09", "kind": "withdrawal", "amount": 100, "quantity": 1},
+		"future":            {"date": "2999-01-01", "kind": "contribution", "amount": 100, "quantity": 1},
+		"negative amount":   {"date": "2025-02-01", "kind": "contribution", "amount": -1, "quantity": 1},
+	}
+	for name, body := range bad {
+		if rec := netWorthRequest(t, router, 1, http.MethodPost, entries, body); rec.Code != http.StatusBadRequest {
+			t.Errorf("%s: expected 400, got %d: %s", name, rec.Code, rec.Body.String())
+		}
+	}
+
+	// A sale, with the amount received left out.
+	rec = netWorthRequest(t, router, 1, http.MethodPost, entries, map[string]any{"date": "2025-02-01", "kind": "withdrawal", "quantity": 0.5})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	// The purchase can't be deleted while the sale depends on it.
+	if rec := netWorthRequest(t, router, 1, http.MethodDelete, entries+"/"+itoa(coin.Entries[0].ID), nil); rec.Code != http.StatusBadRequest {
+		t.Errorf("deleting a purchase under a sale: expected 400, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	// The coin can't change; the name can, and the ticker is kept when left out.
+	if rec := netWorthRequest(t, router, 1, http.MethodPut, "/api/other-assets/"+itoa(coin.ID),
+		map[string]any{"name": "Bitcoin", "details": map[string]any{"ticker": "ETH"}}); rec.Code != http.StatusBadRequest {
+		t.Errorf("changing the coin: expected 400, got %d", rec.Code)
+	}
+	rec = netWorthRequest(t, router, 1, http.MethodPut, "/api/other-assets/"+itoa(coin.ID), map[string]any{"name": "BTC na carteira"})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	var updated services.OtherAsset
+	decodeInto(t, rec, &updated)
+	if updated.Name != "BTC na carteira" || updated.Details == nil || updated.Details.Ticker != "BTC-EUR" || updated.Quantity != 1.5 || updated.ValueEUR != 75000 {
+		t.Errorf("unexpected updated asset %+v", updated)
+	}
+
+	// A quantity makes no sense on the other types.
+	rec = netWorthRequest(t, router, 1, http.MethodPost, "/api/other-assets", map[string]any{"type": "ppr", "name": "PPR", "initial_value": 100})
+	var ppr services.OtherAsset
+	decodeInto(t, rec, &ppr)
+	if rec := netWorthRequest(t, router, 1, http.MethodPost, "/api/other-assets/"+itoa(ppr.ID)+"/entries",
+		map[string]any{"date": "2025-02-01", "kind": "contribution", "amount": 100, "quantity": 1}); rec.Code != http.StatusBadRequest {
+		t.Errorf("a quantity on a PPR: expected 400, got %d", rec.Code)
+	}
+
+	var nw services.NetWorth
+	decodeInto(t, netWorthRequest(t, router, 1, http.MethodGet, "/api/net-worth", nil), &nw)
+	if nw.TotalEUR != 75100 || nw.UnpricedAssets != 0 {
+		t.Errorf("unexpected net worth %+v", nw)
+	}
+
+	// Another user can't see or change it.
+	for _, a := range []struct {
+		method, path string
+		body         any
+	}{
+		{http.MethodPost, entries, map[string]any{"date": "2025-02-01", "kind": "contribution", "amount": 1, "quantity": 1}},
+		{http.MethodDelete, entries + "/" + itoa(coin.Entries[0].ID), nil},
+		{http.MethodPut, "/api/other-assets/" + itoa(coin.ID), map[string]any{"name": "mine"}},
+	} {
+		if rec := netWorthRequest(t, router, 2, a.method, a.path, a.body); rec.Code != http.StatusNotFound {
+			t.Errorf("%s %s by another user: expected 404, got %d", a.method, a.path, rec.Code)
+		}
+	}
 }

@@ -35,7 +35,7 @@ server for Claude Desktop (`VisorFinanceiro.exe mcp`). Start with `ARCHITECTURE_
   `portfolio_id` from the request belongs to the user, as the existing handlers do.
 - **Migrations:** `backend/db/migrations/0000NN_name.up.sql` (+ `.down.sql`), embedded in the executable and run
   at start-up. Numbers are reserved per plan so parallel work doesn't collide: **000012 target allocation,
-  000013 net worth**. The dividend calendar needs no migration.
+  000013 net worth, 000014 other assets in the allocation groups**. The dividend calendar needs no migration.
 - **Frontend layout:** feature folders under `frontend/src/features/<feature>/{api,components,pages,logic}`. Reuse
   `features/analytics/components/MetricCard.jsx` for metric cards, MUI `DataGrid` with
   `ptPT.components.MuiDataGrid.defaultProps.localeText` for tables, month labels from `MONTH_NAMES_CHART`

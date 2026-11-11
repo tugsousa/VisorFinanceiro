@@ -3,7 +3,7 @@ import {
     Box, Typography, Table, TableHead, TableBody, TableRow, TableCell, TableContainer, Tooltip,
 } from '@mui/material';
 import { formatCurrency } from '../../../lib/utils/formatUtils';
-import { formatPct, formatPP, groupColor } from '../logic/allocationLogic';
+import { formatPct, formatPP, groupColor, groupContentsLabel } from '../logic/allocationLogic';
 
 /**
  * A bar centred on zero: to the right when the group is over its target, to the left when under.
@@ -60,7 +60,8 @@ export default function DriftTable({ status }) {
                                     <Box>
                                         <Typography variant="body2" fontWeight={600}>{d.name}</Typography>
                                         <Typography variant="caption" color="text.secondary">
-                                            {d.holdings_count === 1 ? '1 ativo' : `${d.holdings_count} ativos`}
+                                            {groupContentsLabel(d.holdings_count, d.other_assets_count)}
+                                            {d.other_assets_eur > 0 ? ` (${formatCurrency(d.other_assets_eur)})` : ''}
                                             {d.includes_cash ? ` + liquidez (${formatCurrency(d.cash_eur)})` : ''}
                                         </Typography>
                                     </Box>

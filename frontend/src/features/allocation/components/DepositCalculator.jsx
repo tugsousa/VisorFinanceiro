@@ -93,6 +93,13 @@ export default function DepositCalculator({ portfolioId, status }) {
                                                         {line.asset.price_eur > 0 ? `${formatCurrency(line.asset.price_eur)} / unidade` : 'Sem preço'}
                                                     </Typography>
                                                 </>
+                                            ) : line.outside_broker ? (
+                                                <>
+                                                    <Typography variant="body2">Reforçar fora da corretora</Typography>
+                                                    <Typography variant="caption" color="text.secondary">
+                                                        {(line.outside_broker_assets || []).join(', ')}
+                                                    </Typography>
+                                                </>
                                             ) : (
                                                 <Typography variant="body2" color="text.secondary">
                                                     {line.includes_cash ? 'Fica em liquidez' : 'Sem ativo com preço no grupo'}
@@ -120,6 +127,7 @@ export default function DepositCalculator({ portfolioId, status }) {
                     </TableContainer>
                     <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 1 }}>
                         Unidades inteiras ao preço atual, sem comissões. A sobra é o que não chega para mais uma unidade.
+                        {status.other_assets_eur > 0 && ' Os ativos fora da corretora contam para as percentagens, mas só se compram ativos da corretora.'}
                         {plan.unassigned_value_eur > 0 && ` Os ativos sem grupo (${formatCurrency(plan.unassigned_value_eur)}) não entram nas contas.`}
                     </Typography>
                 </>

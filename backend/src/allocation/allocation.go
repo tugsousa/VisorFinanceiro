@@ -108,6 +108,31 @@ func ValidateAssignments(assignments []Assignment, groupIDs map[int64]bool) erro
 	return nil
 }
 
+// OtherAssignment counts an asset kept outside the brokers (an "other asset" of the net worth) in a group.
+// Such an asset only adds its value to the group: it's never an asset to buy or to sell.
+type OtherAssignment struct {
+	AssetID int64
+	GroupID int64
+}
+
+// ValidateOtherAssignments checks that each other asset is in one group at most and that every group exists.
+func ValidateOtherAssignments(assignments []OtherAssignment, groupIDs map[int64]bool) error {
+	seen := map[int64]bool{}
+	for _, a := range assignments {
+		if a.AssetID <= 0 {
+			return invalid("falta o ativo de uma atribuição")
+		}
+		if seen[a.AssetID] {
+			return invalid("um ativo fora da corretora está em mais do que um grupo")
+		}
+		seen[a.AssetID] = true
+		if !groupIDs[a.GroupID] {
+			return invalid("o grupo de um ativo fora da corretora não existe")
+		}
+	}
+	return nil
+}
+
 // ValidateTolerance checks the tolerance in percentage points.
 func ValidateTolerance(tolerancePP float64) error {
 	if math.IsNaN(tolerancePP) || tolerancePP <= 0 || tolerancePP > 50 {

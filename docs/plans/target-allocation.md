@@ -64,7 +64,11 @@ The asset type from Yahoo isn't enough on its own: an ETF is just "ETF", whether
 - **Deposit calculator:** amount input → amount per group and shares of the preferred asset to buy.
 - **Dashboard:** a small warning when any group is outside the tolerance, linking to the page.
 
-## Phase 2 (after the above works)
+## Phase 2 (done)
+
+Built as `GET /api/allocation/rebalance-plan`, the card "Reequilibrar com vendas" and the MCP tool
+`plan_rebalance`; the total tax comes from all the sales simulated together, not from adding up each one. See
+"Target Allocation" in `ARCHITECTURE_DOCUMENTATION.md`.
 
 "Rebalance by selling": the sales that would bring every group back to its target, each through
 `SimulateStockSale` so the user sees the IRS cost before deciding. Show the total tax.

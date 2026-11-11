@@ -66,6 +66,12 @@ type OtherAssetDetails struct {
 	MortgagePayment     float64 `json:"mortgage_payment,omitempty"`      // prestação mensal
 	MonthlyRent         float64 `json:"monthly_rent,omitempty"`
 	AnnualCosts         float64 `json:"annual_costs,omitempty"` // IMI, condomínio, seguros, manutenção
+
+	Ticker string `json:"ticker,omitempty"` // crypto: the Yahoo ticker of the coin in EUR, such as BTC-EUR
+
+	// Certificados de Aforro: the series (D, E or F) of the subscription, whose date is the asset's opened_at.
+	// Optional: with it the asset gets an estimate next to the value typed from AforroNet.
+	Series string `json:"series,omitempty"`
 }
 
 // hasMortgage says whether the property details describe a mortgage.
@@ -104,27 +110,54 @@ type OtherAsset struct {
 	Matured           bool               `json:"matured,omitempty"`
 	LastValuationDate string             `json:"last_valuation_date,omitempty"`
 	Entries           []OtherAssetEntry  `json:"entries"`
+
+	// Crypto: the quantity held, its average cost, and the price used. PriceStatus is OK (today's price), STALE
+	// (the last close, of PriceDate) or UNAVAILABLE (no price: ValueEUR is then the cost).
+	Quantity    float64 `json:"quantity,omitempty"`
+	CostEUR     float64 `json:"cost_eur,omitempty"`
+	PriceEUR    float64 `json:"price_eur,omitempty"`
+	PriceDate   string  `json:"price_date,omitempty"`
+	PriceStatus string  `json:"price_status,omitempty"`
+
+	// Certificados de Aforro with a series: what the certificate is estimated to be worth now, from the last
+	// value typed from AforroNet. Information only: ValueEUR is still the typed value.
+	AforroEstimate *AforroEstimateView `json:"aforro_estimate,omitempty"`
 }
+
+// Price statuses of a crypto asset.
+const (
+	PriceStatusOK          = "OK"
+	PriceStatusStale       = "STALE"
+	PriceStatusUnavailable = "UNAVAILABLE"
+)
 
 // OtherAssetInput creates or updates an asset. InitialValue (manual types, creation only) adds a valuation
-// on InitialDate, today by default. The type of an existing asset can't be changed.
+// on InitialDate, today by default. For crypto (creation only), InitialQuantity adds a purchase of that
+// quantity on InitialDate, and InitialValue is what was paid for it (optional). The type of an existing asset
+// can't be changed, nor the coin of a crypto asset.
 type OtherAssetInput struct {
-	Type         string             `json:"type"`
-	Name         string             `json:"name"`
-	Currency     string             `json:"currency"`
-	OpenedAt     string             `json:"opened_at"`
-	ClosedAt     string             `json:"closed_at"`
-	Details      *OtherAssetDetails `json:"details"`
-	InitialValue *float64           `json:"initial_value"`
-	InitialDate  string             `json:"initial_date"`
+	Type            string             `json:"type"`
+	Name            string             `json:"name"`
+	Currency        string             `json:"currency"`
+	OpenedAt        string             `json:"opened_at"`
+	ClosedAt        string             `json:"closed_at"`
+	Details         *OtherAssetDetails `json:"details"`
+	InitialValue    *float64           `json:"initial_value"`
+	InitialQuantity *float64           `json:"initial_quantity"`
+	InitialDate     string             `json:"initial_date"`
 }
 
-// OtherAssetEntryInput adds an entry to a manual asset.
+// OtherAssetEntryInput adds an entry to a manual or crypto asset. Quantity is for crypto only, where it's
+// required: a contribution buys that quantity and a withdrawal sells it, for Amount euros (0 when unknown).
 type OtherAssetEntryInput struct {
-	Date   string  `json:"date"`
-	Kind   string  `json:"kind"`
-	Amount float64 `json:"amount"`
-	Note   string  `json:"note"`
+	Date     string   `json:"date"`
+	Kind     string   `json:"kind"`
+	Amount   float64  `json:"amount"`
+	Quantity *float64 `json:"quantity"`
+	Note     string   `json:"note"`
+	// Estimate (Certificados de Aforro only) accepts the app's estimate as the asset's value: the other
+	// fields are ignored, and the server stores a valuation with the estimated value.
+	Estimate bool `json:"estimate"`
 }
 
 // NetWorthPortfolio is a broker portfolio valued now, as on the dashboard: holdings at market price (at cost
@@ -150,6 +183,8 @@ type NetWorth struct {
 	Portfolios     []NetWorthPortfolio     `json:"portfolios"`
 	Assets         []OtherAsset            `json:"assets"`
 	History        []networth.HistoryPoint `json:"history"`
+	// UnpricedAssets is how many crypto assets had no price and are counted at what they cost.
+	UnpricedAssets int `json:"unpriced_assets,omitempty"`
 }
 
 // --- Reading ---
@@ -161,7 +196,7 @@ func (s *uploadServiceImpl) ListOtherAssets(userID int64) ([]OtherAsset, error) 
 	}
 	now := today()
 	for i := range assets {
-		v, err := toValuationAsset(assets[i])
+		v, err := toValuationAsset(assets[i], s.cryptoPrices)
 		if err != nil {
 			return nil, err
 		}
@@ -242,9 +277,16 @@ func loadOtherAssets(userID int64, assetID int64) ([]OtherAsset, error) {
 	return assets, entryRows.Err()
 }
 
-// toValuationAsset converts a stored asset into what the networth package values.
-func toValuationAsset(a OtherAsset) (networth.Asset, error) {
+// toValuationAsset converts a stored asset into what the networth package values. prices gives the prices of
+// a crypto asset's coin; when it's nil the asset has no price and is valued at cost.
+func toValuationAsset(a OtherAsset, prices cryptoPriceFunc) (networth.Asset, error) {
 	v := networth.Asset{ID: a.ID, Type: a.Type, Name: a.Name}
+	if a.Type == networth.TypeCrypto {
+		v.Crypto = &networth.CryptoPrices{}
+		if prices != nil && a.Details != nil && a.Details.Ticker != "" && len(a.Entries) > 0 {
+			v.Crypto = prices(a.Details.Ticker)
+		}
+	}
 	if a.ClosedAt != "" {
 		closed, err := networth.ParseDate(a.ClosedAt)
 		if err != nil {
@@ -272,7 +314,11 @@ func toValuationAsset(a OtherAsset) (networth.Asset, error) {
 		if err != nil {
 			return v, fmt.Errorf("asset %d: %w", a.ID, err)
 		}
-		v.Entries = append(v.Entries, networth.Entry{ID: e.ID, Date: date, Kind: e.Kind, Amount: e.Amount})
+		entry := networth.Entry{ID: e.ID, Date: date, Kind: e.Kind, Amount: e.Amount}
+		if e.Quantity != nil {
+			entry.Quantity = *e.Quantity
+		}
+		v.Entries = append(v.Entries, entry)
 	}
 	return v, nil
 }
@@ -357,11 +403,28 @@ func fillValue(a *OtherAsset, v networth.Value, now time.Time) {
 			a.Matured = true
 		}
 	}
+	if a.Type == networth.TypeCrypto && v.Quantity > 0 {
+		a.Quantity = v.Quantity
+		a.CostEUR = round2(v.Cost)
+		switch {
+		case v.Unpriced:
+			a.PriceStatus = PriceStatusUnavailable
+		case v.PriceDate.Equal(now):
+			a.PriceStatus = PriceStatusOK
+		default:
+			a.PriceStatus = PriceStatusStale
+		}
+		if !v.Unpriced {
+			a.PriceEUR = v.Price
+			a.PriceDate = v.PriceDate.Format(networth.DateLayout)
+		}
+	}
 	for _, e := range a.Entries {
 		if e.Kind == networth.KindValuation && e.Date > a.LastValuationDate {
 			a.LastValuationDate = e.Date
 		}
 	}
+	a.AforroEstimate = aforroEstimateOf(*a, now)
 }
 
 // --- Writing ---
@@ -383,7 +446,25 @@ func (s *uploadServiceImpl) CreateOtherAsset(userID int64, in OtherAssetInput) (
 			date = today().Format(networth.DateLayout)
 		}
 		initial = &OtherAssetEntryInput{Date: date, Kind: networth.KindValuation, Amount: *in.InitialValue}
-		if err := validateEntry(*initial); err != nil {
+		if err := validateEntry(*initial, false); err != nil {
+			return nil, err
+		}
+	}
+	if in.Type == networth.TypeCrypto {
+		if in.InitialQuantity != nil {
+			date := in.InitialDate
+			if date == "" {
+				date = today().Format(networth.DateLayout)
+			}
+			initial = &OtherAssetEntryInput{Date: date, Kind: networth.KindContribution, Quantity: in.InitialQuantity}
+			if in.InitialValue != nil {
+				initial.Amount = *in.InitialValue
+			}
+			if err := validateEntry(*initial, true); err != nil {
+				return nil, err
+			}
+		}
+		if err := s.checkCryptoTicker(fields.ticker); err != nil {
 			return nil, err
 		}
 	}
@@ -403,8 +484,8 @@ func (s *uploadServiceImpl) CreateOtherAsset(userID int64, in OtherAssetInput) (
 		return nil, err
 	}
 	if initial != nil {
-		if _, err := tx.Exec(`INSERT INTO other_asset_entries (asset_id, date, kind, amount) VALUES (?, ?, ?, ?)`,
-			assetID, initial.Date, initial.Kind, initial.Amount); err != nil {
+		if _, err := tx.Exec(`INSERT INTO other_asset_entries (asset_id, date, kind, amount, quantity) VALUES (?, ?, ?, ?, ?)`,
+			assetID, initial.Date, initial.Kind, initial.Amount, initial.Quantity); err != nil {
 			return nil, fmt.Errorf("failed to store the initial value: %w", err)
 		}
 	}
@@ -415,8 +496,9 @@ func (s *uploadServiceImpl) CreateOtherAsset(userID int64, in OtherAssetInput) (
 }
 
 func (s *uploadServiceImpl) UpdateOtherAsset(userID int64, assetID int64, in OtherAssetInput) (*OtherAsset, error) {
-	var storedType string
-	err := database.DB.QueryRow("SELECT type FROM other_assets WHERE id = ? AND user_id = ?", assetID, userID).Scan(&storedType)
+	var storedType, storedDetails string
+	err := database.DB.QueryRow("SELECT type, COALESCE(details, '') FROM other_assets WHERE id = ? AND user_id = ?", assetID, userID).
+		Scan(&storedType, &storedDetails)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrOtherAssetNotFound
 	}
@@ -425,6 +507,25 @@ func (s *uploadServiceImpl) UpdateOtherAsset(userID int64, assetID int64, in Oth
 	}
 	if t := strings.TrimSpace(in.Type); t != "" && t != storedType {
 		return nil, inputErrorf("não é possível mudar o tipo de um ativo")
+	}
+	if storedType == networth.TypeCrypto {
+		// The coin is fixed: the entries are quantities of it. An update without the ticker keeps it.
+		var stored OtherAssetDetails
+		if storedDetails != "" {
+			if err := json.Unmarshal([]byte(storedDetails), &stored); err != nil {
+				return nil, fmt.Errorf("asset %d has invalid details: %w", assetID, err)
+			}
+		}
+		if in.Details != nil && strings.TrimSpace(in.Details.Ticker) != "" {
+			ticker, err := normalizeCryptoTicker(in.Details.Ticker)
+			if err != nil {
+				return nil, err
+			}
+			if ticker != stored.Ticker {
+				return nil, inputErrorf("não é possível mudar a moeda de um ativo; crie um novo")
+			}
+		}
+		in.Details = &OtherAssetDetails{Ticker: stored.Ticker}
 	}
 	fields, err := validateAssetFields(storedType, in)
 	if err != nil {
@@ -449,6 +550,11 @@ func (s *uploadServiceImpl) DeleteOtherAsset(userID int64, assetID int64) error 
 		assetID, userID); err != nil {
 		return fmt.Errorf("failed to delete the entries: %w", err)
 	}
+	// Likewise for the allocation groups that counted the asset.
+	if _, err := tx.Exec(`DELETE FROM allocation_other_assignments WHERE other_asset_id IN (SELECT id FROM other_assets WHERE id = ? AND user_id = ?)`,
+		assetID, userID); err != nil {
+		return fmt.Errorf("failed to take the asset out of the allocation groups: %w", err)
+	}
 	result, err := tx.Exec("DELETE FROM other_assets WHERE id = ? AND user_id = ?", assetID, userID)
 	if err != nil {
 		return fmt.Errorf("failed to delete the asset: %w", err)
@@ -468,16 +574,46 @@ func (s *uploadServiceImpl) AddOtherAssetEntry(userID int64, assetID int64, in O
 	if err != nil {
 		return nil, err
 	}
-	if !networth.IsManualType(assetType) {
+	isCrypto := assetType == networth.TypeCrypto
+	if !isCrypto && !networth.IsManualType(assetType) {
 		return nil, inputErrorf("o valor de um depósito a prazo é calculado a partir do capital e da taxa; altere os dados do depósito")
 	}
 	in.Kind = strings.TrimSpace(in.Kind)
 	in.Note = strings.TrimSpace(in.Note)
-	if err := validateEntry(in); err != nil {
+	in.Date = strings.TrimSpace(in.Date)
+	if in.Estimate {
+		// Accepting the estimate of a certificate: the server works out the value and the date, and marks the
+		// entry so that the next estimate still starts from the last value read on AforroNet.
+		entry, err := s.aforroEstimateEntry(userID, assetID)
+		if err != nil {
+			return nil, err
+		}
+		in = *entry
+	} else if in.Note == AforroEstimateNote {
+		return nil, inputErrorf("essa nota está reservada às estimativas; escolha outra")
+	}
+	if err := validateEntry(in, isCrypto); err != nil {
 		return nil, err
 	}
-	result, err := database.DB.Exec(`INSERT INTO other_asset_entries (asset_id, date, kind, amount, note) VALUES (?, ?, ?, ?, ?)`,
-		assetID, in.Date, in.Kind, in.Amount, nullIfEmpty(in.Note))
+	if isCrypto && in.Kind == networth.KindWithdrawal {
+		// A sale can't be larger than what was held on its day (or leave a later sale uncovered).
+		stored, err := loadOtherAssets(userID, assetID)
+		if err != nil {
+			return nil, err
+		}
+		if len(stored) == 0 {
+			return nil, ErrOtherAssetNotFound
+		}
+		entries, err := cryptoEntries(append(stored[0].Entries, OtherAssetEntry{Date: in.Date, Kind: in.Kind, Quantity: in.Quantity}))
+		if err != nil {
+			return nil, err
+		}
+		if !networth.QuantityStaysPositive(entries) {
+			return nil, inputErrorf("não pode vender mais do que a quantidade que tinha nessa data")
+		}
+	}
+	result, err := database.DB.Exec(`INSERT INTO other_asset_entries (asset_id, date, kind, amount, quantity, note) VALUES (?, ?, ?, ?, ?, ?)`,
+		assetID, in.Date, in.Kind, in.Amount, in.Quantity, nullIfEmpty(in.Note))
 	if err != nil {
 		return nil, fmt.Errorf("failed to add the entry: %w", err)
 	}
@@ -486,10 +622,30 @@ func (s *uploadServiceImpl) AddOtherAssetEntry(userID int64, assetID int64, in O
 		return nil, err
 	}
 	database.DB.Exec("UPDATE other_assets SET updated_at = CURRENT_TIMESTAMP WHERE id = ?", assetID)
-	return &OtherAssetEntry{ID: id, Date: in.Date, Kind: in.Kind, Amount: in.Amount, Note: in.Note}, nil
+	return &OtherAssetEntry{ID: id, Date: in.Date, Kind: in.Kind, Amount: in.Amount, Quantity: in.Quantity, Note: in.Note}, nil
 }
 
 func (s *uploadServiceImpl) DeleteOtherAssetEntry(userID int64, assetID int64, entryID int64) error {
+	// Deleting a crypto purchase mustn't leave a later sale without the quantity it sold.
+	stored, err := loadOtherAssets(userID, assetID)
+	if err != nil {
+		return err
+	}
+	if len(stored) == 1 && stored[0].Type == networth.TypeCrypto {
+		remaining := make([]OtherAssetEntry, 0, len(stored[0].Entries))
+		for _, e := range stored[0].Entries {
+			if e.ID != entryID {
+				remaining = append(remaining, e)
+			}
+		}
+		entries, err := cryptoEntries(remaining)
+		if err != nil {
+			return err
+		}
+		if len(remaining) < len(stored[0].Entries) && !networth.QuantityStaysPositive(entries) {
+			return inputErrorf("não pode apagar esta compra: há vendas posteriores que dependem dela; apague primeiro as vendas")
+		}
+	}
 	result, err := database.DB.Exec(`DELETE FROM other_asset_entries
 		WHERE id = ? AND asset_id IN (SELECT id FROM other_assets WHERE id = ? AND user_id = ?)`, entryID, assetID, userID)
 	if err != nil {
@@ -510,7 +666,7 @@ func (s *uploadServiceImpl) getOtherAsset(userID int64, assetID int64) (*OtherAs
 		return nil, ErrOtherAssetNotFound
 	}
 	a := assets[0]
-	v, err := toValuationAsset(a)
+	v, err := toValuationAsset(a, s.cryptoPrices)
 	if err != nil {
 		return nil, err
 	}
@@ -524,6 +680,7 @@ type assetFields struct {
 	details  any // JSON text or nil
 	openedAt any // YYYY-MM-DD or nil
 	closedAt any
+	ticker   string // crypto only
 }
 
 // validateAssetFields checks the common fields and the details the type needs, and returns what to store.
@@ -577,6 +734,35 @@ func validateAssetFields(assetType string, in OtherAssetInput) (assetFields, err
 		fields.details = string(text)
 	}
 
+	if assetType == networth.TypeSavingsCertificate {
+		series, err := validateCertificateDetails(in.Details, in.OpenedAt)
+		if err != nil {
+			return fields, err
+		}
+		if series != "" {
+			text, err := json.Marshal(OtherAssetDetails{Series: series})
+			if err != nil {
+				return fields, err
+			}
+			fields.details = string(text)
+		}
+	}
+
+	if assetType == networth.TypeCrypto {
+		ticker := ""
+		if in.Details != nil {
+			ticker = in.Details.Ticker
+		}
+		if fields.ticker, err = normalizeCryptoTicker(ticker); err != nil {
+			return fields, err
+		}
+		text, err := json.Marshal(OtherAssetDetails{Ticker: fields.ticker})
+		if err != nil {
+			return fields, err
+		}
+		fields.details = string(text)
+	}
+
 	if assetType == networth.TypeRealEstate && in.Details != nil {
 		d := *in.Details
 		details := OtherAssetDetails{
@@ -617,9 +803,21 @@ func validateAssetFields(assetType string, in OtherAssetInput) (assetFields, err
 	return fields, nil
 }
 
-func validateEntry(in OtherAssetEntryInput) error {
+// validateEntry checks an entry. A crypto entry is a purchase or a sale of a quantity, whose amount may be
+// zero (unknown); the other assets' entries have no quantity.
+func validateEntry(in OtherAssetEntryInput, crypto bool) error {
 	if !networth.IsValidKind(in.Kind) {
 		return inputErrorf("tipo de movimento desconhecido: %q", in.Kind)
+	}
+	if crypto {
+		if in.Kind != networth.KindContribution && in.Kind != networth.KindWithdrawal {
+			return inputErrorf("os movimentos de uma criptomoeda são compras ou vendas")
+		}
+		if in.Quantity == nil || math.IsNaN(*in.Quantity) || math.IsInf(*in.Quantity, 0) || *in.Quantity <= 0 {
+			return inputErrorf("a quantidade tem de ser maior que zero")
+		}
+	} else if in.Quantity != nil {
+		return inputErrorf("só os movimentos de criptomoedas têm quantidade")
 	}
 	date, err := networth.ParseDate(strings.TrimSpace(in.Date))
 	if err != nil {
@@ -631,7 +829,7 @@ func validateEntry(in OtherAssetEntryInput) error {
 	if math.IsNaN(in.Amount) || math.IsInf(in.Amount, 0) || in.Amount < 0 {
 		return inputErrorf("o valor não pode ser negativo")
 	}
-	if in.Kind != networth.KindValuation && in.Amount == 0 {
+	if !crypto && in.Kind != networth.KindValuation && in.Amount == 0 {
 		return inputErrorf("o valor tem de ser maior que zero")
 	}
 	if len([]rune(in.Note)) > maxEntryNoteLength {
@@ -658,12 +856,12 @@ type portfolioValuer interface {
 }
 
 func (s *uploadServiceImpl) GetNetWorth(userID int64) (*NetWorth, error) {
-	return buildNetWorth(userID, s, today())
+	return buildNetWorth(userID, s, s.cryptoPrices, today())
 }
 
 // buildNetWorth reads every portfolio and other asset of the user and adds them up. It only reads: the
 // portfolios' figures and snapshots are used as they are.
-func buildNetWorth(userID int64, valuer portfolioValuer, now time.Time) (*NetWorth, error) {
+func buildNetWorth(userID int64, valuer portfolioValuer, prices cryptoPriceFunc, now time.Time) (*NetWorth, error) {
 	rows, err := database.DB.Query("SELECT id, name FROM portfolios WHERE user_id = ? ORDER BY is_default DESC, name ASC", userID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read the portfolios: %w", err)
@@ -717,7 +915,7 @@ func buildNetWorth(userID int64, valuer portfolioValuer, now time.Time) (*NetWor
 	}
 	assets := make([]networth.Asset, 0, len(stored))
 	for _, a := range stored {
-		v, err := toValuationAsset(a)
+		v, err := toValuationAsset(a, prices)
 		if err != nil {
 			return nil, err
 		}
@@ -725,8 +923,12 @@ func buildNetWorth(userID int64, valuer portfolioValuer, now time.Time) (*NetWor
 	}
 
 	summary := networth.Summarize(portfolios, assets, snapshots, now)
+	unpriced := 0
 	for i := range stored {
 		fillValue(&stored[i], summary.AssetValues[stored[i].ID], now)
+		if stored[i].PriceStatus == PriceStatusUnavailable {
+			unpriced++
+		}
 	}
 	if portfolioRows == nil {
 		portfolioRows = []NetWorthPortfolio{}
@@ -742,6 +944,7 @@ func buildNetWorth(userID int64, valuer portfolioValuer, now time.Time) (*NetWor
 		Portfolios:     portfolioRows,
 		Assets:         stored,
 		History:        summary.History,
+		UnpricedAssets: unpriced,
 	}, nil
 }
 

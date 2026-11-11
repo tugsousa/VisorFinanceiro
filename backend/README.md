@@ -96,8 +96,9 @@ The tools are in `src/mcpserver`:
 | `get_transactions` | The transactions, filtered by year, type, ISIN or text. |
 | `simulate_sale` | What selling shares today would give: the FIFO lots used, the gain and the change in this year's tax. Nothing is stored. |
 | `get_tax_year_status` | This year's capital gains balance and estimated tax, and each position's unrealised result, tax effect if sold and lots. |
-| `get_allocation_drift` | The target allocation: each group's value, current and target %, difference in points and in EUR, whether it's outside the tolerance, and its holdings; the holdings in no group. Before any group exists, the holdings with their suggested group. |
+| `get_allocation_drift` | The target allocation: each group's value, current and target %, difference in points and in EUR, whether it's outside the tolerance, its holdings and the assets outside the brokers counted in it; the holdings in no group. Before any group exists, the holdings with their suggested group. |
 | `plan_deposit` | How to split a deposit across the groups to get closer to the targets without selling, and the whole shares of each group's asset it buys. Nothing is stored. |
-| `get_net_worth` | The total net worth: every portfolio plus the savings outside the brokers (accounts, term deposits, Certificados de Aforro, PPR, property), per type and per asset, with the month-end history. Takes no `portfolio_id`. |
+| `plan_rebalance` | The sales that would bring every group back to its target, what the money raised would buy, and the capital gains tax all the sales together would add to this year. A simulation: nothing is sold or stored. |
+| `get_net_worth` | The total net worth: every portfolio plus the savings outside the brokers (accounts, term deposits, Certificados de Aforro, PPR, crypto, property), per type and per asset, with the month-end history. Crypto comes with its quantity, price and price status. Takes no `portfolio_id`. |
 
 To try the MCP mode against a development database instead, run `go run . mcp` with `MCP_USER_EMAIL` set to the email of the account to use. The [MCP Inspector](https://github.com/modelcontextprotocol/inspector) (`npx @modelcontextprotocol/inspector go run . mcp`) shows the tools and lets you call them.
