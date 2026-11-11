@@ -77,6 +77,7 @@ The frontend is built with React 18 using Vite as the build tool, Material-UI (M
 - **Multi-Portfolio Support** - Users can manage multiple portfolios with seamless switching
 - **Analytics Dashboard** - Portfolio value, returns (including XIRR), evolution against an S&P 500 benchmark converted to EUR, asset allocation and a heatmap
 - **Analytics Pages** - Performance, stock sales, option sales, dividends, fees, and deposits and withdrawals (`/analytics/cash-flows`)
+- **Dividend Calendar** - "Próximos dividendos" on `/analytics/dividends` ("Tudo" view): the next dividends of each position held with ex-date, payment date, gross and net amount and whether each is announced, estimated or received; see [Dividend Calendar](#dividend-calendar)
 - **Tax Reporting** - Automated tax calculation and reporting; each line opens a drawer with the transactions behind it
 - **Tax Simulator** - What selling today would give and cost in IRS (`/tax/simulator`, and "Simular venda" on the portfolio page); see [Tax Simulator](#tax-simulator)
 - **Transactions** - The processed transactions, plus transactions added by hand
@@ -115,6 +116,10 @@ frontend/src/
 │   │   ├── components/ - Dashboard widgets and charts
 │   │   ├── hooks/     - Dashboard data fetching
 │   │   └── pages/     - Dashboard page
+│   ├── dividends/     - Dividend calendar ("Próximos dividendos", shown on the dividends page)
+│   │   ├── api/       - Dividend calendar API call
+│   │   ├── components/ - DividendCalendarSection
+│   │   └── logic/     - Grouping of the calendar into the next 60 days and months
 │   ├── landing/       - Public landing page
 │   ├── legal/         - Privacy policy, terms of service, contact
 │   ├── portfolio/     - Portfolio management (PortfolioContext.jsx)
@@ -306,6 +311,19 @@ The tax rules are all in `backend/src/tax` (with tests): the gain of a sale is i
 - `GET /api/tax/year-status?portfolio_id=` returns the year's balance and, for each position, its unrealised result, the tax effect of selling it all and its lots with the date each reaches 365 days.
 
 The simulator only reads the FIFO; it doesn't change the IRS page. To check that a change leaves the IRS page as it was, run `VisorFinanceiro.exe tax-snapshot before.json` before it and `tax-snapshot after.json` after it, and compare the two files. It writes everything the IRS page gets from the backend, for every portfolio; the order of the option sales can change between runs, so compare the lists as sets.
+
+### Dividend Calendar
+
+`GET /api/dividends/calendar?portfolio_id=` (`GetDividendCalendar` in `backend/src/services/dividend_calendar.go`, MCP tool `get_dividend_calendar`) lists, for each position held today, its dividends of the last 3 months and the next 12. The rules are in `backend/src/dividends` (with tests):
+
+- **Source.** Yahoo chart events (`v8/finance/chart?events=div`, 26 months of history) give each ex-date and amount per share; they carry no payment date. Yahoo `quoteSummary` (`calendarEvents`, `summaryDetail`) gives the next announced ex-date and payment date. `GetLastYearDividends`, which feeds the existing 12-month projection, is a wrapper over the same events, so that projection is unchanged (it still groups by ex-date month).
+- **Estimates.** Each dividend of the last 12 months is moved forward by one year with the same amount per share. The frequency comes from how many there were (1, 2, 4 or 12; any other count is "irregular", which happens when Yahoo misses an event).
+- **Announced.** An announced ex-date replaces the estimate within ±20 days of it (keeping its amount, since Yahoo announces dates, not amounts); with no estimate that close it's added, priced at `dividendRate` / payments per year.
+- **Payment date.** The median number of days between an ex-date and the dividend transactions of that ISIN (0–60 days). Without payment history there is no payment date rather than an invented one.
+- **Net.** Gross × (1 − tax withheld / gross dividends of that ISIN over the last 24 months). Without history, no net.
+- **Status.** `received` when a dividend transaction of the ISIN came 0–60 days after the ex-date (its real gross and net are shown); `announced` for announced dates, and for a dividend gone ex whose payment is still to come; `missed` when the ex-date and the expected payment passed with no transaction; `estimated` otherwise.
+
+Amounts use the quantity held today and today's exchange rate; the right to a dividend depends on holding the shares on the ex-date. The result is cached for 4 hours (and dropped with the user's other caches after an upload). Positions without a ticker or whose market data failed are listed in `skipped`.
 
 ### Portfolio History and Benchmark
 
@@ -521,6 +539,7 @@ The routes are defined in `backend/main.go`. Except for the public and auth rout
 - `GET /api/dividend-tax-summary` - Dividends and tax withheld per year and country
 - `GET /api/dividend-transactions` - Individual dividend transactions
 - `GET /api/dividend-metrics` - Dividend metrics
+- `GET /api/dividends/calendar` - Dividend calendar of the positions held (last 3 months and next 12)
 - `GET /api/fees` - Fees
 - `GET /api/history/chart` - Portfolio history and benchmark
 

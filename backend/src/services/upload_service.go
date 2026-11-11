@@ -1246,6 +1246,7 @@ func (s *uploadServiceImpl) InvalidateUserCache(userID int64, portfolioID int64)
 		fmt.Sprintf(ckDividendSummary, userID, portfolioID),
 		fmt.Sprintf(ckAllFeeDetails, userID, portfolioID),
 		fmt.Sprintf("agg_dividend_metrics_v3_holdings_based_user_%d_pf_%d", userID, portfolioID),
+		fmt.Sprintf(ckDividendCalendar, userID, portfolioID),
 		// FIX #5: also invalidate the holdings-with-value short-TTL cache on
 		// explicit cache bust so stale data is never served after a delete/reset.
 		fmt.Sprintf(ckCurrentHoldingsValue, userID, portfolioID),

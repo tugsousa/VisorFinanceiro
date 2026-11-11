@@ -1336,13 +1336,27 @@ func (s *priceServiceImpl) GetHistoricalPrices(ticker string) (PriceMap, string,
 	return priceMap, detectedCurrency, nil
 }
 
+// GetLastYearDividends sums the dividends per share of the last 12 months by month of the ex-dividend date.
 func (s *priceServiceImpl) GetLastYearDividends(ticker string) (map[time.Month]float64, string, error) {
+	now := time.Now()
+	events, currency, err := s.GetDividendEvents(ticker, now.AddDate(-1, 0, 0), now)
+	if err != nil {
+		return nil, "", err
+	}
+	monthlyDividends := make(map[time.Month]float64)
+	for _, div := range events {
+		monthlyDividends[div.ExDate.Month()] += div.Amount
+	}
+	return monthlyDividends, currency, nil
+}
+
+// GetDividendEvents returns every dividend with an ex-date between from and to (amount per share, in the
+// listing's currency), sorted by ex-date, and that currency. Yahoo's chart events only carry the ex-date.
+func (s *priceServiceImpl) GetDividendEvents(ticker string, from, to time.Time) ([]DividendEvent, string, error) {
 	s.ensureSession()
 
-	now := time.Now()
-	oneYearAgo := now.AddDate(-1, 0, 0)
-	period1 := oneYearAgo.Unix()
-	period2 := now.Unix()
+	period1 := from.Unix()
+	period2 := to.Unix()
 
 	url := fmt.Sprintf("https://query1.finance.yahoo.com/v8/finance/chart/%s?symbol=%s&period1=%d&period2=%d&interval=1d&events=div&crumb=%s", ticker, ticker, period1, period2, s.crumb)
 
@@ -1368,23 +1382,85 @@ func (s *priceServiceImpl) GetLastYearDividends(ticker string) (map[time.Month]f
 	}
 
 	if len(data.Chart.Result) == 0 {
-		return make(map[time.Month]float64), "", nil
+		return nil, "", nil
 	}
 
 	result := data.Chart.Result[0]
-	currency := result.Meta.Currency
-	dividendsMap := result.Events.Dividends
-
-	monthlyDividends := make(map[time.Month]float64)
-
-	for _, div := range dividendsMap {
+	var events []DividendEvent
+	for _, div := range result.Events.Dividends {
 		if div.Amount > 0 {
-			divDate := time.Unix(div.Date, 0)
-			monthlyDividends[divDate.Month()] += div.Amount
+			events = append(events, DividendEvent{ExDate: time.Unix(div.Date, 0), Amount: div.Amount})
 		}
 	}
+	sort.Slice(events, func(i, j int) bool { return events[i].ExDate.Before(events[j].ExDate) })
+	return events, result.Meta.Currency, nil
+}
 
-	return monthlyDividends, currency, nil
+type yahooCalendarEventsResponse struct {
+	QuoteSummary struct {
+		Result []struct {
+			CalendarEvents struct {
+				ExDividendDate yahooRawValue `json:"exDividendDate"`
+				DividendDate   yahooRawValue `json:"dividendDate"`
+			} `json:"calendarEvents"`
+			SummaryDetail struct {
+				DividendRate yahooRawValue `json:"dividendRate"`
+				Currency     string        `json:"currency"`
+			} `json:"summaryDetail"`
+		} `json:"result"`
+		Error interface{} `json:"error"`
+	} `json:"quoteSummary"`
+}
+
+// GetAnnouncedDividend reads the next dividend a company has announced (Yahoo quoteSummary calendarEvents).
+// It returns nil without an error when there's no announced ex-date.
+func (s *priceServiceImpl) GetAnnouncedDividend(ticker string) (*AnnouncedDividend, error) {
+	s.ensureSession()
+
+	url := fmt.Sprintf("https://query1.finance.yahoo.com/v10/finance/quoteSummary/%s?modules=calendarEvents,summaryDetail&crumb=%s", ticker, s.crumb)
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
+	resp, err := s.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to call Yahoo quoteSummary: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusUnauthorized {
+		s.mu.Lock()
+		s.isInitialized = false
+		s.mu.Unlock()
+		return nil, fmt.Errorf("status 401 (Unauthorized) - Crumb invalid")
+	}
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, nil
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("yahoo API error: status %d", resp.StatusCode)
+	}
+
+	var data yahooCalendarEventsResponse
+	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
+		return nil, err
+	}
+	if len(data.QuoteSummary.Result) == 0 {
+		return nil, nil
+	}
+	res := data.QuoteSummary.Result[0]
+	if res.CalendarEvents.ExDividendDate.Raw <= 0 {
+		return nil, nil
+	}
+	announced := &AnnouncedDividend{
+		ExDate:       time.Unix(int64(res.CalendarEvents.ExDividendDate.Raw), 0),
+		DividendRate: res.SummaryDetail.DividendRate.Raw,
+		Currency:     res.SummaryDetail.Currency,
+	}
+	if res.CalendarEvents.DividendDate.Raw > 0 {
+		announced.PayDate = time.Unix(int64(res.CalendarEvents.DividendDate.Raw), 0)
+	}
+	return announced, nil
 }
 
 func (s *priceServiceImpl) EnsureBenchmarkData() error {
