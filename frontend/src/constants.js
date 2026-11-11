@@ -36,7 +36,7 @@
     export const ALL_YEARS_OPTION = 'all';
     export const NO_YEAR_SELECTED = '';
 
-    export const MONTH_NAMES_CHART = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    export const MONTH_NAMES_CHART = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
 
     export const UI_TEXT = {
       errorLoadingData: "Erro ao carregar os dados. Por favor, tente novamente.",

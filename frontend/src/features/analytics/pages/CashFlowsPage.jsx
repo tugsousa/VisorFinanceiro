@@ -43,6 +43,8 @@ const CashFlowsPage = () => {
             ) : (
                 <CashFlowsSection
                     movements={filteredMovements}
+                    allMovements={movements}
+                    selectedYear={activeYear}
                     isLoading={isLoading}
                     NoRowsOverlay={() => <Box sx={{p:4, textAlign:'center'}}>Sem registo de movimentos.</Box>}
                 />
