@@ -1,4 +1,4 @@
-// The launcher ("Abrir VisorFinanceiro.exe" in the project folder) is what to double-click to use the
+// The launcher ("VisorFinanceiro (desenvolvimento).exe" in the project folder) is what to double-click to use the
 // app on this PC. It rebuilds dist\VisorFinanceiro.exe when the code changed since the last build,
 // installing what the build needs first, and then starts it. When nothing changed, it just starts it.
 package main

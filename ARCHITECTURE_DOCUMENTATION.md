@@ -438,20 +438,22 @@ go run github.com/golang-migrate/migrate/v4/cmd/migrate -path db/migrations -dat
 `setup.bat` (Windows) prepares a PC with nothing installed. Get the project (`git clone`, or **Code → Download ZIP** on GitHub, which needs no git) and double-click `setup.bat`. It runs `setup.ps1`, which:
 
 1. Installs Go and Node.js with winget if they're missing or older than needed (Go 1.24, Node.js 18)
-2. Builds `dist\VisorFinanceiro.exe` with `build-desktop.bat`, closing a running copy first so it can be replaced, and the launcher, `Abrir VisorFinanceiro.exe` (see [Launcher](#launcher))
+2. Builds `dist\VisorFinanceiro.exe` with `build-desktop.bat`, closing a running copy first so it can be replaced, and the launcher, `VisorFinanceiro (desenvolvimento).exe` (see [Launcher](#launcher))
 3. Installs Claude Desktop with winget if it's missing, and adds VisorFinanceiro to its `claude_desktop_config.json` as an MCP server. It writes to the Microsoft Store version's folder (`%LOCALAPPDATA%\Packages\Claude_*\LocalCache\Roaming\Claude`) and/or `%APPDATA%\Claude`, keeps the rest of the file, saves the previous version as `.bak`, and leaves a file that isn't valid JSON untouched
 
 `setup.bat -SkipClaude` skips step 3. The script can be run again at any time, for example after pulling changes, to rebuild the app.
 
 ### Launcher
 
-`Abrir VisorFinanceiro.exe`, in the project folder, is what to double-click to use the app. Its source is in `launcher/` (its own Go module, standard library only), and `setup.ps1` builds it. Each time it runs, it:
+`VisorFinanceiro (desenvolvimento).exe`, in the project folder, is what to double-click to use the app. Its source is in `launcher/` (its own Go module, standard library only), and `setup.ps1` builds it. Each time it runs, it:
 
 1. Checks whether `dist\VisorFinanceiro.exe` is missing or older than any file it's built from (in `frontend/` and `backend/`, plus `build-desktop.bat`). Build outputs, `node_modules`, databases, logs, tests, Markdown and `.env` files don't count
 2. If so, rebuilds it: runs `setup.ps1 -SkipClaude -SkipLauncher` when Go or Node.js is missing; otherwise runs `npm install` when `package.json` or `package-lock.json` changed since the last install, closes every running `VisorFinanceiro.exe` (including the MCP server, which Claude starts again when needed), and runs `build-desktop.bat`
 3. Starts `dist\VisorFinanceiro.exe` in its own window, which opens the browser (or only opens the browser when the app is already running)
 
-A change to the launcher itself needs `setup.bat`, or `go build -o "..\Abrir VisorFinanceiro.exe" .` in `launcher/`.
+A change to the launcher itself needs `setup.bat`, or `go build -o "..\VisorFinanceiro (desenvolvimento).exe" .` in `launcher/`.
+
+The launcher needs the project's code next to it, so it's only for this PC. To give the app to someone else, send `dist\VisorFinanceiro.exe`: it runs on its own, with no code, Go or Node.js, and keeps its data in that person's `%LOCALAPPDATA%\VisorFinanceiro`. Windows warns about it the first time because it isn't signed ("More info" → "Run anyway").
 
 SQLite doesn't need to be installed: the driver is pure Go and built into the executable, which creates the database on first run. The data isn't part of the project, so a new PC starts empty; upload the broker exports in the app.
 

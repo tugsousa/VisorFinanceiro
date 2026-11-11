@@ -14,7 +14,7 @@
     Don't install or configure Claude Desktop.
 
 .PARAMETER SkipLauncher
-    Don't build the launcher ("Abrir VisorFinanceiro.exe"); the launcher passes it when it runs the setup.
+    Don't build the launcher ("VisorFinanceiro (desenvolvimento).exe"); the launcher passes it when it runs the setup.
 
 .EXAMPLE
     setup.bat
@@ -27,7 +27,7 @@ param(
 $ErrorActionPreference = 'Stop'
 $root = $PSScriptRoot
 $exe = Join-Path $root 'dist\VisorFinanceiro.exe'
-$launcherName = 'Abrir VisorFinanceiro.exe'
+$launcherName = 'VisorFinanceiro (desenvolvimento).exe'
 $dataDir = Join-Path $env:LOCALAPPDATA 'VisorFinanceiro'
 
 $minGo = [version]'1.24'

@@ -24,4 +24,4 @@ dist/
 .mcp.json
 
 # Launcher built by setup.ps1 (source in launcher/)
-/Abrir VisorFinanceiro.exe
+/VisorFinanceiro (desenvolvimento).exe
