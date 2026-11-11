@@ -7,11 +7,10 @@ Read [README.md](README.md) first.
 Track savings that aren't at a broker, such as Certificados de Aforro, term deposits, crypto, current accounts,
 PPR and property, next to the investment portfolios, and show the total net worth.
 
-## Decision to confirm with the user before starting
+## Decision (confirmed by the user)
 
 These assets belong to the **user**, not to a portfolio. That way they don't change the returns (XIRR) or the
 IRS of the broker portfolios, and a new "Património" page adds up every portfolio plus these assets.
-Recommended; the user hasn't confirmed it yet.
 
 ## The key idea
 

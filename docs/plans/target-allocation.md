@@ -7,11 +7,11 @@ Read [README.md](README.md) first.
 The user sets target percentages (for example 80% shares, 20% bonds), sees how far the portfolio is from
 them, and gets a suggestion for splitting the next deposit to get closer, without selling.
 
-## Decision to confirm with the user before starting
+## Decision (confirmed by the user)
 
 Targets are set on **groups the user creates** ("Ações Mundo", "Emergentes", "Obrigações", "Ouro", "Liquidez"),
 and each holding is assigned to one group. A target per individual asset is then just a group with one asset,
-so this covers both. Recommended; the user hasn't confirmed it yet.
+so this covers both.
 
 The asset type from Yahoo isn't enough on its own: an ETF is just "ETF", whether it holds shares or bonds.
 
