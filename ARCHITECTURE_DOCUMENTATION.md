@@ -52,6 +52,8 @@ failed_isins           - ISINs that couldn't be resolved to a ticker, so they ar
 allocation_groups      - Target allocation groups of a portfolio (name, target %, colour, whether it holds the cash)
 allocation_assignments - The group of each holding (ISIN), and the asset preferred for buying in each group
 allocation_settings    - Per portfolio: the tolerance, in percentage points, before a group is flagged
+other_assets           - Savings outside the brokers (term deposits, accounts, PPR...), owned by the user, not a portfolio
+other_asset_entries    - Contributions, withdrawals, valuations and interest of those assets
 
 -- Supporting Tables  
 sessions               - Authentication sessions
@@ -84,6 +86,7 @@ The frontend is built with React 18 using Vite as the build tool, Material-UI (M
 - **Tax Reporting** - Automated tax calculation and reporting; each line opens a drawer with the transactions behind it
 - **Tax Simulator** - What selling today would give and cost in IRS (`/tax/simulator`, and "Simular venda" on the portfolio page); see [Tax Simulator](#tax-simulator)
 - **Target Allocation** - Groups the user creates with a target % each, how far the portfolio is from them, and how to split the next deposit without selling (tab "Alocação-alvo" of the portfolio page, `/portfolio?tab=alocacao`; a warning on the dashboard when a group is off target); see [Target Allocation](#target-allocation)
+- **Net Worth** - Every portfolio plus the savings kept outside the brokers (`/net-worth`, "Património", and a card on the dashboard); see [Net Worth](#net-worth)
 - **Transactions** - The processed transactions, plus transactions added by hand
 - **File Upload Interface** - Streamlined CSV upload process with drag-and-drop support
 - **Admin Dashboard** - System administration and user management with detailed metrics
@@ -357,6 +360,16 @@ Endpoints (all check that the portfolio belongs to the user, 404 otherwise):
 
 The MCP tools `get_allocation_drift` and `plan_deposit` answer the same questions. Rebalancing by selling (with the tax of each sale from the tax simulator) is not built yet.
 
+### Net Worth
+
+Savings kept outside the brokers are "other assets" (`other_assets`, with their movements in `other_asset_entries`). They belong to the **user, not to a portfolio**, so they never enter a portfolio's transactions, snapshots, returns (XIRR) or IRS. Their rules are in `backend/src/networth` (with tests); dates are `YYYY-MM-DD` and amounts EUR (other currencies aren't accepted yet).
+
+- **Term deposits** (`term_deposit`) are computed from `details` (principal, TANB in %, maturity, capitalisation) and the start date (`opened_at`). Day count Actual/365: the actual days elapsed over a 365-day year, also in leap years. Interest paid at maturity is simple; monthly, quarterly or annual capitalisation adds each period's interest to the balance (periods counted in calendar months from the start, clamped to shorter months, the last one ending at maturity). Before maturity the value includes the interest accrued so far. 28% is withheld from each interest payment, so with capitalisation only the net interest compounds on the net balance. The value stops growing at maturity. The net worth counts the value net of the withholding; the gross value is also returned.
+- **Manual types** (`cash_account`, `savings_certificate` until it's computed, `ppr`, `real_estate`, `other`): the last valuation on or before the date (a valuation includes the movements of its own day), plus later contributions and interest, minus later withdrawals.
+- An asset with `closed_at` is worth nothing from that date on. `crypto` is allowed by the table but not by the API yet.
+
+Endpoints (every query filters by the signed-in user): `GET/POST /api/other-assets`, `PUT/DELETE /api/other-assets/{id}` (the type can't change), `POST /api/other-assets/{id}/entries`, `DELETE /api/other-assets/{id}/entries/{entryId}` (term deposits take no entries), and `GET /api/net-worth`. The latter adds up every portfolio of the user, valued as on the dashboard (holdings at market price, at cost where there's no price, plus cash), and the other assets, and gives the totals per type and a history with one point per month end (the portfolios from the last snapshot of each month, the other assets from their entries or formula) and today. "Variação do mês" is the change since the end of last month, deposits included. The MCP tool `get_net_worth` returns the same.
+
 ### Portfolio History and Benchmark
 
 The portfolio's daily value is stored in `portfolio_snapshots` and rebuilt by a background job after an upload. It is compared against an S&P 500 benchmark that buys SPY with the same EUR deposits; each day's SPY price is converted to EUR with that day's `USDEUR=X` rate, so the benchmark includes EUR/USD moves as the portfolio does.
@@ -450,7 +463,7 @@ DIVIDEND_SOURCE_OVERRIDES_PATH=data/dividend_source_overrides.json
 
 ### Database Migrations
 
-The system uses golang-migrate for database schema management. Pending migrations in `backend/db/migrations` are applied automatically when the backend starts (the desktop build embeds them). To run them by hand:
+The system uses golang-migrate for database schema management. Pending migrations in `backend/db/migrations` are applied automatically when the backend starts (the desktop build embeds them). golang-migrate only moves forward from the database's current version: a gap in the numbers is fine, but a migration numbered below one a database has already run is never applied to it, and an executable that lacks the database's current migration refuses to start. So merge migrations in number order before a build runs on real data. To run them by hand:
 
 ```bash
 go run github.com/golang-migrate/migrate/v4/cmd/migrate -path db/migrations -database sqlite://visorfinanceiro.db up

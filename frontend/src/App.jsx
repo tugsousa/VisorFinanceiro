@@ -22,6 +22,7 @@ import TaxPage from './features/tax/TaxPage';
 import TaxSimulatorPage from './features/tax/pages/TaxSimulatorPage';
 import UploadPage from './features/upload/pages/UploadPage';
 import SettingsPage from './features/settings/pages/SettingsPage';
+import NetWorthPage from './features/netWorth/pages/NetWorthPage';
 
 // --- NOVOS IMPORTS DE ADMIN ---
 import AdminLayout from './features/admin/layouts/AdminLayout'; 
@@ -69,6 +70,7 @@ function App() {
                             <Route path="/upload" element={<ProtectedRoute><UploadPage /></ProtectedRoute>} />
                             <Route path="/transactions" element={<ProtectedRoute><TransactionsList /></ProtectedRoute>} />
                             <Route path="/settings" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
+                            <Route path="/net-worth" element={<ProtectedRoute><NetWorthPage /></ProtectedRoute>} />
 
                             {/* --- ADMIN ROUTES (NOVA ESTRUTURA) --- */}
                             <Route path="/admin" element={<AdminRoute><AdminLayout /></AdminRoute>}>

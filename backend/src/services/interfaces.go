@@ -60,6 +60,7 @@ type UploadService interface {
 	SaveAllocationAssignments(userID int64, portfolioID int64, assignments []AllocationAssignment) error
 	SaveAllocationSettings(userID int64, portfolioID int64, settings AllocationSettings) error
 	PlanAllocationDeposit(userID int64, portfolioID int64, amountEUR float64) (*DepositPlan, error)
+	NetWorthService // net_worth.go
 }
 
 type PriceInfo struct {
