@@ -24,6 +24,7 @@ import HistoricalPerformanceChart from '../components/HistoricalPerformanceChart
 import ReturnsPeriodSection from '../components/ReturnsPeriodSection';
 import AllocationSection from '../components/AllocationSection';
 import HeatmapSection from '../components/HeatmapSection';
+import AllocationDriftAlert from '../../allocation/components/AllocationDriftAlert';
 
 // Utils & Constants
 import { parseDateRobust } from '../../../lib/utils/dateUtils';
@@ -343,6 +344,8 @@ const DashboardPage = () => {
                     Alguns ativos não têm preço de mercado disponível. Estão avaliados ao custo, por isso o valor total e o lucro podem não refletir o preço atual.
                 </Alert>
             )}
+
+            <AllocationDriftAlert portfolioId={activePortfolio?.id} />
 
             {/* SECTION 1: HEADER / KPIs */}
             <Box sx={{ mb: 8 }}>
