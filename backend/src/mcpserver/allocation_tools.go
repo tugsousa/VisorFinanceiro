@@ -50,17 +50,34 @@ func (s *Server) getAllocationDrift(_ context.Context, _ *mcp.CallToolRequest, i
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to read the target allocation: %w", err)
 	}
-	if !status.Configured {
-		return nil, map[string]any{"portfolio": p.Name, "configured": false, "note": notConfiguredNote}, nil
+	type holding struct {
+		ISIN           string  `json:"isin"`
+		Name           string  `json:"name"`
+		ValueEUR       float64 `json:"value_eur"`
+		ValuedAtCost   bool    `json:"valued_at_cost,omitempty"`
+		Preferred      bool    `json:"preferred_to_buy,omitempty"`
+		BondSharePct   float64 `json:"bond_share_pct,omitempty"`
+		SuggestedGroup string  `json:"suggested_group,omitempty"`
 	}
 
-	type holding struct {
-		ISIN         string  `json:"isin"`
-		Name         string  `json:"name"`
-		ValueEUR     float64 `json:"value_eur"`
-		ValuedAtCost bool    `json:"valued_at_cost,omitempty"`
-		Preferred    bool    `json:"preferred_to_buy,omitempty"`
+	if !status.Configured {
+		// The holdings with the group the app would suggest, so the assistant can propose targets.
+		holdings := make([]holding, 0, len(status.Holdings))
+		for _, h := range status.Holdings {
+			holdings = append(holdings, holding{
+				ISIN: h.ISIN, Name: h.ProductName, ValueEUR: round2(h.ValueEUR), ValuedAtCost: h.ValuedAtCost,
+				BondSharePct: h.BondSharePct, SuggestedGroup: h.SuggestedGroup,
+			})
+		}
+		return nil, map[string]any{
+			"portfolio":  p.Name,
+			"configured": false,
+			"holdings":   holdings,
+			"cash_eur":   status.CashEUR,
+			"note":       notConfiguredNote,
+		}, nil
 	}
+
 	holdingsOf := map[int64][]holding{}
 	for _, h := range status.Holdings {
 		if h.GroupID != nil {
