@@ -99,13 +99,14 @@ export default function AllocationSection({ holdings }) {
             <Grid container spacing={3}>
                 {/* Adjusted grid to xs=12 md=4 for 3 columns instead of 4 */}
                 <Grid item xs={12} md={4}>
-                    <HoldingsAllocationChart title="Por Empresa" data={allocationData.byCompany} />
+                    <HoldingsAllocationChart title="Por Empresa" data={allocationData.byCompany} maxSlices={Infinity} />
                 </Grid>
                 <Grid item xs={12} md={4}>
-                    <HoldingsAllocationChart title="Por Setor" data={allocationData.bySector} />
+                    {/* Every item gets its own slice; only a real Outros shares the grey slice */}
+                    <HoldingsAllocationChart title="Por Setor" data={allocationData.bySector} maxSlices={Infinity} />
                 </Grid>
                 <Grid item xs={12} md={4}>
-                    <HoldingsAllocationChart title="Por Tipo de Ativo" data={allocationData.byAsset} />
+                    <HoldingsAllocationChart title="Por Tipo de Ativo" data={allocationData.byAsset} maxSlices={Infinity} />
                 </Grid>
             </Grid>
         </Box>

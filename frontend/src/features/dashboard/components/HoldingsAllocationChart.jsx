@@ -66,7 +66,10 @@ const centerTextPlugin = {
   }
 };
 
-export default function HoldingsAllocationChart({ data, title }) {
+const OTHERS = 'Outros';
+const OTHERS_COLOR = 'hsl(0, 0%, 72%)';
+
+export default function HoldingsAllocationChart({ data, title, maxSlices = 5 }) {
     const [hoveredIndex, setHoveredIndex] = useState(null);
     const [showPurchaseValue, setShowPurchaseValue] = useState(false);
 
@@ -95,22 +98,28 @@ export default function HoldingsAllocationChart({ data, title }) {
             percentage: total > 0 ? (item.value / total) * 100 : 0
         }));
 
-        // Prepare Chart Slices (Top 5 + Others)
-        const top5 = sorted.slice(0, 5);
-        const others = sorted.slice(5);
-        
-        const chartItems = [...top5];
+        // Prepare Chart Slices: the largest named items get their own slice; the rest,
+        // plus any item already called 'Outros', share a single grey 'Outros' slice.
+        const sliced = sorted.filter(i => i.name !== OTHERS).slice(0, maxSlices);
+        const slicedNames = new Set(sliced.map(i => i.name));
+        const others = sorted.filter(i => !slicedNames.has(i.name));
+
+        const chartItems = [...sliced];
         if (others.length > 0) {
             chartItems.push({
-                name: 'Outros',
+                name: OTHERS,
                 value: others.reduce((s, i) => s + i.value, 0),
-                color: palette[data.length]
+                color: OTHERS_COLOR
             });
         }
 
         return {
             totalValue: total,
-            sortedItems: sorted, // For the table
+            // For the table: a dot in the color of the slice each row is drawn in
+            sortedItems: sorted.map(item => ({
+                ...item,
+                dotColor: slicedNames.has(item.name) ? item.color : (item.name === OTHERS ? OTHERS_COLOR : null)
+            })),
             baseColors: chartItems.map(i => i.color),
             chartData: {
                 labels: chartItems.map(i => i.name),
@@ -120,7 +129,7 @@ export default function HoldingsAllocationChart({ data, title }) {
                 }]
             }
         };
-    }, [data, showPurchaseValue]);
+    }, [data, showPurchaseValue, maxSlices]);
 
     // 2. Colors (Restored Logic)
     const dynamicBackgroundColors = useMemo(() => {
@@ -224,8 +233,8 @@ export default function HoldingsAllocationChart({ data, title }) {
                             <TableRow key={idx} hover>
                                 <TableCell component="th" scope="row" sx={{ fontSize: '0.75rem', py: 0.5, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 100 }}>
                                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                        {idx < 5 && (
-                                            <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: item.color, flexShrink: 0 }} />
+                                        {item.dotColor && (
+                                            <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: item.dotColor, flexShrink: 0 }} />
                                         )}
                                         {item.name}
                                     </Box>
