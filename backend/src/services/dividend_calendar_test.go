@@ -8,6 +8,7 @@ import (
 
 	"github.com/username/taxfolio/backend/src/logger"
 	"github.com/username/taxfolio/backend/src/models"
+	"github.com/username/taxfolio/backend/src/utils"
 )
 
 // calendarPriceStub answers the dividend calls from fixed data.
@@ -154,5 +155,50 @@ func TestBuildDividendCalendar_NoExchangeRate(t *testing.T) {
 		map[string]string{"Y": "Y"}, nil, prices, rate, d("2026-11-11"))
 	if len(cal.Events) != 0 || len(cal.Skipped) != 1 || cal.Skipped[0].Reason != DividendSkipNoExchangeRate {
 		t.Errorf("calendar = %+v", cal)
+	}
+}
+
+// A position never paid yet has no payment lag of its own; its estimated payment dates use the lag of the
+// announced dividend, when that one is usable.
+func TestPositionDividendEvents_AnnouncedLagFallback(t *testing.T) {
+	logger.InitLogger("error")
+	today := d("2026-11-11")
+	var history []DividendEvent
+	for _, ex := range []string{"2025-10-10", "2026-01-12", "2026-04-10", "2026-07-10", "2026-10-13"} {
+		history = append(history, DividendEvent{ExDate: d(ex), Amount: 1.5})
+	}
+	h := models.HoldingWithValue{ISIN: "Y", ProductName: "Y plc", Quantity: 10}
+
+	good := &AnnouncedDividend{ExDate: d("2026-10-13"), PayDate: d("2026-11-13")}
+	events := positionDividendEvents(h, "Y", "USD", 1, history, good, nil, today)
+	future := 0
+	for _, e := range events {
+		exDate := utils.ParseDate(e.ExDate)
+		if !exDate.After(today) {
+			continue
+		}
+		future++
+		if e.PayDate == nil || !e.PayDateEstimated {
+			t.Errorf("event %s: pay date %v (estimated %v), want an estimated one", e.ExDate, e.PayDate, e.PayDateEstimated)
+			continue
+		}
+		if want := exDate.AddDate(0, 0, 31).Format(utils.DefaultDateFormat); *e.PayDate != want {
+			t.Errorf("event %s: pay date %s, want %s", e.ExDate, *e.PayDate, want)
+		}
+	}
+	if future == 0 {
+		t.Fatal("no future events")
+	}
+
+	for name, bad := range map[string]*AnnouncedDividend{
+		"no pay date":     {ExDate: d("2026-10-13")},
+		"pay before ex":   {ExDate: d("2026-10-13"), PayDate: d("2026-09-01")},
+		"pay too far off": {ExDate: d("2026-10-13"), PayDate: d("2027-01-30")},
+	} {
+		for _, e := range positionDividendEvents(h, "Y", "USD", 1, history, bad, nil, today) {
+			if utils.ParseDate(e.ExDate).After(today) && e.PayDate != nil {
+				t.Errorf("%s: event %s has pay date %s, want none", name, e.ExDate, *e.PayDate)
+			}
+		}
 	}
 }

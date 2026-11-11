@@ -326,6 +326,9 @@ func positionDividendEvents(
 		payDates[i] = p.Date
 	}
 	lag, hasLag := dividends.PaymentLagDays(exDates, payDates)
+	if !hasLag {
+		lag, hasLag = announcedPaymentLag(announced)
+	}
 	withholding, hasWithholding := dividends.WithholdingRate(payments, today)
 
 	name := h.ProductName
@@ -382,6 +385,20 @@ func positionDividendEvents(
 		events = append(events, event)
 	}
 	return events
+}
+
+// announcedPaymentLag is the days from the announced ex-date to the announced payment, used to estimate the
+// payment dates of a position the user has never been paid by yet. ok is false without a usable pair: no
+// payment date, or a payment before the ex-date or later than MaxPaymentLagDays after it.
+func announcedPaymentLag(announced *AnnouncedDividend) (days int, ok bool) {
+	if announced == nil || announced.PayDate.IsZero() {
+		return 0, false
+	}
+	lag := dividends.DaysBetween(dividends.Day(announced.ExDate), dividends.Day(announced.PayDate))
+	if lag < 0 || lag > dividends.MaxPaymentLagDays {
+		return 0, false
+	}
+	return lag, true
 }
 
 func hasPayment(paymentOf map[time.Time]int, exDate time.Time) bool {

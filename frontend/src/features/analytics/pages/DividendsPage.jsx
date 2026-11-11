@@ -5,7 +5,6 @@ import TrendingDownIcon from '@mui/icons-material/TrendingDown';
 import { useAuth } from '../../auth/AuthContext';
 import { useAnalyticsData } from '../hooks/useAnalyticsData';
 import DividendsSection from '../components/DividendsSection';
-import FutureProjectionChart from '../components/FutureProjectionChart';
 import MetricCard from '../components/MetricCard';
 import DividendCalendarSection from '../../dividends/components/DividendCalendarSection';
 import { ALL_YEARS_OPTION } from '../../../constants';
@@ -75,8 +74,6 @@ const DividendsPage = () => {
         return { total, monthlyAvg, bestMonthVal, growthPct, historicalYield };
     }, [filteredData, selectedYear, dividendTransactionsData, dividendMetricsData]);
 
-    // Atenção: Use snake_case porque é o que vem do backend (has_data)
-    const hasAnyData = dividendMetricsData?.has_data === true;
     const isGlobalView = selectedYear === ALL_YEARS_OPTION;
 
     return (
@@ -182,15 +179,9 @@ const DividendsPage = () => {
                     </>
                 )}
 
-                {/* Gráfico de Projeção (SÓ aparece na vista GERAL) */}
-                {isGlobalView && hasAnyData && (
-                    <Grid item xs={12} sx={{ mt: 3 }}>
-                        <FutureProjectionChart metricsData={dividendMetricsData} isLoading={isLoading} />
-                    </Grid>
-                )}
             </Grid>
 
-            {/* Dividend calendar of the positions held (only in the overall view) */}
+            {/* Dividend calendar of the positions held, with the next 12 months by month (only in the overall view) */}
             {isGlobalView && <DividendCalendarSection />}
 
             {/* Espaçamento aumentado para mt: 8 */}

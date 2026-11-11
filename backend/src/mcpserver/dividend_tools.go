@@ -13,7 +13,8 @@ const dividendCalendarNote = "Amounts assume the quantity held today; the right 
 	"shares on the ex-dividend date. status: announced = dates announced by the company (or ex-date passed and payment " +
 	"still to come), estimated = last year's dividend moved forward one year, received = a matching dividend " +
 	"transaction exists (its real amounts are shown), missed = ex-date and expected payment passed with no matching " +
-	"transaction in the uploaded files. pay_date is null when there is no payment history to estimate it from; " +
+	"transaction in the uploaded files. pay_date is null when there is neither a payment history nor an announced " +
+	"payment date to estimate it from; " +
 	"net_eur is null when there is no withholding history (it uses the tax withheld over the last 24 months). " +
 	"Dates are DD-MM-YYYY. Market data from Yahoo Finance."
 
@@ -52,8 +53,7 @@ func (s *Server) getDividendCalendar(_ context.Context, _ *mcp.CallToolRequest, 
 	until := today.AddDate(0, 0, days)
 
 	events := []services.DividendCalendarEvent{}
-	var gross, net float64
-	netComplete := true
+	var gross, net, grossWithoutNet float64
 	for _, e := range calendar.Events {
 		exDate := utils.ParseDate(e.ExDate)
 		upcoming := !exDate.Before(today) || e.Status == services.DividendStatusAnnounced
@@ -66,7 +66,7 @@ func (s *Server) getDividendCalendar(_ context.Context, _ *mcp.CallToolRequest, 
 			if e.NetEUR != nil {
 				net += *e.NetEUR
 			} else {
-				netComplete = false
+				grossWithoutNet += e.GrossEUR
 			}
 		}
 	}
@@ -80,11 +80,13 @@ func (s *Server) getDividendCalendar(_ context.Context, _ *mcp.CallToolRequest, 
 		"skipped_positions":  calendar.Skipped,
 		"note":               dividendCalendarNote,
 	}
-	if netComplete {
+	if grossWithoutNet == 0 {
 		result["upcoming_net_eur"] = net
 	} else {
 		result["upcoming_net_eur_partial"] = net
-		result["upcoming_net_note"] = "Some events have no net estimate (no withholding history), so the net total leaves them out."
+		result["upcoming_gross_without_net_eur"] = grossWithoutNet
+		result["upcoming_net_note"] = "Some events have no net estimate (no withholding history), so upcoming_net_eur_partial " +
+			"leaves them out; their gross amount is upcoming_gross_without_net_eur. Don't add that to the net as if nothing were withheld."
 	}
 	return nil, result, nil
 }

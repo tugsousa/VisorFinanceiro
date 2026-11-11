@@ -47,6 +47,10 @@ export default defineConfig(({ mode }) => {
         }
       }
     },
+    test: {
+      // App.test.js is the Create React App boilerplate (JSX in a .js file, "learn react" link); it never ran here.
+      exclude: ['node_modules/**', 'build/**', 'src/App.test.js'],
+    },
     build: {
       outDir: 'build',
       sourcemap: !isDesktop,

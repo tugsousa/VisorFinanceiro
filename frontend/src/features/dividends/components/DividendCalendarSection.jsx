@@ -1,23 +1,30 @@
 // frontend/src/features/dividends/components/DividendCalendarSection.jsx
 import React, { useMemo, useState } from 'react';
 import {
-    Box, Typography, Grid, Paper, Alert, Chip, Tooltip, ToggleButton, ToggleButtonGroup, Skeleton, Divider,
+    Box, Typography, Grid, Paper, Alert, Chip, Tooltip, ToggleButton, ToggleButtonGroup, Skeleton,
+    Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
 } from '@mui/material';
-import { DataGrid } from '@mui/x-data-grid';
-import { ptPT } from '@mui/x-data-grid/locales';
 import { useQuery } from '@tanstack/react-query';
 
 import MetricCard from '../../analytics/components/MetricCard';
+import DividendMonthChart from './DividendMonthChart';
 import { apiFetchDividendCalendar } from '../api/dividendCalendarApi';
 import { usePortfolio } from '../../portfolio/PortfolioContext';
 import { formatCurrency, formatQuantity } from '../../../lib/utils/formatUtils';
-import { buildCalendarView, STATUS_LABELS, SKIP_REASONS, UPCOMING_DAYS } from '../logic/calendarTransformers';
+import {
+    buildCalendarView, describeNet, STATUS_LABELS, SKIP_REASONS, NEAR_MONTHS, YEAR_MONTHS,
+} from '../logic/calendarTransformers';
+
+const NO_WITHHOLDING_HELP = 'Ainda não recebeu dividendos desta posição nos últimos 24 meses, por isso a retenção na fonte é desconhecida.';
+
+// Columns hidden on phones, to keep the table readable.
+const HIDE_ON_XS = { display: { xs: 'none', sm: 'table-cell' } };
 
 const StatusChip = ({ event }) => {
     const status = STATUS_LABELS[event.status] || STATUS_LABELS.estimated;
     let help = '';
     if (event.status === 'announced') {
-        help = event.exDateObj && event.dateObj && event.exDateObj < new Date() && !event.pay_date
+        help = event.exDateObj && event.exDateObj < new Date()
             ? 'A data ex-dividendo já passou; o pagamento ainda não aparece nos ficheiros carregados.'
             : 'Datas anunciadas pela empresa. O valor por ação é o do último pagamento comparável.';
     } else if (event.status === 'estimated') {
@@ -34,82 +41,123 @@ const StatusChip = ({ event }) => {
     );
 };
 
+/** The payment date; "~" when estimated; the ex-date, said as such, when the payment date is unknown. */
 const PayDate = ({ event }) => {
     if (!event.pay_date) {
         return (
-            <Tooltip title="Sem histórico de pagamentos desta posição para estimar a data de pagamento.">
-                <Typography variant="body2" color="text.disabled">—</Typography>
+            <Tooltip title="Data de pagamento desconhecida: sem histórico de pagamentos desta posição nem data anunciada. Mostra-se a data ex-dividendo.">
+                <Typography variant="body2" color="text.secondary" component="span">ex. {event.ex_date}</Typography>
             </Tooltip>
         );
     }
     if (event.pay_date_estimated) {
         return (
             <Tooltip title="Data estimada a partir do tempo que esta posição costuma demorar a pagar.">
-                <Typography variant="body2" color="text.secondary">~{event.pay_date}</Typography>
+                <Typography variant="body2" color="text.secondary" component="span">~{event.pay_date}</Typography>
             </Tooltip>
         );
     }
-    return <Typography variant="body2">{event.pay_date}</Typography>;
+    return <Typography variant="body2" component="span">{event.pay_date}</Typography>;
 };
 
-const NetAmount = ({ value }) => {
-    if (value === null || value === undefined) {
-        return (
-            <Tooltip title="Sem histórico de retenção na fonte desta posição nos últimos 24 meses.">
-                <Typography variant="body2" color="text.disabled">—</Typography>
-            </Tooltip>
-        );
-    }
-    return <Typography variant="body2">{formatCurrency(value)}</Typography>;
-};
-
-const columns = [
-    { field: 'pay_date', headerName: 'Pagamento', width: 120, sortable: false, renderCell: (p) => <PayDate event={p.row} /> },
-    { field: 'ex_date', headerName: 'Ex-dividendo', width: 120, sortable: false },
-    { field: 'product_name', headerName: 'Empresa', flex: 1, minWidth: 180 },
-    {
-        field: 'per_share', headerName: 'Por ação', width: 110, sortable: false,
-        valueFormatter: (value, row) => `${formatQuantity(value)} ${row.currency || ''}`,
-    },
-    { field: 'quantity', headerName: 'Quantidade', width: 100, valueFormatter: (value) => formatQuantity(value) },
-    {
-        field: 'gross_eur', headerName: 'Bruto', width: 110,
-        renderCell: (p) => <Typography variant="body2" sx={{ fontWeight: 600 }}>{formatCurrency(p.value)}</Typography>,
-    },
-    { field: 'net_eur', headerName: 'Líquido (est.)', width: 120, renderCell: (p) => <NetAmount value={p.value} /> },
-    { field: 'status', headerName: 'Estado', width: 130, renderCell: (p) => <StatusChip event={p.row} /> },
-];
-
-const MonthCard = ({ month }) => (
-    <Paper variant="outlined" sx={{ p: 1.5, height: '100%', borderRadius: 2 }}>
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-            <Typography variant="subtitle2">{month.label}</Typography>
-            <Typography variant="subtitle2" color={month.gross > 0 ? 'success.main' : 'text.disabled'}>
-                {formatCurrency(month.gross)}
-            </Typography>
-        </Box>
-        {month.events.length > 0 && month.netComplete && (
-            <Typography variant="caption" color="text.secondary" component="p" sx={{ textAlign: 'right' }}>
-                líquido ~{formatCurrency(month.net)}
-            </Typography>
-        )}
-        <Divider sx={{ my: 1 }} />
-        {month.events.length === 0 ? (
-            <Typography variant="caption" color="text.disabled">Sem dividendos previstos.</Typography>
-        ) : (
-            month.events.map(e => (
-                <Box key={e.id} sx={{ display: 'flex', justifyContent: 'space-between', gap: 1, mb: 0.5 }}>
-                    <Tooltip title={`Ex-dividendo ${e.ex_date}${e.pay_date ? ` · pagamento ${e.pay_date_estimated ? '~' : ''}${e.pay_date}` : ''} · ${STATUS_LABELS[e.status]?.label || ''}`}>
-                        <Typography variant="caption" noWrap sx={{ minWidth: 0, fontStyle: e.status === 'estimated' ? 'italic' : 'normal' }}>
-                            {String(e.dateObj.getDate()).padStart(2, '0')} · {e.product_name}
-                        </Typography>
-                    </Tooltip>
-                    <Typography variant="caption" sx={{ whiteSpace: 'nowrap' }}>{formatCurrency(e.gross_eur)}</Typography>
-                </Box>
-            ))
-        )}
-    </Paper>
+const Amount = ({ event, value }) => (
+    <Typography variant="body2" component="span" color={event.status === 'estimated' ? 'text.secondary' : 'text.primary'}>
+        {event.status === 'estimated' ? '~' : ''}{formatCurrency(value)}
+    </Typography>
 );
+
+const NetAmount = ({ event }) => {
+    if (event.net_eur === null || event.net_eur === undefined) {
+        return (
+            <Tooltip title={NO_WITHHOLDING_HELP}>
+                <Typography variant="caption" color="text.disabled" component="span">sem histórico</Typography>
+            </Tooltip>
+        );
+    }
+    return <Amount event={event} value={event.net_eur} />;
+};
+
+/** The net of a group of dividends, with the companies without a net estimate named in a tooltip. */
+const NetSummary = ({ split, capitalize = false }) => {
+    let text = describeNet(split, formatCurrency);
+    if (!text) return null;
+    if (capitalize) text = text.charAt(0).toUpperCase() + text.slice(1);
+    if (split.grossWithoutNet === 0) return <>{text}</>;
+    return (
+        <Tooltip title={`Sem estimativa de retenção para: ${split.withoutNet.join(', ')}. ${NO_WITHHOLDING_HELP}`}>
+            <span style={{ textDecoration: 'underline dotted', cursor: 'help' }}>{text}</span>
+        </Tooltip>
+    );
+};
+
+const MonthHeader = ({ group }) => (
+    <TableRow sx={{ bgcolor: 'action.hover' }}>
+        <TableCell colSpan={8} sx={{ py: 0.75 }}>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', columnGap: 2 }}>
+                <Typography variant="subtitle2">
+                    {group.label}
+                    <Typography component="span" variant="caption" color="text.secondary">
+                        {' · '}{group.events.length} {group.events.length === 1 ? 'pagamento' : 'pagamentos'}
+                    </Typography>
+                </Typography>
+                <Typography variant="caption" color="text.secondary">
+                    bruto <b>{formatCurrency(group.split.gross)}</b> · <NetSummary split={group.split} />
+                </Typography>
+            </Box>
+        </TableCell>
+    </TableRow>
+);
+
+const EventRow = ({ event }) => (
+    <TableRow hover>
+        <TableCell sx={{ whiteSpace: 'nowrap' }}><PayDate event={event} /></TableCell>
+        <TableCell sx={{ ...HIDE_ON_XS, whiteSpace: 'nowrap' }}>{event.ex_date}</TableCell>
+        <TableCell>{event.product_name}</TableCell>
+        <TableCell sx={{ ...HIDE_ON_XS, whiteSpace: 'nowrap' }} align="right">
+            {formatQuantity(event.per_share)} {event.currency || ''}
+        </TableCell>
+        <TableCell sx={HIDE_ON_XS} align="right">{formatQuantity(event.quantity)}</TableCell>
+        <TableCell align="right" sx={{ whiteSpace: 'nowrap', fontWeight: 600 }}><Amount event={event} value={event.gross_eur} /></TableCell>
+        <TableCell align="right" sx={{ whiteSpace: 'nowrap' }}><NetAmount event={event} /></TableCell>
+        <TableCell><StatusChip event={event} /></TableCell>
+    </TableRow>
+);
+
+const CalendarTable = ({ groups, emptyText }) => {
+    if (groups.length === 0) {
+        return <Typography variant="body2" color="text.secondary" sx={{ py: 3, textAlign: 'center' }}>{emptyText}</Typography>;
+    }
+    return (
+        <TableContainer>
+            <Table size="small">
+                <TableHead>
+                    <TableRow>
+                        <TableCell>Pagamento</TableCell>
+                        <TableCell sx={HIDE_ON_XS}>Ex-dividendo</TableCell>
+                        <TableCell>Empresa</TableCell>
+                        <TableCell sx={HIDE_ON_XS} align="right">Por ação</TableCell>
+                        <TableCell sx={HIDE_ON_XS} align="right">Quantidade</TableCell>
+                        <TableCell align="right">Bruto</TableCell>
+                        <TableCell align="right">
+                            <Tooltip title="Depois da retenção na fonte estrangeira, estimada com a dos seus dividendos desta posição nos últimos 24 meses. Antes do IRS em Portugal.">
+                                <span>Líquido (est.)</span>
+                            </Tooltip>
+                        </TableCell>
+                        <TableCell>Estado</TableCell>
+                    </TableRow>
+                </TableHead>
+                <TableBody>
+                    {groups.map(group => (
+                        <React.Fragment key={group.key}>
+                            <MonthHeader group={group} />
+                            {group.events.map(e => <EventRow key={e.id} event={e} />)}
+                        </React.Fragment>
+                    ))}
+                </TableBody>
+            </Table>
+        </TableContainer>
+    );
+};
 
 const DividendCalendarSection = () => {
     const { activePortfolio } = usePortfolio();
@@ -124,103 +172,81 @@ const DividendCalendarSection = () => {
     });
 
     const calendarView = useMemo(() => buildCalendarView(calendar), [calendar]);
-    const rows = view === 'upcoming' ? calendarView.upcoming : calendarView.past;
+    const next = calendarView.nextPayment;
 
     return (
         <Box sx={{ mt: 4 }}>
-            <Typography variant="h5" sx={{ mb: 1 }}>Próximos dividendos</Typography>
+            <Typography variant="h5" sx={{ mb: 1 }}>Calendário de dividendos</Typography>
             <Alert severity="info" sx={{ mb: 2 }}>
-                Os valores assumem a quantidade que detém hoje. O direito a um dividendo depende de deter as ações na
+                Os valores assumem a quantidade que detém hoje; o direito a um dividendo depende de deter as ações na
                 data ex-dividendo. Datas e valores por ação vêm do Yahoo Finance; o líquido usa a retenção na fonte dos
-                seus dividendos dos últimos 24 meses.
+                seus dividendos de cada posição nos últimos 24 meses.
             </Alert>
 
             {isError && <Alert severity="error" sx={{ mb: 2 }}>Não foi possível carregar o calendário de dividendos.</Alert>}
 
             <Grid container spacing={2} sx={{ mb: 2 }}>
-                <Grid item xs={12} sm={6} md={4}>
+                <Grid item xs={12} sm={6}>
                     <MetricCard
-                        title={`Próximos ${UPCOMING_DAYS} dias (bruto)`}
-                        value={calendarView.upcomingGross}
+                        title={`Próximos ${NEAR_MONTHS} meses (bruto)`}
+                        value={calendarView.near.gross}
                         isLoading={isLoading}
                         colorOverride="success.main"
-                        tooltipText={`Soma dos dividendos com pagamento (ou data ex-dividendo, sem data de pagamento) nos próximos ${UPCOMING_DAYS} dias.`}
-                        subValue={!isLoading && calendarView.upcoming.length > 0 ? (
+                        tooltipText={`Dividendos ainda por receber com pagamento (ou data ex-dividendo, sem data de pagamento) até ${calendarView.nearLimit.toLocaleDateString('pt-PT')}.`}
+                        subValue={!isLoading && calendarView.near.count > 0 ? (
                             <Typography variant="caption" color="text.secondary">
-                                {calendarView.upcomingNetComplete ? 'Líquido estimado' : 'Líquido estimado (parcial)'}: {formatCurrency(calendarView.upcomingNet)}
+                                <NetSummary split={calendarView.near} capitalize />
                             </Typography>
                         ) : null}
                     />
                 </Grid>
-                <Grid item xs={12} sm={6} md={4}>
+                <Grid item xs={12} sm={6}>
                     <MetricCard
-                        title="Próximos 12 meses (bruto)"
-                        value={calendarView.yearGross}
+                        title="Próximo pagamento"
+                        value={next ? next.gross_eur : null}
                         isLoading={isLoading}
-                        colorOverride="success.main"
-                        tooltipText="Soma dos dividendos anunciados e estimados dos próximos 12 meses, pelo mês de pagamento."
-                    />
-                </Grid>
-                <Grid item xs={12} sm={6} md={4}>
-                    <MetricCard
-                        title="Pagamentos previstos"
-                        value={calendarView.months.reduce((n, m) => n + m.events.length, 0)}
-                        unit="pagamentos"
-                        isLoading={isLoading}
-                        tooltipText="Número de pagamentos anunciados ou estimados nos próximos 12 meses."
+                        tooltipText="O próximo dividendo ainda por receber, anunciado ou estimado."
+                        subValue={!isLoading && next ? (
+                            <Typography variant="caption" color="text.secondary">
+                                {next.product_name} · <PayDate event={next} /> · {STATUS_LABELS[next.status]?.label}
+                            </Typography>
+                        ) : null}
                     />
                 </Grid>
             </Grid>
 
             <Paper elevation={0} sx={{ p: 2, mb: 3, borderRadius: 3 }}>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', flexWrap: 'wrap', gap: 1 }}>
+                    <Typography variant="h6">Próximos {YEAR_MONTHS} meses por mês de pagamento</Typography>
+                    {!isLoading && (
+                        <Typography variant="body2" color="text.secondary">
+                            bruto <b>{formatCurrency(calendarView.year.gross)}</b> · <NetSummary split={calendarView.year} />
+                        </Typography>
+                    )}
+                </Box>
+                <Typography variant="caption" color="text.secondary" component="p" sx={{ mb: 1 }}>
+                    Sem data de pagamento, um dividendo conta no mês da data ex-dividendo.
+                </Typography>
+                {isLoading ? <Skeleton variant="rounded" height={220} /> : <DividendMonthChart months={calendarView.chartMonths} />}
+            </Paper>
+
+            <Paper elevation={0} sx={{ p: 2, borderRadius: 3 }}>
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 1, mb: 1 }}>
-                    <Typography variant="h6">
-                        {view === 'upcoming' ? `Nos próximos ${UPCOMING_DAYS} dias` : 'Últimos 3 meses'}
-                    </Typography>
+                    <Typography variant="h6">{view === 'upcoming' ? 'Por receber' : 'Últimos 3 meses'}</Typography>
                     <ToggleButtonGroup size="small" exclusive value={view} onChange={(_, v) => v && setView(v)}>
-                        <ToggleButton value="upcoming">Próximos {UPCOMING_DAYS} dias</ToggleButton>
+                        <ToggleButton value="upcoming">Próximos {YEAR_MONTHS} meses</ToggleButton>
                         <ToggleButton value="past">Últimos 3 meses</ToggleButton>
                     </ToggleButtonGroup>
                 </Box>
                 {isLoading ? (
-                    <Skeleton variant="rounded" height={160} />
-                ) : (
-                    <DataGrid
-                        rows={rows}
-                        columns={columns}
-                        autoHeight
-                        density="compact"
-                        initialState={{ pagination: { paginationModel: { pageSize: 10 } } }}
-                        pageSizeOptions={[10, 25, 50]}
-                        disableRowSelectionOnClick
-                        disableColumnMenu
-                        localeText={{
-                            ...ptPT.components.MuiDataGrid.defaultProps.localeText,
-                            noRowsLabel: view === 'upcoming'
-                                ? `Sem dividendos previstos nos próximos ${UPCOMING_DAYS} dias.`
-                                : 'Sem dividendos nos últimos 3 meses.',
-                        }}
-                        sx={{ '& .MuiDataGrid-cell': { display: 'flex', alignItems: 'center' } }}
-                    />
-                )}
-            </Paper>
-
-            <Paper elevation={0} sx={{ p: 2, borderRadius: 3 }}>
-                <Typography variant="h6">Mês a mês (próximos 12 meses)</Typography>
-                <Typography variant="caption" color="text.secondary" component="p" sx={{ mb: 2 }}>
-                    Cada dividendo aparece no mês de pagamento; sem data de pagamento, no mês da data ex-dividendo.
-                    Os estimados aparecem em itálico.
-                </Typography>
-                {isLoading ? (
                     <Skeleton variant="rounded" height={240} />
                 ) : (
-                    <Grid container spacing={1.5}>
-                        {calendarView.months.map(month => (
-                            <Grid item xs={12} sm={6} md={4} lg={3} key={month.key}>
-                                <MonthCard month={month} />
-                            </Grid>
-                        ))}
-                    </Grid>
+                    <CalendarTable
+                        groups={view === 'upcoming' ? calendarView.upcomingMonths : calendarView.pastMonths}
+                        emptyText={view === 'upcoming'
+                            ? `Sem dividendos previstos nos próximos ${YEAR_MONTHS} meses.`
+                            : 'Sem dividendos nos últimos 3 meses.'}
+                    />
                 )}
                 {calendar?.skipped?.length > 0 && (
                     <Typography variant="caption" color="text.secondary" component="p" sx={{ mt: 2 }}>

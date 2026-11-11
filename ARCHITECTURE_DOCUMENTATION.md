@@ -82,7 +82,7 @@ The frontend is built with React 18 using Vite as the build tool, Material-UI (M
 - **Multi-Portfolio Support** - Users can manage multiple portfolios with seamless switching
 - **Analytics Dashboard** - Portfolio value, returns (including XIRR), evolution against an S&P 500 benchmark converted to EUR, asset allocation and a heatmap
 - **Analytics Pages** - Performance, stock sales, option sales, dividends, fees, and deposits and withdrawals (`/analytics/cash-flows`)
-- **Dividend Calendar** - "Próximos dividendos" on `/analytics/dividends` ("Tudo" view): the next dividends of each position held with ex-date, payment date, gross and net amount and whether each is announced, estimated or received; see [Dividend Calendar](#dividend-calendar)
+- **Dividend Calendar** - "Calendário de dividendos" on `/analytics/dividends` ("Tudo" view): the next dividends of each position held with ex-date, payment date, gross and net amount and whether each is announced, estimated or received; see [Dividend Calendar](#dividend-calendar)
 - **Tax Reporting** - Automated tax calculation and reporting; each line opens a drawer with the transactions behind it
 - **Tax Simulator** - What selling today would give and cost in IRS (`/tax/simulator`, and "Simular venda" on the portfolio page); see [Tax Simulator](#tax-simulator)
 - **Target Allocation** - Groups the user creates with a target % each, how far the portfolio is from them, and how to split the next deposit without selling (tab "Alocação-alvo" of the portfolio page, `/portfolio?tab=alocacao`; a warning on the dashboard when a group is off target); see [Target Allocation](#target-allocation)
@@ -129,10 +129,10 @@ frontend/src/
 │   │   ├── components/ - Dashboard widgets and charts
 │   │   ├── hooks/     - Dashboard data fetching
 │   │   └── pages/     - Dashboard page
-│   ├── dividends/     - Dividend calendar ("Próximos dividendos", shown on the dividends page)
+│   ├── dividends/     - Dividend calendar ("Calendário de dividendos", shown on the dividends page)
 │   │   ├── api/       - Dividend calendar API call
 │   │   ├── components/ - DividendCalendarSection
-│   │   └── logic/     - Grouping of the calendar into the next 60 days and months
+│   │   └── logic/     - Grouping of the calendar into the next 3 and 12 months, by month, with the net split
 │   ├── landing/       - Public landing page
 │   ├── legal/         - Privacy policy, terms of service, contact
 │   ├── portfolio/     - Portfolio management (PortfolioContext.jsx)
@@ -332,8 +332,10 @@ The simulator only reads the FIFO; it doesn't change the IRS page. To check that
 - **Source.** Yahoo chart events (`v8/finance/chart?events=div`, 26 months of history) give each ex-date and amount per share; they carry no payment date. Yahoo `quoteSummary` (`calendarEvents`, `summaryDetail`) gives the next announced ex-date and payment date. `GetLastYearDividends`, which feeds the existing 12-month projection, is a wrapper over the same events, so that projection is unchanged (it still groups by ex-date month).
 - **Estimates.** Each dividend of the last 12 months is moved forward by one year with the same amount per share. The frequency comes from how many there were (1, 2, 4 or 12; any other count is "irregular", which happens when Yahoo misses an event).
 - **Announced.** An announced ex-date replaces the estimate within ±20 days of it (keeping its amount, since Yahoo announces dates, not amounts); with no estimate that close it's added, priced at `dividendRate` / payments per year.
-- **Payment date.** The median number of days between an ex-date and the dividend transactions of that ISIN (0–60 days). Without payment history there is no payment date rather than an invented one.
-- **Net.** Gross × (1 − tax withheld / gross dividends of that ISIN over the last 24 months). Without history, no net.
+- **Payment date.** The median number of days between an ex-date and the dividend transactions of that ISIN (0–60 days). Without payment history, the days between the announced ex-date and payment date (when 0–60); without either, no payment date rather than an invented one.
+- **Net.** Gross × (1 − tax withheld / gross dividends of that ISIN over the last 24 months). Without history, no net. A total never adds a missing net as zero: the page shows "líquido X + Y bruto sem retenção conhecida" (`splitNet`/`describeNet` in `frontend/src/features/dividends/logic/calendarTransformers.js`), and the MCP tool returns `upcoming_net_eur_partial` with `upcoming_gross_without_net_eur`.
+
+The page section "Calendário de dividendos" shows two cards (next 3 months gross with its net; the next payment), a chart of the next 12 months by payment month (announced and estimated stacked; it replaced the old projection chart, which grouped by ex-date month), and a table grouped by month, with a toggle between the next 12 months and the last 3. Empty months are left out of the table. The frontend tests run with `npm test` (vitest).
 - **Status.** `received` when a dividend transaction of the ISIN came 0–60 days after the ex-date (its real gross and net are shown); `announced` for announced dates, and for a dividend gone ex whose payment is still to come; `missed` when the ex-date and the expected payment passed with no transaction; `estimated` otherwise.
 
 Amounts use the quantity held today and today's exchange rate; the right to a dividend depends on holding the shares on the ex-date. The result is cached for 4 hours (and dropped with the user's other caches after an upload). Positions without a ticker or whose market data failed are listed in `skipped`.
