@@ -95,6 +95,7 @@ func (s *Server) addTools(server *mcp.Server) {
 	}, s.getTransactions)
 
 	s.addTaxTools(server, readOnlyOnline)
+	s.addAllocationTools(server, readOnlyOnline)
 }
 
 // --- Inputs ---

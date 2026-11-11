@@ -51,6 +51,13 @@ type UploadService interface {
 	RebuildUserHistory(userID int64, portfolioID int64) error
 	RebuildUserHistoryFrom(userID int64, portfolioID int64, fromDate string) error
 	RefreshDailySnapshot(userID int64, portfolioID int64) error
+
+	// Target allocation (allocation.go)
+	GetAllocation(userID int64, portfolioID int64) (*AllocationStatus, error)
+	SaveAllocationGroups(userID int64, portfolioID int64, groups []AllocationGroup) ([]AllocationGroup, error)
+	SaveAllocationAssignments(userID int64, portfolioID int64, assignments []AllocationAssignment) error
+	SaveAllocationSettings(userID int64, portfolioID int64, settings AllocationSettings) error
+	PlanAllocationDeposit(userID int64, portfolioID int64, amountEUR float64) (*DepositPlan, error)
 }
 
 type PriceInfo struct {
