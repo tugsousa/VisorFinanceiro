@@ -51,7 +51,7 @@ go test ./src/...
 
 ## Desktop Build
 
-On a new Windows PC, double-click `setup.bat` in the project root: it installs Go and Node.js if needed, builds the app, and adds it to Claude Desktop (installing Claude Desktop if needed). See [Setting Up on a New PC](../ARCHITECTURE_DOCUMENTATION.md#setting-up-on-a-new-pc).
+On a new Windows PC, double-click `setup.bat` in the project root: it installs Go and Node.js if needed, builds the app, and adds it to Claude Desktop (installing Claude Desktop if needed). See [Setting Up on a New PC](../ARCHITECTURE_DOCUMENTATION.md#setting-up-on-a-new-pc). After that, open the app with `Abrir VisorFinanceiro.exe` in the project root: it rebuilds the app first when the code changed (see [Launcher](../ARCHITECTURE_DOCUMENTATION.md#launcher)).
 
 `build-desktop.bat` in the project root only builds `dist\VisorFinanceiro.exe`: one file that runs the whole app on this PC, with the frontend embedded and served next to the API on `http://127.0.0.1:38471`. It needs no configuration or login, and keeps its data in `%LOCALAPPDATA%\VisorFinanceiro`. The desktop code is in `runtime_desktop.go`, behind the `desktop` build tag.
 

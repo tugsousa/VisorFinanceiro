@@ -22,3 +22,6 @@ dist/
 
 # Local MCP server config (machine-specific path)
 .mcp.json
+
+# Launcher built by setup.ps1 (source in launcher/)
+/Abrir VisorFinanceiro.exe

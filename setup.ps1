@@ -13,16 +13,21 @@
 .PARAMETER SkipClaude
     Don't install or configure Claude Desktop.
 
+.PARAMETER SkipLauncher
+    Don't build the launcher ("Abrir VisorFinanceiro.exe"); the launcher passes it when it runs the setup.
+
 .EXAMPLE
     setup.bat
 #>
 param(
-    [switch]$SkipClaude
+    [switch]$SkipClaude,
+    [switch]$SkipLauncher
 )
 
 $ErrorActionPreference = 'Stop'
 $root = $PSScriptRoot
 $exe = Join-Path $root 'dist\VisorFinanceiro.exe'
+$launcherName = 'Abrir VisorFinanceiro.exe'
 $dataDir = Join-Path $env:LOCALAPPDATA 'VisorFinanceiro'
 
 $minGo = [version]'1.24'
@@ -169,6 +174,18 @@ if ($LASTEXITCODE -ne 0 -or -not (Test-Path $exe)) {
     Stop-Setup 'the build failed; see the messages above.'
 }
 
+# The launcher can't replace itself while it's running this setup, so it skips this step.
+if (-not $SkipLauncher) {
+    Write-Step "Building $launcherName"
+    Push-Location (Join-Path $root 'launcher')
+    try {
+        & go build -trimpath -ldflags '-s -w' -o (Join-Path $root $launcherName) .
+        if ($LASTEXITCODE -ne 0) { Stop-Setup 'the launcher build failed; see the messages above.' }
+    } finally {
+        Pop-Location
+    }
+}
+
 # --- 3. Claude Desktop -----------------------------------------------------------------------
 if (-not $SkipClaude) {
     Write-Step 'Adding VisorFinanceiro to Claude Desktop'
@@ -190,7 +207,7 @@ if (-not $SkipClaude) {
 
 Write-Host ''
 Write-Host 'Done.' -ForegroundColor Green
-Write-Host "- The app: $exe (double-click it to open VisorFinanceiro in the browser)"
+Write-Host "- The app: double-click $(Join-Path $root $launcherName). It rebuilds the app when the code changed, then opens it in the browser"
 Write-Host "- Your data: $dataDir"
 if (-not $SkipClaude) {
     Write-Host '- In Claude Desktop, VisorFinanceiro is under the tools ("+" > Connectors) of a new chat.'
