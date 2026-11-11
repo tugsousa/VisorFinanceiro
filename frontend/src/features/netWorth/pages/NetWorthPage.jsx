@@ -48,8 +48,6 @@ const assetDetail = (asset) => {
     if (asset.type === 'crypto') return cryptoDetail(asset);
     if (asset.type === 'real_estate') {
         const parts = [usageLabel(asset.details?.usage)];
-        if (asset.debt_eur > 0) parts.push(`valor ${formatCurrency(asset.gross_value_eur)} − dívida ${formatCurrency(asset.debt_eur)}`);
-        if (asset.details?.monthly_rent) parts.push(`renda ${formatCurrency(asset.details.monthly_rent)}/mês`);
         if (asset.last_valuation_date) parts.push(`valor de ${formatISODate(asset.last_valuation_date)}`);
         return parts.filter(Boolean).join(' · ');
     }
