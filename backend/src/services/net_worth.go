@@ -309,7 +309,11 @@ func toValuationAsset(a OtherAsset, prices cryptoPriceFunc) (networth.Asset, err
 		}
 		v.Mortgage = &mortgage
 	}
+	v.Aforro = aforroCertificateOf(a)
 	for _, e := range a.Entries {
+		if v.Aforro != nil && e.Note == AforroEstimateNote {
+			continue // an estimate accepted before certificates were valued by their rates: the rates give it again
+		}
 		date, err := networth.ParseDate(e.Date)
 		if err != nil {
 			return v, fmt.Errorf("asset %d: %w", a.ID, err)

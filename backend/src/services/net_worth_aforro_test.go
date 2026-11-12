@@ -44,7 +44,7 @@ func tenthMonthsAgo(n int) time.Time {
 	return time.Date(now.Year(), now.Month()-time.Month(n), 10, 0, 0, 0, 0, time.UTC)
 }
 
-func TestAforro_EstimateIsShownButNeverCounted(t *testing.T) {
+func TestAforro_ValuedByTheRates(t *testing.T) {
 	service := setupAforroUser(t)
 	// Subscribed 14 months ago on the 10th; every month since then has a rate.
 	subscribed := tenthMonthsAgo(14)
@@ -70,11 +70,6 @@ func TestAforro_EstimateIsShownButNeverCounted(t *testing.T) {
 	if asset.Details == nil || asset.Details.Series != "F" {
 		t.Fatalf("the series should be stored: %+v", asset.Details)
 	}
-	// The value that counts is the typed one; the estimate is next to it.
-	estimate := asset.AforroEstimate
-	if asset.ValueEUR != 10000 || estimate == nil || estimate.CountedInTotal {
-		t.Fatalf("asset = %+v, estimate = %+v", asset, estimate)
-	}
 	// The fifth quarter ended since (14 months ≥ 15 months only when today is past the 10th; either 0 or 1).
 	fifth := networth.AforroCapitalisationDate(subscribed, 5)
 	wantQuarters := 0
@@ -85,7 +80,12 @@ func TestAforro_EstimateIsShownButNeverCounted(t *testing.T) {
 	if wantQuarters == 1 {
 		wantValue = 10045.0
 	}
-	if estimate.Status != AforroStatusOK || len(estimate.Capitalisations) != wantQuarters || estimate.ValueEUR != wantValue || estimate.DifferenceEUR != round2(wantValue-10000) {
+	// The value that counts is the one worked out by the rates, and the estimate explains it.
+	estimate := asset.AforroEstimate
+	if asset.ValueEUR != wantValue || estimate == nil || !estimate.CountedInTotal {
+		t.Fatalf("asset = %+v, estimate = %+v", asset, estimate)
+	}
+	if estimate.Status != AforroStatusOK || len(estimate.Capitalisations) != wantQuarters || estimate.ValueEUR != wantValue || estimate.DifferenceEUR != 0 {
 		t.Fatalf("estimate = %+v (%+v), want %d quarters and %v", estimate, estimate.AforroEstimate, wantQuarters, wantValue)
 	}
 
@@ -93,15 +93,15 @@ func TestAforro_EstimateIsShownButNeverCounted(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if nw.TotalEUR != 10000 || nw.OtherAssetsEUR != 10000 || nw.History[len(nw.History)-1].TotalEUR != 10000 {
-		t.Errorf("the estimate must not enter the totals or the history: %+v", nw)
+	if nw.TotalEUR != wantValue || nw.OtherAssetsEUR != wantValue || nw.History[len(nw.History)-1].TotalEUR != wantValue {
+		t.Errorf("the value worked out by the rates should be in the totals and the history: %+v", nw)
 	}
 	if nw.Assets[0].AforroEstimate == nil {
 		t.Errorf("the net worth should carry the estimate of the asset")
 	}
 }
 
-func TestAforro_AcceptingTheEstimate(t *testing.T) {
+func TestAforro_ValueFollowsTheRates(t *testing.T) {
 	service := setupAforroUser(t)
 	// Subscribed 20 months ago: anchored after the 4th quarter, the 5th and 6th have ended since.
 	subscribed := tenthMonthsAgo(20)
@@ -122,9 +122,9 @@ func TestAforro_AcceptingTheEstimate(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// By hand: 10 000 → 10 045.00 → 10 090.20.
-	if e := asset.AforroEstimate; e == nil || e.ValueEUR != 10090.20 || len(e.Capitalisations) != 2 {
-		t.Fatalf("estimate = %+v", asset.AforroEstimate)
+	// By hand: 10 000 → 10 045.00 → 10 090.20, and that's what counts.
+	if e := asset.AforroEstimate; e == nil || e.ValueEUR != 10090.20 || len(e.Capitalisations) != 2 || asset.ValueEUR != 10090.20 {
+		t.Fatalf("value %v, estimate = %+v", asset.ValueEUR, asset.AforroEstimate)
 	}
 
 	// A note that looks like an accepted estimate can't be typed by hand.
@@ -135,44 +135,28 @@ func TestAforro_AcceptingTheEstimate(t *testing.T) {
 	if _, err := service.AddOtherAssetEntry(2, asset.ID, OtherAssetEntryInput{Estimate: true}); !errors.Is(err, ErrOtherAssetNotFound) {
 		t.Errorf("accepting on the asset of another user: %v", err)
 	}
-
-	// Accepting: the server stores the estimated value on the day of the last quarter, whatever is sent.
-	entry, err := service.AddOtherAssetEntry(1, asset.ID, OtherAssetEntryInput{Estimate: true, Amount: 999999, Date: "2001-01-01", Kind: "withdrawal"})
-	if err != nil {
-		t.Fatalf("accepting the estimate failed: %v", err)
+	// There's nothing to accept: the value is already the one worked out.
+	if _, err := service.AddOtherAssetEntry(1, asset.ID, OtherAssetEntryInput{Estimate: true}); !errors.Is(err, ErrOtherAssetInput) {
+		t.Errorf("accepting a value that already counts should be refused, got %v", err)
 	}
+
+	// An estimate accepted before certificates were valued by their rates is skipped: the rates give it again.
 	sixth := networth.AforroCapitalisationDate(subscribed, 6).Format(networth.DateLayout)
-	if entry.Kind != "valuation" || entry.Amount != 10090.20 || entry.Date != sixth || entry.Note != AforroEstimateNote {
-		t.Errorf("accepted entry = %+v", entry)
-	}
-	after, err := service.getOtherAsset(1, asset.ID)
-	if err != nil {
+	if _, err := database.DB.Exec(`INSERT INTO other_asset_entries (asset_id, date, kind, amount, note) VALUES (?, ?, 'valuation', 99999, ?)`,
+		asset.ID, sixth, AforroEstimateNote); err != nil {
 		t.Fatal(err)
 	}
-	// Now the estimate counts, because the user chose it. The next estimate still starts from the value
-	// read on AforroNet, not from the accepted estimate: estimates don't pile up.
-	if after.ValueEUR != 10090.20 || after.AforroEstimate == nil || after.AforroEstimate.FromValueEUR != 10000 ||
-		after.AforroEstimate.ValueEUR != 10090.20 || after.AforroEstimate.DifferenceEUR != 0 {
-		t.Errorf("after accepting: value %v, estimate %+v", after.ValueEUR, after.AforroEstimate.AforroEstimate)
-	}
-	// Deleting the entry undoes it.
-	if err := service.DeleteOtherAssetEntry(1, asset.ID, entry.ID); err != nil {
-		t.Fatal(err)
-	}
-	if undone, _ := service.getOtherAsset(1, asset.ID); undone.ValueEUR != 10000 {
-		t.Errorf("after deleting the accepted estimate the typed value counts again, got %v", undone.ValueEUR)
+	if again, _ := service.getOtherAsset(1, asset.ID); again.ValueEUR != 10090.20 || again.AforroEstimate.FromValueEUR != 10000 {
+		t.Errorf("an old accepted estimate should be skipped: value %v, estimate %+v", again.ValueEUR, again.AforroEstimate.AforroEstimate)
 	}
 
-	// Money moved after the value was read: no estimate until a new value is typed.
+	// Money moved after the value was read: the rates can't value it, so the last value plus the movement counts.
 	if _, err := service.AddOtherAssetEntry(1, asset.ID, OtherAssetEntryInput{Date: today().Format(networth.DateLayout), Kind: "contribution", Amount: 500}); err != nil {
 		t.Fatal(err)
 	}
 	moved, _ := service.getOtherAsset(1, asset.ID)
 	if moved.AforroEstimate == nil || moved.AforroEstimate.Status != AforroStatusUnavailable || moved.AforroEstimate.AforroEstimate != nil || moved.ValueEUR != 10500 {
 		t.Errorf("with a later movement: value %v, estimate %+v", moved.ValueEUR, moved.AforroEstimate)
-	}
-	if _, err := service.AddOtherAssetEntry(1, asset.ID, OtherAssetEntryInput{Estimate: true}); !errors.Is(err, ErrOtherAssetInput) {
-		t.Errorf("there's nothing to accept, got %v", err)
 	}
 }
 

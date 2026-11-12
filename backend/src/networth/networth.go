@@ -56,8 +56,8 @@ func IsSupportedType(assetType string) bool {
 }
 
 // IsManualType says whether the value of this type is the last value the user entered (plus the money moved
-// since). A term deposit is valued by its formula and crypto by its quantity and price. Certificados de Aforro
-// are manual until they're computed automatically.
+// since). A term deposit is valued by its formula and crypto by its quantity and price. A Certificado de Aforro
+// is manual too, but with a series and a subscription date its rates move the value on (see aforroValueOn).
 func IsManualType(assetType string) bool {
 	return IsSupportedType(assetType) && assetType != TypeTermDeposit && assetType != TypeCrypto
 }
@@ -263,10 +263,11 @@ type Asset struct {
 	ID       int64
 	Type     string
 	Name     string
-	ClosedAt *time.Time    // worth nothing from this day on
-	Deposit  *TermDeposit  // term deposits only
-	Mortgage *Mortgage     // property with a mortgage only
-	Crypto   *CryptoPrices // crypto only: the coin's prices
+	ClosedAt *time.Time         // worth nothing from this day on
+	Deposit  *TermDeposit       // term deposits only
+	Mortgage *Mortgage          // property with a mortgage only
+	Crypto   *CryptoPrices      // crypto only: the coin's prices
+	Aforro   *AforroCertificate // Certificados de Aforro with a series only: valued by the rates
 	Entries  []Entry
 }
 
@@ -284,6 +285,11 @@ func (a Asset) ValueOn(date time.Time) Value {
 	}
 	if a.Type == TypeCrypto {
 		return a.cryptoValueOn(date)
+	}
+	if a.Type == TypeSavingsCertificate {
+		if v, ok := a.aforroValueOn(date); ok {
+			return v
+		}
 	}
 	value, exists := ManualValueOn(a.Entries, date)
 	if exists && a.Type == TypeRealEstate && a.Mortgage != nil {

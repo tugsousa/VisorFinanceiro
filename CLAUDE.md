@@ -60,9 +60,10 @@ Start with `ARCHITECTURE_DOCUMENTATION.md` (features and the rules behind them) 
 - Other assets (accounts, deposits, Aforro, PPR, crypto, property) belong to the user, not to a portfolio, so
   they don't change the returns (XIRR) or the IRS of the broker portfolios.
 - Target allocation works on groups the user creates; each holding (or other asset) is assigned to one group.
-- Certificados de Aforro: the value that counts is the one typed from AforroNet. The app's estimate only counts
-  if the user accepts it, and it can only start from a value dated December 2024 or later (the first month
-  with an official IGCP rate in `backend/data/aforro_rates.json`). Still open: compare an estimate with
-  AforroNet, and add each new month's rate to that file.
+- Certificados de Aforro with a series are valued by the app from the subscription date and the amount
+  subscribed, at IGCP's rates; the user shouldn't have to type values from AforroNet. A value from AforroNet
+  is only needed for a subscription before December 2024 (the first month with an official IGCP rate in
+  `backend/data/aforro_rates.json`) or after a quarter with no known rate (April 2025 is missing). Checked
+  against IGCP's simulator to the cent. Add each new month's rate to that file.
 - Commit only when the user asks, on the user's branch (currently `devAngelo`), ending the message with the
   attribution line the session gives.

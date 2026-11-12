@@ -15,12 +15,17 @@ import (
 // that changes on the capitalisation dates only.
 //
 // The base rates the State publishes are data (AforroRates), and the official ones known to the app start in
-// December 2024. So a certificate isn't valued from its subscription: the estimate starts from a value the
-// user read on AforroNet and applies only the capitalisations after it. It's an estimate, shown next to the
-// value the user typed, which is what the net worth counts.
+// December 2024. A certificate is valued from a starting value: the amount subscribed, on the subscription
+// date, or a later value the user read on AforroNet (needed for a subscription older than the rates). The
+// capitalisations after it are applied while their rates are known.
 //
-// Not confirmed by an official source, and stated to the user: the interest of a quarter as a quarter of the
-// annual rate (IGCP says so for series B), the 28% withheld, and the rounding AforroNet applies.
+// From the subscription, the value is worked out per unit (1 € when subscribed), rounded to 5 decimals at
+// each quarter, and multiplied by the units: this matched IGCP's simulator to the cent (series F, 10 000 €
+// subscribed on 11-06-2025, 10 192,80 € after five quarters). From a value read on AforroNet the number of
+// units isn't known, so the interest is worked out in euros and can differ by cents.
+//
+// Not confirmed by an official source: the interest of a quarter as a quarter of the annual rate (IGCP says
+// so for series B) and the 28% withheld; both agree with IGCP's simulator in the case above.
 
 // Kinds of base rate, by where the figure comes from.
 const (
@@ -213,6 +218,10 @@ func (r AforroRates) EstimateFrom(series string, subscribed, anchorDate time.Tim
 		RatesFrom:       s.RatesFrom(),
 		RatesThrough:    s.RatesThrough(),
 	}
+	// From the subscription, a unit is worth 1 € and the units are the amount subscribed; see the package
+	// comment for the rounding.
+	perUnit := anchorDate.Equal(subscribed)
+	units, unitValue := anchorValue, 1.0
 	value := anchorValue
 	for k := 1; k <= quarters; k++ {
 		day := AforroCapitalisationDate(subscribed, k)
@@ -230,8 +239,14 @@ func (r AforroRates) EstimateFrom(series string, subscribed, anchorDate time.Tim
 			break
 		}
 		rate := base.Rate + bonus
-		interest := value * rate / 100 / 4 * (1 - WithholdingRate)
-		value += interest
+		before := value
+		if perUnit {
+			unitValue = math.Round(unitValue*(1+rate/100/4*(1-WithholdingRate))*1e5) / 1e5
+			value = unitValue * units
+		} else {
+			value += value * rate / 100 / 4 * (1 - WithholdingRate)
+		}
+		interest := value - before
 		if base.Kind != AforroRateOfficial {
 			estimate.UsesUnofficialRate = true
 		}
@@ -300,4 +315,44 @@ func ParseAforroRates(content []byte) (*AforroRates, error) {
 		}
 	}
 	return &rates, nil
+}
+
+// AforroCertificate is what values a Certificado de Aforro by its rates instead of by the last value
+// entered: its series and subscription date, and the rates.
+type AforroCertificate struct {
+	Rates      *AforroRates
+	Series     string
+	Subscribed time.Time
+}
+
+// aforroValueOn values a certificate at the end of a day from its last valuation on or before that day (the
+// amount subscribed, or a value read on AforroNet) plus the quarters capitalised since, as far as their rates
+// are known: after a quarter without a rate the value stays at the one before it. The second result is false
+// when the rates can't value it, and the certificate is then valued as a manual asset: no valuation yet,
+// money moved in or out after the valuation, a valuation before the subscription or an unknown series.
+func (a Asset) aforroValueOn(date time.Time) (Value, bool) {
+	c := a.Aforro
+	if c == nil || c.Rates == nil {
+		return Value{}, false
+	}
+	var anchor *Entry
+	for i := range a.Entries {
+		e := &a.Entries[i]
+		if e.Kind == KindValuation && !dayOf(e.Date).After(date) && (anchor == nil || !dayOf(e.Date).Before(dayOf(anchor.Date))) {
+			anchor = e
+		}
+	}
+	if anchor == nil {
+		return Value{}, false
+	}
+	for _, e := range a.Entries {
+		if e.Kind != KindValuation && dayOf(e.Date).After(dayOf(anchor.Date)) && !dayOf(e.Date).After(date) {
+			return Value{}, false
+		}
+	}
+	estimate, err := c.Rates.EstimateFrom(c.Series, c.Subscribed, anchor.Date, anchor.Amount, date)
+	if err != nil {
+		return Value{}, false
+	}
+	return Value{Gross: estimate.ValueEUR, Net: estimate.ValueEUR, Exists: true}, true
 }

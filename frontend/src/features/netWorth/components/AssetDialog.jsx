@@ -4,7 +4,7 @@ import {
 } from '@mui/material';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiCreateOtherAsset, apiUpdateOtherAsset, netWorthErrorMessage } from '../api/netWorthApi';
-import { ASSET_TYPES, CAPITALISATIONS, CERTIFICATE_SERIES, PROPERTY_USAGES, parseAmount, todayISO } from '../logic/assetTypes';
+import { AFORRO_RATES_FROM_DAY, ASSET_TYPES, CAPITALISATIONS, CERTIFICATE_SERIES, PROPERTY_USAGES, parseAmount, todayISO } from '../logic/assetTypes';
 import { coinSymbol, isValidTicker, normalizeTicker, parseQuantity } from '../logic/crypto';
 import DateField from '../../../components/ui/DateField';
 
@@ -119,6 +119,9 @@ const AssetDialog = ({ open, onClose, asset }) => {
     const isProperty = form.type === 'real_estate';
     const isCrypto = form.type === 'crypto';
     const isCertificate = form.type === 'savings_certificate';
+    // A certificate with a series is valued by the app from the amount subscribed, when the rates reach back to
+    // its subscription; an older one starts from a value read on AforroNet instead.
+    const certificateFromSubscription = isCertificate && !!form.series && !(form.subscribedAt && form.subscribedAt < AFORRO_RATES_FROM_DAY);
 
     const mutation = useMutation({
         mutationFn: (payload) => (editing ? apiUpdateOtherAsset(asset.id, payload) : apiCreateOtherAsset(payload)),
@@ -158,14 +161,20 @@ const AssetDialog = ({ open, onClose, asset }) => {
                 }
                 payload.initial_date = form.valueDate || todayISO();
             }
+        } else if (!editing && certificateFromSubscription) {
+            if (!form.subscribedAt) return setError('Indique a data de subscrição do certificado.');
+            const value = parseAmount(form.value);
+            if (!(value > 0)) return setError('Indique o valor subscrito.');
+            payload.initial_value = value;
+            payload.initial_date = form.subscribedAt;
         } else if (!editing) {
             const value = parseAmount(form.value);
-            if (!(value >= 0)) return setError('Indique o valor atual.');
+            if (!(value >= 0)) return setError(isCertificate ? 'Indique o valor que consta no AforroNet.' : 'Indique o valor atual.');
             payload.initial_value = value;
             payload.initial_date = form.valueDate || todayISO();
         }
         if (isCertificate && form.series) {
-            // Optional: with the series and the subscription date the app estimates the value between updates.
+            // With the series and the subscription date the app works out the value from IGCP's rates.
             if (!form.subscribedAt) return setError('Indique a data de subscrição do certificado, ou deixe a série em branco.');
             payload.details = { series: form.series };
             payload.opened_at = form.subscribedAt;
@@ -256,7 +265,7 @@ const AssetDialog = ({ open, onClose, asset }) => {
                         </>
                     )}
 
-                    {!isDeposit && !isCrypto && !editing && (
+                    {!isDeposit && !isCrypto && !isCertificate && !editing && (
                         <>
                             <Grid item xs={12} sm={6}>
                                 <TextField fullWidth label={isProperty ? 'Valor de mercado atual (€)' : 'Valor atual (€)'} value={form.value} onChange={set('value')} inputMode="decimal"
@@ -270,24 +279,41 @@ const AssetDialog = ({ open, onClose, asset }) => {
 
                     {isCertificate && (
                         <>
-                            <Grid item xs={12}><Divider textAlign="left"><Typography variant="caption" color="text.secondary">Estimativa entre atualizações (opcional)</Typography></Divider></Grid>
                             <Grid item xs={12} sm={6}>
                                 <TextField select fullWidth label="Série" value={form.series} onChange={set('series')}
                                     helperText="Como consta no AforroNet">
-                                    <MenuItem value=""><em>Não indicar</em></MenuItem>
+                                    <MenuItem value=""><em>Outra / não indicar</em></MenuItem>
                                     {CERTIFICATE_SERIES.map((s) => <MenuItem key={s.value} value={s.value}>{s.label}</MenuItem>)}
                                 </TextField>
                             </Grid>
                             <Grid item xs={12} sm={6}>
                                 <DateField fullWidth label="Data de subscrição" value={form.subscribedAt} onChange={set('subscribedAt')} inputProps={{ max: todayISO() }} disabled={!form.series} />
                             </Grid>
+                            {!editing && certificateFromSubscription && (
+                                <Grid item xs={12} sm={6}>
+                                    <TextField fullWidth label="Valor subscrito (€)" value={form.value} onChange={set('value')} inputMode="decimal"
+                                        helperText="Cada unidade vale 1 € na subscrição" />
+                                </Grid>
+                            )}
+                            {!editing && !certificateFromSubscription && (
+                                <>
+                                    <Grid item xs={12} sm={6}>
+                                        <TextField fullWidth label="Valor atual (€)" value={form.value} onChange={set('value')} inputMode="decimal"
+                                            helperText="O valor indicado no AforroNet" />
+                                    </Grid>
+                                    <Grid item xs={12} sm={6}>
+                                        <DateField fullWidth label="Data do valor" value={form.valueDate} onChange={set('valueDate')} inputProps={{ max: todayISO() }} />
+                                    </Grid>
+                                </>
+                            )}
                             <Grid item xs={12}>
                                 <Typography variant="caption" color="text.secondary">
-                                    O património conta sempre o valor que indicar do AforroNet. Com a série e a data de subscrição, a
-                                    aplicação mostra ao lado uma estimativa do valor atual, com os juros dos trimestres entretanto
-                                    capitalizados. Registe um ativo por subscrição: cada uma tem as suas datas e o seu prémio de permanência.
-                                    A aplicação só conhece as taxas do IGCP a partir de dezembro de 2024: se o último valor do AforroNet
-                                    for mais antigo, a estimativa não avança até o atualizar.
+                                    {form.series
+                                        ? <>A aplicação calcula o valor com as taxas publicadas pelo IGCP e os juros de cada trimestre, como
+                                            o simulador do IGCP. Registe um ativo por subscrição: cada uma tem as suas datas e o seu prémio de
+                                            permanência. As taxas que a aplicação conhece começam em dezembro de 2024: para uma subscrição
+                                            anterior, indique o valor atual do AforroNet, e a aplicação calcula a partir dele.</>
+                                        : 'Sem série, o certificado conta pelo valor que indicar. Atualize-o quando quiser.'}
                                 </Typography>
                             </Grid>
                         </>

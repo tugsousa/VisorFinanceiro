@@ -52,7 +52,8 @@ const assetDetail = (asset) => {
         return parts.filter(Boolean).join(' · ');
     }
     if (asset.last_valuation_date) {
-        // A Certificado de Aforro with a series also shows the app's estimate, which doesn't count in the value.
+        // A Certificado de Aforro with a series is valued by the app from IGCP's rates: say so instead of the date.
+        if (asset.aforro_estimate?.counted_in_total) return aforroCaption(asset.aforro_estimate);
         return [`Valor atualizado a ${formatISODate(asset.last_valuation_date)}`, aforroCaption(asset.aforro_estimate)].filter(Boolean).join(' · ');
     }
     return asset.entries?.length ? 'Soma dos movimentos' : 'Sem valor';

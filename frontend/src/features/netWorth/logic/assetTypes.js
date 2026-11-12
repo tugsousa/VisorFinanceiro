@@ -47,6 +47,13 @@ export const CAPITALISATIONS = [
  * The series of Certificados de Aforro the app can estimate, with the dates each was subscribed in. The
  * older ones (A, B, C) stay at the value typed from AforroNet.
  */
+/**
+ * The first day of the first month with a base rate of Certificados de Aforro in the app's data
+ * (backend/data/aforro_rates.json). The app can value a certificate from its subscription from this day on;
+ * an older one needs a value read on AforroNet to start from.
+ */
+export const AFORRO_RATES_FROM_DAY = '2024-12-01';
+
 export const CERTIFICATE_SERIES = [
     { value: 'F', label: 'Série F (desde junho de 2023)' },
     { value: 'E', label: 'Série E (outubro de 2017 a junho de 2023)' },

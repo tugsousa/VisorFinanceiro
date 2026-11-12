@@ -10,14 +10,17 @@ import (
 	"github.com/username/taxfolio/backend/src/networth"
 )
 
-// Certificados de Aforro keep counting at the value the user typed from AforroNet. Next to it the app shows
-// an estimate of what the certificate is worth now: that typed value plus the interest of the quarters that
-// ended since, at the rates IGCP published (backend/data/aforro_rates.json). The estimate never enters the
-// net worth by itself; the user can accept it, which stores it as an ordinary valuation they can delete.
+// A Certificado de Aforro with a series and a subscription date is valued by the rates IGCP published
+// (backend/data/aforro_rates.json): the amount subscribed, stored as a valuation on the subscription date,
+// plus the interest of every quarter capitalised since. A value read on AforroNet, entered later, becomes the
+// new starting point; it's needed when a quarter has no known rate (a subscription older than December 2024,
+// or a month missing from the data), where the value otherwise stays at the one before that quarter.
+// aforro_estimate explains that value (the quarters, their rates, why it stops) and is what the net worth
+// counts. A certificate without a series is a plain manual asset.
 
 // AforroEstimateNote marks the valuation entries that are an accepted estimate rather than a value read on
-// AforroNet. An estimate always starts from the last value that isn't one, so estimates don't pile up on
-// estimates.
+// AforroNet. They come from before certificates were valued by their rates; the valuation and the estimate
+// both skip them, since the rates give the same value again.
 const AforroEstimateNote = "Estimativa (taxas do IGCP)"
 
 // Statuses of the estimate of a certificate.
@@ -36,7 +39,8 @@ type AforroEstimateView struct {
 	*networth.AforroEstimate
 	// DifferenceEUR is the estimate minus the value that counts today.
 	DifferenceEUR float64 `json:"difference_eur"`
-	// CountedInTotal is always false: the net worth counts the value the user entered, not this estimate.
+	// CountedInTotal is true when this is the value the net worth counts, which is the case whenever there's
+	// an estimate; with status "unavailable" the certificate counts at the last value entered.
 	CountedInTotal bool `json:"counted_in_total"`
 }
 
@@ -116,7 +120,26 @@ func validateCertificateDetails(details *OtherAssetDetails, openedAt string) (st
 
 func formatDatePT(t time.Time) string { return t.Format("02-01-2006") }
 
-// aforroEstimateOf estimates a certificate from the last value the user read on AforroNet. It returns nil
+// aforroCertificateOf is what values a certificate by its rates, or nil for an asset that isn't a
+// certificate with a series and a subscription date, or when the rates aren't loaded: it's then valued as a
+// manual asset.
+func aforroCertificateOf(a OtherAsset) *networth.AforroCertificate {
+	if a.Type != networth.TypeSavingsCertificate || a.Details == nil || a.Details.Series == "" {
+		return nil
+	}
+	rates := currentAforroRates()
+	if rates == nil {
+		return nil
+	}
+	subscribed, err := networth.ParseDate(a.OpenedAt)
+	if err != nil {
+		return nil
+	}
+	return &networth.AforroCertificate{Rates: rates, Series: a.Details.Series, Subscribed: subscribed}
+}
+
+// aforroEstimateOf values a certificate from its last valuation (the amount subscribed or a value read on
+// AforroNet), with the same rules as its valuation in the net worth, and says how. It returns nil
 // for an asset that isn't a certificate with a series, so such an asset is returned exactly as before.
 func aforroEstimateOf(a OtherAsset, now time.Time) *AforroEstimateView {
 	if a.Type != networth.TypeSavingsCertificate || a.Details == nil || a.Details.Series == "" {
@@ -138,7 +161,7 @@ func aforroEstimateOf(a OtherAsset, now time.Time) *AforroEstimateView {
 		return unavailable("Falta a data de subscrição.")
 	}
 
-	// The anchor: the last value that was read on AforroNet, not an accepted estimate.
+	// The anchor: the last valuation, not an accepted estimate.
 	var anchor *OtherAssetEntry
 	for i := range a.Entries {
 		e := &a.Entries[i]
@@ -147,11 +170,11 @@ func aforroEstimateOf(a OtherAsset, now time.Time) *AforroEstimateView {
 		}
 	}
 	if anchor == nil {
-		return unavailable("Indique o valor que consta no AforroNet para ter uma estimativa a partir dele.")
+		return unavailable("Indique o valor subscrito, ou o valor que consta no AforroNet, para a aplicação calcular o valor.")
 	}
 	for _, e := range a.Entries {
 		if e.Kind != networth.KindValuation && e.Date > anchor.Date {
-			return unavailable("Há movimentos depois do último valor do AforroNet (%s). Atualize o valor para voltar a ter estimativa.", formatISODatePT(anchor.Date))
+			return unavailable("Há movimentos depois do último valor (%s): conta o valor indicado. Indique o valor do AforroNet para a aplicação voltar a calcular.", formatISODatePT(anchor.Date))
 		}
 	}
 	anchorDate, err := networth.ParseDate(anchor.Date)
@@ -164,11 +187,11 @@ func aforroEstimateOf(a OtherAsset, now time.Time) *AforroEstimateView {
 		message := err.Error()
 		return unavailable("%s.", strings.ToUpper(message[:1])+message[1:])
 	}
-	view := &AforroEstimateView{Status: AforroStatusOK, AforroEstimate: &estimate}
+	view := &AforroEstimateView{Status: AforroStatusOK, AforroEstimate: &estimate, CountedInTotal: true}
 	switch estimate.Stopped {
 	case networth.AforroStoppedNoRate:
 		view.Status = AforroStatusRatesEnded
-		view.Reason = fmt.Sprintf("A aplicação não tem a taxa do trimestre que terminou a %s (só conhece taxas de %s a %s, com alguns meses em falta), por isso a estimativa pára antes dessa data. Indique o valor do AforroNet.",
+		view.Reason = fmt.Sprintf("A aplicação não tem a taxa do trimestre que terminou a %s (só conhece taxas de %s a %s, com alguns meses em falta), por isso o valor fica no de antes dessa data. Indique o valor do AforroNet para o atualizar.",
 			formatISODatePT(estimate.StoppedOn), formatMonthPT(estimate.RatesFrom), formatMonthPT(estimate.RatesThrough))
 	case networth.AforroStoppedMatured:
 		view.Status = AforroStatusMatured
@@ -197,7 +220,8 @@ func formatMonthPT(month string) string {
 }
 
 // aforroEstimateEntry is the valuation that accepts the estimate of a certificate: the estimated value, on
-// the day of the last quarter it includes. It's refused when there's nothing to accept.
+// the day of the last quarter it includes. It's refused when there's nothing to accept, which is now always
+// the case for a certificate with an estimate, since that estimate is already the value that counts.
 func (s *uploadServiceImpl) aforroEstimateEntry(userID, assetID int64) (*OtherAssetEntryInput, error) {
 	asset, err := s.getOtherAsset(userID, assetID)
 	if err != nil {
@@ -209,6 +233,9 @@ func (s *uploadServiceImpl) aforroEstimateEntry(userID, assetID int64) (*OtherAs
 	}
 	if view.AforroEstimate == nil {
 		return nil, otherAssetInputError(view.Reason)
+	}
+	if view.CountedInTotal {
+		return nil, inputErrorf("o valor deste certificado já é calculado pela aplicação: não há estimativa para aceitar")
 	}
 	if len(view.Capitalisations) == 0 {
 		return nil, inputErrorf("ainda não houve capitalização de juros desde o último valor do AforroNet")

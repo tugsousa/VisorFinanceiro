@@ -256,3 +256,49 @@ func TestAforroQuarterRate_BonusAndMovedDates(t *testing.T) {
 		t.Errorf("with the same rate in both months the rate is known: %v, %v", base, ok)
 	}
 }
+
+// IGCP's simulator, run by the user: series F, 10 000 € subscribed on 11-06-2025, worth 10 192,80 € on
+// 12-11-2026 (five quarters). From the subscription the value is worked out per unit, which gives the same
+// figure to the cent; the same in euros would give 10 192,84 €.
+func TestAforroMatchesIGCPSimulator(t *testing.T) {
+	rates := loadRealAforroRates(t)
+	subscribed := DateOf(2025, 6, 11)
+	estimate, err := rates.EstimateFrom("F", subscribed, subscribed, 10000, DateOf(2026, 11, 12))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if estimate.ValueEUR != 10192.80 || len(estimate.Capitalisations) != 5 || estimate.Stopped != "" {
+		t.Errorf("estimate = %+v, want 10192.80 after 5 quarters", estimate)
+	}
+}
+
+// A certificate with a series is valued by its rates from the amount subscribed, month by month, and stays
+// at its last value after a quarter whose rate is missing.
+func TestAforroCertificateValue(t *testing.T) {
+	rates := &AforroRates{Series: map[string]AforroSeries{"F": {Name: "F", TermYears: 15, From: "2023-06-05",
+		BaseRates: map[string]AforroRate{"2025-01": {Rate: 2.5, Kind: AforroRateOfficial}, "2025-02": {Rate: 2.5, Kind: AforroRateOfficial}}}}}
+	subscribed := DateOf(2025, 1, 10)
+	a := Asset{Type: TypeSavingsCertificate, Aforro: &AforroCertificate{Rates: rates, Series: "F", Subscribed: subscribed},
+		Entries: []Entry{{ID: 1, Date: subscribed, Kind: KindValuation, Amount: 10000}}}
+	cases := []struct {
+		date   time.Time
+		value  float64
+		exists bool
+	}{
+		{DateOf(2025, 1, 9), 0, false},     // before the subscription
+		{DateOf(2025, 4, 9), 10000, true},  // nothing capitalised yet
+		{DateOf(2025, 4, 10), 10045, true}, // first quarter: 2.5% / 4 × 0.72
+		{DateOf(2026, 1, 1), 10045, true},  // the quarter starting in April has no rate: it stays
+	}
+	for _, c := range cases {
+		v := a.ValueOn(c.date)
+		if v.Net != c.value || v.Exists != c.exists {
+			t.Errorf("%s: got %v (exists %v), want %v", c.date.Format(DateLayout), v.Net, v.Exists, c.value)
+		}
+	}
+	// Money moved after the valuation: valued as a manual asset.
+	a.Entries = append(a.Entries, Entry{ID: 2, Date: DateOf(2025, 5, 1), Kind: KindContribution, Amount: 500})
+	if v := a.ValueOn(DateOf(2025, 6, 1)); v.Net != 10500 {
+		t.Errorf("with a later contribution: got %v, want 10500", v.Net)
+	}
+}

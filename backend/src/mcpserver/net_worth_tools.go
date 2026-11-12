@@ -14,11 +14,13 @@ const netWorthNote = "total_eur adds every broker portfolio of the user (holding
 	"(Yahoo Finance, in EUR): price_status is OK for today's price, STALE when it's the last close (see price_date) " +
 	"and UNAVAILABLE when there was no price, in which case the asset counts at cost_eur and unpriced_assets says " +
 	"how many are in that state; mention it when it matters. cost_eur is the average cost of what's held, for " +
-	"information: crypto isn't part of the tax figures. A Certificado de Aforro counts at the value the user typed from " +
-	"AforroNet; when it has a series (D, E or F) and a subscription date, aforro_estimate is the app's estimate of what " +
-	"it's worth now: that typed value plus the interest of the quarters ended since, at the rates IGCP published. It is " +
-	"an estimate and is NOT in value_eur or in any total (counted_in_total is false) unless the user accepted it; say so " +
-	"when quoting it, and when its status isn't ok give the reason. The other assets count at the last " +
+	"information: crypto isn't part of the tax figures. A Certificado de Aforro with a series (D, E or F) and a " +
+	"subscription date is valued by the app from the rates IGCP published: the amount subscribed (or a later value the " +
+	"user read on AforroNet) plus the interest of the quarters ended since. aforro_estimate shows those quarters and " +
+	"rates; when counted_in_total is true it is the value in value_eur and in the totals. When its status isn't ok, " +
+	"give the reason: with rates_ended a quarter had no known rate and the value stays at the one before it. It is " +
+	"computed by the app, not read from AforroNet, so say so when quoting it. Without a series it counts at the value " +
+	"the user typed. The other assets count at the last " +
 	"value the user entered plus the money moved in or out since. month_change_eur includes deposits and withdrawals. " +
 	"The history uses the last portfolio snapshot of each month."
 
