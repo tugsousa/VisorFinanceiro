@@ -33,6 +33,42 @@ func (s *Server) addTaxTools(server *mcp.Server, annotations *mcp.ToolAnnotation
 			"date each one reaches 365 days. Use it for questions about realising losses to offset gains.",
 		Annotations: annotations,
 	}, s.getTaxYearStatus)
+
+	mcp.AddTool(server, &mcp.Tool{
+		Name:  "plan_tax_loss_harvest",
+		Title: "Sales at a loss that lower this year's tax",
+		Description: "Which positions held at a loss could be sold today, and how many shares of each (FIFO, oldest lots " +
+			"first, stopping where the loss is largest), to lower this year's capital gains tax without realising more " +
+			"loss than the year's positive balance needs. Returns each sale with its lots, the year's balance and tax " +
+			"before and after, the tax saved, and the positions left out (no price, or a saving below the commission). " +
+			"Nothing is stored. Buying back lowers the cost, so the tax saved is mostly deferred, not avoided.",
+		Annotations: annotations,
+	}, s.planTaxLossHarvest)
+}
+
+type planTaxLossHarvestInput struct {
+	PortfolioID   int64   `json:"portfolio_id,omitempty" jsonschema:"the portfolio to use; leave it out for the default portfolio"`
+	CommissionEUR float64 `json:"commission_eur,omitempty" jsonschema:"expected commission of each sale in EUR; positions whose tax saving isn't more than it are left out"`
+}
+
+const harvestNote = " The balance is this portfolio's only, while the tax is on all of a person's sales in the year. " +
+	"Selling and buying back lowers the cost of the new lot by the same loss and restarts the 365-day count, so the " +
+	"tax saved comes back when it's sold, unless that year's balance is negative. Losses on securities of entities in " +
+	"tax havens (e.g. the Cayman Islands) may not offset other gains. The sale must be made in time to count in this year."
+
+func (s *Server) planTaxLossHarvest(_ context.Context, _ *mcp.CallToolRequest, in planTaxLossHarvestInput) (*mcp.CallToolResult, any, error) {
+	p, err := s.portfolio(in.PortfolioID)
+	if err != nil {
+		return nil, nil, err
+	}
+	plan, err := s.uploads.PlanTaxLossHarvest(s.userID, p.ID, in.CommissionEUR)
+	if err != nil {
+		if errors.Is(err, services.ErrSimulationInput) {
+			return nil, nil, err
+		}
+		return nil, nil, fmt.Errorf("failed to plan the loss harvest: %w", err)
+	}
+	return nil, map[string]any{"portfolio": p.Name, "plan": plan, "note": taxNote + harvestNote}, nil
 }
 
 type simulateSaleInput struct {

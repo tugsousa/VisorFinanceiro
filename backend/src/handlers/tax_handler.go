@@ -81,3 +81,34 @@ func (h *PortfolioHandler) HandleGetTaxYearStatus(w http.ResponseWriter, r *http
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(status)
 }
+
+// HandleGetTaxLossHarvest answers GET /api/tax/loss-harvest?portfolio_id=&commission=: the sales of positions
+// at a loss that would lower this year's tax. It only reads: nothing is stored.
+func (h *PortfolioHandler) HandleGetTaxLossHarvest(w http.ResponseWriter, r *http.Request) {
+	userID, ok := GetUserIDFromContext(r.Context())
+	if !ok {
+		utils.SendJSONError(w, "authentication required", http.StatusUnauthorized)
+		return
+	}
+	portfolioID, err := getPortfolioID(r)
+	if err != nil {
+		utils.SendJSONError(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	commission, err := parseOptionalFloat(r, "commission")
+	if err != nil {
+		utils.SendJSONError(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	plan, err := h.uploadService.PlanTaxLossHarvest(userID, portfolioID, commission)
+	if err != nil {
+		if errors.Is(err, services.ErrSimulationInput) {
+			utils.SendJSONError(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		utils.SendJSONError(w, fmt.Sprintf("Error planning the loss harvest: %v", err), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(plan)
+}

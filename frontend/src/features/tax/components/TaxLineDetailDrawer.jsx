@@ -58,7 +58,7 @@ const LINE_DETAILS = {
       { label: 'Corretora', render: (sale) => formatBrokers(sale.SaleSource, sale.BuySource, 'compra') },
       { label: 'Produto', render: (sale) => sale.ProductName },
       { label: 'ISIN', render: (sale) => sale.ISIN },
-      { label: 'Qtd', align: 'right', render: (sale) => sale.Quantity, total: (rows) => formatQuantity(sumBy(rows, (sale) => sale.Quantity)) },
+      { label: 'Qtd', align: 'right', render: (sale) => formatQuantity(sale.Quantity), total: (rows) => formatQuantity(sumBy(rows, (sale) => sale.Quantity)) },
       { label: 'Preço venda', align: 'right', render: (sale) => sale.SalePrice },
       { label: 'Valor venda', align: 'right', render: (sale) => formatAmount(sale.SaleAmount, sale.SaleCurrency) },
       { label: 'Câmbio venda', align: 'right', render: (sale) => formatRate(sale.SaleExchangeRate) },

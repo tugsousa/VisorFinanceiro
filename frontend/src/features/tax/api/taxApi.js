@@ -28,3 +28,13 @@ export const simulationErrorMessage = (error) => {
     const separator = message.indexOf(': ');
     return separator >= 0 ? message.slice(separator + 2) : message;
 };
+
+/**
+ * The sales of positions at a loss that would lower this year's tax, and how many shares of each. Nothing is stored.
+ * @param {number} portfolioId
+ * @param {number} [commission] - expected commission of each sale
+ */
+export const apiFetchTaxLossHarvest = (portfolioId, commission) =>
+    apiClient.get('/api/tax/loss-harvest', {
+        params: { portfolio_id: portfolioId, commission: commission || undefined },
+    });

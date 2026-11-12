@@ -4,17 +4,28 @@ import {
     Drawer, Box, Typography, IconButton, TextField, Button, Grid, Alert, Chip, CircularProgress,
     Table, TableHead, TableBody, TableRow, TableCell, TableContainer, InputAdornment, Divider,
 } from '@mui/material';
+import { alpha } from '@mui/material/styles';
 import CloseIcon from '@mui/icons-material/Close';
-import { useQuery, keepPreviousData } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 
 import MetricCard from '../../analytics/components/MetricCard';
 import { apiSimulateSale, simulationErrorMessage } from '../api/taxApi';
 import { formatCurrency, formatQuantity } from '../../../lib/utils/formatUtils';
 
-const parseNumber = (text) => {
-    const value = parseFloat(String(text).replace(',', '.'));
-    return Number.isFinite(value) ? value : 0;
+// Accepts "1.5", "1,5" and "1.000,50"; anything negative or unreadable counts as empty.
+export const parseNumber = (text) => {
+    let normalized = String(text).trim().replace(/\s/g, '');
+    if (normalized.includes(',')) normalized = normalized.replace(/\./g, '').replace(',', '.');
+    const value = parseFloat(normalized);
+    return Number.isFinite(value) && value > 0 ? value : 0;
 };
+
+// Outlined warning chips fail AA contrast on white; a tinted fill with dark text does not.
+export const warningChipSx = (theme) => ({
+    bgcolor: alpha(theme.palette.warning.main, 0.14),
+    color: theme.palette.warning.dark,
+    fontWeight: 500,
+});
 
 // Waits until the user stops typing before asking the backend again.
 const useDebounced = (value, delay = 400) => {
@@ -28,31 +39,30 @@ const useDebounced = (value, delay = 400) => {
 
 const HoldingPeriodChip = ({ lot }) => (
     lot.short_term ? (
-        <Chip
-            size="small"
-            color="warning"
-            variant="outlined"
-            label={`${lot.days_held} dias · 365 a ${lot.long_term_date}`}
-        />
+        <Chip size="small" sx={warningChipSx} label={`${lot.days_held} d · 365 a ${lot.long_term_date}`} />
     ) : (
-        <Chip size="small" color="success" variant="outlined" label={`${lot.days_held} dias`} />
+        <Chip size="small" variant="outlined" label={`${lot.days_held} dias`} />
     )
 );
 
 /**
  * Side panel that simulates selling part of a position today: the FIFO lots used, the gain and the
  * extra IRS of this year.
- * @param {{isin: string, product_name: string, quantity: number} | null} position - null closes it.
+ * @param {{isin: string, product_name: string, quantity: number, initialQuantity?: number} | null} position -
+ *   null closes it. `quantity` is what's held; `initialQuantity`, when given, is the quantity it starts with.
  */
 export default function SaleSimulatorDrawer({ portfolioId, position, onClose }) {
     const [quantityText, setQuantityText] = useState('');
     const [priceText, setPriceText] = useState('');
     const [commissionText, setCommissionText] = useState('');
+    // Keeps the last position on screen while the drawer slides closed.
+    const [shown, setShown] = useState(position);
 
-    // Starts with the whole position each time another position is opened.
+    // Starts with the quantity given (or the whole position) each time another position is opened.
     useEffect(() => {
         if (position) {
-            setQuantityText(String(position.quantity ?? ''));
+            setShown(position);
+            setQuantityText(String(position.initialQuantity ?? position.quantity ?? ''));
             setPriceText('');
             setCommissionText('');
         }
@@ -67,14 +77,21 @@ export default function SaleSimulatorDrawer({ portfolioId, position, onClose }) 
     }));
     const params = useMemo(() => JSON.parse(paramsText), [paramsText]);
 
-    const { data: sim, error, isFetching } = useQuery({
+    const { data, error: queryError, isFetching } = useQuery({
         queryKey: ['taxSimulation', portfolioId, params],
         queryFn: () => apiSimulateSale(portfolioId, params).then(res => res.data),
         enabled: Boolean(position && portfolioId && params.isin && params.quantity > 0),
-        placeholderData: keepPreviousData,
+        // Keeps the last result while the user edits the same position, never another position's.
+        placeholderData: (previous, previousQuery) => (previousQuery?.queryKey?.[2]?.isin === params.isin ? previous : undefined),
         retry: false,
         staleTime: 60 * 1000,
     });
+
+    // Until the debounce catches up, the params still belong to the previously opened position.
+    const isCurrent = Boolean(position) && params.isin === position.isin;
+    const sim = isCurrent ? data : undefined;
+    const error = isCurrent ? queryError : null;
+    const waiting = Boolean(position) && !sim && !error && (isFetching || !isCurrent);
 
     const year = sim ? sim.sale_date.slice(-4) : new Date().getFullYear();
     const plainTax = sim ? Math.max(sim.gain, 0) * sim.tax_rate : 0;
@@ -82,21 +99,19 @@ export default function SaleSimulatorDrawer({ portfolioId, position, onClose }) 
 
     return (
         <Drawer anchor="right" open={Boolean(position)} onClose={onClose}>
-            <Box sx={{ width: { xs: '100vw', sm: 560 }, p: 3 }}>
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
-                    <Box>
-                        <Typography variant="h5">Simular venda</Typography>
+            <Box sx={{ width: { xs: '100vw', sm: 560 }, maxWidth: '100%', p: { xs: 2, sm: 3 } }}>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 3 }}>
+                    <Box sx={{ minWidth: 0 }}>
+                        <Typography variant="h5" sx={{ fontWeight: 700 }}>Simular venda</Typography>
+                        <Typography variant="body1" sx={{ fontWeight: 500, mt: 0.5 }}>{shown?.product_name}</Typography>
                         <Typography variant="body2" color="text.secondary">
-                            {position?.product_name} · {position?.isin}
-                        </Typography>
-                        <Typography variant="body2" color="text.secondary">
-                            Tens {formatQuantity(position?.quantity)} unidades
+                            {shown?.isin} · tens {formatQuantity(shown?.quantity)} unidades
                         </Typography>
                     </Box>
                     <IconButton onClick={onClose} aria-label="fechar"><CloseIcon /></IconButton>
                 </Box>
 
-                <Grid container spacing={2} sx={{ mb: 3 }}>
+                <Grid container spacing={2}>
                     <Grid item xs={12} sm={4}>
                         <TextField
                             label="Quantidade"
@@ -105,29 +120,32 @@ export default function SaleSimulatorDrawer({ portfolioId, position, onClose }) 
                             size="small"
                             fullWidth
                             inputProps={{ inputMode: 'decimal' }}
-                            helperText={
-                                <Button size="small" sx={{ p: 0, minWidth: 0 }} onClick={() => setQuantityText(String(position?.quantity ?? ''))}>
-                                    Tudo
-                                </Button>
-                            }
+                            InputProps={{
+                                endAdornment: (
+                                    <InputAdornment position="end">
+                                        <Button size="small" sx={{ minWidth: 0, px: 0.5 }} onClick={() => setQuantityText(String(shown?.quantity ?? ''))}>
+                                            Tudo
+                                        </Button>
+                                    </InputAdornment>
+                                ),
+                            }}
                         />
                     </Grid>
                     <Grid item xs={12} sm={4}>
                         <TextField
-                            label="Preço por unidade"
+                            label="Preço"
                             value={priceText}
                             onChange={(e) => setPriceText(e.target.value)}
                             size="small"
                             fullWidth
-                            placeholder={sim?.used_current_price ? String(sim.price_eur.toFixed(2)) : ''}
+                            placeholder={sim?.used_current_price ? sim.price_eur.toFixed(2).replace('.', ',') : ''}
                             InputProps={{ endAdornment: <InputAdornment position="end">€</InputAdornment> }}
                             inputProps={{ inputMode: 'decimal' }}
-                            helperText="Vazio = preço atual"
                         />
                     </Grid>
                     <Grid item xs={12} sm={4}>
                         <TextField
-                            label="Comissão da venda"
+                            label="Comissão"
                             value={commissionText}
                             onChange={(e) => setCommissionText(e.target.value)}
                             size="small"
@@ -138,13 +156,16 @@ export default function SaleSimulatorDrawer({ portfolioId, position, onClose }) 
                         />
                     </Grid>
                 </Grid>
+                <Typography variant="caption" color="text.secondary" component="p" sx={{ mt: 1, mb: 3 }}>
+                    Deixa o preço vazio para usar o preço atual{sim?.used_current_price ? ` (${formatCurrency(sim.price_eur)})` : ''}.
+                </Typography>
 
                 {error && <Alert severity="warning" sx={{ mb: 2 }}>{simulationErrorMessage(error)}</Alert>}
-                {!sim && isFetching && <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}><CircularProgress /></Box>}
+                {waiting && <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}><CircularProgress /></Box>}
 
                 {sim && !error && (
                     <Box sx={{ opacity: isFetching ? 0.6 : 1, transition: 'opacity 0.2s' }}>
-                        <Grid container spacing={1.5} sx={{ mb: 2 }}>
+                        <Grid container spacing={1.5} sx={{ mb: 2.5 }}>
                             <Grid item xs={6}>
                                 <MetricCard
                                     title="Valor da venda"
@@ -164,7 +185,7 @@ export default function SaleSimulatorDrawer({ portfolioId, position, onClose }) 
                                 <MetricCard
                                     title={`IRS estimado (${year})`}
                                     value={sim.marginal_tax}
-                                    colorOverride={sim.marginal_tax > 0 ? 'error.main' : 'success.main'}
+                                    colorOverride={sim.marginal_tax > 0.005 ? 'error.main' : sim.marginal_tax < -0.005 ? 'success.main' : 'text.primary'}
                                     tooltipText="Quanto o imposto do ano aumenta (ou diminui, se for negativo) com esta venda, à taxa de 28% sobre o saldo anual."
                                 />
                             </Grid>
@@ -178,9 +199,19 @@ export default function SaleSimulatorDrawer({ portfolioId, position, onClose }) 
                             </Grid>
                         </Grid>
 
-                        <Typography variant="body2" sx={{ mb: 1 }}>
-                            Saldo de mais-valias de {year}: <b>{formatCurrency(sim.year_before.balance)}</b> → <b>{formatCurrency(sim.year_after.balance)}</b>
-                        </Typography>
+                        <Box
+                            sx={{
+                                display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 1,
+                                px: 2, py: 1.25, mb: 1.5, borderRadius: 2, bgcolor: 'action.hover',
+                            }}
+                        >
+                            <Typography variant="body2" color="text.secondary">Saldo de mais-valias de {year}</Typography>
+                            <Typography variant="body1" sx={{ fontWeight: 600, whiteSpace: 'nowrap' }}>
+                                {formatCurrency(sim.year_before.balance)}
+                                <Box component="span" sx={{ color: 'text.secondary', mx: 1 }}>→</Box>
+                                {formatCurrency(sim.year_after.balance)}
+                            </Typography>
+                        </Box>
                         {lossesLowerTheTax && (
                             <Alert severity="success" sx={{ mb: 1 }}>
                                 As perdas que já realizaste em {year} reduzem o imposto desta venda (sem elas seria {formatCurrency(plainTax)}).
@@ -224,7 +255,7 @@ export default function SaleSimulatorDrawer({ portfolioId, position, onClose }) 
                                             </TableCell>
                                             <TableCell align="right">{formatQuantity(lot.quantity)}</TableCell>
                                             <TableCell align="right">{formatCurrency(lot.cost_eur)}</TableCell>
-                                            <TableCell align="right" sx={{ color: lot.gain >= 0 ? 'success.main' : 'error.main', fontWeight: 600 }}>
+                                            <TableCell align="right" sx={{ color: lot.gain >= 0 ? 'success.main' : 'error.main', fontWeight: 500, whiteSpace: 'nowrap' }}>
                                                 {formatCurrency(lot.gain)}
                                             </TableCell>
                                             <TableCell><HoldingPeriodChip lot={lot} /></TableCell>

@@ -50,6 +50,7 @@ type UploadService interface {
 	GetDividendCalendar(userID int64, portfolioID int64) (*DividendCalendar, error)
 	SimulateStockSale(userID int64, portfolioID int64, req SaleSimulationRequest) (*SaleSimulation, error)
 	GetTaxYearStatus(userID int64, portfolioID int64) (*TaxYearStatus, error)
+	PlanTaxLossHarvest(userID int64, portfolioID int64, commission float64) (*TaxLossHarvestPlan, error)
 	RebuildUserHistory(userID int64, portfolioID int64) error
 	RebuildUserHistoryFrom(userID int64, portfolioID int64, fromDate string) error
 	RefreshDailySnapshot(userID int64, portfolioID int64) error

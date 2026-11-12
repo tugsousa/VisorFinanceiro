@@ -295,6 +295,7 @@ func main() {
 			r.Get("/option-sales", portfolioHandler.HandleGetOptionSales)
 			r.Get("/tax/simulate-sale", portfolioHandler.HandleSimulateSale)
 			r.Get("/tax/year-status", portfolioHandler.HandleGetTaxYearStatus)
+			r.Get("/tax/loss-harvest", portfolioHandler.HandleGetTaxLossHarvest)
 			// Target allocation
 			r.Get("/allocation", portfolioHandler.HandleGetAllocation)
 			r.Put("/allocation/groups", portfolioHandler.HandleSaveAllocationGroups)

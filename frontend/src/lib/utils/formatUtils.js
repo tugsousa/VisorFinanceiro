@@ -36,7 +36,12 @@ export const formatCurrency = (value, options = {}) => {
  * @param {number|null|undefined} value - The quantity to format.
  * @returns {number|string} The quantity, or an empty string if there is none.
  */
-export const formatQuantity = (value) => (typeof value === 'number' ? Number(value.toFixed(6)) : '');
+const QUANTITY_FORMAT = new Intl.NumberFormat('pt-PT', { minimumFractionDigits: 0, maximumFractionDigits: 6 });
+
+// A number of shares in pt-PT ("0,9856", "12 345,5"), up to 6 decimals, as text. "+ 0" turns -0 into 0.
+export const formatQuantity = (value) => (
+    typeof value === 'number' && Number.isFinite(value) ? QUANTITY_FORMAT.format(Number(value.toFixed(6)) + 0) : ''
+);
 
 export const calculateAnnualizedReturn = (netReturn, costBasis, daysHeld) => {
     const numDaysHeld = Number(daysHeld);

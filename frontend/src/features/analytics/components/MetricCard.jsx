@@ -43,8 +43,9 @@ const MetricCard = ({ title, value, unit, isPercentage = false, isLoading, toolt
                 border: `1px solid ${theme.palette.divider}`,
                 borderRadius: 2,
                 height: '100%',
-                maxHeight: 70,
-                minHeight: 30,
+                // A minimum, not a cap: a capped card let its content spill over whatever came next.
+                minHeight: 70,
+                boxSizing: 'border-box',
                 position: 'relative'
             }}
         >
