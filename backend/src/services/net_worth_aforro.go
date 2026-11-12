@@ -168,8 +168,8 @@ func aforroEstimateOf(a OtherAsset, now time.Time) *AforroEstimateView {
 	switch estimate.Stopped {
 	case networth.AforroStoppedNoRate:
 		view.Status = AforroStatusRatesEnded
-		view.Reason = fmt.Sprintf("A aplicação não tem a taxa do trimestre que terminou a %s (tem taxas até %s), por isso a estimativa pára antes dessa data. Indique o valor do AforroNet.",
-			formatISODatePT(estimate.StoppedOn), formatMonthPT(estimate.RatesThrough))
+		view.Reason = fmt.Sprintf("A aplicação não tem a taxa do trimestre que terminou a %s (só conhece taxas de %s a %s, com alguns meses em falta), por isso a estimativa pára antes dessa data. Indique o valor do AforroNet.",
+			formatISODatePT(estimate.StoppedOn), formatMonthPT(estimate.RatesFrom), formatMonthPT(estimate.RatesThrough))
 	case networth.AforroStoppedMatured:
 		view.Status = AforroStatusMatured
 		view.Reason = fmt.Sprintf("O certificado venceu a %s e deixou de render.", formatISODatePT(estimate.MaturityDate))

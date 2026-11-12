@@ -89,6 +89,10 @@ func TestAforroRatesFile(t *testing.T) {
 	if f.RatesThrough() != "2026-11" {
 		t.Errorf("rates through %q", f.RatesThrough())
 	}
+	// The dialog of a certificate tells the user the rates start in December 2024: keep the two in step.
+	if f.RatesFrom() != "2024-12" {
+		t.Errorf("rates from %q", f.RatesFrom())
+	}
 }
 
 // The rate of a quarter, checked against the rows of IGCP's own tables "taxa de juro anual em vigor no

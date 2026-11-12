@@ -88,6 +88,18 @@ func (s AforroSeries) RatesThrough() string {
 	return last
 }
 
+// RatesFrom is the first month with a base rate of the series, as YYYY-MM, or "". No official monthly rate
+// was found before it, so a quarter that starts earlier can't be estimated.
+func (s AforroSeries) RatesFrom() string {
+	first := ""
+	for month := range s.BaseRates {
+		if first == "" || month < first {
+			first = month
+		}
+	}
+	return first
+}
+
 // bonusOn is the permanence bonus in a year of permanence (1 is the first year).
 func (s AforroSeries) bonusOn(year int) float64 {
 	for _, b := range s.Bonus {
@@ -162,7 +174,8 @@ type AforroEstimate struct {
 	// StoppedOn the capitalisation it couldn't apply. With "no_rate" the value is the one before that day.
 	Stopped   string `json:"stopped,omitempty"`
 	StoppedOn string `json:"stopped_on,omitempty"`
-	// RatesThrough is the last month the data has a base rate for, as YYYY-MM.
+	// RatesFrom and RatesThrough are the first and last months the data has a base rate for, as YYYY-MM.
+	RatesFrom    string `json:"rates_from"`
 	RatesThrough string `json:"rates_through"`
 	// UsesUnofficialRate is true when a quarter applied used a rate that isn't an official figure.
 	UsesUnofficialRate bool `json:"uses_unofficial_rate,omitempty"`
@@ -197,6 +210,7 @@ func (r AforroRates) EstimateFrom(series string, subscribed, anchorDate time.Tim
 		FromValueEUR:    round2(anchorValue),
 		Capitalisations: []AforroCapitalisation{},
 		MaturityDate:    AforroCapitalisationDate(subscribed, quarters).Format(DateLayout),
+		RatesFrom:       s.RatesFrom(),
 		RatesThrough:    s.RatesThrough(),
 	}
 	value := anchorValue

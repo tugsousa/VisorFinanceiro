@@ -45,7 +45,7 @@ export const aforroExplanation = (estimate) => {
     }
     if (estimate.reason) lines.push(estimate.reason);
     else if (estimate.next_capitalisation) lines.push(`Próxima capitalização: ${formatISODate(estimate.next_capitalisation)}.`);
-    lines.push(`É uma estimativa: taxas publicadas pelo IGCP até ${formatRatesMonth(estimate.rates_through)}, juro trimestral de um quarto da taxa anual e retenção de 28%. Pode diferir do AforroNet em cêntimos.`);
+    lines.push(`É uma estimativa: taxas publicadas pelo IGCP ${estimate.rates_from ? `de ${formatRatesMonth(estimate.rates_from)} ` : ''}até ${formatRatesMonth(estimate.rates_through)}, juro trimestral de um quarto da taxa anual e retenção de 28%. Pode diferir do AforroNet em cêntimos.`);
     if (estimate.uses_unofficial_rate) lines.push('Algumas taxas usadas não foram lidas numa página do IGCP: foram deduzidas das taxas publicadas para a série F.');
     return lines;
 };

@@ -290,6 +290,8 @@ const AssetDialog = ({ open, onClose, asset }) => {
                                     O património conta sempre o valor que indicar do AforroNet. Com a série e a data de subscrição, a
                                     aplicação mostra ao lado uma estimativa do valor atual, com os juros dos trimestres entretanto
                                     capitalizados. Registe um ativo por subscrição: cada uma tem as suas datas e o seu prémio de permanência.
+                                    A aplicação só conhece as taxas do IGCP a partir de dezembro de 2024: se o último valor do AforroNet
+                                    for mais antigo, a estimativa não avança até o atualizar.
                                 </Typography>
                             </Grid>
                         </>
