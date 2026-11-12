@@ -5,6 +5,7 @@ import { apiAddOtherAssetEntry, netWorthErrorMessage } from '../api/netWorthApi'
 import { parseAmount, todayISO } from '../logic/assetTypes';
 import { aforroExplanation, canAcceptEstimate } from '../logic/aforro';
 import { formatCurrency } from '../../../lib/utils/formatUtils';
+import DateField from '../../../components/ui/DateField';
 
 /**
  * "Atualizar valor": adds a valuation entry with the asset's value on a date.
@@ -60,8 +61,8 @@ const UpdateValueDialog = ({ open, onClose, asset }) => {
                             helperText={asset?.type === 'savings_certificate' ? 'O valor indicado no AforroNet' : undefined} />
                     </Grid>
                     <Grid item xs={12} sm={6}>
-                        <TextField fullWidth type="date" label="Data" value={date} onChange={(e) => setDate(e.target.value)}
-                            InputLabelProps={{ shrink: true }} inputProps={{ max: todayISO() }} />
+                        <DateField fullWidth label="Data" value={date} onChange={(e) => setDate(e.target.value)}
+                            inputProps={{ max: todayISO() }} />
                     </Grid>
                 </Grid>
 

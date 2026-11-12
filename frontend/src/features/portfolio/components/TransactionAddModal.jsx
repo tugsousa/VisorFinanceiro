@@ -3,6 +3,7 @@ import React, { useState, useMemo } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiAddManualTransaction } from 'features/portfolio/api/portfolioApi';
 import { usePortfolio } from '../PortfolioContext';
+import DateField from '../../../components/ui/DateField';
 import {
   Button, Dialog, DialogActions, DialogContent, DialogTitle, TextField,
   Grid, CircularProgress, Alert, FormControl, InputLabel, Select, MenuItem
@@ -136,7 +137,7 @@ const AddTransactionModal = ({ open, onClose }) => {
       <DialogContent>
         <Grid container spacing={2} sx={{ pt: 1 }}>
           <Grid item xs={12} sm={4}>
-            <TextField name="date" label="Data" type="date" value={formData.date} onChange={handleChange} InputLabelProps={{ shrink: true }} fullWidth required error={!!errors.date} helperText={errors.date} />
+            <DateField name="date" label="Data" value={formData.date} onChange={handleChange} fullWidth required error={!!errors.date} helperText={errors.date} />
           </Grid>
           <Grid item xs={12} sm={4}>
             <TextField name="product_name" label="Nome do Produto" value={formData.product_name} onChange={handleChange} fullWidth required error={!!errors.product_name} helperText={errors.product_name} />

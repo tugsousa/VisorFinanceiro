@@ -6,6 +6,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiCreateOtherAsset, apiUpdateOtherAsset, netWorthErrorMessage } from '../api/netWorthApi';
 import { ASSET_TYPES, CAPITALISATIONS, CERTIFICATE_SERIES, PROPERTY_USAGES, parseAmount, todayISO } from '../logic/assetTypes';
 import { coinSymbol, isValidTicker, normalizeTicker, parseQuantity } from '../logic/crypto';
+import DateField from '../../../components/ui/DateField';
 
 // The property fields, all optional. Empty text means "not given".
 const emptyProperty = () => ({
@@ -206,12 +207,10 @@ const AssetDialog = ({ open, onClose, asset }) => {
                                     helperText="Taxa anual nominal bruta" />
                             </Grid>
                             <Grid item xs={12} sm={6}>
-                                <TextField fullWidth type="date" label="Data de início" value={form.openedAt} onChange={set('openedAt')}
-                                    InputLabelProps={{ shrink: true }} />
+                                <DateField fullWidth label="Data de início" value={form.openedAt} onChange={set('openedAt')} />
                             </Grid>
                             <Grid item xs={12} sm={6}>
-                                <TextField fullWidth type="date" label="Data de vencimento" value={form.maturity} onChange={set('maturity')}
-                                    InputLabelProps={{ shrink: true }} />
+                                <DateField fullWidth label="Data de vencimento" value={form.maturity} onChange={set('maturity')} />
                             </Grid>
                             <Grid item xs={12}>
                                 <TextField select fullWidth label="Capitalização dos juros" value={form.capitalisation} onChange={set('capitalisation')}>
@@ -244,8 +243,7 @@ const AssetDialog = ({ open, onClose, asset }) => {
                                             helperText="Quanto pagou por essa quantidade" />
                                     </Grid>
                                     <Grid item xs={12} sm={6}>
-                                        <TextField fullWidth type="date" label="Data da compra" value={form.valueDate} onChange={set('valueDate')}
-                                            InputLabelProps={{ shrink: true }} inputProps={{ max: todayISO() }} />
+                                        <DateField fullWidth label="Data da compra" value={form.valueDate} onChange={set('valueDate')} inputProps={{ max: todayISO() }} />
                                     </Grid>
                                 </>
                             )}
@@ -265,8 +263,7 @@ const AssetDialog = ({ open, onClose, asset }) => {
                                     helperText={form.type === 'savings_certificate' ? 'O valor indicado no AforroNet' : ' '} />
                             </Grid>
                             <Grid item xs={12} sm={6}>
-                                <TextField fullWidth type="date" label="Data do valor" value={form.valueDate} onChange={set('valueDate')}
-                                    InputLabelProps={{ shrink: true }} inputProps={{ max: todayISO() }} />
+                                <DateField fullWidth label="Data do valor" value={form.valueDate} onChange={set('valueDate')} inputProps={{ max: todayISO() }} />
                             </Grid>
                         </>
                     )}
@@ -282,8 +279,7 @@ const AssetDialog = ({ open, onClose, asset }) => {
                                 </TextField>
                             </Grid>
                             <Grid item xs={12} sm={6}>
-                                <TextField fullWidth type="date" label="Data de subscrição" value={form.subscribedAt} onChange={set('subscribedAt')}
-                                    InputLabelProps={{ shrink: true }} inputProps={{ max: todayISO() }} disabled={!form.series} />
+                                <DateField fullWidth label="Data de subscrição" value={form.subscribedAt} onChange={set('subscribedAt')} inputProps={{ max: todayISO() }} disabled={!form.series} />
                             </Grid>
                             <Grid item xs={12}>
                                 <Typography variant="caption" color="text.secondary">
@@ -306,8 +302,7 @@ const AssetDialog = ({ open, onClose, asset }) => {
                                 </TextField>
                             </Grid>
                             <Grid item xs={12} sm={6}>
-                                <TextField fullWidth type="date" label="Data de compra" value={form.openedAt} onChange={set('openedAt')}
-                                    InputLabelProps={{ shrink: true }} />
+                                <DateField fullWidth label="Data de compra" value={form.openedAt} onChange={set('openedAt')} />
                             </Grid>
                             <Grid item xs={12} sm={6}>
                                 <TextField fullWidth label="Preço de compra (€)" value={form.purchasePrice} onChange={set('purchasePrice')} inputMode="decimal" />
@@ -323,8 +318,7 @@ const AssetDialog = ({ open, onClose, asset }) => {
                                     helperText="O valor que consta no banco" />
                             </Grid>
                             <Grid item xs={12} sm={6}>
-                                <TextField fullWidth type="date" label="À data de" value={form.mortgageBalanceDate} onChange={set('mortgageBalanceDate')}
-                                    InputLabelProps={{ shrink: true }} helperText="Conta como dia de pagamento da prestação" />
+                                <DateField fullWidth label="À data de" value={form.mortgageBalanceDate} onChange={set('mortgageBalanceDate')} helperText="Conta como dia de pagamento da prestação" />
                             </Grid>
                             <Grid item xs={12} sm={6}>
                                 <TextField fullWidth label="TAN (%)" value={form.mortgageRatePct} onChange={set('mortgageRatePct')} inputMode="decimal"
@@ -354,8 +348,7 @@ const AssetDialog = ({ open, onClose, asset }) => {
 
                     {editing && (
                         <Grid item xs={12} sm={6}>
-                            <TextField fullWidth type="date" label="Data de fecho (opcional)" value={form.closedAt} onChange={set('closedAt')}
-                                InputLabelProps={{ shrink: true }} helperText="A partir desta data deixa de contar" />
+                            <DateField fullWidth label="Data de fecho (opcional)" value={form.closedAt} onChange={set('closedAt')} helperText="A partir desta data deixa de contar" />
                         </Grid>
                     )}
                 </Grid>

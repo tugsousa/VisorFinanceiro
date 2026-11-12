@@ -11,6 +11,7 @@ import {
 } from '../logic/assetTypes';
 import { coinSymbol, formatCoinPrice, formatQuantity, parseQuantity } from '../logic/crypto';
 import { formatCurrency } from '../../../lib/utils/formatUtils';
+import DateField from '../../../components/ui/DateField';
 
 const emptyForm = () => ({ kind: 'contribution', amount: '', quantity: '', date: todayISO(), note: '' });
 
@@ -148,8 +149,7 @@ const MovementsDialog = ({ open, onClose, asset }) => {
                             label={isCrypto ? (form.kind === 'withdrawal' ? 'Valor recebido (€) (opcional)' : 'Valor pago (€) (opcional)') : 'Valor (€)'} />
                     </Grid>
                     <Grid item xs={12} sm={isCrypto ? 4 : 3}>
-                        <TextField fullWidth size="small" type="date" label="Data" value={form.date} onChange={set('date')}
-                            InputLabelProps={{ shrink: true }} inputProps={{ max: todayISO() }} />
+                        <DateField fullWidth size="small" label="Data" value={form.date} onChange={set('date')} inputProps={{ max: todayISO() }} />
                     </Grid>
                     <Grid item xs={12} sm={isCrypto ? 8 : 3}>
                         <TextField fullWidth size="small" label="Nota" value={form.note} onChange={set('note')} inputProps={{ maxLength: 200 }} />
